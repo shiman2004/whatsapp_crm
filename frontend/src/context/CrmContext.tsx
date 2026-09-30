@@ -225,6 +225,19 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedLeadId(cleanLeads[0]?.id || null);
       }
     }
+
+    // Auto-normalize any multi-reaction messages to strictly single reaction
+    setMessages(prev => {
+      let changed = false;
+      const normalized = prev.map(m => {
+        if (m.reactions && m.reactions.length > 1) {
+          changed = true;
+          return { ...m, reactions: [m.reactions[m.reactions.length - 1]] };
+        }
+        return m;
+      });
+      return changed ? normalized : prev;
+    });
   }, []);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
@@ -404,11 +417,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (hasExact) {
                 return prevMsgs.map(m => {
                   if (m.waMessageId === targetMessageId || m.id === targetMessageId) {
-                    if (!emoji) return { ...m, reactions: [] };
-                    const existing = m.reactions || [];
+                    // WhatsApp standard: Exactly 1 reaction per message (or empty if removed)
                     return {
                       ...m,
-                      reactions: existing.includes(emoji) ? existing : [...existing, emoji]
+                      reactions: emoji ? [emoji] : []
                     };
                   }
                   return m;
@@ -419,11 +431,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (lastIdx >= 0) {
                   return prevMsgs.map((m, idx) => {
                     if (idx === lastIdx) {
-                      if (!emoji) return { ...m, reactions: [] };
-                      const existing = m.reactions || [];
                       return {
                         ...m,
-                        reactions: existing.includes(emoji) ? existing : [...existing, emoji]
+                        reactions: emoji ? [emoji] : []
                       };
                     }
                     return m;
@@ -672,15 +682,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Message Sent', `Outbound WhatsApp message delivered to ${lead.customer?.displayName || 'client'}`, 'success');
   };
 
-  // React with Emoji
+  // React with Emoji (Single reaction rule)
   const reactToMessage = (messageId: string, emoji: string) => {
     setMessages(prev => prev.map(m => {
       if (m.id === messageId) {
         const existingReactions = m.reactions || [];
-        const hasReaction = existingReactions.includes(emoji);
-        const newReactions = hasReaction 
-          ? existingReactions.filter(e => e !== emoji)
-          : [...existingReactions, emoji];
+        const isSameEmoji = existingReactions.includes(emoji);
+        // Toggle off if same emoji clicked again, otherwise replace with new emoji
+        const newReactions = isSameEmoji ? [] : [emoji];
         return { ...m, reactions: newReactions };
       }
       return m;

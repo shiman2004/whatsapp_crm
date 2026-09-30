@@ -183,16 +183,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               } ${isOutbound ? 'right-0' : 'left-0'} z-50 animate-in fade-in zoom-in-95 duration-150`}
             >
               <div className="bg-[#202c33] border border-slate-700 rounded-full px-2 py-1 shadow-2xl flex items-center gap-1 backdrop-blur-md">
-                {(showFullPicker ? EXTENDED_EMOJIS : QUICK_EMOJIS).map((emoji) => (
-                  <button
-                    key={emoji}
-                    type="button"
-                    onClick={() => handleToggleReaction(emoji)}
-                    className="w-7 h-7 flex items-center justify-center text-sm hover:scale-130 transition-transform rounded-full hover:bg-slate-700/70 active:scale-95"
-                  >
-                    {emoji}
-                  </button>
-                ))}
+                {(showFullPicker ? EXTENDED_EMOJIS : QUICK_EMOJIS).map((emoji) => {
+                  const isActive = message.reactions?.[0] === emoji;
+                  return (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => handleToggleReaction(emoji)}
+                      className={`w-7 h-7 flex items-center justify-center text-sm hover:scale-130 transition-transform rounded-full ${
+                        isActive 
+                          ? 'bg-emerald-950/80 ring-1 ring-emerald-500 scale-110 shadow-sm' 
+                          : 'hover:bg-slate-700/70'
+                      } active:scale-95`}
+                      title={isActive ? 'Remove reaction' : `React ${emoji}`}
+                    >
+                      {emoji}
+                    </button>
+                  );
+                })}
                 <button
                   type="button"
                   onClick={() => setShowFullPicker(!showFullPicker)}
@@ -389,19 +397,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           </div>
         )}
 
-        {/* Reaction Badges below the Bubble */}
+        {/* Single Reaction Badge below the Bubble */}
         {message.reactions && message.reactions.length > 0 && (
           <div className={`absolute -bottom-2.5 ${isOutbound ? 'right-2' : 'left-2'} z-20`}>
-            <div className="bg-[#1f2c34] border border-slate-700/80 px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 text-[11px] backdrop-blur-md">
-              {message.reactions.map((r, i) => (
-                <span 
-                  key={i} 
-                  onClick={() => handleToggleReaction(r)}
-                  className="cursor-pointer hover:scale-125 transition-transform"
-                >
-                  {r}
-                </span>
-              ))}
+            <div 
+              onClick={() => handleToggleReaction(message.reactions![0])}
+              className="bg-[#1f2c34] hover:bg-[#2a3942] border border-slate-700/80 px-1.5 py-0.5 rounded-full shadow-lg flex items-center justify-center cursor-pointer text-xs backdrop-blur-md hover:scale-115 transition-all select-none"
+              title="Click to remove reaction"
+            >
+              <span>{message.reactions[0]}</span>
             </div>
           </div>
         )}

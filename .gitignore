@@ -7,23 +7,37 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Dependencies
+node_modules/
+frontend/node_modules/
+backend/node_modules/
+
+# Production Builds
+dist/
+dist-ssr/
+frontend/dist/
+frontend/dist-ssr/
 *.local
+
+# Environment Variables
 .env
 .env.*
 !.env.example
+frontend/.env
+backend/.env
 
 # WhatsApp Baileys Session Data
 auth_info_baileys/
+backend/auth_info_baileys/
 auth_info_*/
+backend/auth_info_*/
 
-# Editor directories and files
+# Editor & OS files
 .vscode/*
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
+Thumbs.db
 *.suo
 *.ntvs*
 *.njsproj

@@ -1,36 +1,21 @@
 {
-  "name": "royal-wellness-crm",
+  "name": "royal-wellness-crm-monorepo",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
   "scripts": {
-    "dev": "vite",
-    "server": "node whatsapp-qr-bridge.js",
-    "build": "tsc -b && vite build",
-    "lint": "oxlint",
-    "preview": "vite preview"
+    "dev": "npm run dev:all",
+    "dev:all": "node -e \"const { spawn } = require('child_process'); const b = spawn('npm', ['run', 'dev'], { cwd: 'backend', stdio: 'inherit', shell: true }); const f = spawn('npm', ['run', 'dev'], { cwd: 'frontend', stdio: 'inherit', shell: true }); process.on('SIGINT', () => { b.kill(); f.kill(); process.exit(); });\"",
+    "dev:frontend": "npm run dev --prefix frontend",
+    "dev:backend": "npm run dev --prefix backend",
+    "build": "npm run build --prefix frontend",
+    "preview": "npm run preview --prefix frontend",
+    "lint": "npm run lint --prefix frontend",
+    "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend"
   },
-  "dependencies": {
-    "@types/qrcode": "^1.5.6",
-    "@whiskeysockets/baileys": "^7.0.0-rc14",
-    "canvas-confetti": "^1.9.4",
-    "lucide-react": "^1.47.0",
-    "qrcode": "^1.5.4",
-    "react": "^19.2.8",
-    "react-dom": "^19.2.8",
-    "recharts": "^3.10.1"
-  },
-  "devDependencies": {
-    "@types/canvas-confetti": "^1.9.0",
-    "@types/node": "^24.13.3",
-    "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.7",
-    "@vitejs/plugin-react": "^6.1.1",
-    "autoprefixer": "^10.6.1",
-    "oxlint": "^1.81.0",
-    "postcss": "^8.5.28",
-    "tailwindcss": "^3.4.17",
-    "typescript": "~6.0.2",
-    "vite": "^8.3.0"
-  }
+  "devDependencies": {}
 }

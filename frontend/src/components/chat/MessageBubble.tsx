@@ -158,7 +158,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
         {/* Message Bubble Box */}
         <div
-          className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3.5 py-2 shadow-md text-xs leading-relaxed transition-all ${
+          className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-2.5 pt-1.5 pb-1.5 shadow-sm text-xs leading-relaxed transition-all ${
             isOutbound
               ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none wa-bubble-out'
               : 'bg-[#202c33] text-[#e9edef] rounded-tl-none wa-bubble-in'
@@ -215,7 +215,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
           {/* Quoted Reply Preview (if replyTo exists) */}
           {message.replyTo && (
-            <div className="mb-2 p-2 rounded-lg bg-black/25 border-l-4 border-whatsapp text-slate-200 text-[11px]">
+            <div className="mb-1.5 p-2 rounded-lg bg-black/25 border-l-4 border-whatsapp text-slate-200 text-[11px]">
               <span className="font-bold text-teal-300 block text-[10px]">
                 {message.replyTo.senderName}
               </span>
@@ -225,14 +225,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             </div>
           )}
 
-          {/* Message Content */}
-          <p className="whitespace-pre-line text-[13px] font-normal text-slate-100 break-words pr-4 leading-relaxed">
-            {renderFormattedText(message.content)}
-          </p>
-
           {/* Media attachment */}
           {message.media && (
-            <div className="mt-1.5 p-2 rounded-lg bg-black/20 border border-white/10 flex items-center gap-2">
+            <div className="mb-1.5 p-2 rounded-lg bg-black/20 border border-white/10 flex items-center gap-2">
               <File className="w-4 h-4 text-teal-400 shrink-0" />
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-semibold truncate">{message.media.fileName || 'Attachment'}</p>
@@ -241,30 +236,31 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             </div>
           )}
 
-          {/* Timestamp, Pin, Star & Delivery Status */}
-          <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-slate-300/80 font-mono select-none">
-            {message.pinned && (
-              <span title="Pinned message" className="text-amber-400">
-                <Pin className="w-3 h-3 fill-amber-400" />
+          {/* Message Content & Inline Timestamp (WhatsApp Web 1:1 format) */}
+          <div className="text-[13.5px] leading-[19px] text-[#e9edef] break-words select-text">
+            <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
+            
+            {/* Inline float-right timestamp container */}
+            <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#8696a0] font-normal">
+              {message.pinned && (
+                <Pin className="w-3 h-3 fill-[#8696a0] text-[#8696a0] -rotate-45" />
+              )}
+              {message.starred && (
+                <Star className="w-3 h-3 fill-[#8696a0] text-[#8696a0]" />
+              )}
+              <span className="whitespace-nowrap">
+                {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
               </span>
-            )}
-            {message.starred && (
-              <span title="Starred message" className="text-amber-300">
-                <Star className="w-3 h-3 fill-amber-300" />
-              </span>
-            )}
-            <span>
-              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              {isOutbound && (
+                message.status === 'read' ? (
+                  <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                ) : message.status === 'delivered' ? (
+                  <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                ) : (
+                  <span title="Sent"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                )
+              )}
             </span>
-            {isOutbound && (
-              message.status === 'read' ? (
-                <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-sky-400" /></span>
-              ) : message.status === 'delivered' ? (
-                <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-slate-300" /></span>
-              ) : (
-                <span title="Sent"><Check className="w-3.5 h-3.5 text-slate-300" /></span>
-              )
-            )}
           </div>
 
           {/* Dropdown Menu (WhatsApp Web Style with Upward/Downward Float) */}

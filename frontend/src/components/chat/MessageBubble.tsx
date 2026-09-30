@@ -158,10 +158,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
         {/* Message Bubble Box */}
         <div
-          className={`relative max-w-[85%] md:max-w-[65%] rounded-2xl px-3.5 py-2 shadow-sm text-xs leading-relaxed transition-all ${
+          className={`relative max-w-[85%] md:max-w-[65%] rounded-xl px-3.5 py-2 shadow-md text-xs leading-relaxed transition-all ${
             isOutbound
-              ? 'bg-[#005c4b] text-slate-100 rounded-tr-none'
-              : 'bg-[#202c33] text-slate-100 rounded-tl-none'
+              ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none wa-bubble-out'
+              : 'bg-[#202c33] text-[#e9edef] rounded-tl-none wa-bubble-in'
           } ${message.pinned ? 'border border-amber-500/50 shadow-amber-500/10' : ''}`}
         >
           {/* Top-Right Hover Chevron (WhatsApp Web standard) */}

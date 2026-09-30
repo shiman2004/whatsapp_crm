@@ -60,17 +60,62 @@
   border-color: rgba(45, 212, 190, 0.3);
 }
 
-/* WhatsApp Pattern Background */
+/* WhatsApp Pattern Background with Authentic Doodle Texture */
 .wa-chat-bg {
   background-color: #0b141a;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 0);
-  background-size: 20px 20px;
+  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
+  background-size: 24px 24px;
+  position: relative;
+}
+
+.wa-chat-bg::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: radial-gradient(#00a884 0.5px, transparent 0.5px), radial-gradient(#111b21 0.5px, transparent 0.5px);
+  background-size: 32px 32px;
+  background-position: 0 0, 16px 16px;
+  opacity: 0.05;
+  pointer-events: none;
 }
 
 .wa-sim-bg {
   background-color: #efeae2;
-  background-image: radial-gradient(rgba(0, 0, 0, 0.04) 1px, transparent 0);
+  background-image: radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 0);
   background-size: 16px 16px;
+}
+
+/* WhatsApp Message Bubble Tails */
+.wa-bubble-out {
+  position: relative;
+  border-top-right-radius: 0px !important;
+}
+
+.wa-bubble-out::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: -8px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid #005c4b;
+  border-right: 10px solid transparent;
+}
+
+.wa-bubble-in {
+  position: relative;
+  border-top-left-radius: 0px !important;
+}
+
+.wa-bubble-in::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -8px;
+  width: 0;
+  height: 0;
+  border-top: 10px solid #202c33;
+  border-left: 10px solid transparent;
 }
 
 /* Luxury Gold Text Gradient */
@@ -84,4 +129,32 @@
   background: linear-gradient(135deg, #ccfbef 0%, #2dd4be 50%, #0d9488 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
+}
+
+/* WhatsApp Web Context Menu */
+.wa-context-menu {
+  background: #233138;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.wa-context-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: #d1d7db;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.wa-context-item:hover {
+  background: #182229;
+  color: #ffffff;
+}
+
+.wa-context-item.danger:hover {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
 }

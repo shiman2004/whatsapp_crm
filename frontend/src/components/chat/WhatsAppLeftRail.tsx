@@ -2,13 +2,7 @@ import React from 'react';
 import { 
   MessageSquare, 
   Phone, 
-  CircleDashed, 
-  Radio, 
-  Users, 
-  Sparkles, 
-  Settings,
-  Archive,
-  Star
+  Settings
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -25,12 +19,12 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
 }) => {
   const { currentUser, leads } = useCrm();
 
-  const unreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length || 62;
+  const unreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length;
 
   return (
-    <aside className="w-[60px] bg-[#202c33] border-r border-[#222e35] flex flex-col justify-between items-center py-3 select-none shrink-0 z-20">
-      {/* Top Main Navigation Icons */}
-      <div className="flex flex-col items-center gap-4 w-full">
+    <aside className="w-[60px] bg-[#202c33] border-r border-[#222e35] flex flex-col justify-between items-center py-4 select-none shrink-0 z-20">
+      {/* Top Navigation Icons */}
+      <div className="flex flex-col items-center gap-3 w-full">
         {/* Chats Tab */}
         <button
           onClick={() => setActiveSection('chats')}
@@ -54,106 +48,32 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
           onClick={() => setActiveSection('calls')}
           className={`relative p-2.5 rounded-full transition-all group ${
             activeSection === 'calls' 
-              ? 'bg-[#374248] text-white' 
+              ? 'bg-[#374248] text-white shadow-sm' 
               : 'text-[#aebac1] hover:bg-[#374248]/60 hover:text-white'
           }`}
           title="Calls"
         >
           <Phone className="w-5 h-5" />
-          <span className="absolute -top-1 -right-1 bg-[#25D366] text-black font-bold text-[10px] w-4 h-4 rounded-full flex items-center justify-center shadow-sm">
-            6
-          </span>
-        </button>
-
-        {/* Status / Stories Tab */}
-        <button
-          onClick={() => setActiveSection('status')}
-          className={`relative p-2.5 rounded-full transition-all group ${
-            activeSection === 'status' 
-              ? 'bg-[#374248] text-white' 
-              : 'text-[#aebac1] hover:bg-[#374248]/60 hover:text-white'
-          }`}
-          title="Status"
-        >
-          <CircleDashed className="w-5 h-5" />
-          <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#25D366] ring-2 ring-[#202c33]" />
-        </button>
-
-        {/* Channels / Broadcast */}
-        <button
-          onClick={() => setActiveSection('channels')}
-          className={`p-2.5 rounded-full transition-all ${
-            activeSection === 'channels' 
-              ? 'bg-[#374248] text-white' 
-              : 'text-[#aebac1] hover:bg-[#374248]/60 hover:text-white'
-          }`}
-          title="Channels"
-        >
-          <Radio className="w-5 h-5" />
-        </button>
-
-        {/* Communities */}
-        <button
-          onClick={() => setActiveSection('communities')}
-          className={`p-2.5 rounded-full transition-all ${
-            activeSection === 'communities' 
-              ? 'bg-[#374248] text-white' 
-              : 'text-[#aebac1] hover:bg-[#374248]/60 hover:text-white'
-          }`}
-          title="Communities"
-        >
-          <Users className="w-5 h-5" />
-        </button>
-
-        {/* Meta AI (Purple Gradient Icon from WhatsApp Web) */}
-        <button
-          onClick={() => setActiveSection('meta-ai')}
-          className={`p-2.5 rounded-full transition-all relative ${
-            activeSection === 'meta-ai' 
-              ? 'bg-purple-900/40 text-purple-300 ring-1 ring-purple-500/50' 
-              : 'text-[#aebac1] hover:bg-[#374248]/60 hover:text-purple-400'
-          }`}
-          title="Meta AI Assistant"
-        >
-          <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
         </button>
       </div>
 
       {/* Bottom Profile & Settings */}
-      <div className="flex flex-col items-center gap-3 w-full">
-        {/* Starred */}
-        <button
-          onClick={() => setActiveSection('starred')}
-          className="p-2.5 rounded-full text-[#aebac1] hover:bg-[#374248]/60 hover:text-white transition-all"
-          title="Starred Messages"
-        >
-          <Star className="w-4 h-4" />
-        </button>
-
-        {/* Archived */}
-        <button
-          onClick={() => setActiveSection('archived')}
-          className="p-2.5 rounded-full text-[#aebac1] hover:bg-[#374248]/60 hover:text-white transition-all"
-          title="Archived Chats"
-        >
-          <Archive className="w-4 h-4" />
-        </button>
-
+      <div className="flex flex-col items-center gap-4 w-full">
         {/* Settings Gear */}
         <button
           onClick={onOpenSettings}
           className="p-2.5 rounded-full text-[#aebac1] hover:bg-[#374248]/60 hover:text-white transition-all"
-          title="Settings"
+          title="Settings & CRM Details"
         >
           <Settings className="w-5 h-5" />
         </button>
 
         {/* User Profile Avatar */}
-        <div className="pt-1">
+        <div>
           <img
             src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
             alt={currentUser.fullName}
-            className="w-8 h-8 rounded-full object-cover ring-1 ring-emerald-500/60 cursor-pointer hover:scale-105 transition-transform"
+            className="w-8 h-8 rounded-full object-cover ring-2 ring-emerald-500/60 cursor-pointer hover:scale-105 transition-transform"
             title={`${currentUser.fullName} (${currentUser.role})`}
           />
         </div>

@@ -1,0 +1,305 @@
+// Royal Wellness CRM — MySQL Prisma Schema
+// Database Provider: MySQL with utf8mb4 charset support
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  super_admin
+  coordinator
+}
+
+enum LanguageCode {
+  en
+  si
+  ta
+}
+
+enum LeadStage {
+  new
+  assigned
+  contacted
+  interested
+  follow_up
+  converted
+  lost
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum SenderType {
+  customer
+  coordinator
+  system
+  ai
+}
+
+enum MessageStatus {
+  sent
+  delivered
+  read
+  failed
+}
+
+enum FollowupStatus {
+  pending
+  sent
+  cancelled
+  paused
+}
+
+enum TemplateStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+// 1. Users / Staff / Coordinators
+model User {
+  id                  String            @id @default(uuid()) @db.VarChar(36)
+  fullName            String            @db.VarChar(255)
+  email               String            @unique @db.VarChar(255)
+  phone               String?           @db.VarChar(50)
+  role                UserRole          @default(coordinator)
+  treatmentCategoryId String?           @db.VarChar(50)
+  language            LanguageCode      @default(en)
+  avatar              String?           @db.VarChar(500)
+  active              Boolean           @default(true)
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  // Relations
+  category            TreatmentCategory? @relation(fields: [treatmentCategoryId], references: [id], onDelete: SetNull)
+  assignedLeads       Lead[]            @relation("AssignedCoordinator")
+  notesWritten        LeadNote[]
+  stageChanges        LeadStageHistory[]
+
+  @@map("users")
+}
+
+// 2. Treatment Categories (e.g., Hair Care, Skin Care, IV Wellness)
+model TreatmentCategory {
+  id          String      @id @db.VarChar(50)
+  name        String      @db.VarChar(255)
+  nameEn      String      @db.VarChar(255)
+  nameSi      String      @db.VarChar(255)
+  nameTa      String      @db.VarChar(255)
+  active      Boolean     @default(true)
+  iconName    String      @default("Sparkles") @db.VarChar(100)
+  description String?     @db.Text
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  treatments  Treatment[]
+  leads       Lead[]
+  coordinators User[]
+
+  @@map("treatment_categories")
+}
+
+// 3. Treatment Catalog
+model Treatment {
+  id              String            @id @db.VarChar(50)
+  categoryId      String            @db.VarChar(50)
+  name            String            @db.VarChar(255)
+  nameEn          String            @db.VarChar(255)
+  nameSi          String            @db.VarChar(255)
+  nameTa          String            @db.VarChar(255)
+  startingPrice   Decimal           @default(0.00) @db.Decimal(10, 2)
+  currency        String            @default("LKR") @db.VarChar(10)
+  durationMinutes Int               @default(60)
+  active          Boolean           @default(true)
+  benefits        String?           @db.Text
+  description     String?           @db.Text
+  createdAt       DateTime          @default(now())
+
+  // Relations
+  category        TreatmentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  leads           Lead[]
+
+  @@index([categoryId])
+  @@map("treatments")
+}
+
+// 4. WhatsApp Customers / Patients
+model Customer {
+  id                String        @id @default(uuid()) @db.VarChar(50)
+  whatsappNumber    String        @unique @db.VarChar(50) // Canonical E.164: +94771234567
+  whatsappId        String?       @db.VarChar(100)        // Meta/Baileys ID
+  phoneNumber       String?       @db.VarChar(50)         // Display formatting
+  displayName       String        @db.VarChar(255)
+  preferredLanguage LanguageCode  @default(en)
+  avatarUrl         String?       @db.VarChar(500)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  leads             Lead[]
+  messages          Message[]
+
+  @@index([whatsappNumber])
+  @@index([whatsappId])
+  @@map("customers")
+}
+
+// 5. CRM Leads / Patient Inquiries
+model Lead {
+  id                    String            @id @default(uuid()) @db.VarChar(50)
+  customerId            String            @db.VarChar(50)
+  categoryId            String            @db.VarChar(50)
+  treatmentId           String            @db.VarChar(50)
+  assignedTo            String?           @db.VarChar(36)
+  stage                 LeadStage         @default(new)
+  source                String            @default("whatsapp") @db.VarChar(50)
+  language              LanguageCode      @default(en)
+  lastCustomerMessageAt DateTime          @default(now())
+  createdAt             DateTime          @default(now())
+  updatedAt             DateTime          @updatedAt
+
+  // Relations
+  customer              Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category              TreatmentCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  treatment             Treatment         @relation(fields: [treatmentId], references: [id], onDelete: Restrict)
+  assignedCoordinator   User?             @relation("AssignedCoordinator", fields: [assignedTo], references: [id], onDelete: SetNull)
+  messages              Message[]
+  followups             Followup[]
+  notes                 LeadNote[]
+  stageHistories        LeadStageHistory[]
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([treatmentId])
+  @@index([assignedTo])
+  @@index([stage])
+  @@map("leads")
+}
+
+// 6. WhatsApp Messages
+model Message {
+  id              String            @id @db.VarChar(100) // WhatsApp Message ID e.g. wamid.HBg...
+  leadId          String            @db.VarChar(50)
+  customerId      String            @db.VarChar(50)
+  direction       MessageDirection
+  senderType      SenderType
+  content         String            @db.Text
+  status          MessageStatus     @default(sent)
+  timestamp       DateTime          @default(now())
+  reaction        String?           @db.VarChar(50)
+  starred         Boolean           @default(false)
+  pinned          Boolean           @default(false)
+  replyToId       String?           @db.VarChar(100)
+  replyToContent  String?           @db.Text
+  replyToSender   String?           @db.VarChar(255)
+  mediaUrl        String?           @db.VarChar(500)
+  mediaType       String?           @db.VarChar(50)
+
+  // Relations
+  lead            Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([customerId])
+  @@index([timestamp])
+  @@map("messages")
+}
+
+// 7. Automated Follow-up Tasks (BullMQ / Cron)
+model Followup {
+  id                  String          @id @default(uuid()) @db.VarChar(50)
+  leadId              String          @db.VarChar(50)
+  sequenceId          String?         @db.VarChar(50)
+  stepNumber          Int             @default(1)
+  templateId          String?         @db.VarChar(50)
+  scheduledAt         DateTime
+  status              FollowupStatus  @default(pending)
+  cancellationReason  String?         @db.VarChar(255)
+  sentAt              DateTime?
+  createdAt           DateTime        @default(now())
+
+  // Relations
+  lead                Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([status, scheduledAt])
+  @@map("followups")
+}
+
+// 8. Lead Notes & Clinical Annotations
+model LeadNote {
+  id          String    @id @default(uuid()) @db.VarChar(50)
+  leadId      String    @db.VarChar(50)
+  authorId    String    @db.VarChar(36)
+  authorName  String    @db.VarChar(255)
+  note        String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  // Relations
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([authorId])
+  @@map("lead_notes")
+}
+
+// 9. Lead Stage Audit & Pipeline History
+model LeadStageHistory {
+  id            String    @id @default(uuid()) @db.VarChar(50)
+  leadId        String    @db.VarChar(50)
+  fromStage     LeadStage
+  toStage       LeadStage
+  changedById   String    @db.VarChar(36)
+  changedByName String    @db.VarChar(255)
+  reason        String?   @db.VarChar(500)
+  timestamp     DateTime  @default(now())
+
+  // Relations
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  changedBy     User      @relation(fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([changedById])
+  @@map("lead_stage_histories")
+}
+
+// 10. System Audit Logs
+model AuditLog {
+  id              String    @id @default(uuid()) @db.VarChar(50)
+  action          String    @db.VarChar(100)
+  entityType      String    @db.VarChar(100)
+  entityId        String    @db.VarChar(100)
+  performedById   String?   @db.VarChar(36)
+  performedByName String?   @db.VarChar(255)
+  previousValue   String?   @db.Text // JSON string
+  newValue        String?   @db.Text // JSON string
+  timestamp       DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// 11. WhatsApp Pre-Approved HSM Templates
+model WhatsAppTemplate {
+  id          String          @id @db.VarChar(50)
+  name        String          @db.VarChar(255)
+  category    String          @db.VarChar(100)
+  language    LanguageCode    @default(en)
+  content     String          @db.Text
+  header      String?         @db.VarChar(255)
+  footer      String?         @db.VarChar(255)
+  buttonsJson String?         @db.Text // JSON array of buttons
+  status      TemplateStatus  @default(APPROVED)
+  createdAt   DateTime        @default(now())
+
+  @@map("whatsapp_templates")
+}

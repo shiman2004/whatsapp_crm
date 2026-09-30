@@ -1,0 +1,47 @@
+import { PrismaClient } from '@prisma/client';
+import dotenv from 'dotenv';
+
+dotenv.config();
+
+let prismaInstance = null;
+let isDbConnected = false;
+
+export const getPrisma = () => {
+  if (!process.env.DATABASE_URL) {
+    return null;
+  }
+
+  if (!prismaInstance) {
+    try {
+      prismaInstance = new PrismaClient({
+        log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
+      });
+    } catch (e) {
+      console.warn('⚠️ PrismaClient initialization deferred:', e.message);
+      return null;
+    }
+  }
+  return prismaInstance;
+};
+
+// Check if MySQL Database is reachable
+export const checkDbConnection = async () => {
+  const prisma = getPrisma();
+  if (!prisma) {
+    isDbConnected = false;
+    return { connected: false, message: 'DATABASE_URL not configured in backend/.env' };
+  }
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+    isDbConnected = true;
+    console.log('✅ Connected to MySQL Database successfully via Prisma!');
+    return { connected: true, message: 'MySQL Connected' };
+  } catch (err) {
+    isDbConnected = false;
+    console.warn('⚠️ MySQL connection check failed (fallback to in-memory/SSE mode):', err.message);
+    return { connected: false, error: err.message };
+  }
+};
+
+export const getDbStatus = () => isDbConnected;

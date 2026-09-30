@@ -9,11 +9,15 @@ import makeWASocketDefault, {
   fetchLatestBaileysVersion
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
+import dotenv from 'dotenv';
+import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
+
+dotenv.config();
 
 // Support both ESM default and named export
 const makeWASocket = makeWASocketDefault.default || makeWASocketDefault;
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 const AUTH_FOLDER = path.join(process.cwd(), 'auth_info_baileys');
 
 let sock = null;
@@ -25,6 +29,15 @@ const processedMessageIds = new Set();
 // Map clean phone/ID to original rawJid (handles @lid and @s.whatsapp.net)
 const jidMap = new Map();
 
+// Initialize database connection on start
+checkDbConnection().then(res => {
+  if (res.connected) {
+    console.log('📦 [MySQL Database Storage] Active and ready for persistence.');
+  } else {
+    console.log('ℹ️ [Storage Mode] Running in memory / SSE mode (Configure DATABASE_URL in backend/.env for MySQL storage).');
+  }
+});
+
 function broadcastSSE(data) {
   const payload = `data: ${JSON.stringify(data)}\n\n`;
   sseClients.forEach(client => {
@@ -32,6 +45,113 @@ function broadcastSSE(data) {
       client.write(payload);
     } catch (e) {}
   });
+}
+
+// Helper: Save Inbound Message to MySQL
+async function persistInboundMessage({ phone, whatsappId, name, text, messageId, timestamp, avatarUrl }) {
+  const prisma = getPrisma();
+  if (!prisma || !getDbStatus()) return;
+
+  try {
+    const canonicalPhone = phone.startsWith('+') ? phone : `+${phone}`;
+    
+    // 1. Upsert Customer
+    const customer = await prisma.customer.upsert({
+      where: { whatsappNumber: canonicalPhone },
+      update: {
+        displayName: name || canonicalPhone,
+        avatarUrl: avatarUrl || undefined,
+        whatsappId: whatsappId || undefined,
+      },
+      create: {
+        whatsappNumber: canonicalPhone,
+        whatsappId: whatsappId || canonicalPhone.replace(/[^0-9]/g, ''),
+        displayName: name || canonicalPhone,
+        avatarUrl: avatarUrl || null,
+        preferredLanguage: 'en',
+      },
+    });
+
+    // 2. Find or Create Default Lead for this Customer
+    let lead = await prisma.lead.findFirst({
+      where: {
+        customerId: customer.id,
+        stage: { notIn: ['converted', 'lost'] },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!lead) {
+      // Find fallback treatment category
+      const firstCategory = await prisma.treatmentCategory.findFirst();
+      const firstTreatment = await prisma.treatment.findFirst();
+
+      lead = await prisma.lead.create({
+        data: {
+          customerId: customer.id,
+          categoryId: firstCategory ? firstCategory.id : 'cat-hair-care',
+          treatmentId: firstTreatment ? firstTreatment.id : 'trt-hair-prp',
+          stage: 'new',
+          source: 'whatsapp',
+          language: 'en',
+          lastCustomerMessageAt: new Date(timestamp || Date.now()),
+        },
+      });
+    } else {
+      await prisma.lead.update({
+        where: { id: lead.id },
+        data: { lastCustomerMessageAt: new Date(timestamp || Date.now()) },
+      });
+    }
+
+    // 3. Save Message Record
+    if (messageId) {
+      await prisma.message.upsert({
+        where: { id: messageId },
+        update: {
+          content: text,
+          status: 'delivered',
+        },
+        create: {
+          id: messageId,
+          leadId: lead.id,
+          customerId: customer.id,
+          direction: 'inbound',
+          senderType: 'customer',
+          content: text,
+          status: 'delivered',
+          timestamp: new Date(timestamp || Date.now()),
+        },
+      });
+    }
+  } catch (err) {
+    console.warn('⚠️ [MySQL Persistence Error - Inbound]:', err.message);
+  }
+}
+
+// Helper: Save Outbound Message to MySQL
+async function persistOutboundMessage({ leadId, customerId, content, messageId, senderType }) {
+  const prisma = getPrisma();
+  if (!prisma || !getDbStatus()) return;
+
+  try {
+    if (!leadId || !messageId) return;
+
+    await prisma.message.create({
+      data: {
+        id: messageId,
+        leadId: leadId,
+        customerId: customerId || 'cust-unknown',
+        direction: 'outbound',
+        senderType: senderType || 'coordinator',
+        content: content,
+        status: 'sent',
+        timestamp: new Date(),
+      },
+    });
+  } catch (err) {
+    console.warn('⚠️ [MySQL Persistence Error - Outbound]:', err.message);
+  }
 }
 
 async function startWhatsAppSocket() {
@@ -58,45 +178,41 @@ async function startWhatsAppSocket() {
       connectionState = 'qr_ready';
       try {
         currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
+        broadcastSSE({
+          type: 'QR_CODE',
+          qrDataUrl: currentQrDataUrl
+        });
       } catch (err) {
-        console.error('Error creating QR data URL:', err);
+        console.error('Error generating QR data URL:', err);
       }
-      broadcastSSE({
-        type: 'QR_CODE_UPDATED',
-        qr: currentQrDataUrl,
-        status: connectionState
-      });
     }
 
     if (connection === 'close') {
-      const statusCode = (lastDisconnect?.error)?.output?.statusCode;
+      const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      console.log('⚠️ WhatsApp connection closed. StatusCode:', statusCode, ', Reconnecting:', shouldReconnect);
+      
+      console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode} , Reconnecting: ${shouldReconnect}`);
       connectionState = 'disconnected';
+      connectedPhoneNumber = null;
       currentQrDataUrl = null;
 
       broadcastSSE({
         type: 'CONNECTION_STATUS',
-        status: connectionState,
-        phone: null
+        status: 'disconnected'
       });
 
       if (shouldReconnect) {
         setTimeout(startWhatsAppSocket, 3000);
       } else {
-        // Logged out - clear session
-        if (fs.existsSync(AUTH_FOLDER)) {
-          fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-        }
-        setTimeout(startWhatsAppSocket, 2000);
+        console.log('🔒 Logged out from WhatsApp. Clear auth_info_baileys to re-scan.');
       }
     } else if (connection === 'open') {
-      console.log('🎉 WhatsApp Linked Successfully via QR Code!');
+      console.log('\n🎉 WhatsApp Linked Successfully via QR Code!');
       connectionState = 'connected';
       currentQrDataUrl = null;
       
-      const userJid = sock.user?.id || '';
-      connectedPhoneNumber = userJid.split(':')[0] || userJid.split('@')[0];
+      const rawUser = sock.user?.id || '';
+      connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
       console.log(`✅ Connected Phone Number: +${connectedPhoneNumber}`);
 
       broadcastSSE({
@@ -223,6 +339,15 @@ async function startWhatsAppSocket() {
           emoji: emoji,
           timestamp: new Date().toISOString()
         });
+
+        // Update reaction in MySQL
+        const prisma = getPrisma();
+        if (prisma && getDbStatus() && targetMessageId) {
+          prisma.message.update({
+            where: { id: targetMessageId },
+            data: { reaction: emoji },
+          }).catch(() => {});
+        }
         continue; // Do NOT create a new chat message bubble!
       }
 
@@ -238,13 +363,17 @@ async function startWhatsAppSocket() {
       let avatarUrl = null;
       try {
         avatarUrl = await sock.profilePictureUrl(rawJid, 'image');
-      } catch (e) {}
+      } catch (e) {
+        avatarUrl = null;
+      }
 
-      const normalizedPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : (senderPhone ? (senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`) : '');
+      const timestampIso = new Date().toISOString();
+      const phonePayload = realPhone ? `+${realPhone}` : (rawJid.endsWith('@s.whatsapp.net') ? `+${senderPhone}` : senderPhone);
 
+      // Broadcast real-time SSE to open frontend browsers
       broadcastSSE({
         type: 'INBOUND_WHATSAPP_MESSAGE',
-        phone: normalizedPhone,
+        phone: phonePayload,
         whatsappId: senderPhone,
         realPhone: realPhone ? `+${realPhone}` : null,
         isLid: rawJid.endsWith('@lid'),
@@ -252,222 +381,314 @@ async function startWhatsAppSocket() {
         avatarUrl: avatarUrl,
         text: messageText,
         messageId: messageId,
-        timestamp: new Date().toISOString()
+        timestamp: timestampIso
       });
-    }
-  });
 
-  // Also listen for dedicated messages.reaction event from Baileys
-  sock.ev.on('messages.reaction', (reactions) => {
-    if (!Array.isArray(reactions)) return;
-    for (const r of reactions) {
-      const targetId = r.key?.id;
-      const emoji = r.reaction?.text || '';
-      console.log(`\n✨ [REACTION EVENT] Reaction "${emoji}" on message ${targetId}`);
-      broadcastSSE({
-        type: 'INBOUND_REACTION',
-        targetMessageId: targetId,
-        emoji: emoji,
-        timestamp: new Date().toISOString()
+      // Persist directly into MySQL
+      persistInboundMessage({
+        phone: phonePayload,
+        whatsappId: senderPhone,
+        name: pushName,
+        text: messageText,
+        messageId: messageId,
+        timestamp: timestampIso,
+        avatarUrl: avatarUrl,
       });
     }
   });
 }
 
-// Start WhatsApp socket immediately
-startWhatsAppSocket();
-
-// HTTP API Server
+// Start HTTP REST & SSE Gateway Server
 const server = http.createServer(async (req, res) => {
-  const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
-
+  // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
-    res.writeHead(200);
+    res.writeHead(204);
     res.end();
     return;
   }
 
-  // 1. Live SSE Stream
+  const parsedUrl = url.parse(req.url, true);
+  const pathname = parsedUrl.pathname;
+
+  // 1. Health & Status
+  if (req.method === 'GET' && pathname === '/api/status') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      status: connectionState,
+      phone: connectedPhoneNumber,
+      hasQr: !!currentQrDataUrl,
+      db: {
+        connected: getDbStatus(),
+      }
+    }));
+    return;
+  }
+
+  // 2. Database Status Check
+  if (req.method === 'GET' && pathname === '/api/db/status') {
+    const dbRes = await checkDbConnection();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(dbRes));
+    return;
+  }
+
+  // 3. QR Code Endpoint
+  if (req.method === 'GET' && pathname === '/api/qr') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      qr: currentQrDataUrl,
+      status: connectionState
+    }));
+    return;
+  }
+
+  // 4. Server-Sent Events (SSE) Live Feed
   if (req.method === 'GET' && pathname === '/api/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache',
       'Connection': 'keep-alive',
-      'Access-Control-Allow-Origin': '*'
     });
 
     res.write(`data: ${JSON.stringify({
-      type: 'INIT_STATE',
+      type: 'INIT',
       status: connectionState,
-      qr: currentQrDataUrl,
-      phone: connectedPhoneNumber
+      phone: connectedPhoneNumber,
+      qrDataUrl: currentQrDataUrl,
+      dbConnected: getDbStatus(),
     })}\n\n`);
 
     sseClients.push(res);
+
     req.on('close', () => {
-      sseClients = sseClients.filter(c => c !== res);
+      sseClients = sseClients.filter(client => client !== res);
     });
     return;
   }
 
-  // 2. Meta WhatsApp Cloud API Webhook Verification (GET /api/webhook)
-  if (req.method === 'GET' && (pathname === '/api/webhook' || pathname === '/webhook')) {
-    const mode = parsedUrl.query['hub.mode'];
-    const token = parsedUrl.query['hub.verify_token'];
-    const challenge = parsedUrl.query['hub.challenge'];
-    const VERIFY_TOKEN = 'royal_wellness_token_2026';
-
-    console.log(`\n[WEBHOOK GET] Meta verification handshake: mode=${mode}, token=${token}`);
-
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('✅ Meta Webhook Verified Successfully!');
-      res.writeHead(200, { 'Content-Type': 'text/plain' });
-      res.end(challenge);
-      return;
-    } else {
-      res.writeHead(403, { 'Content-Type': 'text/plain' });
-      res.end('Forbidden');
-      return;
-    }
-  }
-
-  // 3. Meta WhatsApp Cloud API Inbound Ingestion (POST /api/webhook)
-  if (req.method === 'POST' && (pathname === '/api/webhook' || pathname === '/webhook')) {
+  // 5. Send Outbound WhatsApp Message
+  if (req.method === 'POST' && pathname === '/api/send') {
     let body = '';
-    req.on('data', chunk => { body += chunk.toString(); });
-    req.on('end', () => {
-      try {
-        const json = JSON.parse(body);
-        const entry = json.entry?.[0];
-        const changes = entry?.changes?.[0];
-        const value = changes?.value;
-        const contacts = value?.contacts;
-        const messages = value?.messages;
-
-        if (messages && messages.length > 0) {
-          const msg = messages[0];
-          const contact = contacts?.[0];
-
-          // TASK 1 & TASK 8: Real Customer phone & WhatsApp ID from Cloud API
-          const senderPhone = msg.from; // e.g. "94770049469"
-          const waId = contact?.wa_id || senderPhone; // e.g. "94770049469"
-          const senderName = contact?.profile?.name || (senderPhone ? `+${senderPhone}` : 'WhatsApp Customer');
-          const text = msg.text?.body || (msg.interactive?.button_reply?.title) || `[${msg.type} message]`;
-
-          // TASK 9: Development trace logging
-          console.log(`\n[WhatsApp Webhook]`);
-          console.log(`- Customer WhatsApp ID: ${waId}`);
-          console.log(`- Customer phone: ${senderPhone}`);
-          console.log(`- Customer name: ${senderName}`);
-          console.log(`- Message text: "${text}"`);
-
-          const normalizedPhone = senderPhone ? (senderPhone.startsWith('+') ? senderPhone : `+${senderPhone}`) : '';
-
-          broadcastSSE({
-            type: 'INBOUND_WHATSAPP_MESSAGE',
-            phone: normalizedPhone,
-            whatsappId: waId,
-            name: senderName,
-            text: text,
-            messageId: msg.id,
-            timestamp: new Date(parseInt(msg.timestamp) * 1000).toISOString()
-          });
-        }
-      } catch (err) {
-        console.error('Error parsing Meta webhook payload:', err);
-      }
-
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ status: 'EVENT_RECEIVED' }));
-    });
-    return;
-  }
-
-  // 4. Get QR Code status
-  if (req.method === 'GET' && pathname === '/api/qr') {
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({
-      status: connectionState,
-      qr: currentQrDataUrl,
-      phone: connectedPhoneNumber
-    }));
-    return;
-  }
-
-  // 3. Outbound Message Dispatcher (Sends through linked phone via Baileys)
-  if (req.method === 'POST' && pathname === '/api/send-message') {
-    let body = '';
-    req.on('data', chunk => body += chunk);
+    req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { to, text } = JSON.parse(body);
-        if (!to || !text) {
+        const { to, message, leadId, customerId } = JSON.parse(body);
+
+        if (!to || !message) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Missing "to" or "text"' }));
+          res.end(JSON.stringify({ success: false, error: 'Missing "to" or "message" field' }));
           return;
         }
 
-        if (!sock || connectionState !== 'connected') {
-          console.warn('⚠️ Send attempted but WhatsApp socket is not connected');
+        if (connectionState !== 'connected' || !sock) {
           res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'WhatsApp is not connected. Please scan QR code.' }));
+          res.end(JSON.stringify({ success: false, error: 'WhatsApp is not linked yet.' }));
           return;
         }
 
         const cleanPhone = to.replace(/[^0-9]/g, '');
-        
-        // Resolve destination JID from known mapping or default standard JID
-        let targetJid = jidMap.get(cleanPhone) || jidMap.get(to) || `${cleanPhone}@s.whatsapp.net`;
-        
+        let targetJid = jidMap.get(cleanPhone) || jidMap.get(`+${cleanPhone}`) || `${cleanPhone}@s.whatsapp.net`;
+
         console.log(`📤 Sending outbound WhatsApp to JID: ${targetJid} (Recipient: "${to}")...`);
-        const sent = await sock.sendMessage(targetJid, { text });
-        console.log(`✅ Message Delivered to ${to}! (ID: ${sent.key.id})`);
+        const sentMsg = await sock.sendMessage(targetJid, { text: message });
+        const outboundMsgId = sentMsg?.key?.id || `out-${Date.now()}`;
+
+        // Save outbound message to MySQL
+        persistOutboundMessage({
+          leadId,
+          customerId,
+          content: message,
+          messageId: outboundMsgId,
+          senderType: 'coordinator',
+        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, messageId: sent.key.id }));
+        res.end(JSON.stringify({
+          success: true,
+          messageId: outboundMsgId,
+          status: 'sent',
+          to: to
+        }));
       } catch (err) {
-        console.error('❌ Error sending WhatsApp message via Baileys:', err);
+        console.error('Error sending WhatsApp message:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ error: err.message }));
+        res.end(JSON.stringify({ success: false, error: err.message }));
       }
     });
     return;
   }
 
-  // 4. Disconnect / Logout
-  if (req.method === 'POST' && pathname === '/api/logout') {
+  // 6. Disconnect / Logout
+  if (req.method === 'POST' && pathname === '/api/disconnect') {
     try {
       if (sock) {
         await sock.logout();
       }
-      if (fs.existsSync(AUTH_FOLDER)) {
-        fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-      }
-      connectionState = 'connecting';
-      currentQrDataUrl = null;
+      fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+      connectionState = 'disconnected';
       connectedPhoneNumber = null;
+      currentQrDataUrl = null;
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true }));
-      setTimeout(startWhatsAppSocket, 1000);
-    } catch (e) {
+      res.end(JSON.stringify({ success: true, message: 'Logged out successfully.' }));
+
+      setTimeout(startWhatsAppSocket, 1500);
+    } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: e.message }));
+      res.end(JSON.stringify({ success: false, error: err.message }));
     }
     return;
   }
 
-  res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('Not Found');
+  // 7. REST: Get Treatment Categories from MySQL
+  if (req.method === 'GET' && pathname === '/api/categories') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const categories = await prisma.treatmentCategory.findMany({ where: { active: true } });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(categories));
+        return;
+      } catch (e) {}
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
+  // 8. REST: Get Treatments from MySQL
+  if (req.method === 'GET' && pathname === '/api/treatments') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const treatments = await prisma.treatment.findMany({ where: { active: true } });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(treatments));
+        return;
+      } catch (e) {}
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
+  // 9. REST: Get Leads from MySQL
+  if (req.method === 'GET' && pathname === '/api/leads') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const leads = await prisma.lead.findMany({
+          include: {
+            customer: true,
+            category: true,
+            treatment: true,
+            assignedCoordinator: true,
+            messages: { take: 1, orderBy: { timestamp: 'desc' } },
+          },
+          orderBy: { updatedAt: 'desc' },
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(leads));
+        return;
+      } catch (e) {}
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
+  // 10. Meta WhatsApp Cloud API Webhook Handlers
+  if (pathname === '/api/webhook') {
+    if (req.method === 'GET') {
+      const mode = parsedUrl.query['hub.mode'];
+      const token = parsedUrl.query['hub.verify_token'];
+      const challenge = parsedUrl.query['hub.challenge'];
+      const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || 'royal_wellness_token_2026';
+
+      if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+        console.log('✅ [META WEBHOOK] Verified successfully with challenge token.');
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end(challenge);
+      } else {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'Forbidden. Invalid verification token.' }));
+      }
+      return;
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', () => {
+        try {
+          const payload = JSON.parse(body);
+          if (payload.object === 'whatsapp_business_account' && Array.isArray(payload.entry)) {
+            for (const entry of payload.entry) {
+              for (const change of entry.changes || []) {
+                if (change.field === 'messages' && change.value) {
+                  const val = change.value;
+                  const contact = val.contacts?.[0];
+                  const message = val.messages?.[0];
+
+                  if (message) {
+                    const phone = contact?.wa_id || message.from;
+                    const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
+                    const text = message.text?.body || message.button?.text || '[Media Message]';
+                    const messageId = message.id;
+
+                    console.log(`\n💬 [META INBOUND] ${name} (+${phone}): "${text}"`);
+                    
+                    broadcastSSE({
+                      type: 'INBOUND_WHATSAPP_MESSAGE',
+                      phone: phone ? `+${phone}` : '',
+                      whatsappId: phone,
+                      realPhone: phone ? `+${phone}` : '',
+                      name: name,
+                      text: text,
+                      messageId: messageId,
+                      timestamp: new Date().toISOString()
+                    });
+
+                    persistInboundMessage({
+                      phone: `+${phone}`,
+                      whatsappId: phone,
+                      name: name,
+                      text: text,
+                      messageId: messageId,
+                      timestamp: new Date().toISOString(),
+                    });
+                  }
+                }
+              }
+            }
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ status: 'EVENT_RECEIVED' }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Malformed JSON payload' }));
+        }
+      });
+      return;
+    }
+  }
+
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Endpoint Not Found' }));
 });
 
 server.listen(PORT, () => {
-  console.log(`\n🚀 Royal Wellness WhatsApp QR Web Bridge running on http://localhost:${PORT}`);
-  console.log(`- QR Stream: http://localhost:${PORT}/api/events`);
-  console.log(`- Send API:  http://localhost:${PORT}/api/send-message`);
+  console.log(`\n🚀 Royal Wellness Unified WhatsApp Server running on http://localhost:${PORT}`);
+  console.log(`   - WhatsApp Web Socket: Active (Baileys)`);
+  console.log(`   - Meta Cloud API Webhook: http://localhost:${PORT}/api/webhook`);
+  console.log(`   - Real-Time SSE Hub: http://localhost:${PORT}/api/events`);
+  console.log(`   - MySQL Storage Support: Active (Prisma ORM)`);
+
+  startWhatsAppSocket().catch(err => {
+    console.error('Failed to initialize WhatsApp socket:', err);
+  });
 });

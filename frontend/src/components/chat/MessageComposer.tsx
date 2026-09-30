@@ -40,9 +40,21 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
+  // Media Attachment State & Preview
+  const [mediaPreview, setMediaPreview] = useState<{
+    file: File;
+    previewUrl: string;
+    type: 'image' | 'video' | 'document';
+    fileName: string;
+    caption: string;
+  } | null>(null);
+
   const inputRef = useRef<HTMLInputElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const docInputRef = useRef<HTMLInputElement>(null);
 
   const category = categories.find(c => c.id === lead.categoryId);
   const treatment = treatments.find(t => t.id === lead.treatmentId);
@@ -81,6 +93,57 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     return () => clearInterval(interval);
   }, [isRecording]);
 
+  // Handle File Selection
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, fallbackType?: 'image' | 'video' | 'document') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    let type: 'image' | 'video' | 'document' = fallbackType || 'document';
+    if (file.type.startsWith('image/')) type = 'image';
+    else if (file.type.startsWith('video/')) type = 'video';
+    else type = 'document';
+
+    const previewUrl = URL.createObjectURL(file);
+    setMediaPreview({
+      file,
+      previewUrl,
+      type,
+      fileName: file.name,
+      caption: ''
+    });
+
+    setShowAttachMenu(false);
+    e.target.value = '';
+  };
+
+  // Submit and Send Media
+  const handleSendMedia = () => {
+    if (!mediaPreview) return;
+
+    const { file, type, fileName, caption } = mediaPreview;
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      const base64Data = reader.result as string;
+      sendMessage(
+        lead.id,
+        caption.trim(),
+        'coordinator',
+        {
+          type,
+          url: base64Data,
+          dataUrl: base64Data,
+          fileName,
+          caption: caption.trim()
+        }
+      );
+      URL.revokeObjectURL(mediaPreview.previewUrl);
+      setMediaPreview(null);
+    };
+
+    reader.readAsDataURL(file);
+  };
+
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputVal.trim()) return;
@@ -100,9 +163,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   };
 
   const handleInsertEmoji = (emoji: string) => {
-    setInputVal(prev => prev + emoji);
-    if (inputRef.current) {
-      inputRef.current.focus();
+    if (mediaPreview) {
+      setMediaPreview(prev => prev ? { ...prev, caption: prev.caption + emoji } : null);
+    } else {
+      setInputVal(prev => prev + emoji);
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
     }
   };
 
@@ -110,6 +177,30 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
   return (
     <div className="bg-[#202c33] px-4 py-2 border-t border-[#222e35] select-none shrink-0 relative">
+      {/* Hidden File Inputs */}
+      <input 
+        ref={fileInputRef}
+        type="file" 
+        accept="image/*,video/*" 
+        className="hidden" 
+        onChange={(e) => handleFileSelect(e)}
+      />
+      <input 
+        ref={cameraInputRef}
+        type="file" 
+        accept="image/*" 
+        capture="environment"
+        className="hidden" 
+        onChange={(e) => handleFileSelect(e, 'image')}
+      />
+      <input 
+        ref={docInputRef}
+        type="file" 
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.txt,.zip" 
+        className="hidden" 
+        onChange={(e) => handleFileSelect(e, 'document')}
+      />
+
       {/* 1. Replying Preview Bar */}
       {replyingMessage && (
         <div className="mb-2 p-2 bg-[#111b21] border-l-4 border-[#00a884] rounded-r-lg flex items-center justify-between text-xs animate-in fade-in duration-100">
@@ -172,7 +263,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           className="absolute bottom-16 left-4 bg-[#233138] border border-slate-700/80 rounded-2xl shadow-2xl p-2 w-52 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db] space-y-1 select-none"
         >
           <button 
-            onClick={() => setShowAttachMenu(false)}
+            onClick={() => {
+              setShowAttachMenu(false);
+              fileInputRef.current?.click();
+            }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
           >
             <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
@@ -182,7 +276,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           </button>
 
           <button 
-            onClick={() => setShowAttachMenu(false)}
+            onClick={() => {
+              setShowAttachMenu(false);
+              cameraInputRef.current?.click();
+            }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
           >
             <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center">
@@ -192,7 +289,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           </button>
 
           <button 
-            onClick={() => setShowAttachMenu(false)}
+            onClick={() => {
+              setShowAttachMenu(false);
+              docInputRef.current?.click();
+            }}
             className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
           >
             <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
@@ -346,6 +446,94 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           </button>
         )}
       </div>
+
+      {/* 6. WhatsApp Web Style Fullscreen Media Send Preview Modal */}
+      {mediaPreview && (
+        <div className="fixed inset-0 z-[100] bg-[#111b21] flex flex-col animate-in fade-in duration-150">
+          {/* Header */}
+          <div className="h-14 px-6 bg-[#202c33] flex items-center justify-between border-b border-[#222e35]">
+            <div className="flex items-center gap-3">
+              <button 
+                onClick={() => {
+                  URL.revokeObjectURL(mediaPreview.previewUrl);
+                  setMediaPreview(null);
+                }}
+                className="p-2 rounded-full hover:bg-[#374248] text-[#8696a0] hover:text-white transition-colors"
+                title="Cancel"
+              >
+                <X className="w-5 h-5" />
+              </button>
+              <span className="font-semibold text-sm text-[#e9edef] truncate max-w-md">
+                {mediaPreview.type === 'image' ? 'Send Photo' : mediaPreview.type === 'video' ? 'Send Video' : 'Send Document'} — {mediaPreview.fileName}
+              </span>
+            </div>
+          </div>
+
+          {/* Center Preview Content */}
+          <div className="flex-1 flex items-center justify-center p-6 overflow-hidden relative">
+            {mediaPreview.type === 'image' ? (
+              <img 
+                src={mediaPreview.previewUrl} 
+                alt="Media Preview" 
+                className="max-h-[65vh] max-w-full object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-150"
+              />
+            ) : mediaPreview.type === 'video' ? (
+              <video 
+                src={mediaPreview.previewUrl} 
+                controls 
+                autoPlay 
+                className="max-h-[65vh] max-w-full rounded-lg shadow-2xl"
+              />
+            ) : (
+              <div className="bg-[#202c33] border border-slate-700 rounded-2xl p-8 flex flex-col items-center gap-4 text-center max-w-sm shadow-2xl">
+                <div className="w-20 h-20 rounded-2xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                  <FileText className="w-10 h-10" />
+                </div>
+                <div>
+                  <p className="font-bold text-sm text-[#e9edef] truncate max-w-xs">{mediaPreview.fileName}</p>
+                  <p className="text-xs text-[#8696a0] mt-1">{(mediaPreview.file.size / 1024).toFixed(1)} KB</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Bottom Caption Input & Send Row */}
+          <div className="bg-[#202c33] p-4 border-t border-[#222e35]">
+            <div className="max-w-3xl mx-auto flex items-center gap-3">
+              <button 
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className={`p-2.5 rounded-full transition-colors ${showEmojiPicker ? 'text-[#00a884] bg-[#374248]' : 'text-[#8696a0] hover:text-[#d1d7db]'}`}
+                title="Emoji"
+              >
+                <Smile className="w-6 h-6" />
+              </button>
+
+              <input 
+                type="text"
+                value={mediaPreview.caption}
+                onChange={(e) => setMediaPreview({ ...mediaPreview, caption: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleSendMedia();
+                  }
+                }}
+                autoFocus
+                placeholder="Add a caption..."
+                className="flex-1 bg-[#2a3942] text-[#d1d7db] placeholder-[#8696a0] text-sm rounded-lg px-4 py-3 outline-none border-none focus:ring-1 focus:ring-[#00a884]"
+              />
+
+              <button 
+                onClick={handleSendMedia}
+                className="w-12 h-12 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-xl active:scale-95 transition-all shrink-0"
+                title="Send"
+              >
+                <Send className="w-6 h-6 fill-current ml-0.5" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

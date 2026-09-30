@@ -6,7 +6,8 @@ import QRCode from 'qrcode';
 import makeWASocketDefault, {
   DisconnectReason,
   useMultiFileAuthState,
-  fetchLatestBaileysVersion
+  fetchLatestBaileysVersion,
+  downloadMediaMessage
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import dotenv from 'dotenv';
@@ -48,7 +49,7 @@ function broadcastSSE(data) {
 }
 
 // Helper: Save Inbound Message to MySQL
-async function persistInboundMessage({ phone, whatsappId, name, text, messageId, timestamp, avatarUrl }) {
+async function persistInboundMessage({ phone, whatsappId, name, text, messageId, timestamp, avatarUrl, mediaUrl, mediaType }) {
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return;
 
@@ -109,8 +110,10 @@ async function persistInboundMessage({ phone, whatsappId, name, text, messageId,
       await prisma.message.upsert({
         where: { id: messageId },
         update: {
-          content: text,
+          content: text || '',
           status: 'delivered',
+          mediaUrl: mediaUrl || undefined,
+          mediaType: mediaType || undefined,
         },
         create: {
           id: messageId,
@@ -118,9 +121,11 @@ async function persistInboundMessage({ phone, whatsappId, name, text, messageId,
           customerId: customer.id,
           direction: 'inbound',
           senderType: 'customer',
-          content: text,
+          content: text || '',
           status: 'delivered',
           timestamp: new Date(timestamp || Date.now()),
+          mediaUrl: mediaUrl || null,
+          mediaType: mediaType || null,
         },
       });
     }
@@ -130,7 +135,7 @@ async function persistInboundMessage({ phone, whatsappId, name, text, messageId,
 }
 
 // Helper: Save Outbound Message to MySQL
-async function persistOutboundMessage({ leadId, customerId, content, messageId, senderType }) {
+async function persistOutboundMessage({ leadId, customerId, content, messageId, senderType, mediaUrl, mediaType }) {
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return;
 
@@ -144,9 +149,11 @@ async function persistOutboundMessage({ leadId, customerId, content, messageId, 
         customerId: customerId || 'cust-unknown',
         direction: 'outbound',
         senderType: senderType || 'coordinator',
-        content: content,
+        content: content || '',
         status: 'sent',
         timestamp: new Date(),
+        mediaUrl: mediaUrl || null,
+        mediaType: mediaType || null,
       },
     });
   } catch (err) {
@@ -351,14 +358,58 @@ async function startWhatsAppSocket() {
         continue; // Do NOT create a new chat message bubble!
       }
 
+      // Check for Inbound Media (Image, Video, Audio, Document)
+      let mediaType = null;
+      let mediaUrl = null;
+      let fileName = null;
+
+      if (msg.message.imageMessage) {
+        mediaType = 'image';
+      } else if (msg.message.videoMessage) {
+        mediaType = 'video';
+      } else if (msg.message.documentMessage) {
+        mediaType = 'document';
+        fileName = msg.message.documentMessage.fileName || 'document.pdf';
+      } else if (msg.message.audioMessage) {
+        mediaType = 'audio';
+      }
+
+      if (mediaType) {
+        try {
+          const buffer = await downloadMediaMessage(
+            msg,
+            'buffer',
+            {},
+            { 
+              logger: pino({ level: 'silent' }),
+              reuploadRequest: sock.updateMediaMessage
+            }
+          );
+          if (buffer && buffer.length > 0) {
+            const ext = mediaType === 'image' ? 'jpg' : mediaType === 'video' ? 'mp4' : mediaType === 'audio' ? 'ogg' : (fileName ? path.extname(fileName).replace('.', '') || 'pdf' : 'pdf');
+            const safeName = `media_${(messageId || 'in').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.${ext}`;
+            const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+            if (!fs.existsSync(uploadsDir)) {
+              fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            fs.writeFileSync(path.join(uploadsDir, safeName), buffer);
+            mediaUrl = `http://localhost:3001/uploads/${safeName}`;
+            console.log(`📥 [MEDIA DOWNLOADED] Saved ${mediaType} to: ${mediaUrl}`);
+          }
+        } catch (e) {
+          console.warn('Could not download inbound media message:', e.message);
+        }
+      }
+
       const messageText = 
         msg.message.conversation || 
         msg.message.extendedTextMessage?.text || 
         msg.message.imageMessage?.caption || 
         msg.message.videoMessage?.caption ||
-        (msg.message.interactiveResponseMessage ? 'Interactive Response' : '[Media Message]');
+        msg.message.documentMessage?.caption ||
+        (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : (msg.message.interactiveResponseMessage ? 'Interactive Response' : ''));
 
-      console.log(`\n💬 [WHATSAPP INBOUND] ${pushName} (+${senderPhone}): "${messageText}"`);
+      console.log(`\n💬 [WHATSAPP INBOUND] ${pushName} (+${senderPhone}): "${messageText}" ${mediaUrl ? `[Media: ${mediaType}]` : ''}`);
 
       let avatarUrl = null;
       try {
@@ -381,7 +432,13 @@ async function startWhatsAppSocket() {
         avatarUrl: avatarUrl,
         text: messageText,
         messageId: messageId,
-        timestamp: timestampIso
+        timestamp: timestampIso,
+        media: mediaUrl ? {
+          type: mediaType,
+          url: mediaUrl,
+          caption: messageText,
+          fileName: fileName
+        } : undefined
       });
 
       // Persist directly into MySQL
@@ -393,6 +450,8 @@ async function startWhatsAppSocket() {
         messageId: messageId,
         timestamp: timestampIso,
         avatarUrl: avatarUrl,
+        mediaUrl: mediaUrl,
+        mediaType: mediaType,
       });
     }
   });
@@ -413,6 +472,36 @@ const server = http.createServer(async (req, res) => {
 
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
+
+  // 0. Static Uploads File Serving
+  if (pathname.startsWith('/uploads/')) {
+    const filename = path.basename(pathname);
+    const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+    if (fs.existsSync(filePath)) {
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeTypes = {
+        '.jpg': 'image/jpeg',
+        '.jpeg': 'image/jpeg',
+        '.png': 'image/png',
+        '.gif': 'image/gif',
+        '.webp': 'image/webp',
+        '.mp4': 'video/mp4',
+        '.webm': 'video/webm',
+        '.ogg': 'audio/ogg',
+        '.mp3': 'audio/mpeg',
+        '.wav': 'audio/wav',
+        '.pdf': 'application/pdf',
+      };
+      const contentType = mimeTypes[ext] || 'application/octet-stream';
+      res.writeHead(200, { 'Content-Type': contentType });
+      fs.createReadStream(filePath).pipe(res);
+      return;
+    } else {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'File not found' }));
+      return;
+    }
+  }
 
   // 1. Health & Status
   if (req.method === 'GET' && pathname === '/api/status') {
@@ -470,7 +559,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 5. Send Outbound WhatsApp Message (Supports both /api/send and /api/send-message)
+  // 5. Send Outbound WhatsApp Message & Media
   if (req.method === 'POST' && (pathname === '/api/send' || pathname === '/api/send-message')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -480,6 +569,7 @@ const server = http.createServer(async (req, res) => {
         const to = payload.to || payload.phone || '';
         const whatsappId = payload.whatsappId || payload.waId || '';
         const msgContent = payload.message || payload.text || payload.content || '';
+        const media = payload.media; // { type, url, dataUrl, fileName, caption }
         const leadId = payload.leadId;
         const customerId = payload.customerId;
 
@@ -489,9 +579,9 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        if (!msgContent) {
+        if (!msgContent && !media) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Missing "message" or "text" content field' }));
+          res.end(JSON.stringify({ success: false, error: 'Missing message text or media content' }));
           return;
         }
 
@@ -523,7 +613,54 @@ const server = http.createServer(async (req, res) => {
         }
 
         console.log(`📤 Sending outbound WhatsApp to JID: ${targetJid} (Recipient: "${to}", WA ID: "${whatsappId}")...`);
-        const sentMsg = await sock.sendMessage(targetJid, { text: msgContent });
+        
+        let sentMsg;
+        let savedMediaUrl = media ? media.url : null;
+        let mediaBuffer = null;
+
+        // Process base64 / dataUrl if provided
+        if (media && (media.dataUrl || (media.url && media.url.startsWith('data:')))) {
+          const rawData = media.dataUrl || media.url;
+          const matches = rawData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
+          if (matches && matches.length === 3) {
+            mediaBuffer = Buffer.from(matches[2], 'base64');
+            const ext = media.type === 'image' ? 'jpg' : media.type === 'video' ? 'mp4' : media.type === 'audio' ? 'ogg' : 'pdf';
+            const safeName = `out_${Date.now()}_${Math.floor(Math.random()*1000)}.${ext}`;
+            const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+            if (!fs.existsSync(uploadsDir)) {
+              fs.mkdirSync(uploadsDir, { recursive: true });
+            }
+            fs.writeFileSync(path.join(uploadsDir, safeName), mediaBuffer);
+            savedMediaUrl = `http://localhost:3001/uploads/${safeName}`;
+          }
+        }
+
+        if (media && media.type === 'image') {
+          sentMsg = await sock.sendMessage(targetJid, {
+            image: mediaBuffer || { url: savedMediaUrl },
+            caption: msgContent || media.caption || ''
+          });
+        } else if (media && media.type === 'video') {
+          sentMsg = await sock.sendMessage(targetJid, {
+            video: mediaBuffer || { url: savedMediaUrl },
+            caption: msgContent || media.caption || ''
+          });
+        } else if (media && media.type === 'document') {
+          sentMsg = await sock.sendMessage(targetJid, {
+            document: mediaBuffer || { url: savedMediaUrl },
+            mimetype: media.mimetype || 'application/pdf',
+            fileName: media.fileName || 'document.pdf',
+            caption: msgContent || media.caption || ''
+          });
+        } else if (media && media.type === 'audio') {
+          sentMsg = await sock.sendMessage(targetJid, {
+            audio: mediaBuffer || { url: savedMediaUrl },
+            ptt: true
+          });
+        } else {
+          sentMsg = await sock.sendMessage(targetJid, { text: msgContent });
+        }
+
         const outboundMsgId = sentMsg?.key?.id || `out-${Date.now()}`;
         console.log(`✅ WhatsApp Outbound Delivered! Msg ID: ${outboundMsgId}`);
 
@@ -531,9 +668,11 @@ const server = http.createServer(async (req, res) => {
         persistOutboundMessage({
           leadId,
           customerId,
-          content: msgContent,
+          content: msgContent || (media ? `[${media.type.toUpperCase()}]` : ''),
           messageId: outboundMsgId,
           senderType: 'coordinator',
+          mediaUrl: savedMediaUrl,
+          mediaType: media ? media.type : null,
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -541,7 +680,8 @@ const server = http.createServer(async (req, res) => {
           success: true,
           messageId: outboundMsgId,
           status: 'sent',
-          to: to
+          to: to,
+          mediaUrl: savedMediaUrl
         }));
       } catch (err) {
         console.error('❌ Error sending WhatsApp message:', err);

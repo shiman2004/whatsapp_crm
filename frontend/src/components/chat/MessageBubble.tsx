@@ -3,6 +3,10 @@ import {
   Check, 
   CheckCheck, 
   File, 
+  FileText,
+  Download,
+  Maximize2,
+  X,
   ChevronDown, 
   Info, 
   CornerUpLeft, 
@@ -45,6 +49,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   const [infoModalOpen, setInfoModalOpen] = useState(false);
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
   const [metaAiModalOpen, setMetaAiModalOpen] = useState(false);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   const bubbleRef = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -225,14 +230,54 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             </div>
           )}
 
-          {/* Media attachment */}
+          {/* Rich Media Attachment (Image, Video, Audio, Document) */}
           {message.media && (
-            <div className="mb-1.5 p-2 rounded-lg bg-black/20 border border-white/10 flex items-center gap-2">
-              <File className="w-4 h-4 text-teal-400 shrink-0" />
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] font-semibold truncate">{message.media.fileName || 'Attachment'}</p>
-                <p className="text-[9px] text-slate-400">Media file</p>
-              </div>
+            <div className="mb-1.5 rounded-lg overflow-hidden">
+              {message.media.type === 'image' || message.media.url.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) ? (
+                <div 
+                  className="relative group/media cursor-pointer rounded-lg overflow-hidden bg-black/20"
+                  onClick={() => setLightboxUrl(message.media?.url || null)}
+                >
+                  <img 
+                    src={message.media.url} 
+                    alt={message.media.fileName || 'Photo'} 
+                    className="w-full max-h-80 object-cover rounded-lg hover:brightness-95 transition-all"
+                  />
+                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
+                    <Maximize2 className="w-6 h-6 text-white drop-shadow-lg" />
+                  </div>
+                </div>
+              ) : message.media.type === 'video' || message.media.url.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
+                <div className="relative rounded-lg overflow-hidden bg-black/40">
+                  <video 
+                    src={message.media.url} 
+                    controls 
+                    playsInline 
+                    className="w-full max-h-80 rounded-lg"
+                  />
+                </div>
+              ) : message.media.type === 'audio' ? (
+                <div className="p-2 rounded-lg bg-black/25 border border-white/10 flex items-center gap-2">
+                  <audio src={message.media.url} controls className="w-full h-8" />
+                </div>
+              ) : (
+                <a 
+                  href={message.media.url} 
+                  target="_blank" 
+                  rel="noopener noreferrer" 
+                  download={message.media.fileName || 'document'}
+                  className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate text-[#e9edef]">{message.media.fileName || 'Document'}</p>
+                    <p className="text-[10px] text-[#8696a0]">Click to view / download</p>
+                  </div>
+                  <Download className="w-4 h-4 text-[#8696a0] hover:text-white shrink-0" />
+                </a>
+              )}
             </div>
           )}
 
@@ -429,6 +474,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
         message={message}
         lead={lead}
       />
+
+      {/* Image Lightbox Modal */}
+      {lightboxUrl && (
+        <div 
+          className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button 
+            onClick={() => setLightboxUrl(null)}
+            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all z-10"
+            title="Close"
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <img 
+            src={lightboxUrl} 
+            alt="Full size preview" 
+            className="max-w-full max-h-[90vh] object-contain rounded-lg shadow-2xl animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </>
   );
 };

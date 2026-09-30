@@ -1,0 +1,435 @@
+import React, { useState, useRef, useEffect } from 'react';
+import { 
+  Check, 
+  CheckCheck, 
+  File, 
+  ChevronDown, 
+  Info, 
+  CornerUpLeft, 
+  Copy, 
+  Smile, 
+  Forward, 
+  Pin, 
+  Sparkles, 
+  Star, 
+  Trash2,
+  Plus
+} from 'lucide-react';
+import { Message, Lead } from '../../types';
+import { useCrm } from '../../context/CrmContext';
+import { MessageInfoModal } from './MessageInfoModal';
+import { ForwardMessageModal } from './ForwardMessageModal';
+import { MessageMetaAiModal } from './MessageMetaAiModal';
+
+interface MessageBubbleProps {
+  message: Message;
+  lead?: Lead;
+}
+
+const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
+const EXTENDED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👏', '🎉', '💯', '✨', '🤝'];
+
+export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) => {
+  const { 
+    setReplyingMessage, 
+    reactToMessage, 
+    starMessage, 
+    pinMessage, 
+    deleteMessage 
+  } = useCrm();
+
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [openUpward, setOpenUpward] = useState(false);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+  const [showFullPicker, setShowFullPicker] = useState(false);
+  const [infoModalOpen, setInfoModalOpen] = useState(false);
+  const [forwardModalOpen, setForwardModalOpen] = useState(false);
+  const [metaAiModalOpen, setMetaAiModalOpen] = useState(false);
+
+  const bubbleRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const isOutbound = message.direction === 'outbound';
+
+  const handleOpenMenu = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (bubbleRef.current) {
+      const rect = bubbleRef.current.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      // If bubble is close to bottom (< 350px), pop menu upward!
+      if (windowHeight - rect.bottom < 350) {
+        setOpenUpward(true);
+      } else {
+        setOpenUpward(false);
+      }
+    }
+    setMenuOpen(prev => !prev);
+  };
+
+  // Close context menu & emoji picker when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+        setShowReactionPicker(false);
+        setShowFullPicker(false);
+      }
+    };
+    if (menuOpen || showReactionPicker || showFullPicker) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [menuOpen, showReactionPicker, showFullPicker]);
+
+  // Actions
+  const handleCopy = () => {
+    navigator.clipboard.writeText(message.content);
+    setMenuOpen(false);
+  };
+
+  const handleReply = () => {
+    setReplyingMessage(message);
+    setMenuOpen(false);
+  };
+
+  const handleToggleReaction = (emoji: string) => {
+    reactToMessage(message.id, emoji);
+    setShowReactionPicker(false);
+    setShowFullPicker(false);
+    setMenuOpen(false);
+  };
+
+  // Format URLs inside text as clickable links
+  const renderFormattedText = (text: string) => {
+    const urlRegex = /(https?:\/\/[^\s]+)/g;
+    const parts = text.split(urlRegex);
+    return parts.map((part, i) => {
+      if (part.match(urlRegex)) {
+        return (
+          <a
+            key={i}
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            className="text-sky-300 underline hover:text-sky-200 break-all"
+          >
+            {part}
+          </a>
+        );
+      }
+      return part;
+    });
+  };
+
+  return (
+    <>
+      <div 
+        ref={bubbleRef}
+        className={`flex items-center gap-1.5 my-1 group relative z-10 ${
+          isOutbound ? 'justify-end' : 'justify-start'
+        } ${menuOpen || showReactionPicker ? 'z-40' : ''}`}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          handleOpenMenu();
+        }}
+      >
+        {/* Outbound Hover Emoji Trigger (Appears to the LEFT of outbound bubble) */}
+        {isOutbound && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReactionPicker(!showReactionPicker);
+                setMenuOpen(false);
+              }}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                showReactionPicker 
+                  ? 'bg-slate-700 text-whatsapp shadow-md' 
+                  : 'bg-black/30 hover:bg-[#202c33] text-slate-400 hover:text-slate-200'
+              }`}
+              title="React"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Message Bubble Box */}
+        <div
+          className={`relative max-w-[85%] md:max-w-[65%] rounded-2xl px-3.5 py-2 shadow-sm text-xs leading-relaxed transition-all ${
+            isOutbound
+              ? 'bg-[#005c4b] text-slate-100 rounded-tr-none'
+              : 'bg-[#202c33] text-slate-100 rounded-tl-none'
+          } ${message.pinned ? 'border border-amber-500/50 shadow-amber-500/10' : ''}`}
+        >
+          {/* Top-Right Hover Chevron (WhatsApp Web standard) */}
+          <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              onClick={handleOpenMenu}
+              className="w-5 h-5 rounded-full bg-black/40 hover:bg-black/70 text-slate-300 hover:text-white flex items-center justify-center shadow transition-all"
+              title="Menu"
+            >
+              <ChevronDown className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* Floating Emoji Reaction Bar (When open or clicked) */}
+          {showReactionPicker && (
+            <div 
+              className={`absolute ${
+                openUpward ? 'bottom-full mb-2' : '-top-10'
+              } ${isOutbound ? 'right-0' : 'left-0'} z-50 animate-in fade-in zoom-in-95 duration-150`}
+            >
+              <div className="bg-[#202c33] border border-slate-700 rounded-full px-2 py-1 shadow-2xl flex items-center gap-1 backdrop-blur-md">
+                {(showFullPicker ? EXTENDED_EMOJIS : QUICK_EMOJIS).map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => handleToggleReaction(emoji)}
+                    className="w-7 h-7 flex items-center justify-center text-sm hover:scale-130 transition-transform rounded-full hover:bg-slate-700/70 active:scale-95"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setShowFullPicker(!showFullPicker)}
+                  className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white rounded-full hover:bg-slate-700/60 transition-all"
+                  title="More reactions"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Quoted Reply Preview (if replyTo exists) */}
+          {message.replyTo && (
+            <div className="mb-2 p-2 rounded-lg bg-black/25 border-l-4 border-whatsapp text-slate-200 text-[11px]">
+              <span className="font-bold text-teal-300 block text-[10px]">
+                {message.replyTo.senderName}
+              </span>
+              <p className="line-clamp-1 italic text-slate-300">
+                {message.replyTo.content}
+              </p>
+            </div>
+          )}
+
+          {/* Message Content */}
+          <p className="whitespace-pre-line text-[13px] font-normal text-slate-100 break-words pr-4 leading-relaxed">
+            {renderFormattedText(message.content)}
+          </p>
+
+          {/* Media attachment */}
+          {message.media && (
+            <div className="mt-1.5 p-2 rounded-lg bg-black/20 border border-white/10 flex items-center gap-2">
+              <File className="w-4 h-4 text-teal-400 shrink-0" />
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] font-semibold truncate">{message.media.fileName || 'Attachment'}</p>
+                <p className="text-[9px] text-slate-400">Media file</p>
+              </div>
+            </div>
+          )}
+
+          {/* Timestamp, Pin, Star & Delivery Status */}
+          <div className="flex items-center justify-end gap-1.5 mt-1 text-[10px] text-slate-300/80 font-mono select-none">
+            {message.pinned && (
+              <span title="Pinned message" className="text-amber-400">
+                <Pin className="w-3 h-3 fill-amber-400" />
+              </span>
+            )}
+            {message.starred && (
+              <span title="Starred message" className="text-amber-300">
+                <Star className="w-3 h-3 fill-amber-300" />
+              </span>
+            )}
+            <span>
+              {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+            </span>
+            {isOutbound && (
+              message.status === 'read' ? (
+                <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-sky-400" /></span>
+              ) : message.status === 'delivered' ? (
+                <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-slate-300" /></span>
+              ) : (
+                <span title="Sent"><Check className="w-3.5 h-3.5 text-slate-300" /></span>
+              )
+            )}
+          </div>
+
+          {/* Dropdown Menu (WhatsApp Web Style with Upward/Downward Float) */}
+          {menuOpen && (
+            <div 
+              ref={menuRef}
+              className={`absolute ${
+                openUpward ? 'bottom-full mb-1.5' : 'top-8 mt-1'
+              } ${
+                isOutbound ? 'right-0' : 'left-0'
+              } z-50 w-48 bg-[#233138] border border-slate-700/90 rounded-2xl shadow-2xl py-1.5 text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md`}
+            >
+              <button
+                onClick={() => {
+                  setInfoModalOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <Info className="w-4 h-4 text-slate-400" />
+                <span>Message info</span>
+              </button>
+
+              <button
+                onClick={handleReply}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <CornerUpLeft className="w-4 h-4 text-slate-400" />
+                <span>Reply</span>
+              </button>
+
+              <button
+                onClick={handleCopy}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <Copy className="w-4 h-4 text-slate-400" />
+                <span>Copy</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setShowReactionPicker(true);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <Smile className="w-4 h-4 text-slate-400" />
+                <span>React</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setForwardModalOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <Forward className="w-4 h-4 text-slate-400" />
+                <span>Forward</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  pinMessage(message.id);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <Pin className="w-4 h-4 text-slate-400" />
+                <span>{message.pinned ? 'Unpin' : 'Pin'}</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setMetaAiModalOpen(true);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors text-teal-300 font-medium"
+              >
+                <Sparkles className="w-4 h-4 text-teal-400" />
+                <span>Ask Meta AI</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  starMessage(message.id);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              >
+                <Star className={`w-4 h-4 ${message.starred ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} />
+                <span>{message.starred ? 'Unstar' : 'Star'}</span>
+              </button>
+
+              <div className="h-px bg-slate-700/60 my-1" />
+
+              <button
+                onClick={() => {
+                  deleteMessage(message.id);
+                  setMenuOpen(false);
+                }}
+                className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-red-950/40 text-red-400 transition-colors"
+              >
+                <Trash2 className="w-4 h-4 text-red-400" />
+                <span>Delete</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Inbound Hover Emoji Trigger (Appears to the RIGHT of inbound bubble) */}
+        {!isOutbound && (
+          <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 relative">
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowReactionPicker(!showReactionPicker);
+                setMenuOpen(false);
+              }}
+              className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
+                showReactionPicker 
+                  ? 'bg-slate-700 text-whatsapp shadow-md' 
+                  : 'bg-black/30 hover:bg-[#202c33] text-slate-400 hover:text-slate-200'
+              }`}
+              title="React"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
+        {/* Reaction Badges below the Bubble */}
+        {message.reactions && message.reactions.length > 0 && (
+          <div className={`absolute -bottom-2.5 ${isOutbound ? 'right-2' : 'left-2'} z-20`}>
+            <div className="bg-[#1f2c34] border border-slate-700/80 px-2 py-0.5 rounded-full shadow-lg flex items-center gap-1 text-[11px] backdrop-blur-md">
+              {message.reactions.map((r, i) => (
+                <span 
+                  key={i} 
+                  onClick={() => handleToggleReaction(r)}
+                  className="cursor-pointer hover:scale-125 transition-transform"
+                >
+                  {r}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Message Info Modal */}
+      <MessageInfoModal
+        isOpen={infoModalOpen}
+        onClose={() => setInfoModalOpen(false)}
+        message={message}
+        lead={lead}
+      />
+
+      {/* Forward Message Modal */}
+      <ForwardMessageModal
+        isOpen={forwardModalOpen}
+        onClose={() => setForwardModalOpen(false)}
+        message={message}
+      />
+
+      {/* Ask Meta AI Modal */}
+      <MessageMetaAiModal
+        isOpen={metaAiModalOpen}
+        onClose={() => setMetaAiModalOpen(false)}
+        message={message}
+        lead={lead}
+      />
+    </>
+  );
+};
+

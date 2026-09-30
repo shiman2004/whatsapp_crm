@@ -1,0 +1,1194 @@
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import confetti from 'canvas-confetti';
+import {
+  User,
+  Customer,
+  Lead,
+  Message,
+  TreatmentCategory,
+  Treatment,
+  WhatsAppTemplate,
+  FollowupSequence,
+  Followup,
+  LeadNote,
+  LeadStageHistory,
+  AuditLog,
+  LeadStage,
+  LanguageCode,
+  OnboardingSession
+} from '../types';
+import {
+  INITIAL_USERS,
+  INITIAL_CATEGORIES,
+  INITIAL_TREATMENTS,
+  INITIAL_TEMPLATES,
+  INITIAL_SEQUENCES,
+  INITIAL_CUSTOMERS,
+  INITIAL_LEADS,
+  INITIAL_MESSAGES,
+  INITIAL_FOLLOWUPS,
+  INITIAL_NOTES,
+  INITIAL_STAGE_HISTORY,
+  INITIAL_AUDIT_LOGS
+} from '../mockData/initialData';
+import { 
+  normalizeWhatsAppNumber, 
+  getCleanWhatsAppDigits, 
+  isHardwareLid, 
+  formatWhatsAppDisplay 
+} from '../utils/phoneUtils';
+import { aiService } from '../services/aiService';
+
+interface NotificationToast {
+  id: string;
+  title: string;
+  message: string;
+  type: 'info' | 'success' | 'warning' | 'lead';
+  timestamp: string;
+}
+
+interface CrmContextType {
+  // Current user & RBAC
+  currentUser: User;
+  users: User[];
+  setCurrentUser: (user: User) => void;
+  isSuperAdmin: boolean;
+
+  // Data collections
+  leads: Lead[];
+  customers: Customer[];
+  messages: Message[];
+  categories: TreatmentCategory[];
+  treatments: Treatment[];
+  templates: WhatsAppTemplate[];
+  sequences: FollowupSequence[];
+  followups: Followup[];
+  notes: LeadNote[];
+  stageHistories: LeadStageHistory[];
+  auditLogs: AuditLog[];
+  notifications: NotificationToast[];
+
+  // Selected Lead in view
+  selectedLeadId: string | null;
+  setSelectedLeadId: (id: string | null) => void;
+  selectedLead: Lead | undefined;
+
+  // Lead actions
+  assignLead: (leadId: string, coordinatorId: string) => void;
+  updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string) => void;
+  addLeadNote: (leadId: string, note: string) => void;
+  
+  // Messaging actions
+  replyingMessage: Message | null;
+  setReplyingMessage: (msg: Message | null) => void;
+  sendMessage: (leadId: string, content: string, senderType?: 'coordinator' | 'system' | 'ai', media?: any, replyTo?: { id: string; content: string; senderName: string }) => void;
+  sendWhatsAppTemplate: (leadId: string, templateId: string, params: string[]) => void;
+  markChatAsRead: (leadId: string) => void;
+  reactToMessage: (messageId: string, emoji: string) => void;
+  starMessage: (messageId: string) => void;
+  pinMessage: (messageId: string) => void;
+  deleteMessage: (messageId: string) => void;
+  forwardMessage: (messageId: string, targetLeadId: string) => void;
+  
+  // Followup controls
+  cancelFollowup: (followupId: string) => void;
+  pauseFollowup: (followupId: string) => void;
+  resumeFollowup: (followupId: string) => void;
+  triggerFollowupNow: (followupId: string) => void;
+
+  // Admin CRUD & Data Management
+  clearAllData: () => void;
+  addCategory: (category: Omit<TreatmentCategory, 'id'>) => void;
+  updateCategory: (id: string, updates: Partial<TreatmentCategory>) => void;
+  addTreatment: (treatment: Omit<Treatment, 'id'>) => void;
+  updateTreatment: (id: string, updates: Partial<Treatment>) => void;
+  addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => void;
+  updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
+  updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
+  updateCustomer: (id: string, updates: Partial<Customer>) => void;
+  addCoordinator: (data: { fullName: string; email: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  deleteCoordinator: (id: string) => void;
+
+  // Simulator State & Actions
+  simulatorOpen: boolean;
+  setSimulatorOpen: (open: boolean) => void;
+  simulatorSession: OnboardingSession;
+  resetSimulator: () => void;
+  sendSimulatorMessage: (text: string) => void;
+  selectSimulatorLanguage: (lang: LanguageCode) => void;
+  selectSimulatorCategory: (catId: string) => void;
+  selectSimulatorTreatment: (trtId: string) => void;
+
+  // Toasts
+  dismissNotification: (id: string) => void;
+}
+
+const CrmContext = createContext<CrmContextType | undefined>(undefined);
+
+// Safe storage helper
+const getStored = <T,>(key: string, fallback: T): T => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch (e) {
+    return fallback;
+  }
+};
+
+export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  // Load state with localStorage persistence across refreshes
+  const [users, setUsers] = useState<User[]>(() => getStored('rw_crm_users', INITIAL_USERS));
+  const [currentUser, setCurrentUser] = useState<User>(() => {
+    const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    return storedUsers[0] || INITIAL_USERS[0];
+  });
+  const [categories, setCategories] = useState<TreatmentCategory[]>(INITIAL_CATEGORIES);
+  const [treatments, setTreatments] = useState<Treatment[]>(INITIAL_TREATMENTS);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
+  const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
+  
+  const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', INITIAL_CUSTOMERS));
+  const [leads, setLeads] = useState<Lead[]>(() => getStored('rw_crm_leads', INITIAL_LEADS));
+  const [messages, setMessages] = useState<Message[]>(() => getStored('rw_crm_messages', INITIAL_MESSAGES));
+  const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
+  const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
+  const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
+  
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
+    const savedLeads = getStored<Lead[]>('rw_crm_leads', INITIAL_LEADS);
+    return savedLeads.length > 0 ? savedLeads[0].id : null;
+  });
+  const [notifications, setNotifications] = useState<NotificationToast[]>([]);
+  const [simulatorOpen, setSimulatorOpen] = useState<boolean>(false);
+  const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
+
+  // Sync users to localStorage
+  useEffect(() => {
+    localStorage.setItem('rw_crm_users', JSON.stringify(users));
+  }, [users]);
+
+  // Sync to localStorage
+  useEffect(() => {
+    localStorage.setItem('rw_crm_leads', JSON.stringify(leads));
+  }, [leads]);
+
+  useEffect(() => {
+    localStorage.setItem('rw_crm_customers', JSON.stringify(customers));
+  }, [customers]);
+
+  useEffect(() => {
+    localStorage.setItem('rw_crm_messages', JSON.stringify(messages));
+  }, [messages]);
+
+  useEffect(() => {
+    localStorage.setItem('rw_crm_notes', JSON.stringify(notes));
+  }, [notes]);
+
+  useEffect(() => {
+    localStorage.setItem('rw_crm_stage_histories', JSON.stringify(stageHistories));
+  }, [stageHistories]);
+
+  // Simulator state
+  const [simulatorSession, setSimulatorSession] = useState<OnboardingSession>({
+    waId: '+9470' + Math.floor(1000000 + Math.random() * 9000000),
+    name: 'WhatsApp Tester',
+    state: 'AwaitingLanguage',
+    updatedAt: new Date().toISOString(),
+  });
+
+  // Automatically remove any legacy mock/fake leads on initial load
+  useEffect(() => {
+    const isMockLead = (l: Lead) => {
+      const name = l.customer?.displayName?.toLowerCase() || '';
+      const phone = l.customer?.whatsappNumber || '';
+      return (
+        l.id === 'lead-1' ||
+        l.id === 'lead-2' ||
+        l.id === 'lead-3' ||
+        name.includes('kasun bandara') ||
+        phone === '+94770001122' ||
+        phone === '+94771234567'
+      );
+    };
+
+    const hasMock = leads.some(isMockLead);
+    if (hasMock) {
+      const cleanLeads = leads.filter(l => !isMockLead(l));
+      const cleanLeadIds = new Set(cleanLeads.map(l => l.id));
+      setLeads(cleanLeads);
+      setMessages(prev => prev.filter(m => cleanLeadIds.has(m.leadId)));
+      setFollowups(prev => prev.filter(f => cleanLeadIds.has(f.leadId)));
+      setNotes(prev => prev.filter(n => cleanLeadIds.has(n.leadId)));
+      setStageHistories(prev => prev.filter(sh => cleanLeadIds.has(sh.leadId)));
+      if (selectedLeadId && !cleanLeadIds.has(selectedLeadId)) {
+        setSelectedLeadId(cleanLeads[0]?.id || null);
+      }
+    }
+  }, []);
+
+  const isSuperAdmin = currentUser.role === 'super_admin';
+
+  // Listen to real-time inbound WhatsApp messages from Webhook / Baileys server
+  useEffect(() => {
+    let eventSource: EventSource | null = null;
+    const handledMsgIds = new Set<string>();
+
+    try {
+      eventSource = new EventSource('http://localhost:3001/api/events');
+      
+      eventSource.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'INBOUND_WHATSAPP_MESSAGE') {
+            const { phone, whatsappId, realPhone, isLid, name, avatarUrl, text, messageId, timestamp } = data;
+            
+            // Deduplicate at client level
+            if (messageId && handledMsgIds.has(messageId)) return;
+            if (messageId) handledMsgIds.add(messageId);
+
+            // TASK 1 & TASK 3: Normalize incoming customer phone & WhatsApp ID
+            const rawNumber = realPhone || phone || '';
+            const canonicalPhone = normalizeWhatsAppNumber(rawNumber);
+            const cleanDigits = getCleanWhatsAppDigits(rawNumber || whatsappId || '');
+            const displayPhone = formatWhatsAppDisplay(canonicalPhone || rawNumber);
+            const rawWaId = whatsappId || cleanDigits;
+            
+            const cleanDisplayName = name && name.trim().length > 0 && !isHardwareLid(name)
+              ? name 
+              : (displayPhone || 'WhatsApp Patient');
+
+            let targetLeadId = '';
+            let targetCustomerId = '';
+
+            // 1. Update/Create Customer (Matching by WhatsApp ID, phone number or canonical digits)
+            setCustomers(prevCusts => {
+              let cust = prevCusts.find(c => {
+                const cDigits = getCleanWhatsAppDigits(c.whatsappNumber);
+                const cIdDigits = getCleanWhatsAppDigits(c.whatsappId);
+                return (
+                  (cleanDigits && cDigits && (cleanDigits === cDigits || cleanDigits.includes(cDigits) || cDigits.includes(cleanDigits))) ||
+                  (rawWaId && c.whatsappId && (c.whatsappId === rawWaId || cIdDigits === rawWaId)) ||
+                  (canonicalPhone && c.whatsappNumber && (c.whatsappNumber === canonicalPhone || c.whatsappNumber.includes(canonicalPhone)))
+                );
+              });
+
+              if (!cust) {
+                targetCustomerId = 'cust-' + Date.now();
+                const newCust: Customer = {
+                  id: targetCustomerId,
+                  whatsappNumber: canonicalPhone || rawNumber,
+                  whatsappId: rawWaId,
+                  phoneNumber: displayPhone,
+                  displayName: cleanDisplayName,
+                  avatarUrl: avatarUrl || undefined,
+                  preferredLanguage: 'en',
+                  createdAt: new Date().toISOString(),
+                };
+                return [newCust, ...prevCusts];
+              } else {
+                targetCustomerId = cust.id;
+                // If customer exists but had missing phone or LID, upgrade to the real phone number
+                return prevCusts.map(c => {
+                  if (c.id === cust!.id) {
+                    const shouldUpdatePhone = canonicalPhone && (!c.whatsappNumber || isHardwareLid(c.whatsappNumber));
+                    return {
+                      ...c,
+                      whatsappNumber: shouldUpdatePhone ? canonicalPhone : (c.whatsappNumber || canonicalPhone),
+                      whatsappId: rawWaId || c.whatsappId,
+                      phoneNumber: shouldUpdatePhone ? displayPhone : (c.phoneNumber || displayPhone),
+                      displayName: c.displayName && !isHardwareLid(c.displayName) ? c.displayName : cleanDisplayName,
+                      avatarUrl: avatarUrl || c.avatarUrl
+                    };
+                  }
+                  return c;
+                });
+              }
+            });
+
+            // 2. Update/Create Lead
+            setLeads(prevLeads => {
+              let lead = prevLeads.find(l => {
+                const lCustDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber);
+                const lIdDigits = getCleanWhatsAppDigits(l.customer?.whatsappId);
+                return (
+                  (targetCustomerId && l.customerId === targetCustomerId) ||
+                  (cleanDigits && lCustDigits && (cleanDigits === lCustDigits || cleanDigits.includes(lCustDigits) || lCustDigits.includes(cleanDigits))) ||
+                  (rawWaId && l.customer?.whatsappId && (l.customer.whatsappId === rawWaId || lIdDigits === rawWaId))
+                );
+              });
+              
+              if (!lead) {
+                targetLeadId = 'lead-' + Date.now();
+                const newLead: Lead = {
+                  id: targetLeadId,
+                  customerId: targetCustomerId || 'cust-' + Date.now(),
+                  customer: {
+                    id: targetCustomerId || 'cust-' + Date.now(),
+                    whatsappNumber: canonicalPhone || rawNumber,
+                    whatsappId: rawWaId,
+                    phoneNumber: displayPhone,
+                    displayName: cleanDisplayName,
+                    avatarUrl: avatarUrl || undefined,
+                    preferredLanguage: 'en',
+                    createdAt: new Date().toISOString(),
+                  },
+                  categoryId: 'cat-hair-care',
+                  treatmentId: 'trt-prp-hair',
+                  stage: 'new',
+                  assignedTo: undefined,
+                  source: 'whatsapp',
+                  language: 'en',
+                  notesCount: 0,
+                  unreadCount: 1,
+                  lastCustomerMessageAt: new Date().toISOString(),
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+
+                // Auto-select first lead
+                setSelectedLeadId(prevId => prevId ? prevId : targetLeadId);
+                return [newLead, ...prevLeads];
+              } else {
+                targetLeadId = lead.id;
+                const isCurrentlyActive = selectedLeadId === lead.id;
+                return prevLeads.map(l => {
+                  if (l.id === lead!.id) {
+                    const shouldUpdatePhone = canonicalPhone && (!l.customer?.whatsappNumber || isHardwareLid(l.customer?.whatsappNumber));
+                    const updatedCustomer = l.customer ? {
+                      ...l.customer,
+                      whatsappNumber: shouldUpdatePhone ? canonicalPhone : (l.customer.whatsappNumber || canonicalPhone),
+                      whatsappId: rawWaId || l.customer.whatsappId,
+                      phoneNumber: shouldUpdatePhone ? displayPhone : (l.customer.phoneNumber || displayPhone),
+                      displayName: l.customer.displayName && !isHardwareLid(l.customer.displayName) ? l.customer.displayName : cleanDisplayName,
+                      avatarUrl: avatarUrl || l.customer.avatarUrl
+                    } : undefined;
+
+                    return { 
+                      ...l, 
+                      customer: updatedCustomer,
+                      unreadCount: isCurrentlyActive ? 0 : (l.unreadCount || 0) + 1,
+                      lastCustomerMessageAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString() 
+                    };
+                  }
+                  return l;
+                });
+              }
+            });
+
+            // 3. Add message with deduplication check
+            setMessages(prevMsgs => {
+              if (prevMsgs.some(m => m.waMessageId === messageId)) {
+                return prevMsgs;
+              }
+              const newMsg: Message = {
+                id: 'msg-' + (messageId || Date.now()),
+                leadId: targetLeadId || 'lead-' + Date.now(),
+                customerId: targetCustomerId || 'cust-' + Date.now(),
+                direction: 'inbound',
+                senderType: 'customer',
+                content: text,
+                waMessageId: messageId || 'wamid.' + Date.now(),
+                status: 'read',
+                createdAt: timestamp || new Date().toISOString(),
+              };
+              return [...prevMsgs, newMsg];
+            });
+          } else if (data.type === 'INBOUND_REACTION') {
+            const { targetMessageId, emoji } = data;
+            setMessages(prevMsgs => {
+              // Try matching by exact WhatsApp message ID or ID
+              const hasExact = prevMsgs.some(m => m.waMessageId === targetMessageId || m.id === targetMessageId);
+              
+              if (hasExact) {
+                return prevMsgs.map(m => {
+                  if (m.waMessageId === targetMessageId || m.id === targetMessageId) {
+                    if (!emoji) return { ...m, reactions: [] };
+                    const existing = m.reactions || [];
+                    return {
+                      ...m,
+                      reactions: existing.includes(emoji) ? existing : [...existing, emoji]
+                    };
+                  }
+                  return m;
+                });
+              } else {
+                // If not matched, attach to the latest message in the current lead
+                const lastIdx = prevMsgs.length - 1;
+                if (lastIdx >= 0) {
+                  return prevMsgs.map((m, idx) => {
+                    if (idx === lastIdx) {
+                      if (!emoji) return { ...m, reactions: [] };
+                      const existing = m.reactions || [];
+                      return {
+                        ...m,
+                        reactions: existing.includes(emoji) ? existing : [...existing, emoji]
+                      };
+                    }
+                    return m;
+                  });
+                }
+                return prevMsgs;
+              }
+            });
+          }
+        } catch (err) {
+          console.error('Error handling SSE message:', err);
+        }
+      };
+    } catch (e) {
+      console.warn('Webhook SSE connection unavailable:', e);
+    }
+
+    return () => {
+      if (eventSource) eventSource.close();
+    };
+  }, [selectedLeadId]);
+
+  // Mark chat as read and clear unread badge
+  const markChatAsRead = (leadId: string) => {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: 0 } : l));
+    setMessages(prev => prev.map(m => m.leadId === leadId ? { ...m, status: 'read' } : m));
+  };
+
+  // Auto-mark active chat as read on load or change
+  useEffect(() => {
+    if (selectedLeadId) {
+      markChatAsRead(selectedLeadId);
+    }
+  }, [selectedLeadId]);
+
+  // Helper for toast notifications
+  const notify = (title: string, message: string, type: 'info' | 'success' | 'warning' | 'lead' = 'info') => {
+    const newToast: NotificationToast = {
+      id: 'toast-' + Date.now() + Math.random(),
+      title,
+      message,
+      type,
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+    };
+    setNotifications(prev => [newToast, ...prev].slice(0, 5));
+  };
+
+  const dismissNotification = (id: string) => {
+    setNotifications(prev => prev.filter(n => n.id !== id));
+  };
+
+  // Helper to add audit logs
+  const logAudit = (action: string, entityType: AuditLog['entityType'], entityId: string, before?: any, after?: any) => {
+    const log: AuditLog = {
+      id: 'audit-' + Date.now(),
+      userId: currentUser.id,
+      userName: currentUser.fullName,
+      action,
+      entityType,
+      entityId,
+      before,
+      after,
+      createdAt: new Date().toISOString(),
+    };
+    setAuditLogs(prev => [log, ...prev]);
+  };
+
+  // Enriched selected lead
+  const selectedLead = leads.find(l => l.id === selectedLeadId);
+
+  // Assign lead
+  const assignLead = (leadId: string, coordinatorId: string) => {
+    const coord = users.find(u => u.id === coordinatorId);
+    if (!coord) return;
+
+    setLeads(prev => prev.map(l => {
+      if (l.id === leadId) {
+        const prevStage = l.stage;
+        const newStage: LeadStage = prevStage === 'new' ? 'assigned' : prevStage;
+        
+        // Audit log
+        logAudit('LEAD_ASSIGNED', 'Assignment', leadId, { assignedTo: l.assignedTo, stage: prevStage }, { assignedTo: coordinatorId, stage: newStage });
+
+        // Add stage history if stage moved from new -> assigned
+        if (prevStage === 'new') {
+          const hist: LeadStageHistory = {
+            id: 'hist-' + Date.now(),
+            leadId,
+            fromStage: 'new',
+            toStage: 'assigned',
+            changedBy: currentUser.id,
+            changedByName: currentUser.fullName,
+            reason: `Assigned to coordinator ${coord.fullName}`,
+            createdAt: new Date().toISOString(),
+          };
+          setStageHistories(h => [hist, ...h]);
+        }
+
+        return {
+          ...l,
+          assignedTo: coordinatorId,
+          stage: newStage,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return l;
+    }));
+
+    notify('Lead Assigned', `Lead successfully assigned to ${coord.fullName}`, 'success');
+  };
+
+  // Update lead stage
+  const updateLeadStage = (leadId: string, newStage: LeadStage, reason?: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    if (lead.stage === newStage) return;
+
+    const prevStage = lead.stage;
+
+    // Trigger celebration confetti on conversion!
+    if (newStage === 'converted') {
+      confetti({
+        particleCount: 120,
+        spread: 70,
+        origin: { y: 0.6 },
+        colors: ['#2dd4be', '#d4a438', '#14b8a6', '#f5eecc']
+      });
+      notify('🎉 Lead Converted!', `${lead.customer?.displayName || 'Client'} has been successfully converted!`, 'success');
+    } else {
+      notify('Stage Updated', `Lead moved to ${newStage.toUpperCase().replace('_', ' ')}`, 'info');
+    }
+
+    setLeads(prev => prev.map(l => {
+      if (l.id === leadId) {
+        return {
+          ...l,
+          stage: newStage,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return l;
+    }));
+
+    // Record stage history
+    const hist: LeadStageHistory = {
+      id: 'hist-' + Date.now(),
+      leadId,
+      fromStage: prevStage,
+      toStage: newStage,
+      changedBy: currentUser.id,
+      changedByName: currentUser.fullName,
+      reason: reason || `Stage changed from ${prevStage} to ${newStage}`,
+      createdAt: new Date().toISOString(),
+    };
+    setStageHistories(prev => [hist, ...prev]);
+
+    // Audit log
+    logAudit('STAGE_CHANGED', 'Lead', leadId, { stage: prevStage }, { stage: newStage, reason });
+  };
+
+  // Add internal note
+  const addLeadNote = (leadId: string, noteText: string) => {
+    if (!noteText.trim()) return;
+
+    const newNote: LeadNote = {
+      id: 'note-' + Date.now(),
+      leadId,
+      authorId: currentUser.id,
+      authorName: currentUser.fullName,
+      note: noteText.trim(),
+      createdAt: new Date().toISOString(),
+    };
+
+    setNotes(prev => [newNote, ...prev]);
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, notesCount: (l.notesCount || 0) + 1, updatedAt: new Date().toISOString() } : l));
+    notify('Note Saved', 'Internal note added to lead record', 'info');
+  };
+
+  // Send WhatsApp message from CRM
+  const sendMessage = (
+    leadId: string, 
+    content: string, 
+    senderType: 'coordinator' | 'system' | 'ai' = 'coordinator', 
+    media?: any,
+    replyTo?: { id: string; content: string; senderName: string }
+  ) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    const newMsg: Message = {
+      id: 'msg-' + Date.now(),
+      leadId,
+      customerId: lead.customerId,
+      direction: 'outbound',
+      senderType,
+      content,
+      media,
+      replyTo: replyTo || (replyingMessage ? {
+        id: replyingMessage.id,
+        content: replyingMessage.content,
+        senderName: replyingMessage.direction === 'inbound' 
+          ? (lead.customer?.displayName || 'Customer')
+          : currentUser.fullName
+      } : undefined),
+      waMessageId: 'wamid.HBg' + Date.now(),
+      status: 'delivered',
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages(prev => [...prev, newMsg]);
+    setReplyingMessage(null); // Clear replying state after sending
+
+    // Auto-advance stage if New or Assigned -> Contacted
+    if (lead.stage === 'new' || lead.stage === 'assigned') {
+      updateLeadStage(leadId, 'contacted', 'First WhatsApp message sent');
+    }
+
+    // Dispatch to WhatsApp bridge (Supports both linked QR session & Meta API)
+    const recipientPhone = lead.customer?.whatsappNumber;
+    const savedToken = localStorage.getItem('meta_access_token');
+    
+    if (recipientPhone && !leadId.startsWith('lead-sim')) {
+      fetch('http://localhost:3001/api/send-message', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: recipientPhone,
+          text: content,
+          token: savedToken || undefined,
+          phoneNumberId: '1302468252956177'
+        })
+      }).then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json();
+          console.warn('WhatsApp bridge send error:', err);
+        } else {
+          console.log('✅ Outbound WhatsApp message dispatched successfully!');
+        }
+      }).catch(err => {
+        console.warn('WhatsApp bridge offline:', err);
+      });
+    }
+
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, updatedAt: new Date().toISOString() } : l));
+    notify('Message Sent', `Outbound WhatsApp message delivered to ${lead.customer?.displayName || 'client'}`, 'success');
+  };
+
+  // React with Emoji
+  const reactToMessage = (messageId: string, emoji: string) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId) {
+        const existingReactions = m.reactions || [];
+        const hasReaction = existingReactions.includes(emoji);
+        const newReactions = hasReaction 
+          ? existingReactions.filter(e => e !== emoji)
+          : [...existingReactions, emoji];
+        return { ...m, reactions: newReactions };
+      }
+      return m;
+    }));
+  };
+
+  // Star message
+  const starMessage = (messageId: string) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId) {
+        const nextStarred = !m.starred;
+        notify(nextStarred ? 'Message Starred ⭐' : 'Message Unstarred', nextStarred ? 'Added to starred messages' : 'Removed from starred messages', 'info');
+        return { ...m, starred: nextStarred };
+      }
+      return m;
+    }));
+  };
+
+  // Pin message
+  const pinMessage = (messageId: string) => {
+    setMessages(prev => prev.map(m => {
+      if (m.id === messageId) {
+        const nextPinned = !m.pinned;
+        notify(nextPinned ? 'Message Pinned 📌' : 'Message Unpinned', nextPinned ? 'Message pinned to top' : 'Message unpinned', 'info');
+        return { ...m, pinned: nextPinned };
+      }
+      return m;
+    }));
+  };
+
+  // Delete message
+  const deleteMessage = (messageId: string) => {
+    setMessages(prev => prev.filter(m => m.id !== messageId));
+    notify('Message Deleted 🗑️', 'Message removed from chat', 'warning');
+  };
+
+  // Forward message to another lead
+  const forwardMessage = (messageId: string, targetLeadId: string) => {
+    const sourceMsg = messages.find(m => m.id === messageId);
+    const targetLead = leads.find(l => l.id === targetLeadId);
+    if (!sourceMsg || !targetLead) return;
+    
+    sendMessage(targetLeadId, sourceMsg.content, 'coordinator', sourceMsg.media);
+    notify('Message Forwarded ➡️', `Message forwarded to ${targetLead.customer?.displayName || 'contact'}`, 'success');
+  };
+
+  // Send approved WhatsApp template
+  const sendWhatsAppTemplate = (leadId: string, templateId: string, params: string[]) => {
+    const template = templates.find(t => t.id === templateId);
+    const lead = leads.find(l => l.id === leadId);
+    if (!template || !lead) return;
+
+    let body = template.body;
+    params.forEach((param, idx) => {
+      body = body.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), param);
+    });
+
+    sendMessage(leadId, body, 'coordinator');
+  };
+
+  // Followup controls
+  const cancelFollowup = (followupId: string) => {
+    setFollowups(prev => prev.map(f => f.id === followupId ? { ...f, status: 'cancelled' } : f));
+    notify('Follow-up Cancelled', 'Scheduled message was cancelled', 'warning');
+  };
+
+  const pauseFollowup = (followupId: string) => {
+    setFollowups(prev => prev.map(f => f.id === followupId ? { ...f, status: 'skipped' } : f));
+    notify('Follow-up Paused', 'Scheduled message paused', 'info');
+  };
+
+  const resumeFollowup = (followupId: string) => {
+    setFollowups(prev => prev.map(f => f.id === followupId ? { ...f, status: 'pending' } : f));
+    notify('Follow-up Resumed', 'Scheduled message resumed', 'success');
+  };
+
+  const triggerFollowupNow = (followupId: string) => {
+    const fol = followups.find(f => f.id === followupId);
+    if (!fol) return;
+    const template = templates.find(t => t.id === fol.templateId);
+    const lead = leads.find(l => l.id === fol.leadId);
+
+    if (template && lead) {
+      const custName = lead.customer?.displayName || 'Client';
+      const trt = treatments.find(t => t.id === lead.treatmentId)?.name || 'Treatment';
+      sendWhatsAppTemplate(lead.id, template.id, [custName, trt]);
+      
+      setFollowups(prev => prev.map(f => f.id === followupId ? { ...f, status: 'sent', sentAt: new Date().toISOString() } : f));
+      notify('Follow-up Triggered', `Follow-up #${fol.stepNumber} sent via WhatsApp Cloud API`, 'success');
+    }
+  };
+
+  // Admin CRUD implementations
+  const addCategory = (cat: Omit<TreatmentCategory, 'id'>) => {
+    const newCat: TreatmentCategory = {
+      ...cat,
+      id: 'cat-' + Date.now(),
+    };
+    setCategories(prev => [...prev, newCat]);
+    logAudit('CREATE_CATEGORY', 'Treatment', newCat.id, null, newCat);
+    notify('Category Created', `${newCat.name} added to treatments catalogue`, 'success');
+  };
+
+  const updateCategory = (id: string, updates: Partial<TreatmentCategory>) => {
+    setCategories(prev => prev.map(c => c.id === id ? { ...c, ...updates } : c));
+    logAudit('UPDATE_CATEGORY', 'Treatment', id, null, updates);
+    notify('Category Updated', 'Changes saved to catalogue', 'info');
+  };
+
+  const addTreatment = (trt: Omit<Treatment, 'id'>) => {
+    const newTrt: Treatment = {
+      ...trt,
+      id: 'trt-' + Date.now(),
+    };
+    setTreatments(prev => [...prev, newTrt]);
+    logAudit('CREATE_TREATMENT', 'Treatment', newTrt.id, null, newTrt);
+    notify('Treatment Added', `${newTrt.name} added to service menu`, 'success');
+  };
+
+  const updateTreatment = (id: string, updates: Partial<Treatment>) => {
+    setTreatments(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    logAudit('UPDATE_TREATMENT', 'Treatment', id, null, updates);
+    notify('Treatment Updated', 'Service details updated', 'info');
+  };
+
+  const addTemplate = (tpl: Omit<WhatsAppTemplate, 'id'>) => {
+    const newTpl: WhatsAppTemplate = {
+      ...tpl,
+      id: 'tpl-' + Date.now(),
+    };
+    setTemplates(prev => [...prev, newTpl]);
+    logAudit('CREATE_TEMPLATE', 'Template', newTpl.id, null, newTpl);
+    notify('Template Created', `Submitted "${newTpl.name}" to Meta for approval`, 'success');
+  };
+
+  const updateTemplate = (id: string, updates: Partial<WhatsAppTemplate>) => {
+    setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    logAudit('UPDATE_TEMPLATE', 'Template', id, null, updates);
+    notify('Template Updated', 'Template details updated', 'info');
+  };
+
+  const updateSequence = (id: string, updates: Partial<FollowupSequence>) => {
+    setSequences(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
+    logAudit('UPDATE_SEQUENCE', 'Followup', id, null, updates);
+  };
+
+  const updateCustomer = (id: string, updates: Partial<Customer>) => {
+    const normalizedUpdates = { ...updates };
+    if (updates.whatsappNumber) {
+      normalizedUpdates.whatsappNumber = normalizeWhatsAppNumber(updates.whatsappNumber);
+      normalizedUpdates.phoneNumber = formatWhatsAppDisplay(updates.whatsappNumber);
+      normalizedUpdates.whatsappId = updates.whatsappId || getCleanWhatsAppDigits(updates.whatsappNumber);
+    }
+    setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...normalizedUpdates } : c));
+    setLeads(prev => prev.map(l => (l.customerId === id || l.customer?.id === id) ? {
+      ...l,
+      customer: l.customer ? { ...l.customer, ...normalizedUpdates } : undefined
+    } : l));
+    logAudit('UPDATE_CUSTOMER', 'Lead', id, null, normalizedUpdates);
+    notify('Customer Updated', 'WhatsApp contact details saved', 'success');
+  };
+
+  const addCoordinator = (data: { fullName: string; email: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
+    const newCoord: User = {
+      id: 'coord-' + Date.now(),
+      fullName: data.fullName,
+      email: data.email,
+      phone: data.phone,
+      role: 'coordinator',
+      treatmentCategoryId: data.treatmentCategoryId,
+      language: data.language || 'en',
+      active: true,
+      createdAt: new Date().toISOString(),
+      activeLeadsCount: 0,
+    };
+    setUsers(prev => [...prev, newCoord]);
+    logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
+  };
+
+  const deleteCoordinator = (id: string) => {
+    setUsers(prev => prev.filter(u => u.id !== id));
+    logAudit('DELETE_USER', 'User', id, null, null);
+  };
+
+  // Clear all fake, demo and test CRM records completely
+  const clearAllData = () => {
+    setCustomers([]);
+    setLeads([]);
+    setMessages([]);
+    setFollowups([]);
+    setNotes([]);
+    setStageHistories([]);
+    setAuditLogs([]);
+    setSelectedLeadId(null);
+
+    try {
+      localStorage.removeItem('rw_crm_customers');
+      localStorage.removeItem('rw_crm_leads');
+      localStorage.removeItem('rw_crm_messages');
+      localStorage.removeItem('rw_crm_followups');
+      localStorage.removeItem('rw_crm_notes');
+      localStorage.removeItem('rw_crm_stage_histories');
+      localStorage.removeItem('rw_crm_audit_logs');
+    } catch (e) {
+      console.error('Error clearing localStorage:', e);
+    }
+
+    setNotifications(prev => [
+      {
+        id: 'toast-' + Date.now(),
+        type: 'info',
+        title: 'CRM Reset Complete',
+        message: 'All mock and demo data removed. Ready for live WhatsApp conversations.',
+        timestamp: new Date().toISOString()
+      },
+      ...prev
+    ]);
+  };
+
+  // Simulator actions (WhatsApp Customer Mobile)
+  const resetSimulator = () => {
+    setSimulatorSession({
+      waId: '+9470' + Math.floor(1000000 + Math.random() * 9000000),
+      name: 'WhatsApp Tester',
+      state: 'AwaitingLanguage',
+      updatedAt: new Date().toISOString(),
+    });
+  };
+
+  const selectSimulatorLanguage = (lang: LanguageCode) => {
+    setSimulatorSession(prev => ({
+      ...prev,
+      selectedLanguage: lang,
+      state: 'AwaitingCategory',
+      updatedAt: new Date().toISOString(),
+    }));
+  };
+
+  const selectSimulatorCategory = (catId: string) => {
+    setSimulatorSession(prev => ({
+      ...prev,
+      selectedCategory: catId,
+      state: 'AwaitingService',
+      updatedAt: new Date().toISOString(),
+    }));
+  };
+
+  const completeOnboardingAndCreateLead = (lang: LanguageCode, catId: string, trtId: string, customerName: string, phone: string) => {
+    // 1. Create or Find Customer
+    const newCustId = 'cust-' + Date.now();
+    const newCustomer: Customer = {
+      id: newCustId,
+      whatsappNumber: phone,
+      displayName: customerName,
+      preferredLanguage: lang,
+      createdAt: new Date().toISOString(),
+      avatarUrl: `https://images.unsplash.com/photo-${1500000000000 + Math.floor(Math.random() * 1000000)}?w=150&auto=format&fit=crop&q=80`
+    };
+
+    // 2. Create Lead
+    const newLeadId = 'lead-' + Date.now();
+    const newLead: Lead = {
+      id: newLeadId,
+      customerId: newCustId,
+      customer: newCustomer,
+      categoryId: catId,
+      treatmentId: trtId,
+      assignedTo: undefined, // New unassigned lead for Super Admin queue
+      stage: 'new',
+      source: 'whatsapp',
+      language: lang,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      lastCustomerMessageAt: new Date().toISOString(),
+      notesCount: 0,
+      unreadCount: 1,
+    };
+
+    // 3. Create initial conversation messages
+    const trtObj = treatments.find(t => t.id === trtId);
+    const catObj = categories.find(c => c.id === catId);
+    const trtLabel = trtObj?.nameI18n[lang] || trtObj?.name || 'Treatment';
+
+    const custMsg: Message = {
+      id: 'msg-sim-' + Date.now(),
+      leadId: newLeadId,
+      customerId: newCustId,
+      direction: 'inbound',
+      senderType: 'customer',
+      content: `I would like to inquire about ${trtLabel}.`,
+      waMessageId: 'wamid.sim' + Date.now(),
+      status: 'delivered',
+      createdAt: new Date().toISOString(),
+    };
+
+    const confirmText = lang === 'si' 
+      ? `ස්තූතියි ${customerName}! අපගේ ${catObj?.nameI18n.si || 'වෛද්‍ය'} කණ්ඩායම කෙටි වේලාවකින් ඔබව සම්බන්ධ කර ගනු ඇත.`
+      : lang === 'ta'
+      ? `நன்றி ${customerName}! எங்கள் ${catObj?.nameI18n.ta || 'மருத்துவ'} குழு விரைவில் உங்களை தொடர்பு கொள்ளும்.`
+      : `Thank you ${customerName}! Our ${catObj?.name || 'Clinical'} team will contact you shortly.`;
+
+    const sysMsg: Message = {
+      id: 'msg-sim-sys-' + (Date.now() + 1),
+      leadId: newLeadId,
+      customerId: newCustId,
+      direction: 'outbound',
+      senderType: 'system',
+      content: confirmText,
+      waMessageId: 'wamid.simsys' + Date.now(),
+      status: 'read',
+      createdAt: new Date(Date.now() + 500).toISOString(),
+    };
+
+    // 4. Schedule Follow-up sequence (Day 1/3/5/7)
+    const matchingSeq = sequences.find(s => s.categoryId === catId && s.active) || sequences[0];
+    const newFollowups: Followup[] = matchingSeq.steps.map((st, idx) => ({
+      id: `fol-sim-${Date.now()}-${idx}`,
+      leadId: newLeadId,
+      sequenceId: matchingSeq.id,
+      templateId: st.templateId,
+      stepNumber: idx + 1,
+      scheduledAt: new Date(Date.now() + st.dayOffset * 86400000).toISOString(),
+      status: 'pending',
+      retryCount: 0,
+      dayOffset: st.dayOffset,
+    }));
+
+    // Update state
+    setCustomers(prev => [newCustomer, ...prev]);
+    setLeads(prev => [newLead, ...prev]);
+    setMessages(prev => [...prev, custMsg, sysMsg]);
+    setFollowups(prev => [...prev, ...newFollowups]);
+    setSelectedLeadId(newLeadId);
+
+    // Audit log
+    const audit: AuditLog = {
+      id: 'audit-sim-' + Date.now(),
+      userId: 'system',
+      userName: 'WhatsApp Webhook Engine',
+      action: 'LEAD_CREATED_FROM_WEBHOOK',
+      entityType: 'Lead',
+      entityId: newLeadId,
+      after: { source: 'whatsapp', language: lang, categoryId: catId, treatmentId: trtId },
+      createdAt: new Date().toISOString(),
+    };
+    setAuditLogs(prev => [audit, ...prev]);
+
+    notify('🚨 New WhatsApp Lead!', `${customerName} enquired for ${trtLabel} (${lang.toUpperCase()})`, 'lead');
+  };
+
+  const selectSimulatorTreatment = (trtId: string) => {
+    const lang = simulatorSession.selectedLanguage || 'en';
+    const catId = simulatorSession.selectedCategory || 'cat-hair-care';
+    
+    setSimulatorSession(prev => ({
+      ...prev,
+      selectedTreatment: trtId,
+      state: 'LeadCreated',
+      updatedAt: new Date().toISOString(),
+    }));
+
+    completeOnboardingAndCreateLead(lang, catId, trtId, simulatorSession.name, simulatorSession.waId);
+  };
+
+  const sendSimulatorMessage = (text: string) => {
+    if (!text.trim()) return;
+
+    if (simulatorSession.state !== 'LeadCreated') {
+      // Free text intent detection fallback
+      const detected = aiService.detectIntent(text, categories, treatments);
+      const catId = detected.categoryId;
+      const trtId = detected.treatmentId || treatments.find(t => t.categoryId === catId)?.id || treatments[0].id;
+      const lang = detected.detectedLanguage;
+
+      setSimulatorSession(prev => ({
+        ...prev,
+        selectedLanguage: lang,
+        selectedCategory: catId,
+        selectedTreatment: trtId,
+        state: 'LeadCreated',
+        updatedAt: new Date().toISOString(),
+      }));
+
+      completeOnboardingAndCreateLead(lang, catId, trtId, simulatorSession.name, simulatorSession.waId);
+      notify('AI Intent Detected', `Classified "${text.slice(0, 30)}..." into ${categories.find(c => c.id === catId)?.name}`, 'info');
+      return;
+    }
+
+    // If lead already created, send as inbound message to current lead
+    const currentLead = leads.find(l => l.customer?.whatsappNumber === simulatorSession.waId);
+    if (!currentLead) return;
+
+    const newInbound: Message = {
+      id: 'msg-sim-' + Date.now(),
+      leadId: currentLead.id,
+      customerId: currentLead.customerId,
+      direction: 'inbound',
+      senderType: 'customer',
+      content: text,
+      waMessageId: 'wamid.sim' + Date.now(),
+      status: 'delivered',
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages(prev => [...prev, newInbound]);
+
+    // AUTO-CANCEL RULE (PRD §FR-6.3 & Integration Guide §8):
+    // "On any inbound message from that customer, the ingestion service cancels all pending followups rows for that lead"
+    setFollowups(prev => prev.map(f => f.leadId === currentLead.id && f.status === 'pending' ? { ...f, status: 'cancelled' } : f));
+    
+    setLeads(prev => prev.map(l => l.id === currentLead.id ? { 
+      ...l, 
+      lastCustomerMessageAt: new Date().toISOString(),
+      unreadCount: (l.unreadCount || 0) + 1,
+      updatedAt: new Date().toISOString()
+    } : l));
+
+    notify('Customer Replied', `Inbound message from ${currentLead.customer?.displayName}. Pending follow-ups auto-cancelled.`, 'info');
+  };
+
+  // Join leads with customer & coordinator objects
+  const hydratedLeads: Lead[] = leads.map(lead => {
+    const cust = customers.find(c => c.id === lead.customerId);
+    const rawCust = cust || lead.customer;
+    const finalCust: Customer | undefined = rawCust ? {
+      ...rawCust,
+      whatsappNumber: rawCust.whatsappNumber || '',
+      phoneNumber: rawCust.phoneNumber || formatWhatsAppDisplay(rawCust.whatsappNumber),
+      whatsappId: rawCust.whatsappId || getCleanWhatsAppDigits(rawCust.whatsappNumber)
+    } : undefined;
+
+    return {
+      ...lead,
+      customer: finalCust,
+      assignedCoordinator: users.find(u => u.id === lead.assignedTo),
+    };
+  });
+
+  const value: CrmContextType = {
+    currentUser,
+    users,
+    setCurrentUser,
+    isSuperAdmin,
+    leads: hydratedLeads,
+    customers,
+    messages,
+    categories,
+    treatments,
+    templates,
+    sequences,
+    followups,
+    notes,
+    stageHistories,
+    auditLogs,
+    notifications,
+    selectedLeadId,
+    setSelectedLeadId,
+    selectedLead: hydratedLeads.find(l => l.id === selectedLeadId),
+    assignLead,
+    updateLeadStage,
+    addLeadNote,
+    sendMessage,
+    replyingMessage,
+    setReplyingMessage,
+    reactToMessage,
+    starMessage,
+    pinMessage,
+    deleteMessage,
+    forwardMessage,
+    sendWhatsAppTemplate,
+    markChatAsRead,
+    cancelFollowup,
+    pauseFollowup,
+    resumeFollowup,
+    triggerFollowupNow,
+    addCategory,
+    updateCategory,
+    addTreatment,
+    updateTreatment,
+    addTemplate,
+    updateTemplate,
+    updateSequence,
+    updateCustomer,
+    addCoordinator,
+    deleteCoordinator,
+    clearAllData,
+    simulatorOpen,
+    setSimulatorOpen,
+    simulatorSession,
+    resetSimulator,
+    sendSimulatorMessage,
+    selectSimulatorLanguage,
+    selectSimulatorCategory,
+    selectSimulatorTreatment,
+    dismissNotification,
+  };
+
+  return (
+    <CrmContext.Provider value={value}>
+      {children}
+    </CrmContext.Provider>
+  );
+};
+
+export const useCrm = () => {
+  const context = useContext(CrmContext);
+  if (!context) {
+    throw new Error('useCrm must be used within a CrmProvider');
+  }
+  return context;
+};

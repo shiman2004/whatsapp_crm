@@ -54,11 +54,23 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await fetch('http://localhost:3001/api/logout', { method: 'POST' });
+      await fetch('http://localhost:3001/api/disconnect', { method: 'POST' });
       setStatus('connecting');
       setQrCode(null);
       setConnectedPhone(null);
       if (notify) notify('WhatsApp Disconnected', 'Session unlinked. Scan new QR code to reconnect.', 'info');
+      
+      // Re-fetch new QR code after a short delay
+      setTimeout(async () => {
+        try {
+          const res = await fetch('http://localhost:3001/api/qr');
+          if (res.ok) {
+            const data = await res.json();
+            setStatus(data.status);
+            if (data.qr) setQrCode(data.qr);
+          }
+        } catch (e) {}
+      }, 1200);
     } catch (e) {
       console.error('Logout error:', e);
     } finally {

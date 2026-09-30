@@ -692,22 +692,49 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Disconnect / Logout
-  if (req.method === 'POST' && pathname === '/api/disconnect') {
+  // 6. Disconnect / Logout / Unlink
+  if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink')) {
+    console.log('🔄 [WhatsApp Unlink] Disconnecting session and resetting auth keys...');
     try {
       if (sock) {
-        await sock.logout();
+        try {
+          await sock.logout();
+        } catch (e) {
+          try { sock.end(new Error('User unlinked session')); } catch (e2) {}
+        }
+        sock = null;
       }
-      fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-      connectionState = 'disconnected';
+
+      // Clean up auth folder
+      if (fs.existsSync(AUTH_FOLDER)) {
+        try {
+          fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+        } catch (e) {
+          console.warn('⚠️ Could not remove auth folder immediately:', e.message);
+        }
+      }
+
+      connectionState = 'connecting';
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
+      jidMap.clear();
+
+      broadcastSSE({
+        type: 'INIT',
+        status: 'connecting',
+        phone: null,
+        qrDataUrl: null,
+        dbConnected: getDbStatus(),
+      });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Logged out successfully.' }));
+      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully.' }));
 
-      setTimeout(startWhatsAppSocket, 1500);
+      setTimeout(() => {
+        startWhatsAppSocket().catch(err => console.error('Error restarting WhatsApp socket:', err));
+      }, 1000);
     } catch (err) {
+      console.error('❌ Error during disconnect:', err);
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: err.message }));
     }

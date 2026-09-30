@@ -22,7 +22,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'disconnected'>('connecting');
   const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { notify } = useCrm() as any;
+  const { notify, clearAllData } = useCrm() as any;
 
   // Poll or listen for QR code & status
   useEffect(() => {
@@ -54,11 +54,12 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
+      if (clearAllData) clearAllData();
       await fetch('http://localhost:3001/api/disconnect', { method: 'POST' });
       setStatus('connecting');
       setQrCode(null);
       setConnectedPhone(null);
-      if (notify) notify('WhatsApp Disconnected', 'Session unlinked. Scan new QR code to reconnect.', 'info');
+      if (notify) notify('WhatsApp Disconnected', 'Session unlinked and chat messages cleared.', 'info');
       
       // Re-fetch new QR code after a short delay
       setTimeout(async () => {

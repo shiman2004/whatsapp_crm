@@ -714,6 +714,22 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
+      // Clear synced messages and live session data from MySQL
+      const prisma = getPrisma();
+      if (prisma && getDbStatus()) {
+        try {
+          await prisma.message.deleteMany({});
+          await prisma.leadNote.deleteMany({});
+          await prisma.leadStageHistory.deleteMany({});
+          await prisma.followup.deleteMany({});
+          await prisma.lead.deleteMany({});
+          await prisma.customer.deleteMany({});
+          console.log('🧹 [MySQL] Cleared database messages & synced leads on WhatsApp logout.');
+        } catch (e) {
+          console.warn('Could not clear database messages on logout:', e.message);
+        }
+      }
+
       connectionState = 'connecting';
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
@@ -726,9 +742,12 @@ const server = http.createServer(async (req, res) => {
         qrDataUrl: null,
         dbConnected: getDbStatus(),
       });
+      broadcastSSE({
+        type: 'SESSION_CLEARED'
+      });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully.' }));
+      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully and data cleared.' }));
 
       setTimeout(() => {
         startWhatsAppSocket().catch(err => console.error('Error restarting WhatsApp socket:', err));
@@ -738,6 +757,28 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: err.message }));
     }
+    return;
+  }
+
+  // 6b. Clear All Database Data
+  if (req.method === 'POST' && pathname === '/api/clear-db') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        await prisma.message.deleteMany({});
+        await prisma.leadNote.deleteMany({});
+        await prisma.leadStageHistory.deleteMany({});
+        await prisma.followup.deleteMany({});
+        await prisma.lead.deleteMany({});
+        await prisma.customer.deleteMany({});
+        console.log('🧹 [MySQL] Full database messages and leads cleared.');
+      } catch (e) {
+        console.warn('Error clearing database:', e.message);
+      }
+    }
+    broadcastSSE({ type: 'SESSION_CLEARED' });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Database cleared successfully.' }));
     return;
   }
 

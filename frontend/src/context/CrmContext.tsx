@@ -443,6 +443,24 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return prevMsgs;
               }
             });
+          } else if (data.type === 'SESSION_CLEARED') {
+            setCustomers([]);
+            setLeads([]);
+            setMessages([]);
+            setFollowups([]);
+            setNotes([]);
+            setStageHistories([]);
+            setAuditLogs([]);
+            setSelectedLeadId(null);
+            try {
+              localStorage.removeItem('rw_crm_customers');
+              localStorage.removeItem('rw_crm_leads');
+              localStorage.removeItem('rw_crm_messages');
+              localStorage.removeItem('rw_crm_followups');
+              localStorage.removeItem('rw_crm_notes');
+              localStorage.removeItem('rw_crm_stage_histories');
+              localStorage.removeItem('rw_crm_audit_logs');
+            } catch (e) {}
           }
         } catch (err) {
           console.error('Error handling SSE message:', err);
@@ -903,6 +921,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.error('Error clearing localStorage:', e);
     }
+
+    // Also purge MySQL backend storage
+    fetch('http://localhost:3001/api/clear-db', { method: 'POST' }).catch(() => {});
 
     setNotifications(prev => [
       {

@@ -48,70 +48,219 @@ function broadcastSSE(data) {
   });
 }
 
-// Helper: Save Inbound Message to MySQL
-async function persistInboundMessage({ phone, whatsappId, name, text, messageId, timestamp, avatarUrl, mediaUrl, mediaType }) {
+// Map of LID to Phone number
+const lidToPhoneMap = new Map();
+
+function registerContact(c) {
+  if (!c) return;
+  const jid = c.id || '';
+  const lid = c.lid || '';
+  if (jid && jid.endsWith('@s.whatsapp.net')) {
+    const phone = jid.replace('@s.whatsapp.net', '');
+    if (lid && lid.endsWith('@lid')) {
+      const cleanLid = lid.replace('@lid', '');
+      lidToPhoneMap.set(cleanLid, phone);
+    }
+    jidMap.set(phone, jid);
+    jidMap.set(`+${phone}`, jid);
+  }
+}
+
+// Unified Core: Process and Persist WhatsApp Message (Idempotent)
+async function processAndPersistWhatsAppMessage(msg, source = 'live') {
+  if (!msg || !msg.message) return null;
+
+  const messageId = msg.key?.id;
+  if (!messageId) return null;
+
+  const isFromMe = Boolean(msg.key.fromMe);
+  const rawJid = msg.key.remoteJid || '';
+
+  // Ignore group chats, channels, broadcasts, status updates
+  if (
+    !rawJid ||
+    rawJid.endsWith('@g.us') ||
+    rawJid.includes('@newsletter') ||
+    rawJid.includes('@broadcast') ||
+    rawJid.startsWith('120363') ||
+    rawJid === 'status@broadcast'
+  ) {
+    return null;
+  }
+
+  // Determine phone number and clean ID
+  let senderPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+  let realPhone = null;
+
+  if (rawJid.endsWith('@s.whatsapp.net')) {
+    realPhone = senderPhone;
+  } else if (rawJid.endsWith('@lid') && lidToPhoneMap.has(senderPhone)) {
+    realPhone = lidToPhoneMap.get(senderPhone);
+  } else if (msg.key.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
+    realPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+  }
+
+  if (senderPhone.length > 15 && !realPhone) {
+    return null;
+  }
+
+  const effectivePhone = realPhone || senderPhone;
+  const canonicalPhone = effectivePhone.startsWith('+') ? effectivePhone : `+${effectivePhone}`;
+
+  // Remember mapping from phone and LID to original JID for sending replies
+  jidMap.set(senderPhone, rawJid);
+  jidMap.set(`+${senderPhone}`, rawJid);
+  if (realPhone) {
+    jidMap.set(realPhone, rawJid);
+    jidMap.set(`+${realPhone}`, rawJid);
+  }
+
+  const pushName = msg.pushName && msg.pushName.trim().length > 0
+    ? msg.pushName
+    : (isFromMe ? 'You (Staff)' : canonicalPhone);
+
+  // Original timestamp from WhatsApp message (seconds -> ms), fallback to current date
+  const rawTimestamp = msg.messageTimestamp;
+  const timestampDate = rawTimestamp
+    ? new Date(typeof rawTimestamp === 'number' ? rawTimestamp * 1000 : (Number(rawTimestamp) * 1000 || Date.now()))
+    : new Date();
+  const timestampIso = timestampDate.toISOString();
+
+  // Check for Reaction message
+  if (msg.message.reactionMessage) {
+    const reaction = msg.message.reactionMessage;
+    const targetMessageId = reaction.key?.id;
+    const emoji = reaction.text || '';
+
+    console.log(`❤️ [WHATSAPP REACTION] ${pushName} reacted "${emoji}" to message ${targetMessageId}`);
+
+    broadcastSSE({
+      type: 'INBOUND_REACTION',
+      phone: canonicalPhone,
+      targetMessageId: targetMessageId,
+      emoji: emoji,
+      timestamp: timestampIso
+    });
+
+    const prisma = getPrisma();
+    if (prisma && getDbStatus() && targetMessageId) {
+      await prisma.message.update({
+        where: { id: targetMessageId },
+        data: { reaction: emoji },
+      }).catch(() => {});
+    }
+    return null;
+  }
+
+  // Extract text and media
+  let mediaType = null;
+  let mediaUrl = null;
+  let fileName = null;
+
+  if (msg.message.imageMessage) {
+    mediaType = 'image';
+  } else if (msg.message.videoMessage) {
+    mediaType = 'video';
+  } else if (msg.message.documentMessage) {
+    mediaType = 'document';
+    fileName = msg.message.documentMessage.fileName || 'document.pdf';
+  } else if (msg.message.audioMessage) {
+    mediaType = 'audio';
+  }
+
+  // Attempt media download if present and live
+  if (mediaType && sock && source === 'live') {
+    try {
+      const buffer = await downloadMediaMessage(
+        msg,
+        'buffer',
+        {},
+        {
+          logger: pino({ level: 'silent' }),
+          reuploadRequest: sock.updateMediaMessage
+        }
+      );
+      if (buffer && buffer.length > 0) {
+        const ext = mediaType === 'image' ? 'jpg' : mediaType === 'video' ? 'mp4' : mediaType === 'audio' ? 'ogg' : (fileName ? path.extname(fileName).replace('.', '') || 'pdf' : 'pdf');
+        const safeName = `media_${messageId.replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.${ext}`;
+        const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadsDir)) {
+          fs.mkdirSync(uploadsDir, { recursive: true });
+        }
+        fs.writeFileSync(path.join(uploadsDir, safeName), buffer);
+        mediaUrl = `http://localhost:3001/uploads/${safeName}`;
+      }
+    } catch (e) {
+      // Gracefully fallback
+    }
+  }
+
+  const messageText =
+    msg.message.conversation ||
+    msg.message.extendedTextMessage?.text ||
+    msg.message.imageMessage?.caption ||
+    msg.message.videoMessage?.caption ||
+    msg.message.documentMessage?.caption ||
+    (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : (msg.message.interactiveResponseMessage ? 'Interactive Response' : ''));
+
+  // Database Persistence (MySQL)
   const prisma = getPrisma();
-  if (!prisma || !getDbStatus()) return;
+  let lead = null;
+  let customer = null;
 
-  try {
-    const canonicalPhone = phone.startsWith('+') ? phone : `+${phone}`;
-    
-    // 1. Upsert Customer
-    const customer = await prisma.customer.upsert({
-      where: { whatsappNumber: canonicalPhone },
-      update: {
-        displayName: name || canonicalPhone,
-        avatarUrl: avatarUrl || undefined,
-        whatsappId: whatsappId || undefined,
-      },
-      create: {
-        whatsappNumber: canonicalPhone,
-        whatsappId: whatsappId || canonicalPhone.replace(/[^0-9]/g, ''),
-        displayName: name || canonicalPhone,
-        avatarUrl: avatarUrl || null,
-        preferredLanguage: 'en',
-      },
-    });
-
-    // 2. Find or Create Default Lead for this Customer
-    let lead = await prisma.lead.findFirst({
-      where: {
-        customerId: customer.id,
-        stage: { notIn: ['converted', 'lost'] },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!lead) {
-      // Find fallback treatment category
-      const firstCategory = await prisma.treatmentCategory.findFirst();
-      const firstTreatment = await prisma.treatment.findFirst();
-
-      lead = await prisma.lead.create({
-        data: {
-          customerId: customer.id,
-          categoryId: firstCategory ? firstCategory.id : 'cat-hair-care',
-          treatmentId: firstTreatment ? firstTreatment.id : 'trt-hair-prp',
-          stage: 'new',
-          source: 'whatsapp',
-          language: 'en',
-          lastCustomerMessageAt: new Date(timestamp || Date.now()),
+  if (prisma && getDbStatus()) {
+    try {
+      // 1. Upsert Customer
+      customer = await prisma.customer.upsert({
+        where: { whatsappNumber: canonicalPhone },
+        update: {
+          displayName: !isFromMe && pushName && !pushName.startsWith('+') ? pushName : undefined,
+          whatsappId: effectivePhone,
+        },
+        create: {
+          whatsappNumber: canonicalPhone,
+          whatsappId: effectivePhone,
+          displayName: !isFromMe && pushName ? pushName : canonicalPhone,
+          preferredLanguage: 'en',
         },
       });
-    } else {
-      await prisma.lead.update({
-        where: { id: lead.id },
-        data: { lastCustomerMessageAt: new Date(timestamp || Date.now()) },
-      });
-    }
 
-    // 3. Save Message Record
-    if (messageId) {
+      // 2. Find or Create Lead
+      lead = await prisma.lead.findFirst({
+        where: { customerId: customer.id, stage: { notIn: ['converted', 'lost'] } },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (!lead) {
+        const firstCategory = await prisma.treatmentCategory.findFirst();
+        const firstTreatment = await prisma.treatment.findFirst();
+
+        lead = await prisma.lead.create({
+          data: {
+            customerId: customer.id,
+            categoryId: firstCategory ? firstCategory.id : 'cat-hair-care',
+            treatmentId: firstTreatment ? firstTreatment.id : 'trt-hair-prp',
+            stage: isFromMe ? 'contacted' : 'new',
+            source: 'whatsapp',
+            language: 'en',
+            lastCustomerMessageAt: timestampDate,
+          },
+        });
+      } else {
+        if (!isFromMe) {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: { lastCustomerMessageAt: timestampDate },
+          });
+        }
+      }
+
+      // 3. Idempotent Message Upsert
       await prisma.message.upsert({
         where: { id: messageId },
         update: {
-          content: text || '',
-          status: 'delivered',
+          content: messageText || '',
+          status: isFromMe ? 'sent' : 'delivered',
           mediaUrl: mediaUrl || undefined,
           mediaType: mediaType || undefined,
         },
@@ -119,22 +268,56 @@ async function persistInboundMessage({ phone, whatsappId, name, text, messageId,
           id: messageId,
           leadId: lead.id,
           customerId: customer.id,
-          direction: 'inbound',
-          senderType: 'customer',
-          content: text || '',
-          status: 'delivered',
-          timestamp: new Date(timestamp || Date.now()),
+          direction: isFromMe ? 'outbound' : 'inbound',
+          senderType: isFromMe ? 'coordinator' : 'customer',
+          content: messageText || '',
+          status: isFromMe ? 'sent' : 'delivered',
+          timestamp: timestampDate,
           mediaUrl: mediaUrl || null,
           mediaType: mediaType || null,
         },
       });
+    } catch (err) {
+      console.warn(`⚠️ [MySQL Sync Error]:`, err.message);
     }
-  } catch (err) {
-    console.warn('⚠️ [MySQL Persistence Error - Inbound]:', err.message);
   }
+
+  // Structured Logging
+  if (source === 'history_sync') {
+    // History sync logging
+  } else if (isFromMe) {
+    console.log(`📱 [PHONE OUTBOUND] Staff replied to (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
+  } else {
+    console.log(`💬 [WHATSAPP INBOUND] ${pushName} (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
+  }
+
+  // Real-time broadcast
+  const messagePayload = {
+    type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
+    phone: canonicalPhone,
+    whatsappId: effectivePhone,
+    name: pushName,
+    text: messageText,
+    messageId: messageId,
+    timestamp: timestampIso,
+    direction: isFromMe ? 'outbound' : 'inbound',
+    senderType: isFromMe ? 'coordinator' : 'customer',
+    leadId: lead?.id,
+    customerId: customer?.id,
+    source: source,
+    media: mediaUrl ? {
+      type: mediaType,
+      url: mediaUrl,
+      caption: messageText,
+      fileName: fileName
+    } : undefined
+  };
+
+  broadcastSSE(messagePayload);
+  return messagePayload;
 }
 
-// Helper: Save Outbound Message to MySQL
+// Helper: Save Outbound Message to MySQL (for CRM web client outbound)
 async function persistOutboundMessage({ leadId, customerId, content, messageId, senderType, mediaUrl, mediaType }) {
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return;
@@ -142,8 +325,15 @@ async function persistOutboundMessage({ leadId, customerId, content, messageId, 
   try {
     if (!leadId || !messageId) return;
 
-    await prisma.message.create({
-      data: {
+    await prisma.message.upsert({
+      where: { id: messageId },
+      update: {
+        content: content || '',
+        status: 'sent',
+        mediaUrl: mediaUrl || undefined,
+        mediaType: mediaType || undefined,
+      },
+      create: {
         id: messageId,
         leadId: leadId,
         customerId: customerId || 'cust-unknown',
@@ -172,7 +362,8 @@ async function startWhatsAppSocket() {
     logger: pino({ level: 'silent' }),
     printQRInTerminal: true,
     auth: state,
-    browser: ['Royal Wellness CRM', 'Chrome', '1.0.0']
+    browser: ['Royal Wellness CRM', 'Chrome', '1.0.0'],
+    syncFullHistory: true, // Request full history sync on connection
   });
 
   sock.ev.on('creds.update', saveCreds);
@@ -231,35 +422,10 @@ async function startWhatsAppSocket() {
     }
   });
 
-  // Map of LID to Phone number
-  const lidToPhoneMap = new Map();
-
-  const registerContact = (c) => {
-    if (!c) return;
-    const jid = c.id || '';
-    const lid = c.lid || '';
-    if (jid && jid.endsWith('@s.whatsapp.net')) {
-      const phone = jid.replace('@s.whatsapp.net', '');
-      if (lid && lid.endsWith('@lid')) {
-        const cleanLid = lid.replace('@lid', '');
-        lidToPhoneMap.set(cleanLid, phone);
-      }
-      jidMap.set(phone, jid);
-      jidMap.set(`+${phone}`, jid);
-    }
-  };
-
   sock.ev.on('contacts.set', ({ contacts }) => {
     if (Array.isArray(contacts)) {
       contacts.forEach(registerContact);
       console.log(`📇 Synced ${contacts.length} WhatsApp contacts automatically.`);
-    }
-  });
-
-  sock.ev.on('messaging-history.set', ({ contacts }) => {
-    if (Array.isArray(contacts)) {
-      contacts.forEach(registerContact);
-      console.log(`📇 Synced ${contacts.length} historical contacts automatically.`);
     }
   });
 
@@ -275,184 +441,47 @@ async function startWhatsAppSocket() {
     }
   });
 
-  // Handle incoming messages
+  // History Sync Event (Multi-device conversation history)
+  sock.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
+    console.log(`\n⏳ [HISTORY SYNC STARTED] WhatsApp history received: ${contacts?.length || 0} contacts, ${chats?.length || 0} chats, ${messages?.length || 0} messages (isLatest: ${isLatest}).`);
+    
+    if (Array.isArray(contacts)) {
+      contacts.forEach(registerContact);
+    }
+
+    if (Array.isArray(messages) && messages.length > 0) {
+      let syncedCount = 0;
+      for (const msg of messages) {
+        try {
+          const res = await processAndPersistWhatsAppMessage(msg, 'history_sync');
+          if (res) syncedCount++;
+        } catch (e) {
+          // ignore individual sync errors
+        }
+      }
+      console.log(`✅ [HISTORY SYNC COMPLETED] Successfully synchronized ${syncedCount} historical messages into CRM database.`);
+      broadcastSSE({ type: 'HISTORY_SYNC_COMPLETED', count: syncedCount });
+    }
+  });
+
+  // Handle live and catch-up messages (both notify & append)
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    if (type !== 'notify') return;
-
+    const isCatchUp = type === 'append';
     for (const msg of messages) {
-      if (!msg.message || msg.key.fromMe) continue; // Skip own outbound messages
+      const messageId = msg.key?.id;
+      if (!messageId) continue;
 
-      const messageId = msg.key.id;
-      if (!messageId || processedMessageIds.has(messageId)) continue; // Deduplicate
+      if (processedMessageIds.has(messageId)) {
+        // Skip duplicate
+        continue;
+      }
       processedMessageIds.add(messageId);
-
-      if (processedMessageIds.size > 500) {
+      if (processedMessageIds.size > 1000) {
         const first = processedMessageIds.values().next().value;
         processedMessageIds.delete(first);
       }
 
-      const rawJid = msg.key.remoteJid || '';
-      // Ignore group chats, channels, newsletters, and status updates
-      if (
-        rawJid.endsWith('@g.us') || 
-        rawJid.includes('@newsletter') || 
-        rawJid.includes('@broadcast') || 
-        rawJid.startsWith('120363') || 
-        rawJid === 'status@broadcast'
-      ) {
-        continue;
-      }
-
-      let senderPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
-      
-      // If JID is an LID, try to find the real phone number from contact mapping
-      let realPhone = null;
-      if (rawJid.endsWith('@s.whatsapp.net')) {
-        realPhone = senderPhone;
-      } else if (rawJid.endsWith('@lid') && lidToPhoneMap.has(senderPhone)) {
-        realPhone = lidToPhoneMap.get(senderPhone);
-      } else if (msg.key.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
-        realPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
-      }
-
-      if (senderPhone.length > 15) {
-        continue;
-      }
-
-      // Remember mapping from phone and LID to original JID for sending replies
-      jidMap.set(senderPhone, rawJid);
-      jidMap.set(`+${senderPhone}`, rawJid);
-      if (realPhone) {
-        jidMap.set(realPhone, rawJid);
-        jidMap.set(`+${realPhone}`, rawJid);
-      }
-
-      const pushName = msg.pushName && msg.pushName.trim().length > 0 
-        ? msg.pushName 
-        : (senderPhone ? `+${senderPhone}` : 'Direct Contact');
-
-      // Check if this is an incoming reaction (e.g. ❤️, 😂, 👍)
-      if (msg.message.reactionMessage) {
-        const reaction = msg.message.reactionMessage;
-        const targetMessageId = reaction.key?.id;
-        const emoji = reaction.text || '';
-        
-        console.log(`\n❤️ [WHATSAPP REACTION] ${pushName} reacted "${emoji}" to message ${targetMessageId}`);
-        
-        broadcastSSE({
-          type: 'INBOUND_REACTION',
-          phone: realPhone ? `+${realPhone}` : (rawJid.endsWith('@s.whatsapp.net') ? `+${senderPhone}` : senderPhone),
-          targetMessageId: targetMessageId,
-          emoji: emoji,
-          timestamp: new Date().toISOString()
-        });
-
-        // Update reaction in MySQL
-        const prisma = getPrisma();
-        if (prisma && getDbStatus() && targetMessageId) {
-          prisma.message.update({
-            where: { id: targetMessageId },
-            data: { reaction: emoji },
-          }).catch(() => {});
-        }
-        continue; // Do NOT create a new chat message bubble!
-      }
-
-      // Check for Inbound Media (Image, Video, Audio, Document)
-      let mediaType = null;
-      let mediaUrl = null;
-      let fileName = null;
-
-      if (msg.message.imageMessage) {
-        mediaType = 'image';
-      } else if (msg.message.videoMessage) {
-        mediaType = 'video';
-      } else if (msg.message.documentMessage) {
-        mediaType = 'document';
-        fileName = msg.message.documentMessage.fileName || 'document.pdf';
-      } else if (msg.message.audioMessage) {
-        mediaType = 'audio';
-      }
-
-      if (mediaType) {
-        try {
-          const buffer = await downloadMediaMessage(
-            msg,
-            'buffer',
-            {},
-            { 
-              logger: pino({ level: 'silent' }),
-              reuploadRequest: sock.updateMediaMessage
-            }
-          );
-          if (buffer && buffer.length > 0) {
-            const ext = mediaType === 'image' ? 'jpg' : mediaType === 'video' ? 'mp4' : mediaType === 'audio' ? 'ogg' : (fileName ? path.extname(fileName).replace('.', '') || 'pdf' : 'pdf');
-            const safeName = `media_${(messageId || 'in').replace(/[^a-zA-Z0-9_-]/g, '_')}_${Date.now()}.${ext}`;
-            const uploadsDir = path.join(process.cwd(), 'public', 'uploads');
-            if (!fs.existsSync(uploadsDir)) {
-              fs.mkdirSync(uploadsDir, { recursive: true });
-            }
-            fs.writeFileSync(path.join(uploadsDir, safeName), buffer);
-            mediaUrl = `http://localhost:3001/uploads/${safeName}`;
-            console.log(`📥 [MEDIA DOWNLOADED] Saved ${mediaType} to: ${mediaUrl}`);
-          }
-        } catch (e) {
-          console.warn('Could not download inbound media message:', e.message);
-        }
-      }
-
-      const messageText = 
-        msg.message.conversation || 
-        msg.message.extendedTextMessage?.text || 
-        msg.message.imageMessage?.caption || 
-        msg.message.videoMessage?.caption ||
-        msg.message.documentMessage?.caption ||
-        (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : (msg.message.interactiveResponseMessage ? 'Interactive Response' : ''));
-
-      console.log(`\n💬 [WHATSAPP INBOUND] ${pushName} (+${senderPhone}): "${messageText}" ${mediaUrl ? `[Media: ${mediaType}]` : ''}`);
-
-      let avatarUrl = null;
-      try {
-        avatarUrl = await sock.profilePictureUrl(rawJid, 'image');
-      } catch (e) {
-        avatarUrl = null;
-      }
-
-      const timestampIso = new Date().toISOString();
-      const phonePayload = realPhone ? `+${realPhone}` : (rawJid.endsWith('@s.whatsapp.net') ? `+${senderPhone}` : senderPhone);
-
-      // Broadcast real-time SSE to open frontend browsers
-      broadcastSSE({
-        type: 'INBOUND_WHATSAPP_MESSAGE',
-        phone: phonePayload,
-        whatsappId: senderPhone,
-        realPhone: realPhone ? `+${realPhone}` : null,
-        isLid: rawJid.endsWith('@lid'),
-        name: pushName,
-        avatarUrl: avatarUrl,
-        text: messageText,
-        messageId: messageId,
-        timestamp: timestampIso,
-        media: mediaUrl ? {
-          type: mediaType,
-          url: mediaUrl,
-          caption: messageText,
-          fileName: fileName
-        } : undefined
-      });
-
-      // Persist directly into MySQL
-      persistInboundMessage({
-        phone: phonePayload,
-        whatsappId: senderPhone,
-        name: pushName,
-        text: messageText,
-        messageId: messageId,
-        timestamp: timestampIso,
-        avatarUrl: avatarUrl,
-        mediaUrl: mediaUrl,
-        mediaType: mediaType,
-      });
+      await processAndPersistWhatsAppMessage(msg, isCatchUp ? 'catch_up' : 'live');
     }
   });
 }
@@ -692,9 +721,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Disconnect / Logout / Unlink
+  // 6. Disconnect / Logout / Unlink (Preserves Database History)
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink')) {
-    console.log('🔄 [WhatsApp Unlink] Disconnecting session and resetting auth keys...');
+    console.log('🔄 [WhatsApp Unlink] Disconnecting session and unlinking device (CRM message history preserved)...');
     try {
       if (sock) {
         try {
@@ -705,7 +734,7 @@ const server = http.createServer(async (req, res) => {
         sock = null;
       }
 
-      // Clean up auth folder
+      // Clean up auth session files so QR can be scanned afresh
       if (fs.existsSync(AUTH_FOLDER)) {
         try {
           fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
@@ -714,40 +743,19 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      // Clear synced messages and live session data from MySQL
-      const prisma = getPrisma();
-      if (prisma && getDbStatus()) {
-        try {
-          await prisma.message.deleteMany({});
-          await prisma.leadNote.deleteMany({});
-          await prisma.leadStageHistory.deleteMany({});
-          await prisma.followup.deleteMany({});
-          await prisma.lead.deleteMany({});
-          await prisma.customer.deleteMany({});
-          console.log('🧹 [MySQL] Cleared database messages & synced leads on WhatsApp logout.');
-        } catch (e) {
-          console.warn('Could not clear database messages on logout:', e.message);
-        }
-      }
-
-      connectionState = 'connecting';
+      connectionState = 'disconnected';
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
       jidMap.clear();
 
       broadcastSSE({
-        type: 'INIT',
-        status: 'connecting',
+        type: 'CONNECTION_STATUS',
+        status: 'disconnected',
         phone: null,
-        qrDataUrl: null,
-        dbConnected: getDbStatus(),
-      });
-      broadcastSSE({
-        type: 'SESSION_CLEARED'
       });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully and data cleared.' }));
+      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully. CRM message history preserved in database.' }));
 
       setTimeout(() => {
         startWhatsAppSocket().catch(err => console.error('Error restarting WhatsApp socket:', err));
@@ -760,7 +768,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6b. Clear All Database Data
+  // 6b. Clear All Database Data (Explicit Admin Action)
   if (req.method === 'POST' && pathname === '/api/clear-db') {
     const prisma = getPrisma();
     if (prisma && getDbStatus()) {
@@ -771,7 +779,7 @@ const server = http.createServer(async (req, res) => {
         await prisma.followup.deleteMany({});
         await prisma.lead.deleteMany({});
         await prisma.customer.deleteMany({});
-        console.log('🧹 [MySQL] Full database messages and leads cleared.');
+        console.log('🧹 [MySQL] Full database messages and leads cleared by Admin.');
       } catch (e) {
         console.warn('Error clearing database:', e.message);
       }
@@ -814,7 +822,30 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 9. REST: Get Leads from MySQL
+  // 9. REST: Get Messages from MySQL (Persistent History)
+  if (req.method === 'GET' && pathname === '/api/messages') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const queryLeadId = parsedUrl.query.leadId;
+        const whereClause = queryLeadId ? { leadId: String(queryLeadId) } : {};
+        const messages = await prisma.message.findMany({
+          where: whereClause,
+          orderBy: { timestamp: 'asc' },
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(messages));
+        return;
+      } catch (e) {
+        console.error('Error fetching messages from DB:', e);
+      }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
+  // 10. REST: Get Leads from MySQL
   if (req.method === 'GET' && pathname === '/api/leads') {
     const prisma = getPrisma();
     if (prisma && getDbStatus()) {
@@ -825,14 +856,18 @@ const server = http.createServer(async (req, res) => {
             category: true,
             treatment: true,
             assignedCoordinator: true,
-            messages: { take: 1, orderBy: { timestamp: 'desc' } },
+            messages: { orderBy: { timestamp: 'asc' } },
+            notes: true,
+            stageHistories: true,
           },
           orderBy: { updatedAt: 'desc' },
         });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(leads));
         return;
-      } catch (e) {}
+      } catch (e) {
+        console.error('Error fetching leads from DB:', e);
+      }
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify([]));

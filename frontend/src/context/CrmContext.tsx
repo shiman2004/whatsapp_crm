@@ -240,9 +240,112 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
+  // Automatically load persistent conversation history and leads from MySQL Database
+  const fetchInitialData = async () => {
+    try {
+      const [leadsRes, msgsRes] = await Promise.all([
+        fetch('http://localhost:3001/api/leads'),
+        fetch('http://localhost:3001/api/messages')
+      ]);
+
+      if (leadsRes.ok && msgsRes.ok) {
+        const dbLeads: any[] = await leadsRes.json();
+        const dbMessages: any[] = await msgsRes.json();
+
+        if (Array.isArray(dbLeads) && dbLeads.length > 0) {
+          const dbCustomers: Customer[] = [];
+          dbLeads.forEach(l => {
+            if (l.customer) {
+              const rawCust = l.customer;
+              const cleanDigits = getCleanWhatsAppDigits(rawCust.whatsappNumber);
+              const canonicalPhone = normalizeWhatsAppNumber(rawCust.whatsappNumber);
+              const displayPhone = formatWhatsAppDisplay(canonicalPhone || rawCust.whatsappNumber);
+              dbCustomers.push({
+                id: rawCust.id,
+                whatsappNumber: canonicalPhone || rawCust.whatsappNumber,
+                phoneNumber: displayPhone,
+                whatsappId: rawCust.whatsappId || cleanDigits,
+                displayName: rawCust.displayName || 'WhatsApp Contact',
+                avatarUrl: rawCust.avatarUrl,
+                preferredLanguage: rawCust.preferredLanguage || 'en',
+                createdAt: rawCust.createdAt || new Date().toISOString(),
+              });
+            }
+          });
+
+          setCustomers(prev => {
+            const map = new Map<string, Customer>();
+            prev.forEach(c => map.set(c.id, c));
+            dbCustomers.forEach(c => map.set(c.id, c));
+            return Array.from(map.values());
+          });
+
+          setLeads(prev => {
+            const map = new Map<string, Lead>();
+            prev.forEach(l => map.set(l.id, l));
+            dbLeads.forEach(l => {
+              const cust = l.customer;
+              map.set(l.id, {
+                ...l,
+                customer: cust ? {
+                  ...cust,
+                  phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
+                  whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
+                } : undefined
+              });
+            });
+            return Array.from(map.values());
+          });
+
+          setSelectedLeadId(prevId => prevId ? prevId : dbLeads[0]?.id || null);
+        }
+
+        if (Array.isArray(dbMessages) && dbMessages.length > 0) {
+          const formattedMessages: Message[] = dbMessages.map(m => ({
+            id: m.id,
+            leadId: m.leadId,
+            customerId: m.customerId,
+            direction: m.direction,
+            senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+            content: m.content || '',
+            status: m.status || 'delivered',
+            createdAt: m.timestamp || new Date().toISOString(),
+            media: m.mediaUrl ? {
+              type: m.mediaType || 'image',
+              url: m.mediaUrl
+            } : undefined,
+            reactions: m.reaction ? [m.reaction] : [],
+            starred: m.starred || false,
+            pinned: m.pinned || false,
+            replyTo: m.replyToId ? {
+              id: m.replyToId,
+              content: m.replyToContent || '',
+              senderName: m.replyToSender || ''
+            } : undefined,
+            waMessageId: m.id,
+          }));
+
+          setMessages(prev => {
+            const map = new Map<string, Message>();
+            prev.forEach(m => map.set(m.waMessageId || m.id, m));
+            formattedMessages.forEach(m => map.set(m.waMessageId || m.id, m));
+            return Array.from(map.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Could not fetch persistent MySQL database state:', e);
+    }
+  };
+
+  // Hydrate on mount
+  useEffect(() => {
+    fetchInitialData();
+  }, []);
+
   const isSuperAdmin = currentUser.role === 'super_admin';
 
-  // Listen to real-time inbound WhatsApp messages from Webhook / Baileys server
+  // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server
   useEffect(() => {
     let eventSource: EventSource | null = null;
     const handledMsgIds = new Set<string>();
@@ -253,33 +356,36 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       eventSource.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
-          if (data.type === 'INBOUND_WHATSAPP_MESSAGE') {
-            const { phone, whatsappId, realPhone, isLid, name, avatarUrl, text, messageId, timestamp } = data;
+
+          if (data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE') {
+            const { phone, whatsappId, realPhone, name, avatarUrl, text, messageId, timestamp, direction, senderType } = data;
+            const isOutbound = direction === 'outbound' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE';
             
             // Deduplicate at client level
             if (messageId && handledMsgIds.has(messageId)) return;
             if (messageId) handledMsgIds.add(messageId);
 
-            // TASK 1 & TASK 3: Normalize incoming customer phone & WhatsApp ID
+            // Normalize incoming customer phone & WhatsApp ID
             const rawNumber = realPhone || phone || '';
             const canonicalPhone = normalizeWhatsAppNumber(rawNumber);
             const cleanDigits = getCleanWhatsAppDigits(rawNumber || whatsappId || '');
             const displayPhone = formatWhatsAppDisplay(canonicalPhone || rawNumber);
             const rawWaId = whatsappId || cleanDigits;
             
-            const cleanDisplayName = name && name.trim().length > 0 && !isHardwareLid(name)
+            const cleanDisplayName = name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)')
               ? name 
-              : (displayPhone || 'WhatsApp Patient');
+              : (displayPhone || 'WhatsApp Contact');
 
-            let targetLeadId = '';
-            let targetCustomerId = '';
+            let targetLeadId = data.leadId || '';
+            let targetCustomerId = data.customerId || '';
 
-            // 1. Update/Create Customer (Matching by WhatsApp ID, phone number or canonical digits)
+            // 1. Update/Create Customer
             setCustomers(prevCusts => {
               let cust = prevCusts.find(c => {
                 const cDigits = getCleanWhatsAppDigits(c.whatsappNumber);
                 const cIdDigits = getCleanWhatsAppDigits(c.whatsappId);
                 return (
+                  (targetCustomerId && c.id === targetCustomerId) ||
                   (cleanDigits && cDigits && (cleanDigits === cDigits || cleanDigits.includes(cDigits) || cDigits.includes(cleanDigits))) ||
                   (rawWaId && c.whatsappId && (c.whatsappId === rawWaId || cIdDigits === rawWaId)) ||
                   (canonicalPhone && c.whatsappNumber && (c.whatsappNumber === canonicalPhone || c.whatsappNumber.includes(canonicalPhone)))
@@ -287,7 +393,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
 
               if (!cust) {
-                targetCustomerId = 'cust-' + Date.now();
+                targetCustomerId = targetCustomerId || 'cust-' + Date.now();
                 const newCust: Customer = {
                   id: targetCustomerId,
                   whatsappNumber: canonicalPhone || rawNumber,
@@ -301,7 +407,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return [newCust, ...prevCusts];
               } else {
                 targetCustomerId = cust.id;
-                // If customer exists but had missing phone or LID, upgrade to the real phone number
                 return prevCusts.map(c => {
                   if (c.id === cust!.id) {
                     const shouldUpdatePhone = canonicalPhone && (!c.whatsappNumber || isHardwareLid(c.whatsappNumber));
@@ -325,6 +430,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 const lCustDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber);
                 const lIdDigits = getCleanWhatsAppDigits(l.customer?.whatsappId);
                 return (
+                  (targetLeadId && l.id === targetLeadId) ||
                   (targetCustomerId && l.customerId === targetCustomerId) ||
                   (cleanDigits && lCustDigits && (cleanDigits === lCustDigits || cleanDigits.includes(lCustDigits) || lCustDigits.includes(cleanDigits))) ||
                   (rawWaId && l.customer?.whatsappId && (l.customer.whatsappId === rawWaId || lIdDigits === rawWaId))
@@ -332,7 +438,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               });
               
               if (!lead) {
-                targetLeadId = 'lead-' + Date.now();
+                targetLeadId = targetLeadId || 'lead-' + Date.now();
                 const newLead: Lead = {
                   id: targetLeadId,
                   customerId: targetCustomerId || 'cust-' + Date.now(),
@@ -348,18 +454,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   },
                   categoryId: 'cat-hair-care',
                   treatmentId: 'trt-prp-hair',
-                  stage: 'new',
+                  stage: isOutbound ? 'contacted' : 'new',
                   assignedTo: undefined,
                   source: 'whatsapp',
                   language: 'en',
                   notesCount: 0,
-                  unreadCount: 1,
-                  lastCustomerMessageAt: new Date().toISOString(),
-                  createdAt: new Date().toISOString(),
+                  unreadCount: isOutbound ? 0 : 1,
+                  lastCustomerMessageAt: timestamp || new Date().toISOString(),
+                  createdAt: timestamp || new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
 
-                // Auto-select first lead
+                // Auto-select first lead if none selected
                 setSelectedLeadId(prevId => prevId ? prevId : targetLeadId);
                 return [newLead, ...prevLeads];
               } else {
@@ -380,8 +486,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     return { 
                       ...l, 
                       customer: updatedCustomer,
-                      unreadCount: isCurrentlyActive ? 0 : (l.unreadCount || 0) + 1,
-                      lastCustomerMessageAt: new Date().toISOString(),
+                      unreadCount: isOutbound ? 0 : (isCurrentlyActive ? 0 : (l.unreadCount || 0) + 1),
+                      lastCustomerMessageAt: timestamp || new Date().toISOString(),
                       updatedAt: new Date().toISOString() 
                     };
                   }
@@ -392,33 +498,30 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // 3. Add message with deduplication check
             setMessages(prevMsgs => {
-              if (prevMsgs.some(m => m.waMessageId === messageId)) {
+              if (prevMsgs.some(m => m.waMessageId === messageId || m.id === messageId)) {
                 return prevMsgs;
               }
               const newMsg: Message = {
-                id: 'msg-' + (messageId || Date.now()),
+                id: messageId || 'msg-' + Date.now(),
                 leadId: targetLeadId || 'lead-' + Date.now(),
                 customerId: targetCustomerId || 'cust-' + Date.now(),
-                direction: 'inbound',
-                senderType: 'customer',
+                direction: isOutbound ? 'outbound' : 'inbound',
+                senderType: senderType || (isOutbound ? 'coordinator' : 'customer'),
                 content: text || (data.media ? (data.media.caption || '') : ''),
                 media: data.media || undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
-                status: 'read',
+                status: isOutbound ? 'sent' : 'delivered',
                 createdAt: timestamp || new Date().toISOString(),
               };
-              return [...prevMsgs, newMsg];
+              return [...prevMsgs, newMsg].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             });
           } else if (data.type === 'INBOUND_REACTION') {
             const { targetMessageId, emoji } = data;
             setMessages(prevMsgs => {
-              // Try matching by exact WhatsApp message ID or ID
               const hasExact = prevMsgs.some(m => m.waMessageId === targetMessageId || m.id === targetMessageId);
-              
               if (hasExact) {
                 return prevMsgs.map(m => {
                   if (m.waMessageId === targetMessageId || m.id === targetMessageId) {
-                    // WhatsApp standard: Exactly 1 reaction per message (or empty if removed)
                     return {
                       ...m,
                       reactions: emoji ? [emoji] : []
@@ -426,41 +529,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   }
                   return m;
                 });
-              } else {
-                // If not matched, attach to the latest message in the current lead
-                const lastIdx = prevMsgs.length - 1;
-                if (lastIdx >= 0) {
-                  return prevMsgs.map((m, idx) => {
-                    if (idx === lastIdx) {
-                      return {
-                        ...m,
-                        reactions: emoji ? [emoji] : []
-                      };
-                    }
-                    return m;
-                  });
-                }
-                return prevMsgs;
               }
+              return prevMsgs;
             });
-          } else if (data.type === 'SESSION_CLEARED') {
-            setCustomers([]);
-            setLeads([]);
-            setMessages([]);
-            setFollowups([]);
-            setNotes([]);
-            setStageHistories([]);
-            setAuditLogs([]);
-            setSelectedLeadId(null);
-            try {
-              localStorage.removeItem('rw_crm_customers');
-              localStorage.removeItem('rw_crm_leads');
-              localStorage.removeItem('rw_crm_messages');
-              localStorage.removeItem('rw_crm_followups');
-              localStorage.removeItem('rw_crm_notes');
-              localStorage.removeItem('rw_crm_stage_histories');
-              localStorage.removeItem('rw_crm_audit_logs');
-            } catch (e) {}
+          } else if (data.type === 'HISTORY_SYNC_COMPLETED') {
+            console.log(`🔄 History sync completed. Restoring ${data.count} messages into CRM.`);
+            fetchInitialData();
+            notify('WhatsApp History Synced', `${data.count} conversation messages restored from WhatsApp.`, 'success');
+          } else if (data.type === 'CONNECTION_STATUS' && data.status === 'connected') {
+            console.log('🟢 WhatsApp connected. Refreshing latest conversation state.');
+            fetchInitialData();
           }
         } catch (err) {
           console.error('Error handling SSE message:', err);

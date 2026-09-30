@@ -654,15 +654,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Dispatch to WhatsApp bridge (Supports both linked QR session & Meta API)
     const recipientPhone = lead.customer?.whatsappNumber;
+    const recipientWaId = lead.customer?.whatsappId;
     const savedToken = localStorage.getItem('meta_access_token');
     
-    if (recipientPhone && !leadId.startsWith('lead-sim')) {
+    if ((recipientPhone || recipientWaId) && !leadId.startsWith('lead-sim')) {
       fetch('http://localhost:3001/api/send-message', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           to: recipientPhone,
+          whatsappId: recipientWaId,
           text: content,
+          message: content,
+          leadId: lead.id,
+          customerId: lead.customerId,
           token: savedToken || undefined,
           phoneNumberId: '1302468252956177'
         })

@@ -470,17 +470,28 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 5. Send Outbound WhatsApp Message
-  if (req.method === 'POST' && pathname === '/api/send') {
+  // 5. Send Outbound WhatsApp Message (Supports both /api/send and /api/send-message)
+  if (req.method === 'POST' && (pathname === '/api/send' || pathname === '/api/send-message')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        const { to, message, leadId, customerId } = JSON.parse(body);
+        const payload = JSON.parse(body);
+        const to = payload.to || payload.phone || '';
+        const whatsappId = payload.whatsappId || payload.waId || '';
+        const msgContent = payload.message || payload.text || payload.content || '';
+        const leadId = payload.leadId;
+        const customerId = payload.customerId;
 
-        if (!to || !message) {
+        if (!to && !whatsappId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Missing "to" or "message" field' }));
+          res.end(JSON.stringify({ success: false, error: 'Missing recipient "to" or "whatsappId" field' }));
+          return;
+        }
+
+        if (!msgContent) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing "message" or "text" content field' }));
           return;
         }
 
@@ -491,17 +502,36 @@ const server = http.createServer(async (req, res) => {
         }
 
         const cleanPhone = to.replace(/[^0-9]/g, '');
-        let targetJid = jidMap.get(cleanPhone) || jidMap.get(`+${cleanPhone}`) || `${cleanPhone}@s.whatsapp.net`;
+        const cleanWaId = whatsappId.replace(/[^0-9]/g, '');
 
-        console.log(`📤 Sending outbound WhatsApp to JID: ${targetJid} (Recipient: "${to}")...`);
-        const sentMsg = await sock.sendMessage(targetJid, { text: message });
+        // Resolve JID in priority order
+        let targetJid = null;
+        if (cleanWaId && jidMap.has(cleanWaId)) targetJid = jidMap.get(cleanWaId);
+        if (!targetJid && cleanPhone && jidMap.has(cleanPhone)) targetJid = jidMap.get(cleanPhone);
+        if (!targetJid && cleanWaId && jidMap.has(`+${cleanWaId}`)) targetJid = jidMap.get(`+${cleanWaId}`);
+        if (!targetJid && cleanPhone && jidMap.has(`+${cleanPhone}`)) targetJid = jidMap.get(`+${cleanPhone}`);
+
+        // Fallback resolution
+        if (!targetJid) {
+          if (cleanWaId && cleanWaId.length > 15) {
+            targetJid = `${cleanWaId}@lid`;
+          } else if (cleanPhone) {
+            targetJid = `${cleanPhone}@s.whatsapp.net`;
+          } else if (cleanWaId) {
+            targetJid = `${cleanWaId}@s.whatsapp.net`;
+          }
+        }
+
+        console.log(`📤 Sending outbound WhatsApp to JID: ${targetJid} (Recipient: "${to}", WA ID: "${whatsappId}")...`);
+        const sentMsg = await sock.sendMessage(targetJid, { text: msgContent });
         const outboundMsgId = sentMsg?.key?.id || `out-${Date.now()}`;
+        console.log(`✅ WhatsApp Outbound Delivered! Msg ID: ${outboundMsgId}`);
 
         // Save outbound message to MySQL
         persistOutboundMessage({
           leadId,
           customerId,
-          content: message,
+          content: msgContent,
           messageId: outboundMsgId,
           senderType: 'coordinator',
         });
@@ -514,7 +544,7 @@ const server = http.createServer(async (req, res) => {
           to: to
         }));
       } catch (err) {
-        console.error('Error sending WhatsApp message:', err);
+        console.error('❌ Error sending WhatsApp message:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
       }

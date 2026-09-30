@@ -8,8 +8,8 @@
     "backend"
   ],
   "scripts": {
-    "dev": "npm run dev:all",
-    "dev:all": "node -e \"const { spawn } = require('child_process'); const b = spawn('npm', ['run', 'dev'], { cwd: 'backend', stdio: 'inherit', shell: true }); const f = spawn('npm', ['run', 'dev'], { cwd: 'frontend', stdio: 'inherit', shell: true }); process.on('SIGINT', () => { b.kill(); f.kill(); process.exit(); });\"",
+    "dev": "node dev.js",
+    "dev:all": "node dev.js",
     "dev:frontend": "npm run dev --prefix frontend",
     "dev:backend": "npm run dev --prefix backend",
     "build": "npm run build --prefix frontend",

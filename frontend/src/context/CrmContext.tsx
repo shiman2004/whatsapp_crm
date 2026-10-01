@@ -153,41 +153,34 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
-  const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', INITIAL_CUSTOMERS));
-  const [leads, setLeads] = useState<Lead[]>(() => getStored('rw_crm_leads', INITIAL_LEADS));
-  const [messages, setMessages] = useState<Message[]>(() => getStored('rw_crm_messages', INITIAL_MESSAGES));
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
   const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
   
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
-    const savedLeads = getStored<Lead[]>('rw_crm_leads', INITIAL_LEADS);
-    return savedLeads.length > 0 ? savedLeads[0].id : null;
-  });
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationToast[]>([]);
   const [simulatorOpen, setSimulatorOpen] = useState<boolean>(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
 
+  // Clear legacy localStorage cache keys so MySQL remains the single source of truth
+  useEffect(() => {
+    try {
+      localStorage.removeItem('rw_crm_leads');
+      localStorage.removeItem('rw_crm_customers');
+      localStorage.removeItem('rw_crm_messages');
+    } catch (e) {}
+  }, []);
+
   // Sync users to localStorage
   useEffect(() => {
     localStorage.setItem('rw_crm_users', JSON.stringify(users));
   }, [users]);
-
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('rw_crm_leads', JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem('rw_crm_customers', JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    localStorage.setItem('rw_crm_messages', JSON.stringify(messages));
-  }, [messages]);
 
   useEffect(() => {
     localStorage.setItem('rw_crm_notes', JSON.stringify(notes));

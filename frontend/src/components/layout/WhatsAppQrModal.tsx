@@ -19,10 +19,10 @@ interface WhatsAppQrModalProps {
 
 export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClose }) => {
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'disconnected'>('connecting');
+  const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'disconnected' | 'syncing' | 'sync_error'>('connecting');
   const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const { notify, clearAllData } = useCrm() as any;
+  const { notify } = useCrm() as any;
 
   // Poll or listen for QR code & status
   useEffect(() => {
@@ -58,7 +58,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
       setStatus('connecting');
       setQrCode(null);
       setConnectedPhone(null);
-      if (notify) notify('WhatsApp Disconnected', 'Session unlinked. Conversation history preserved.', 'info');
+      if (notify) notify('WhatsApp Disconnected', 'Session unlinked. Conversation history preserved in CRM database.', 'info');
       
       // Re-fetch new QR code after a short delay
       setTimeout(async () => {
@@ -94,9 +94,15 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
                   status === 'connected' 
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                    : status === 'syncing'
+                    ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
                     : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                 }`}>
-                  {status === 'connected' ? '🟢 Linked & Online' : 'Scan to Connect'}
+                  {status === 'connected' 
+                    ? '🟢 Linked & Online' 
+                    : status === 'syncing'
+                    ? '🔄 Syncing History...'
+                    : 'Scan to Connect'}
                 </span>
               </h2>
               <p className="text-xs text-slate-400">Use your personal or clinic WhatsApp directly in this CRM</p>
@@ -113,7 +119,23 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
         {/* Content Body */}
         <div className="p-6 space-y-6">
           
-          {status === 'connected' ? (
+          {status === 'syncing' ? (
+            /* Syncing State */
+            <div className="p-6 bg-[#202c33] rounded-2xl border border-amber-500/40 text-center space-y-4 shadow-lg animate-pulse">
+              <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/40 shadow-inner">
+                <RefreshCw className="w-8 h-8 animate-spin" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Synchronizing WhatsApp Conversation History</h3>
+                <p className="text-xs text-slate-300 mt-1 font-mono">
+                  Connected Number: <span className="text-emerald-400 font-bold">+{connectedPhone || 'Active SIM'}</span>
+                </p>
+                <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
+                  Catching up on missed messages, phone replies, and previous chat history...
+                </p>
+              </div>
+            </div>
+          ) : status === 'connected' ? (
             /* Connected State */
             <div className="p-6 bg-[#202c33] rounded-2xl border border-emerald-500/40 text-center space-y-4 shadow-lg">
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40 shadow-inner">

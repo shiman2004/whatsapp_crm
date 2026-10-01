@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node server.js",
-    "dev": "node server.js",
+    "dev": "node --watch server.js",
     "webhook": "node webhook-standalone.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",

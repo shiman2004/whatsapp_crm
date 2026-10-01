@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   User,
@@ -15,7 +15,8 @@ import {
   AuditLog,
   LeadStage,
   LanguageCode,
-  OnboardingSession
+  OnboardingSession,
+  WhatsAppConnectionStatus
 } from '../types';
 import {
   INITIAL_USERS,
@@ -89,6 +90,8 @@ interface CrmContextType {
   pinMessage: (messageId: string) => void;
   deleteMessage: (messageId: string) => void;
   forwardMessage: (messageId: string, targetLeadId: string) => void;
+  deleteChat: (leadId: string) => Promise<void>;
+  clearChat: (leadId: string) => Promise<void>;
   
   // Followup controls
   cancelFollowup: (followupId: string) => void;
@@ -119,6 +122,11 @@ interface CrmContextType {
   selectSimulatorCategory: (catId: string) => void;
   selectSimulatorTreatment: (trtId: string) => void;
 
+  // WhatsApp Connection & QR Modal
+  whatsappStatus: WhatsAppConnectionStatus;
+  qrModalOpen: boolean;
+  setQrModalOpen: (open: boolean) => void;
+
   // Toasts
   dismissNotification: (id: string) => void;
 }
@@ -147,39 +155,34 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
-  const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', INITIAL_CUSTOMERS));
-  const [leads, setLeads] = useState<Lead[]>(() => getStored('rw_crm_leads', INITIAL_LEADS));
-  const [messages, setMessages] = useState<Message[]>(() => getStored('rw_crm_messages', INITIAL_MESSAGES));
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
   const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
   
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
-    const savedLeads = getStored<Lead[]>('rw_crm_leads', INITIAL_LEADS);
-    return savedLeads.length > 0 ? savedLeads[0].id : null;
-  });
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<NotificationToast[]>([]);
   const [simulatorOpen, setSimulatorOpen] = useState<boolean>(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
+  const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
+  const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
+
+  // Clear legacy localStorage cache keys so MySQL remains the single source of truth
+  useEffect(() => {
+    try {
+      localStorage.removeItem('rw_crm_leads');
+      localStorage.removeItem('rw_crm_customers');
+      localStorage.removeItem('rw_crm_messages');
+    } catch (e) {}
+  }, []);
 
   // Sync users to localStorage
   useEffect(() => {
     localStorage.setItem('rw_crm_users', JSON.stringify(users));
   }, [users]);
-
-  // Sync to localStorage
-  useEffect(() => {
-    localStorage.setItem('rw_crm_leads', JSON.stringify(leads));
-  }, [leads]);
-
-  useEffect(() => {
-    localStorage.setItem('rw_crm_customers', JSON.stringify(customers));
-  }, [customers]);
-
-  useEffect(() => {
-    localStorage.setItem('rw_crm_messages', JSON.stringify(messages));
-  }, [messages]);
 
   useEffect(() => {
     localStorage.setItem('rw_crm_notes', JSON.stringify(notes));
@@ -273,64 +276,66 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           });
 
-          setCustomers(prev => {
-            const map = new Map<string, Customer>();
-            prev.forEach(c => map.set(c.id, c));
-            dbCustomers.forEach(c => map.set(c.id, c));
-            return Array.from(map.values());
+          // Hydrate unique customers from DB
+          const custMap = new Map<string, Customer>();
+          dbCustomers.forEach(c => {
+            if (!custMap.has(c.id)) {
+              custMap.set(c.id, c);
+            }
           });
+          setCustomers(Array.from(custMap.values()));
 
-          setLeads(prev => {
-            const map = new Map<string, Lead>();
-            prev.forEach(l => map.set(l.id, l));
-            dbLeads.forEach(l => {
-              const cust = l.customer;
-              map.set(l.id, {
-                ...l,
-                customer: cust ? {
-                  ...cust,
-                  phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
-                  whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
-                } : undefined
-              });
+          // Hydrate unique leads from DB
+          const leadMap = new Map<string, Lead>();
+          dbLeads.forEach(l => {
+            const cust = l.customer;
+            leadMap.set(l.id, {
+              ...l,
+              customer: cust ? {
+                ...cust,
+                phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
+                whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
+              } : undefined
             });
-            return Array.from(map.values());
           });
+          setLeads(Array.from(leadMap.values()));
 
-          setSelectedLeadId(prevId => prevId ? prevId : dbLeads[0]?.id || null);
+          setSelectedLeadId(prevId => {
+            if (prevId && leadMap.has(prevId)) return prevId;
+            return dbLeads[0]?.id || null;
+          });
         }
 
         if (Array.isArray(dbMessages) && dbMessages.length > 0) {
-          const formattedMessages: Message[] = dbMessages.map(m => ({
-            id: m.id,
-            leadId: m.leadId,
-            customerId: m.customerId,
-            direction: m.direction,
-            senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
-            content: m.content || '',
-            status: m.status || 'delivered',
-            createdAt: m.timestamp || new Date().toISOString(),
-            media: m.mediaUrl ? {
-              type: m.mediaType || 'image',
-              url: m.mediaUrl
-            } : undefined,
-            reactions: m.reaction ? [m.reaction] : [],
-            starred: m.starred || false,
-            pinned: m.pinned || false,
-            replyTo: m.replyToId ? {
-              id: m.replyToId,
-              content: m.replyToContent || '',
-              senderName: m.replyToSender || ''
-            } : undefined,
-            waMessageId: m.id,
-          }));
+          const formattedMessages: Message[] = dbMessages
+            .filter(m => (m.content && m.content.trim().length > 0) || Boolean(m.mediaUrl))
+            .map(m => ({
+              id: m.id,
+              leadId: m.leadId,
+              customerId: m.customerId,
+              direction: m.direction,
+              senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+              content: m.content || '',
+              status: m.status || 'delivered',
+              createdAt: m.timestamp || new Date().toISOString(),
+              media: m.mediaUrl ? {
+                type: m.mediaType || 'image',
+                url: m.mediaUrl
+              } : undefined,
+              reactions: m.reaction ? [m.reaction] : [],
+              starred: m.starred || false,
+              pinned: m.pinned || false,
+              replyTo: m.replyToId ? {
+                id: m.replyToId,
+                content: m.replyToContent || '',
+                senderName: m.replyToSender || ''
+              } : undefined,
+              waMessageId: m.id,
+            }));
 
-          setMessages(prev => {
-            const map = new Map<string, Message>();
-            prev.forEach(m => map.set(m.waMessageId || m.id, m));
-            formattedMessages.forEach(m => map.set(m.waMessageId || m.id, m));
-            return Array.from(map.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          });
+          const msgMap = new Map<string, Message>();
+          formattedMessages.forEach(m => msgMap.set(m.waMessageId || m.id, m));
+          setMessages(Array.from(msgMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         }
       }
     } catch (e) {
@@ -345,6 +350,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isSuperAdmin = currentUser.role === 'super_admin';
 
+  const selectedLeadIdRef = useRef<string | null>(selectedLeadId);
+  useEffect(() => {
+    selectedLeadIdRef.current = selectedLeadId;
+  }, [selectedLeadId]);
+
   // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server
   useEffect(() => {
     let eventSource: EventSource | null = null;
@@ -358,6 +368,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const data = JSON.parse(event.data);
 
           if (data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE') {
+            // Skip empty protocol messages without text or media
+            if ((!data.text || data.text.trim().length === 0) && !data.media) {
+              return;
+            }
+
+            console.log('[CRM SSE DEBUG] event received:', data.type, 'message ID:', data.messageId, 'conversation ID:', data.leadId);
             const { phone, whatsappId, realPhone, name, avatarUrl, text, messageId, timestamp, direction, senderType } = data;
             const isOutbound = direction === 'outbound' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE';
             
@@ -372,7 +388,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const displayPhone = formatWhatsAppDisplay(canonicalPhone || rawNumber);
             const rawWaId = whatsappId || cleanDigits;
             
-            const cleanDisplayName = name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)')
+            const cleanDisplayName = (!isOutbound && name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)') && !name.includes('Shiman Nafaas'))
               ? name 
               : (displayPhone || 'WhatsApp Contact');
 
@@ -410,12 +426,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return prevCusts.map(c => {
                   if (c.id === cust!.id) {
                     const shouldUpdatePhone = canonicalPhone && (!c.whatsappNumber || isHardwareLid(c.whatsappNumber));
+                    const shouldUpdateName = !isOutbound && name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)') && !name.includes('Shiman Nafaas');
                     return {
                       ...c,
                       whatsappNumber: shouldUpdatePhone ? canonicalPhone : (c.whatsappNumber || canonicalPhone),
                       whatsappId: rawWaId || c.whatsappId,
                       phoneNumber: shouldUpdatePhone ? displayPhone : (c.phoneNumber || displayPhone),
-                      displayName: c.displayName && !isHardwareLid(c.displayName) ? c.displayName : cleanDisplayName,
+                      displayName: shouldUpdateName ? name : (c.displayName && !isHardwareLid(c.displayName) ? c.displayName : cleanDisplayName),
                       avatarUrl: avatarUrl || c.avatarUrl
                     };
                   }
@@ -470,7 +487,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return [newLead, ...prevLeads];
               } else {
                 targetLeadId = lead.id;
-                const isCurrentlyActive = selectedLeadId === lead.id;
+                const isCurrentlyActive = selectedLeadIdRef.current === lead.id;
                 return prevLeads.map(l => {
                   if (l.id === lead!.id) {
                     const shouldUpdatePhone = canonicalPhone && (!l.customer?.whatsappNumber || isHardwareLid(l.customer?.whatsappNumber));
@@ -498,16 +515,53 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // 3. Add message with deduplication check
             setMessages(prevMsgs => {
-              if (prevMsgs.some(m => m.waMessageId === messageId || m.id === messageId)) {
+              // 1. Exact ID check
+              if (messageId && prevMsgs.some(m => m.waMessageId === messageId || m.id === messageId)) {
                 return prevMsgs;
               }
+
+              const cleanContent = text || (data.media ? (data.media.caption || '') : '');
+
+              // 2. Outbound optimistic placeholder replacement
+              if (isOutbound) {
+                const optIndex = prevMsgs.findIndex(m => 
+                  m.direction === 'outbound' &&
+                  (m.id.startsWith('msg-') || m.waMessageId?.startsWith('wamid.HBg')) &&
+                  m.content === cleanContent &&
+                  Math.abs(new Date(m.createdAt).getTime() - new Date(timestamp || Date.now()).getTime()) < 20000
+                );
+
+                if (optIndex !== -1) {
+                  const updated = [...prevMsgs];
+                  updated[optIndex] = {
+                    ...updated[optIndex],
+                    id: messageId || updated[optIndex].id,
+                    waMessageId: messageId || updated[optIndex].waMessageId,
+                    status: 'sent',
+                    leadId: targetLeadId || updated[optIndex].leadId,
+                    customerId: targetCustomerId || updated[optIndex].customerId
+                  };
+                  return updated;
+                }
+              }
+
+              // 3. Duplicate content within 3-second window check
+              const isDuplicate = prevMsgs.some(m =>
+                m.direction === (isOutbound ? 'outbound' : 'inbound') &&
+                m.content === cleanContent &&
+                Math.abs(new Date(m.createdAt).getTime() - new Date(timestamp || Date.now()).getTime()) < 3000
+              );
+              if (isDuplicate) {
+                return prevMsgs;
+              }
+
               const newMsg: Message = {
                 id: messageId || 'msg-' + Date.now(),
                 leadId: targetLeadId || 'lead-' + Date.now(),
                 customerId: targetCustomerId || 'cust-' + Date.now(),
                 direction: isOutbound ? 'outbound' : 'inbound',
                 senderType: senderType || (isOutbound ? 'coordinator' : 'customer'),
-                content: text || (data.media ? (data.media.caption || '') : ''),
+                content: cleanContent,
                 media: data.media || undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
                 status: isOutbound ? 'sent' : 'delivered',
@@ -532,13 +586,72 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
               return prevMsgs;
             });
+          } else if (data.type === 'CHAT_DELETED') {
+            const { leadId, customerId, phone, whatsappId } = data;
+            console.log('🗑️ [CRM SSE] Chat deleted event received for:', leadId || customerId || phone);
+            
+            const cleanDigits = getCleanWhatsAppDigits(phone || whatsappId || '');
+
+            setLeads(prev => {
+              const remaining = prev.filter(l => {
+                if (leadId && l.id === leadId) return false;
+                if (customerId && l.customerId === customerId) return false;
+                const lDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber || l.customer?.whatsappId || '');
+                if (cleanDigits && lDigits && (cleanDigits === lDigits || cleanDigits.includes(lDigits) || lDigits.includes(cleanDigits))) return false;
+                return true;
+              });
+
+              // If active lead was deleted, switch to next available lead
+              setSelectedLeadId(currentSelectedId => {
+                const wasDeleted = !remaining.some(l => l.id === currentSelectedId);
+                if (wasDeleted) {
+                  return remaining.length > 0 ? remaining[0].id : null;
+                }
+                return currentSelectedId;
+              });
+
+              return remaining;
+            });
+
+            setCustomers(prev => prev.filter(c => {
+              if (customerId && c.id === customerId) return false;
+              const cDigits = getCleanWhatsAppDigits(c.whatsappNumber || c.whatsappId || '');
+              if (cleanDigits && cDigits && (cleanDigits === cDigits || cleanDigits.includes(cDigits) || cDigits.includes(cleanDigits))) return false;
+              return true;
+            }));
+
+            setMessages(prev => prev.filter(m => {
+              if (leadId && m.leadId === leadId) return false;
+              if (customerId && m.customerId === customerId) return false;
+              return true;
+            }));
+          } else if (data.type === 'CHAT_CLEARED') {
+            const { leadId, customerId } = data;
+            setMessages(prev => prev.filter(m => {
+              if (leadId && m.leadId === leadId) return false;
+              if (customerId && m.customerId === customerId) return false;
+              return true;
+            }));
+          } else if (data.type === 'MESSAGE_DELETED') {
+            const { messageId } = data;
+            if (messageId) {
+              setMessages(prev => prev.filter(m => m.id !== messageId && m.waMessageId !== messageId));
+            }
+          } else if (data.type === 'INIT') {
+            if (data.status) setWhatsappStatus(data.status);
+          } else if (data.type === 'CONNECTION_STATUS') {
+            setWhatsappStatus(data.status);
+            if (data.status === 'connected') {
+              console.log('🟢 WhatsApp connected. Refreshing latest conversation state.');
+              fetchInitialData();
+            }
           } else if (data.type === 'HISTORY_SYNC_COMPLETED') {
             console.log(`🔄 History sync completed. Restoring ${data.count} messages into CRM.`);
+            setWhatsappStatus('connected');
             fetchInitialData();
             notify('WhatsApp History Synced', `${data.count} conversation messages restored from WhatsApp.`, 'success');
-          } else if (data.type === 'CONNECTION_STATUS' && data.status === 'connected') {
-            console.log('🟢 WhatsApp connected. Refreshing latest conversation state.');
-            fetchInitialData();
+          } else if (data.type === 'QR_CODE') {
+            setWhatsappStatus('qr_ready');
           }
         } catch (err) {
           console.error('Error handling SSE message:', err);
@@ -551,7 +664,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (eventSource) eventSource.close();
     };
-  }, [selectedLeadId]);
+  }, []);
 
   // Mark chat as read and clear unread badge
   const markChatAsRead = (leadId: string) => {
@@ -721,6 +834,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
+    // Enforce WhatsApp connection requirement for CRM sending
+    if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected') {
+      notify('WhatsApp Disconnected', 'Please link your WhatsApp first to send messages from the CRM.', 'warning');
+      setQrModalOpen(true);
+      return;
+    }
+
     const newMsg: Message = {
       id: 'msg-' + Date.now(),
       leadId,
@@ -774,7 +894,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const err = await res.json();
           console.warn('WhatsApp bridge send error:', err);
         } else {
-          console.log('✅ Outbound WhatsApp message dispatched successfully!');
+          const data = await res.json().catch(() => ({}));
+          console.log('✅ Outbound WhatsApp message dispatched successfully! ID:', data.messageId);
+          if (data.messageId) {
+            setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+              ...m,
+              id: data.messageId,
+              waMessageId: data.messageId,
+              status: 'sent'
+            } : m));
+          }
         }
       }).catch(err => {
         console.warn('WhatsApp bridge offline:', err);
@@ -827,6 +956,63 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteMessage = (messageId: string) => {
     setMessages(prev => prev.filter(m => m.id !== messageId));
     notify('Message Deleted 🗑️', 'Message removed from chat', 'warning');
+  };
+
+  // Delete entire chat from CRM & physical WhatsApp phone
+  const deleteChat = async (leadId: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    // Optimistically remove from state
+    setLeads(prev => prev.filter(l => l.id !== leadId));
+    setCustomers(prev => prev.filter(c => c.id !== targetLead.customerId));
+    setMessages(prev => prev.filter(m => m.leadId !== leadId && m.customerId !== targetLead.customerId));
+
+    if (selectedLeadId === leadId) {
+      const remaining = leads.filter(l => l.id !== leadId);
+      setSelectedLeadId(remaining.length > 0 ? remaining[0].id : null);
+    }
+
+    notify('Chat Deleted 🗑️', `Chat with ${targetLead.customer?.displayName || 'contact'} deleted from CRM & WhatsApp.`, 'info');
+
+    try {
+      await fetch('http://localhost:3001/api/chats/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: targetLead.id,
+          customerId: targetLead.customerId,
+          phone: targetLead.customer?.whatsappNumber,
+          whatsappId: targetLead.customer?.whatsappId
+        })
+      });
+    } catch (e) {
+      console.warn('Error syncing chat delete to backend:', e);
+    }
+  };
+
+  // Clear all messages in a chat while preserving the lead/customer
+  const clearChat = async (leadId: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    setMessages(prev => prev.filter(m => m.leadId !== leadId && m.customerId !== targetLead.customerId));
+    notify('Chat Cleared 🧹', `Messages cleared for ${targetLead.customer?.displayName || 'contact'}.`, 'info');
+
+    try {
+      await fetch('http://localhost:3001/api/chats/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: targetLead.id,
+          customerId: targetLead.customerId,
+          phone: targetLead.customer?.whatsappNumber,
+          whatsappId: targetLead.customer?.whatsappId
+        })
+      });
+    } catch (e) {
+      console.warn('Error syncing chat clear to backend:', e);
+    }
   };
 
   // Forward message to another lead
@@ -1265,6 +1451,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pinMessage,
     deleteMessage,
     forwardMessage,
+    deleteChat,
+    clearChat,
     sendWhatsAppTemplate,
     markChatAsRead,
     cancelFollowup,
@@ -1291,6 +1479,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectSimulatorCategory,
     selectSimulatorTreatment,
     dismissNotification,
+    whatsappStatus,
+    qrModalOpen,
+    setQrModalOpen,
   };
 
   return (

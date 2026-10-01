@@ -27,13 +27,28 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   crmPanelOpen, 
   setCrmPanelOpen 
 }) => {
-  const { messages } = useCrm();
+  const { messages, deleteChat, clearChat } = useCrm();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [searchInChat, setSearchInChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const leadMessages = messages.filter(m => m.leadId === lead.id);
+  const rawLeadMessages = messages.filter(m => 
+    m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId)
+  );
+
+  // Deduplicate messages
+  const seenMsgKeys = new Set<string>();
+  const leadMessages = rawLeadMessages.filter(m => {
+    // Filter out empty messages
+    if ((!m.content || m.content.trim().length === 0) && !m.media) return false;
+    const timeBucket = Math.floor(new Date(m.createdAt).getTime() / 2000);
+    const key = m.waMessageId || m.id || `${m.direction}-${m.content}-${timeBucket}`;
+    if (seenMsgKeys.has(key)) return false;
+    seenMsgKeys.add(key);
+    return true;
+  });
+
   const displayName = lead.customer?.displayName || 'WhatsApp Contact';
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
@@ -130,10 +145,22 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                 <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229]">
                   Mute notifications
                 </button>
-                <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229]">
+                <button 
+                  onClick={() => {
+                    clearChat(lead.id);
+                    setThreadMenuOpen(false);
+                  }} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#182229]"
+                >
                   Clear chat
                 </button>
-                <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229] text-rose-400">
+                <button 
+                  onClick={() => {
+                    deleteChat(lead.id);
+                    setThreadMenuOpen(false);
+                  }} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#182229] text-rose-400 font-medium"
+                >
                   Delete chat
                 </button>
               </div>

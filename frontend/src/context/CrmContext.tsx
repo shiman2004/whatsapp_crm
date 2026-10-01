@@ -90,6 +90,8 @@ interface CrmContextType {
   pinMessage: (messageId: string) => void;
   deleteMessage: (messageId: string) => void;
   forwardMessage: (messageId: string, targetLeadId: string) => void;
+  deleteChat: (leadId: string) => Promise<void>;
+  clearChat: (leadId: string) => Promise<void>;
   
   // Followup controls
   cancelFollowup: (followupId: string) => void;
@@ -575,9 +577,57 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   }
                   return m;
                 });
-              }
-              return prevMsgs;
+          } else if (data.type === 'CHAT_DELETED') {
+            const { leadId, customerId, phone, whatsappId } = data;
+            console.log('🗑️ [CRM SSE] Chat deleted event received for:', leadId || customerId || phone);
+            
+            const cleanDigits = getCleanWhatsAppDigits(phone || whatsappId || '');
+
+            setLeads(prev => {
+              const remaining = prev.filter(l => {
+                if (leadId && l.id === leadId) return false;
+                if (customerId && l.customerId === customerId) return false;
+                const lDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber || l.customer?.whatsappId || '');
+                if (cleanDigits && lDigits && (cleanDigits === lDigits || cleanDigits.includes(lDigits) || lDigits.includes(cleanDigits))) return false;
+                return true;
+              });
+
+              // If active lead was deleted, switch to next available lead
+              setSelectedLeadId(currentSelectedId => {
+                const wasDeleted = !remaining.some(l => l.id === currentSelectedId);
+                if (wasDeleted) {
+                  return remaining.length > 0 ? remaining[0].id : null;
+                }
+                return currentSelectedId;
+              });
+
+              return remaining;
             });
+
+            setCustomers(prev => prev.filter(c => {
+              if (customerId && c.id === customerId) return false;
+              const cDigits = getCleanWhatsAppDigits(c.whatsappNumber || c.whatsappId || '');
+              if (cleanDigits && cDigits && (cleanDigits === cDigits || cleanDigits.includes(cDigits) || cDigits.includes(cleanDigits))) return false;
+              return true;
+            }));
+
+            setMessages(prev => prev.filter(m => {
+              if (leadId && m.leadId === leadId) return false;
+              if (customerId && m.customerId === customerId) return false;
+              return true;
+            }));
+          } else if (data.type === 'CHAT_CLEARED') {
+            const { leadId, customerId } = data;
+            setMessages(prev => prev.filter(m => {
+              if (leadId && m.leadId === leadId) return false;
+              if (customerId && m.customerId === customerId) return false;
+              return true;
+            }));
+          } else if (data.type === 'MESSAGE_DELETED') {
+            const { messageId } = data;
+            if (messageId) {
+              setMessages(prev => prev.filter(m => m.id !== messageId && m.waMessageId !== messageId));
+            }
           } else if (data.type === 'INIT') {
             if (data.status) setWhatsappStatus(data.status);
           } else if (data.type === 'CONNECTION_STATUS') {
@@ -897,6 +947,63 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteMessage = (messageId: string) => {
     setMessages(prev => prev.filter(m => m.id !== messageId));
     notify('Message Deleted 🗑️', 'Message removed from chat', 'warning');
+  };
+
+  // Delete entire chat from CRM & physical WhatsApp phone
+  const deleteChat = async (leadId: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    // Optimistically remove from state
+    setLeads(prev => prev.filter(l => l.id !== leadId));
+    setCustomers(prev => prev.filter(c => c.id !== targetLead.customerId));
+    setMessages(prev => prev.filter(m => m.leadId !== leadId && m.customerId !== targetLead.customerId));
+
+    if (selectedLeadId === leadId) {
+      const remaining = leads.filter(l => l.id !== leadId);
+      setSelectedLeadId(remaining.length > 0 ? remaining[0].id : null);
+    }
+
+    notify('Chat Deleted 🗑️', `Chat with ${targetLead.customer?.displayName || 'contact'} deleted from CRM & WhatsApp.`, 'info');
+
+    try {
+      await fetch('http://localhost:3001/api/chats/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: targetLead.id,
+          customerId: targetLead.customerId,
+          phone: targetLead.customer?.whatsappNumber,
+          whatsappId: targetLead.customer?.whatsappId
+        })
+      });
+    } catch (e) {
+      console.warn('Error syncing chat delete to backend:', e);
+    }
+  };
+
+  // Clear all messages in a chat while preserving the lead/customer
+  const clearChat = async (leadId: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    setMessages(prev => prev.filter(m => m.leadId !== leadId && m.customerId !== targetLead.customerId));
+    notify('Chat Cleared 🧹', `Messages cleared for ${targetLead.customer?.displayName || 'contact'}.`, 'info');
+
+    try {
+      await fetch('http://localhost:3001/api/chats/clear', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          leadId: targetLead.id,
+          customerId: targetLead.customerId,
+          phone: targetLead.customer?.whatsappNumber,
+          whatsappId: targetLead.customer?.whatsappId
+        })
+      });
+    } catch (e) {
+      console.warn('Error syncing chat clear to backend:', e);
+    }
   };
 
   // Forward message to another lead
@@ -1335,6 +1442,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     pinMessage,
     deleteMessage,
     forwardMessage,
+    deleteChat,
+    clearChat,
     sendWhatsAppTemplate,
     markChatAsRead,
     cancelFollowup,

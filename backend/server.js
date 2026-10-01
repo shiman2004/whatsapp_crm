@@ -578,6 +578,72 @@ async function startWhatsAppSocket() {
     });
   });
 
+  // Listen for chat deletion from physical phone
+  sock.ev.on('chats.delete', async (deletedJids) => {
+    console.log(`🗑️ [WA EVENT] chats.delete fired from phone:`, deletedJids);
+    if (!Array.isArray(deletedJids)) return;
+
+    for (const rawJid of deletedJids) {
+      try {
+        const cleanDigits = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+        const realPhone = lidToPhoneMap.get(cleanDigits) || cleanDigits;
+        const canonicalPhone = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const cust = await prisma.customer.findFirst({
+            where: {
+              OR: [
+                { whatsappNumber: canonicalPhone },
+                { whatsappNumber: realPhone },
+                { whatsappId: cleanDigits },
+                { whatsappId: realPhone }
+              ]
+            },
+            include: { leads: true }
+          });
+
+          if (cust) {
+            for (const l of cust.leads) {
+              await prisma.message.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.leadNote.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.followup.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.leadStageHistory.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.lead.delete({ where: { id: l.id } }).catch(() => {});
+            }
+            await prisma.customer.delete({ where: { id: cust.id } }).catch(() => {});
+            console.log(`🗑️ [PHONE CHAT DELETED] Customer ${cust.displayName} (${cust.whatsappNumber}) and leads removed.`);
+
+            broadcastSSE({
+              type: 'CHAT_DELETED',
+              customerId: cust.id,
+              phone: cust.whatsappNumber,
+              whatsappId: cust.whatsappId
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error handling phone chats.delete:', err.message);
+      }
+    }
+  });
+
+  // Listen for message deletion/revocation from physical phone
+  sock.ev.on('messages.delete', async (item) => {
+    console.log(`🗑️ [WA EVENT] messages.delete fired:`, item);
+    const keys = item?.keys || (Array.isArray(item) ? item : [item]);
+    const prisma = getPrisma();
+    for (const k of keys) {
+      const msgId = k?.id;
+      if (msgId) {
+        if (prisma && getDbStatus()) {
+          await prisma.message.delete({ where: { id: msgId } }).catch(() => {});
+        }
+        broadcastSSE({ type: 'MESSAGE_DELETED', messageId: msgId });
+      }
+    }
+  });
+
   // Register messages.upsert listener on the active socket
   console.log(`[WA SOCKET #${instanceId}] Registering messages.upsert listener`);
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
@@ -863,6 +929,130 @@ const server = http.createServer(async (req, res) => {
         }));
       } catch (err) {
         console.error('❌ Error sending WhatsApp message:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 5b. Delete Entire Chat from CRM & Physical WhatsApp Phone
+  if (req.method === 'POST' && (pathname === '/api/chats/delete' || pathname === '/api/leads/delete')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const leadId = payload.leadId;
+        const customerId = payload.customerId;
+        const phone = payload.phone || payload.to || '';
+        const whatsappId = payload.whatsappId || '';
+
+        console.log(`🗑️ [CRM ACTION] Deleting chat for Lead: "${leadId}", Customer: "${customerId}", Phone: "${phone}"...`);
+
+        // 1. Delete chat on WhatsApp Multi-Device / Physical Phone if connected
+        const cleanWaId = String(whatsappId).replace(/[^0-9]/g, '');
+        const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+        let targetJid = null;
+        if (cleanWaId && jidMap.has(cleanWaId)) targetJid = jidMap.get(cleanWaId);
+        if (!targetJid && cleanPhone && jidMap.has(cleanPhone)) targetJid = jidMap.get(cleanPhone);
+        if (!targetJid && cleanWaId && jidMap.has(`+${cleanWaId}`)) targetJid = jidMap.get(`+${cleanWaId}`);
+        if (!targetJid && cleanPhone && jidMap.has(`+${cleanPhone}`)) targetJid = jidMap.get(`+${cleanPhone}`);
+        if (!targetJid) {
+          if (cleanWaId && cleanWaId.length > 15) targetJid = `${cleanWaId}@lid`;
+          else if (cleanPhone) targetJid = `${cleanPhone}@s.whatsapp.net`;
+          else if (cleanWaId) targetJid = `${cleanWaId}@s.whatsapp.net`;
+        }
+
+        if (sock && targetJid) {
+          try {
+            await sock.chatModify({ delete: true, lastMessages: [] }, targetJid);
+            console.log(`📱 [WA SYNC] Chat delete instruction sent to WhatsApp for JID: ${targetJid}`);
+          } catch (e) {
+            console.warn(`⚠️ Could not sync chat delete to WhatsApp:`, e.message);
+          }
+        }
+
+        // 2. Delete from MySQL Database
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          if (leadId) {
+            await prisma.message.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.leadNote.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.followup.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.leadStageHistory.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.lead.delete({ where: { id: leadId } }).catch(() => {});
+          }
+          if (customerId) {
+            const otherLeads = await prisma.lead.count({ where: { customerId } });
+            if (otherLeads === 0) {
+              await prisma.message.deleteMany({ where: { customerId } }).catch(() => {});
+              await prisma.customer.delete({ where: { id: customerId } }).catch(() => {});
+            }
+          }
+          console.log(`📦 [MySQL] Lead ${leadId} and messages successfully removed from DB.`);
+        }
+
+        // 3. Broadcast Real-Time SSE to all CRM tabs
+        broadcastSSE({
+          type: 'CHAT_DELETED',
+          leadId,
+          customerId,
+          phone,
+          whatsappId
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Chat deleted from CRM and WhatsApp.' }));
+      } catch (err) {
+        console.error('❌ Error deleting chat:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 5c. Clear Chat Messages from CRM & Physical WhatsApp Phone
+  if (req.method === 'POST' && pathname === '/api/chats/clear') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const leadId = payload.leadId;
+        const customerId = payload.customerId;
+        const phone = payload.phone || '';
+        const whatsappId = payload.whatsappId || '';
+
+        const cleanWaId = String(whatsappId).replace(/[^0-9]/g, '');
+        const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+        let targetJid = null;
+        if (cleanWaId && jidMap.has(cleanWaId)) targetJid = jidMap.get(cleanWaId);
+        if (!targetJid && cleanPhone && jidMap.has(cleanPhone)) targetJid = jidMap.get(cleanPhone);
+        if (!targetJid && cleanWaId && cleanWaId.length > 15) targetJid = `${cleanWaId}@lid`;
+        else if (!targetJid && cleanPhone) targetJid = `${cleanPhone}@s.whatsapp.net`;
+
+        if (sock && targetJid) {
+          try {
+            await sock.chatModify({ clear: { messages: [] } }, targetJid);
+          } catch (e) {}
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus() && leadId) {
+          await prisma.message.deleteMany({ where: { leadId } }).catch(() => {});
+        }
+
+        broadcastSSE({
+          type: 'CHAT_CLEARED',
+          leadId,
+          customerId
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Chat cleared.' }));
+      } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
       }

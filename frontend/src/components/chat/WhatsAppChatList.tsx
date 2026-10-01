@@ -37,7 +37,9 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     categories,
     markChatAsRead,
     updateLeadStage,
-    deleteMessage
+    deleteMessage,
+    deleteChat,
+    clearChat
   } = useCrm();
 
   const [search, setSearch] = useState('');
@@ -403,12 +405,24 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
           <div className="h-px bg-slate-700/60 my-1" />
 
-          <div className="wa-context-item" onClick={() => setContextMenuLeadId(null)}>
+          <div 
+            className="wa-context-item" 
+            onClick={() => {
+              if (contextMenuLeadId) clearChat(contextMenuLeadId);
+              setContextMenuLeadId(null);
+            }}
+          >
             <Slash className="w-4 h-4 text-[#8696a0]" />
             <span>Clear chat</span>
           </div>
 
-          <div className="wa-context-item danger" onClick={() => setContextMenuLeadId(null)}>
+          <div 
+            className="wa-context-item danger" 
+            onClick={() => {
+              if (contextMenuLeadId) deleteChat(contextMenuLeadId);
+              setContextMenuLeadId(null);
+            }}
+          >
             <Trash2 className="w-4 h-4 text-rose-400" />
             <span className="text-rose-400">Delete chat</span>
           </div>

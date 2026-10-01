@@ -78,7 +78,20 @@ function registerContact(c) {
   }
 }
 
-// Unified Core: Process and Persist WhatsApp Message (Idempotent)
+// Helper: Deeply unwrap message content across various WhatsApp wrappers
+function unwrapMessageContent(rawMessage) {
+  if (!rawMessage) return null;
+  let m = rawMessage;
+  if (m.ephemeralMessage?.message) m = m.ephemeralMessage.message;
+  if (m.viewOnceMessage?.message) m = m.viewOnceMessage.message;
+  if (m.viewOnceMessageV2?.message) m = m.viewOnceMessageV2.message;
+  if (m.documentWithCaptionMessage?.message) m = m.documentWithCaptionMessage.message;
+  if (m.editedMessage?.message?.protocolMessage?.editedMessage) m = m.editedMessage.message.protocolMessage.editedMessage;
+  if (m.templateMessage?.hydratedTemplate) m = m.templateMessage.hydratedTemplate;
+  return m;
+}
+
+// Unified Core: Process and Persist WhatsApp Message (Idempotent & Multi-Directional)
 async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   if (!msg || !msg.message) return null;
 
@@ -100,6 +113,8 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     return null;
   }
 
+  const unwrapped = unwrapMessageContent(msg.message) || msg.message;
+
   // Determine phone number and clean ID
   let senderPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
   let realPhone = null;
@@ -110,10 +125,6 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     realPhone = lidToPhoneMap.get(senderPhone);
   } else if (msg.key.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
     realPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
-  }
-
-  if (senderPhone.length > 15 && !realPhone) {
-    return null;
   }
 
   const effectivePhone = realPhone || senderPhone;
@@ -138,9 +149,21 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     : new Date();
   const timestampIso = timestampDate.toISOString();
 
+  // Debug event logging
+  console.log(`\n================== [WA EVENT] ==================`);
+  console.log(`Source: ${source}`);
+  console.log(`Message ID: ${messageId}`);
+  console.log(`Direction: ${isFromMe ? 'OUTBOUND (Staff Phone/CRM)' : 'INBOUND (Customer)'}`);
+  console.log(`Remote JID: ${rawJid}`);
+  console.log(`Phone: ${canonicalPhone} (Effective: ${effectivePhone})`);
+  console.log(`Push Name: ${pushName}`);
+  console.log(`Timestamp: ${timestampIso}`);
+  console.log(`Message Types: ${Object.keys(unwrapped).join(', ')}`);
+  console.log(`================================================`);
+
   // Check for Reaction message
-  if (msg.message.reactionMessage) {
-    const reaction = msg.message.reactionMessage;
+  if (unwrapped.reactionMessage) {
+    const reaction = unwrapped.reactionMessage;
     const targetMessageId = reaction.key?.id;
     const emoji = reaction.text || '';
 
@@ -169,14 +192,14 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   let mediaUrl = null;
   let fileName = null;
 
-  if (msg.message.imageMessage) {
+  if (unwrapped.imageMessage) {
     mediaType = 'image';
-  } else if (msg.message.videoMessage) {
+  } else if (unwrapped.videoMessage) {
     mediaType = 'video';
-  } else if (msg.message.documentMessage) {
+  } else if (unwrapped.documentMessage) {
     mediaType = 'document';
-    fileName = msg.message.documentMessage.fileName || 'document.pdf';
-  } else if (msg.message.audioMessage) {
+    fileName = unwrapped.documentMessage.fileName || 'document.pdf';
+  } else if (unwrapped.audioMessage) {
     mediaType = 'audio';
   }
 
@@ -208,12 +231,16 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   }
 
   const messageText =
-    msg.message.conversation ||
-    msg.message.extendedTextMessage?.text ||
-    msg.message.imageMessage?.caption ||
-    msg.message.videoMessage?.caption ||
-    msg.message.documentMessage?.caption ||
-    (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : (msg.message.interactiveResponseMessage ? 'Interactive Response' : ''));
+    unwrapped.conversation ||
+    unwrapped.extendedTextMessage?.text ||
+    unwrapped.imageMessage?.caption ||
+    unwrapped.videoMessage?.caption ||
+    unwrapped.documentMessage?.caption ||
+    unwrapped.templateButtonReplyMessage?.selectedDisplayText ||
+    unwrapped.buttonsResponseMessage?.selectedButtonId ||
+    unwrapped.listResponseMessage?.title ||
+    unwrapped.interactiveResponseMessage?.body?.text ||
+    (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : '');
 
   // Database Persistence (MySQL)
   const prisma = getPrisma();
@@ -223,20 +250,37 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   if (prisma && getDbStatus()) {
     try {
-      // 1. Upsert Customer
-      customer = await prisma.customer.upsert({
-        where: { whatsappNumber: canonicalPhone },
-        update: {
-          displayName: !isFromMe && pushName && !pushName.startsWith('+') ? pushName : undefined,
-          whatsappId: effectivePhone,
-        },
-        create: {
-          whatsappNumber: canonicalPhone,
-          whatsappId: effectivePhone,
-          displayName: !isFromMe && pushName ? pushName : canonicalPhone,
-          preferredLanguage: 'en',
-        },
+      // 1. Find or Upsert Customer (Search flexibly across phone formats)
+      customer = await prisma.customer.findFirst({
+        where: {
+          OR: [
+            { whatsappNumber: canonicalPhone },
+            { whatsappNumber: effectivePhone },
+            { whatsappId: effectivePhone },
+            { whatsappId: senderPhone },
+          ]
+        }
       });
+
+      if (!customer) {
+        customer = await prisma.customer.create({
+          data: {
+            whatsappNumber: canonicalPhone,
+            whatsappId: effectivePhone,
+            displayName: !isFromMe && pushName && !pushName.startsWith('+') ? pushName : canonicalPhone,
+            preferredLanguage: 'en',
+          }
+        });
+        console.log(`[CRM SYNC] New customer created: ${customer.displayName} (${customer.whatsappNumber}) [ID: ${customer.id}]`);
+      } else {
+        // Update display name if new real name is now known
+        if (!isFromMe && pushName && !pushName.startsWith('+') && (!customer.displayName || customer.displayName.startsWith('+') || customer.displayName === 'WhatsApp Contact')) {
+          await prisma.customer.update({
+            where: { id: customer.id },
+            data: { displayName: pushName, whatsappId: effectivePhone }
+          }).catch(() => {});
+        }
+      }
 
       // 2. Find or Create Lead
       lead = await prisma.lead.findFirst({
@@ -259,23 +303,26 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
             lastCustomerMessageAt: timestampDate,
           },
         });
+        console.log(`[CRM SYNC] New conversation lead created: Lead ID ${lead.id} for Customer ${customer.displayName}`);
       } else {
-        if (!isFromMe) {
-          await prisma.lead.update({
-            where: { id: lead.id },
-            data: { lastCustomerMessageAt: timestampDate },
-          });
-        }
+        // Always update lastCustomerMessageAt and updatedAt
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            lastCustomerMessageAt: timestampDate,
+            updatedAt: new Date()
+          },
+        });
       }
 
-      // Check if message already exists in DB
+      // 3. Check if message already exists in DB
       const existing = await prisma.message.findUnique({
         where: { id: messageId }
       });
 
       if (existing) {
         isNew = false;
-        // If updating status or reaction
+        console.log(`[CRM SYNC] Duplicate skipped: Message ${messageId} already stored in DB.`);
         if (mediaUrl && !existing.mediaUrl) {
           await prisma.message.update({
             where: { id: messageId },
@@ -283,7 +330,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
           }).catch(() => {});
         }
       } else {
-        // 3. Idempotent Message Insert
+        // Insert message
         await prisma.message.create({
           data: {
             id: messageId,
@@ -291,13 +338,14 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
             customerId: customer.id,
             direction: isFromMe ? 'outbound' : 'inbound',
             senderType: isFromMe ? 'coordinator' : 'customer',
-            content: messageText || '',
+            content: messageText || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
             status: isFromMe ? 'sent' : 'delivered',
             timestamp: timestampDate,
             mediaUrl: mediaUrl || null,
             mediaType: mediaType || null,
           },
         });
+        console.log(`[CRM SYNC] Database insert success: Message ${messageId} saved to Lead ${lead.id} (${isFromMe ? 'Staff Phone Outbound' : 'Customer Inbound'}).`);
       }
     } catch (err) {
       console.warn(`⚠️ [MySQL Sync Error]:`, err.message);
@@ -313,13 +361,13 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     console.log(`💬 [WHATSAPP INBOUND] ${pushName} (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
   }
 
-  // Real-time broadcast
+  // Real-time broadcast to all connected frontend clients
   const messagePayload = {
     type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
     phone: canonicalPhone,
     whatsappId: effectivePhone,
     name: pushName,
-    text: messageText,
+    text: messageText || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
     messageId: messageId,
     timestamp: timestampIso,
     direction: isFromMe ? 'outbound' : 'inbound',
@@ -337,6 +385,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   };
 
   broadcastSSE(messagePayload);
+  console.log(`[CRM SYNC] Frontend SSE broadcast sent for ${messageId} (${messagePayload.type}).`);
   return { isNew, leadId: lead?.id, customerId: customer?.id, messageId };
 }
 
@@ -511,13 +560,14 @@ async function startWhatsAppSocket() {
 
   // Handle live and catch-up messages (both notify & append)
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`\n📥 [WA EVENT messages.upsert] Received ${messages?.length || 0} message(s) with type: "${type}"`);
     const isCatchUp = type === 'append';
     for (const msg of messages) {
       const messageId = msg.key?.id;
       if (!messageId) continue;
 
       if (processedMessageIds.has(messageId)) {
-        // Skip duplicate
+        console.log(`[WA EVENT] In-memory duplicate skipped for message ${messageId}`);
         continue;
       }
       processedMessageIds.add(messageId);

@@ -423,13 +423,15 @@ async function persistOutboundMessage({ leadId, customerId, content, messageId, 
   }
 }
 
+let socketInstanceCounter = 0;
 let syncSafetyTimeout = null;
 
 async function startWhatsAppSocket() {
+  const instanceId = ++socketInstanceCounter;
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
   const { version, isLatest } = await fetchLatestBaileysVersion();
 
-  console.log(`\n📱 Starting WhatsApp Web Socket (Baileys v${version.join('.')}, isLatest: ${isLatest})...`);
+  console.log(`\n[WA SOCKET] Created new socket instance #${instanceId} (Baileys v${version.join('.')}, isLatest: ${isLatest})`);
   setConnectionState('connecting');
 
   sock = makeWASocket({
@@ -456,7 +458,7 @@ async function startWhatsAppSocket() {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       
-      console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode}, Reconnecting: ${shouldReconnect}`);
+      console.log(`⚠️ [WA SOCKET #${instanceId}] Connection closed. StatusCode: ${statusCode}, Reconnecting: ${shouldReconnect}`);
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
       setConnectionState('disconnected', { phone: null });
@@ -471,7 +473,7 @@ async function startWhatsAppSocket() {
       connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
       currentQrDataUrl = null;
       
-      console.log(`\n🎉 WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
+      console.log(`\n🎉 [WA SOCKET #${instanceId}] WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
       setConnectionState('syncing', {
         phone: connectedPhoneNumber,
         name: sock.user?.name || 'Royal Wellness Center'
@@ -558,16 +560,36 @@ async function startWhatsAppSocket() {
     });
   });
 
-  // Handle live and catch-up messages (both notify & append)
+  // Register messages.upsert listener on the active socket
+  console.log(`[WA SOCKET #${instanceId}] Registering messages.upsert listener`);
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    console.log(`\n📥 [WA EVENT messages.upsert] Received ${messages?.length || 0} message(s) with type: "${type}"`);
+    console.log(`\n================== [WA DEBUG] messages.upsert FIRED ==================`);
+    console.log(`type: ${type}`);
+    console.log(`message count: ${messages?.length || 0}`);
+
     const isCatchUp = type === 'append';
     for (const msg of messages) {
       const messageId = msg.key?.id;
+      const unwrapped = unwrapMessageContent(msg.message) || msg.message || {};
+
+      console.log(`\n[WA DEBUG MESSAGE METADATA]`);
+      console.log(`messageId: ${messageId}`);
+      console.log(`remoteJid: ${msg.key?.remoteJid}`);
+      console.log(`participant: ${msg.key?.participant || 'N/A'}`);
+      console.log(`fromMe: ${Boolean(msg.key?.fromMe)}`);
+      console.log(`pushName: ${msg.pushName || 'N/A'}`);
+      console.log(`messageTimestamp: ${msg.messageTimestamp}`);
+      console.log(`messageType: ${Object.keys(unwrapped).join(', ')}`);
+      console.log(`hasMessage: ${Boolean(msg.message)}`);
+      console.log(`hasConversation: ${Boolean(unwrapped.conversation)}`);
+      console.log(`hasExtendedText: ${Boolean(unwrapped.extendedTextMessage)}`);
+      console.log(`hasEphemeral: ${Boolean(msg.message?.ephemeralMessage)}`);
+      console.log(`hasViewOnce: ${Boolean(msg.message?.viewOnceMessage || msg.message?.viewOnceMessageV2)}`);
+
       if (!messageId) continue;
 
       if (processedMessageIds.has(messageId)) {
-        console.log(`[WA EVENT] In-memory duplicate skipped for message ${messageId}`);
+        console.log(`[WA DEBUG] In-memory duplicate skipped for message ${messageId}`);
         continue;
       }
       processedMessageIds.add(messageId);
@@ -578,6 +600,7 @@ async function startWhatsAppSocket() {
 
       await processAndPersistWhatsAppMessage(msg, isCatchUp ? 'catch_up' : 'live');
     }
+    console.log(`=======================================================================\n`);
   });
 }
 

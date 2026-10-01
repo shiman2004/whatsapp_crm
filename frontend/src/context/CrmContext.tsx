@@ -577,6 +577,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   }
                   return m;
                 });
+              }
+              return prevMsgs;
+            });
           } else if (data.type === 'CHAT_DELETED') {
             const { leadId, customerId, phone, whatsappId } = data;
             console.log('🗑️ [CRM SSE] Chat deleted event received for:', leadId || customerId || phone);

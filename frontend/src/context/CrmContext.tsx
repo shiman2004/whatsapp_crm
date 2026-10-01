@@ -383,7 +383,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const displayPhone = formatWhatsAppDisplay(canonicalPhone || rawNumber);
             const rawWaId = whatsappId || cleanDigits;
             
-            const cleanDisplayName = name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)')
+            const cleanDisplayName = (!isOutbound && name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)') && !name.includes('Shiman Nafaas'))
               ? name 
               : (displayPhone || 'WhatsApp Contact');
 
@@ -421,12 +421,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return prevCusts.map(c => {
                   if (c.id === cust!.id) {
                     const shouldUpdatePhone = canonicalPhone && (!c.whatsappNumber || isHardwareLid(c.whatsappNumber));
+                    const shouldUpdateName = !isOutbound && name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)') && !name.includes('Shiman Nafaas');
                     return {
                       ...c,
                       whatsappNumber: shouldUpdatePhone ? canonicalPhone : (c.whatsappNumber || canonicalPhone),
                       whatsappId: rawWaId || c.whatsappId,
                       phoneNumber: shouldUpdatePhone ? displayPhone : (c.phoneNumber || displayPhone),
-                      displayName: c.displayName && !isHardwareLid(c.displayName) ? c.displayName : cleanDisplayName,
+                      displayName: shouldUpdateName ? name : (c.displayName && !isHardwareLid(c.displayName) ? c.displayName : cleanDisplayName),
                       avatarUrl: avatarUrl || c.avatarUrl
                     };
                   }

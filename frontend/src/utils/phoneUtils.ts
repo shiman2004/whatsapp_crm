@@ -39,6 +39,11 @@ export const formatWhatsAppDisplay = (phone?: string): string => {
   
   if (!digits) return '';
 
+  // Internal WhatsApp LID (14+ digits) is an internal hardware ID, not a real phone number
+  if (digits.length >= 14 || digits.startsWith('1820') || digits.startsWith('2001') || digits.startsWith('1766') || digits.startsWith('1605') || digits.startsWith('1980') || digits.startsWith('2226') || digits.startsWith('2520') || digits.startsWith('7328')) {
+    return '';
+  }
+
   // Sri Lanka: +94 XX XXX XXXX (11 digits total with country code)
   if (digits.startsWith('94') && digits.length === 11) {
     return `+94 ${digits.slice(2, 4)} ${digits.slice(4, 7)} ${digits.slice(7)}`;

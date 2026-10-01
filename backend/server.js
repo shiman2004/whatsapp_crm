@@ -60,21 +60,39 @@ function setConnectionState(newState, extra = {}) {
   });
 }
 
-// Map of LID to Phone number
+// Maps for contact resolution
 const lidToPhoneMap = new Map();
+const lidToNameMap = new Map();
+const phoneToNameMap = new Map();
 
 function registerContact(c) {
   if (!c) return;
   const jid = c.id || '';
   const lid = c.lid || '';
-  if (jid && jid.endsWith('@s.whatsapp.net')) {
-    const phone = jid.replace('@s.whatsapp.net', '');
-    if (lid && lid.endsWith('@lid')) {
-      const cleanLid = lid.replace('@lid', '');
-      lidToPhoneMap.set(cleanLid, phone);
-    }
+  const name = c.name || c.notify || c.verifiedName || '';
+
+  let phone = '';
+  let cleanLid = '';
+
+  if (jid.endsWith('@s.whatsapp.net')) {
+    phone = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
     jidMap.set(phone, jid);
     jidMap.set(`+${phone}`, jid);
+  }
+
+  if (lid.endsWith('@lid')) {
+    cleanLid = lid.replace('@lid', '').replace(/[^0-9]/g, '');
+    jidMap.set(cleanLid, lid);
+    jidMap.set(`+${cleanLid}`, lid);
+  }
+
+  if (cleanLid && phone) {
+    lidToPhoneMap.set(cleanLid, phone);
+  }
+
+  if (name && name.trim().length > 0 && !name.startsWith('+') && name !== 'WhatsApp Contact') {
+    if (phone) phoneToNameMap.set(phone, name);
+    if (cleanLid) lidToNameMap.set(cleanLid, name);
   }
 }
 
@@ -117,18 +135,19 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   // Determine phone number and clean ID
   let senderPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+  const isLid = rawJid.endsWith('@lid') || (senderPhone.length >= 14 && (senderPhone.startsWith('1820') || senderPhone.startsWith('2001') || senderPhone.startsWith('1766') || senderPhone.startsWith('1605') || senderPhone.startsWith('1980') || senderPhone.startsWith('2226') || senderPhone.startsWith('2520') || senderPhone.startsWith('7328') || senderPhone.startsWith('9304') || senderPhone.startsWith('2304') || senderPhone.startsWith('5218')));
   let realPhone = null;
 
   if (rawJid.endsWith('@s.whatsapp.net')) {
     realPhone = senderPhone;
-  } else if (rawJid.endsWith('@lid') && lidToPhoneMap.has(senderPhone)) {
+  } else if (lidToPhoneMap.has(senderPhone)) {
     realPhone = lidToPhoneMap.get(senderPhone);
   } else if (msg.key.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
     realPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
   }
 
   const effectivePhone = realPhone || senderPhone;
-  const canonicalPhone = effectivePhone.startsWith('+') ? effectivePhone : `+${effectivePhone}`;
+  const canonicalPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : (isLid ? '' : `+${senderPhone}`);
 
   // Remember mapping from phone and LID to original JID for sending replies
   jidMap.set(senderPhone, rawJid);
@@ -138,9 +157,17 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     jidMap.set(`+${realPhone}`, rawJid);
   }
 
-  const pushName = msg.pushName && msg.pushName.trim().length > 0
-    ? msg.pushName
-    : (isFromMe ? 'You (Staff)' : canonicalPhone);
+  // Determine Customer Display Name (Never use sender's own pushName on outbound replies)
+  let contactName = null;
+  if (!isFromMe) {
+    contactName = (msg.pushName && !msg.pushName.startsWith('+') && msg.pushName.trim().length > 0) ? msg.pushName : null;
+  }
+  if (!contactName && realPhone && phoneToNameMap.has(realPhone)) {
+    contactName = phoneToNameMap.get(realPhone);
+  }
+  if (!contactName && lidToNameMap.has(senderPhone)) {
+    contactName = lidToNameMap.get(senderPhone);
+  }
 
   // Original timestamp from WhatsApp message (seconds -> ms), fallback to current date
   const rawTimestamp = msg.messageTimestamp;
@@ -271,12 +298,14 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         }
       });
 
+      const resolvedCustomerName = contactName || (customer ? customer.displayName : null) || (realPhone ? `+${realPhone}` : 'WhatsApp Contact');
+
       if (!customer) {
         customer = await prisma.customer.create({
           data: {
-            whatsappNumber: canonicalPhone,
-            whatsappId: effectivePhone,
-            displayName: !isFromMe && pushName && !pushName.startsWith('+') ? pushName : canonicalPhone,
+            whatsappNumber: canonicalPhone || `+${senderPhone}`,
+            whatsappId: senderPhone,
+            displayName: resolvedCustomerName,
             preferredLanguage: 'en',
           }
         });
@@ -289,8 +318,8 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         if (senderPhone && !customer.whatsappId) {
           updateData.whatsappId = senderPhone;
         }
-        if (!isFromMe && pushName && !pushName.startsWith('+') && (!customer.displayName || customer.displayName.startsWith('+') || customer.displayName === 'WhatsApp Contact')) {
-          updateData.displayName = pushName;
+        if (!isFromMe && contactName && (!customer.displayName || customer.displayName.startsWith('+') || customer.displayName === 'WhatsApp Contact')) {
+          updateData.displayName = contactName;
         }
         if (Object.keys(updateData).length > 0) {
           customer = await prisma.customer.update({
@@ -371,20 +400,24 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   }
 
   // Structured Logging
+  const finalDisplayName = customer ? customer.displayName : (contactName || (realPhone ? `+${realPhone}` : 'WhatsApp Contact'));
+  const finalDisplayPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : '';
+
   if (source === 'history_sync') {
     // Suppress individual logs during bulk sync
   } else if (isFromMe) {
-    console.log(`📱 [PHONE OUTBOUND] Staff replied to (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
+    console.log(`📱 [PHONE OUTBOUND] Staff replied to ${finalDisplayName} (${finalDisplayPhone || senderPhone}): "${messageText}" [ID: ${messageId}]`);
   } else {
-    console.log(`💬 [WHATSAPP INBOUND] ${pushName} (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
+    console.log(`💬 [WHATSAPP INBOUND] ${finalDisplayName} (${finalDisplayPhone || senderPhone}): "${messageText}" [ID: ${messageId}]`);
   }
 
   // Real-time broadcast to all connected frontend clients
   const messagePayload = {
     type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
-    phone: canonicalPhone,
-    whatsappId: effectivePhone,
-    name: pushName,
+    phone: finalDisplayPhone,
+    whatsappId: senderPhone,
+    realPhone: finalDisplayPhone,
+    name: finalDisplayName,
     text: messageText || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
     messageId: messageId,
     timestamp: timestampIso,

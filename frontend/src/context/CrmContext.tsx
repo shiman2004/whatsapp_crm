@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import confetti from 'canvas-confetti';
 import {
   User,
@@ -350,6 +350,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const isSuperAdmin = currentUser.role === 'super_admin';
 
+  const selectedLeadIdRef = useRef<string | null>(selectedLeadId);
+  useEffect(() => {
+    selectedLeadIdRef.current = selectedLeadId;
+  }, [selectedLeadId]);
+
   // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server
   useEffect(() => {
     let eventSource: EventSource | null = null;
@@ -482,7 +487,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return [newLead, ...prevLeads];
               } else {
                 targetLeadId = lead.id;
-                const isCurrentlyActive = selectedLeadId === lead.id;
+                const isCurrentlyActive = selectedLeadIdRef.current === lead.id;
                 return prevLeads.map(l => {
                   if (l.id === lead!.id) {
                     const shouldUpdatePhone = canonicalPhone && (!l.customer?.whatsappNumber || isHardwareLid(l.customer?.whatsappNumber));
@@ -659,7 +664,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (eventSource) eventSource.close();
     };
-  }, [selectedLeadId]);
+  }, []);
 
   // Mark chat as read and clear unread badge
   const markChatAsRead = (leadId: string) => {

@@ -8,7 +8,8 @@ import makeWASocketDefault, {
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
   downloadMediaMessage,
-  Browsers
+  Browsers,
+  makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import dotenv from 'dotenv';
@@ -492,13 +493,17 @@ async function startWhatsAppSocket(forceClean = false) {
   isStartingSocket = true;
 
   try {
+    // Always cleanly terminate previous socket and listeners
+    if (sock) {
+      try {
+        sock.ev.removeAllListeners();
+        sock.end(undefined);
+      } catch (e) {}
+      sock = null;
+    }
+
     if (forceClean) {
       try {
-        if (sock) {
-          sock.ev.removeAllListeners();
-          sock.end(undefined);
-          sock = null;
-        }
         if (fs.existsSync(AUTH_FOLDER)) {
           fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
         }
@@ -508,22 +513,38 @@ async function startWhatsAppSocket(forceClean = false) {
     const instanceId = ++socketInstanceCounter;
     const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
     const { version, isLatest } = await fetchLatestBaileysVersion();
+    const logger = pino({ level: 'silent' });
 
     console.log(`\n[WA SOCKET] Created new socket instance #${instanceId} (Baileys v${version.join('.')}, isLatest: ${isLatest})`);
-    setConnectionState('connecting');
+    if (connectionState !== 'connected') {
+      setConnectionState('connecting');
+    }
 
     sock = makeWASocket({
       version,
-      logger: pino({ level: 'silent' }),
+      logger,
       printQRInTerminal: true,
-      auth: state,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger)
+      },
       browser: Browsers.ubuntu('Chrome'),
-      syncFullHistory: true, // Request full history sync on connection
+      syncFullHistory: false, // Prevent socket timeouts on large historical syncs
+      markOnlineOnConnect: true,
+      generateHighQualityLinkPreview: true,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 25000,
     });
 
     sock.ev.on('creds.update', saveCreds);
 
     sock.ev.on('connection.update', async (update) => {
+      // Guard against events from stale/superseded socket instances
+      if (instanceId !== socketInstanceCounter) {
+        return;
+      }
+
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -554,35 +575,23 @@ async function startWhatsAppSocket(forceClean = false) {
               fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
             }
           } catch (e) {}
-          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 1000);
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 1500);
         } else {
-          // Temporary drop / network timeout
-          connectedPhoneNumber = null;
+          // Temporary drop / network timeout / stream error
+          console.log(`🔄 WhatsApp temporary reconnect (code: ${statusCode}). Reconnecting with existing auth in 2s...`);
           setConnectionState('connecting');
           reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 2000);
         }
       } else if (connection === 'open') {
-        const rawUser = sock.user?.id || '';
+        const rawUser = sock?.user?.id || '';
         connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
         currentQrDataUrl = null;
         
         console.log(`\n🎉 [WA SOCKET #${instanceId}] WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
-        setConnectionState('syncing', {
+        setConnectionState('connected', {
           phone: connectedPhoneNumber,
-          name: sock.user?.name || 'Royal Wellness Center'
+          name: sock?.user?.name || 'Royal Wellness Center'
         });
-
-        // Safety timeout: transition from 'syncing' to 'connected' within 3.5s if history sync completes or is empty
-        if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
-        syncSafetyTimeout = setTimeout(() => {
-          if (connectionState === 'syncing') {
-            console.log(`✅ [SYNC READY] Initial connection synchronization window complete.`);
-            setConnectionState('connected', {
-              phone: connectedPhoneNumber,
-              name: sock.user?.name || 'Royal Wellness Center'
-            });
-          }
-        }, 3500);
       }
     });
 
@@ -841,13 +850,14 @@ const server = http.createServer(async (req, res) => {
 
   // 3. QR Code Endpoint (Read-only, never deletes auth credentials)
   if (req.method === 'GET' && pathname === '/api/qr') {
-    if ((connectionState === 'disconnected' || !sock) && !currentQrDataUrl) {
+    if ((connectionState === 'disconnected' || !sock) && !currentQrDataUrl && !isStartingSocket) {
       startWhatsAppSocket(false);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       qr: currentQrDataUrl,
-      status: connectionState
+      status: connectionState,
+      phone: connectedPhoneNumber
     }));
     return;
   }

@@ -48,6 +48,18 @@ function broadcastSSE(data) {
   });
 }
 
+function setConnectionState(newState, extra = {}) {
+  const oldState = connectionState;
+  connectionState = newState;
+  console.log(`📡 [WHATSAPP STATUS] Connection state changed: ${oldState} -> ${newState}`);
+  broadcastSSE({
+    type: 'CONNECTION_STATUS',
+    status: connectionState,
+    phone: connectedPhoneNumber,
+    ...extra
+  });
+}
+
 // Map of LID to Phone number
 const lidToPhoneMap = new Map();
 
@@ -149,7 +161,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         data: { reaction: emoji },
       }).catch(() => {});
     }
-    return null;
+    return { isNew: false, targetMessageId, reaction: emoji };
   }
 
   // Extract text and media
@@ -169,7 +181,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   }
 
   // Attempt media download if present and live
-  if (mediaType && sock && source === 'live') {
+  if (mediaType && sock && (source === 'live' || source === 'catch_up')) {
     try {
       const buffer = await downloadMediaMessage(
         msg,
@@ -207,6 +219,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   const prisma = getPrisma();
   let lead = null;
   let customer = null;
+  let isNew = true;
 
   if (prisma && getDbStatus()) {
     try {
@@ -255,28 +268,37 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         }
       }
 
-      // 3. Idempotent Message Upsert
-      await prisma.message.upsert({
-        where: { id: messageId },
-        update: {
-          content: messageText || '',
-          status: isFromMe ? 'sent' : 'delivered',
-          mediaUrl: mediaUrl || undefined,
-          mediaType: mediaType || undefined,
-        },
-        create: {
-          id: messageId,
-          leadId: lead.id,
-          customerId: customer.id,
-          direction: isFromMe ? 'outbound' : 'inbound',
-          senderType: isFromMe ? 'coordinator' : 'customer',
-          content: messageText || '',
-          status: isFromMe ? 'sent' : 'delivered',
-          timestamp: timestampDate,
-          mediaUrl: mediaUrl || null,
-          mediaType: mediaType || null,
-        },
+      // Check if message already exists in DB
+      const existing = await prisma.message.findUnique({
+        where: { id: messageId }
       });
+
+      if (existing) {
+        isNew = false;
+        // If updating status or reaction
+        if (mediaUrl && !existing.mediaUrl) {
+          await prisma.message.update({
+            where: { id: messageId },
+            data: { mediaUrl, mediaType }
+          }).catch(() => {});
+        }
+      } else {
+        // 3. Idempotent Message Insert
+        await prisma.message.create({
+          data: {
+            id: messageId,
+            leadId: lead.id,
+            customerId: customer.id,
+            direction: isFromMe ? 'outbound' : 'inbound',
+            senderType: isFromMe ? 'coordinator' : 'customer',
+            content: messageText || '',
+            status: isFromMe ? 'sent' : 'delivered',
+            timestamp: timestampDate,
+            mediaUrl: mediaUrl || null,
+            mediaType: mediaType || null,
+          },
+        });
+      }
     } catch (err) {
       console.warn(`⚠️ [MySQL Sync Error]:`, err.message);
     }
@@ -284,7 +306,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   // Structured Logging
   if (source === 'history_sync') {
-    // History sync logging
+    // Suppress individual logs during bulk sync
   } else if (isFromMe) {
     console.log(`📱 [PHONE OUTBOUND] Staff replied to (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
   } else {
@@ -305,6 +327,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     leadId: lead?.id,
     customerId: customer?.id,
     source: source,
+    isNew: isNew,
     media: mediaUrl ? {
       type: mediaType,
       url: mediaUrl,
@@ -314,7 +337,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   };
 
   broadcastSSE(messagePayload);
-  return messagePayload;
+  return { isNew, leadId: lead?.id, customerId: customer?.id, messageId };
 }
 
 // Helper: Save Outbound Message to MySQL (for CRM web client outbound)
@@ -351,11 +374,14 @@ async function persistOutboundMessage({ leadId, customerId, content, messageId, 
   }
 }
 
+let syncSafetyTimeout = null;
+
 async function startWhatsAppSocket() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
   const { version, isLatest } = await fetchLatestBaileysVersion();
 
   console.log(`\n📱 Starting WhatsApp Web Socket (Baileys v${version.join('.')}, isLatest: ${isLatest})...`);
+  setConnectionState('connecting');
 
   sock = makeWASocket({
     version,
@@ -373,52 +399,46 @@ async function startWhatsAppSocket() {
 
     if (qr) {
       console.log('\n📸 New WhatsApp QR Code generated! Ready to scan on screen.');
-      connectionState = 'qr_ready';
-      try {
-        currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
-        broadcastSSE({
-          type: 'QR_CODE',
-          qrDataUrl: currentQrDataUrl
-        });
-      } catch (err) {
-        console.error('Error generating QR data URL:', err);
-      }
+      currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 }).catch(() => null);
+      setConnectionState('qr_ready', { qrDataUrl: currentQrDataUrl });
     }
 
     if (connection === 'close') {
       const statusCode = lastDisconnect?.error?.output?.statusCode;
       const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
       
-      console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode} , Reconnecting: ${shouldReconnect}`);
-      connectionState = 'disconnected';
+      console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode}, Reconnecting: ${shouldReconnect}`);
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
-
-      broadcastSSE({
-        type: 'CONNECTION_STATUS',
-        status: 'disconnected'
-      });
+      setConnectionState('disconnected', { phone: null });
 
       if (shouldReconnect) {
         setTimeout(startWhatsAppSocket, 3000);
       } else {
-        console.log('🔒 Logged out from WhatsApp. Clear auth_info_baileys to re-scan.');
+        console.log('🔒 Logged out from WhatsApp session. Awaiting next user QR scan.');
       }
     } else if (connection === 'open') {
-      console.log('\n🎉 WhatsApp Linked Successfully via QR Code!');
-      connectionState = 'connected';
-      currentQrDataUrl = null;
-      
       const rawUser = sock.user?.id || '';
       connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
-      console.log(`✅ Connected Phone Number: +${connectedPhoneNumber}`);
-
-      broadcastSSE({
-        type: 'CONNECTION_STATUS',
-        status: connectionState,
+      currentQrDataUrl = null;
+      
+      console.log(`\n🎉 WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
+      setConnectionState('syncing', {
         phone: connectedPhoneNumber,
         name: sock.user?.name || 'Royal Wellness Center'
       });
+
+      // Safety timeout: transition from 'syncing' to 'connected' within 3.5s if history sync completes or is empty
+      if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
+      syncSafetyTimeout = setTimeout(() => {
+        if (connectionState === 'syncing') {
+          console.log(`✅ [SYNC READY] Initial connection synchronization window complete.`);
+          setConnectionState('connected', {
+            phone: connectedPhoneNumber,
+            name: sock.user?.name || 'Royal Wellness Center'
+          });
+        }
+      }, 3500);
     }
   });
 
@@ -443,25 +463,50 @@ async function startWhatsAppSocket() {
 
   // History Sync Event (Multi-device conversation history)
   sock.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
-    console.log(`\n⏳ [HISTORY SYNC STARTED] WhatsApp history received: ${contacts?.length || 0} contacts, ${chats?.length || 0} chats, ${messages?.length || 0} messages (isLatest: ${isLatest}).`);
+    console.log(`\n⏳ [SYNC STARTED] WhatsApp multi-device history set received: ${contacts?.length || 0} contacts, ${chats?.length || 0} chats, ${messages?.length || 0} messages (isLatest: ${isLatest}).`);
     
     if (Array.isArray(contacts)) {
       contacts.forEach(registerContact);
     }
 
+    let found = messages?.length || 0;
+    let inserted = 0;
+    let skipped = 0;
+    let updatedConversations = new Set();
+
     if (Array.isArray(messages) && messages.length > 0) {
-      let syncedCount = 0;
       for (const msg of messages) {
         try {
           const res = await processAndPersistWhatsAppMessage(msg, 'history_sync');
-          if (res) syncedCount++;
+          if (res) {
+            if (res.isNew) inserted++;
+            else skipped++;
+            if (res.leadId) updatedConversations.add(res.leadId);
+          }
         } catch (e) {
           // ignore individual sync errors
         }
       }
-      console.log(`✅ [HISTORY SYNC COMPLETED] Successfully synchronized ${syncedCount} historical messages into CRM database.`);
-      broadcastSSE({ type: 'HISTORY_SYNC_COMPLETED', count: syncedCount });
     }
+
+    console.log(`✅ [SYNC COMPLETED] Full synchronization finished: Total messages found: ${found}, Inserted: ${inserted}, Skipped (duplicates): ${skipped}, Conversations updated: ${updatedConversations.size}.`);
+    
+    broadcastSSE({
+      type: 'HISTORY_SYNC_COMPLETED',
+      count: inserted,
+      stats: {
+        found,
+        inserted,
+        skipped,
+        conversationsUpdated: updatedConversations.size
+      }
+    });
+
+    if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
+    setConnectionState('connected', {
+      phone: connectedPhoneNumber,
+      syncStats: { found, inserted, skipped, conversationsUpdated: updatedConversations.size }
+    });
   });
 
   // Handle live and catch-up messages (both notify & append)
@@ -615,8 +660,13 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (connectionState !== 'connected' || !sock) {
-          res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'WhatsApp is not linked yet.' }));
+          console.warn(`⛔ [CRM SEND BLOCKED] Attempted to send WhatsApp message while state is "${connectionState}".`);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: 'Please link your WhatsApp first to send messages from the CRM.',
+            status: connectionState
+          }));
           return;
         }
 
@@ -723,13 +773,14 @@ const server = http.createServer(async (req, res) => {
 
   // 6. Disconnect / Logout / Unlink (Preserves Database History)
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink')) {
-    console.log('🔄 [WhatsApp Unlink] Disconnecting session and unlinking device (CRM message history preserved)...');
+    console.log('🔄 [WHATSAPP DISCONNECT] Coordinator unlinked WhatsApp from CRM (Conversation history preserved)...');
     try {
+      if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
       if (sock) {
         try {
           await sock.logout();
         } catch (e) {
-          try { sock.end(new Error('User unlinked session')); } catch (e2) {}
+          try { sock.end(new Error('Coordinator unlinked session')); } catch (e2) {}
         }
         sock = null;
       }
@@ -743,22 +794,23 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      connectionState = 'disconnected';
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
       jidMap.clear();
 
-      broadcastSSE({
-        type: 'CONNECTION_STATUS',
-        status: 'disconnected',
-        phone: null,
-      });
+      setConnectionState('disconnected', { phone: null });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully. CRM message history preserved in database.' }));
+      res.end(JSON.stringify({ 
+        success: true, 
+        status: 'disconnected',
+        message: 'Unlinked successfully. CRM conversation history preserved in database.' 
+      }));
 
       setTimeout(() => {
-        startWhatsAppSocket().catch(err => console.error('Error restarting WhatsApp socket:', err));
+        startWhatsAppSocket().catch(err => {
+          console.error('Failed to restart WhatsApp socket after unlink:', err);
+        });
       }, 1000);
     } catch (err) {
       console.error('❌ Error during disconnect:', err);

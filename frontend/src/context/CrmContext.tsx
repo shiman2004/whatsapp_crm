@@ -15,7 +15,8 @@ import {
   AuditLog,
   LeadStage,
   LanguageCode,
-  OnboardingSession
+  OnboardingSession,
+  WhatsAppConnectionStatus
 } from '../types';
 import {
   INITIAL_USERS,
@@ -119,6 +120,11 @@ interface CrmContextType {
   selectSimulatorCategory: (catId: string) => void;
   selectSimulatorTreatment: (trtId: string) => void;
 
+  // WhatsApp Connection & QR Modal
+  whatsappStatus: WhatsAppConnectionStatus;
+  qrModalOpen: boolean;
+  setQrModalOpen: (open: boolean) => void;
+
   // Toasts
   dismissNotification: (id: string) => void;
 }
@@ -162,6 +168,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notifications, setNotifications] = useState<NotificationToast[]>([]);
   const [simulatorOpen, setSimulatorOpen] = useState<boolean>(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
+  const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
+  const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
 
   // Sync users to localStorage
   useEffect(() => {
@@ -532,13 +540,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
               return prevMsgs;
             });
+          } else if (data.type === 'INIT') {
+            if (data.status) setWhatsappStatus(data.status);
+          } else if (data.type === 'CONNECTION_STATUS') {
+            setWhatsappStatus(data.status);
+            if (data.status === 'connected') {
+              console.log('🟢 WhatsApp connected. Refreshing latest conversation state.');
+              fetchInitialData();
+            }
           } else if (data.type === 'HISTORY_SYNC_COMPLETED') {
             console.log(`🔄 History sync completed. Restoring ${data.count} messages into CRM.`);
+            setWhatsappStatus('connected');
             fetchInitialData();
             notify('WhatsApp History Synced', `${data.count} conversation messages restored from WhatsApp.`, 'success');
-          } else if (data.type === 'CONNECTION_STATUS' && data.status === 'connected') {
-            console.log('🟢 WhatsApp connected. Refreshing latest conversation state.');
-            fetchInitialData();
+          } else if (data.type === 'QR_CODE') {
+            setWhatsappStatus('qr_ready');
           }
         } catch (err) {
           console.error('Error handling SSE message:', err);
@@ -720,6 +736,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
+
+    // Enforce WhatsApp connection requirement for CRM sending
+    if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected') {
+      notify('WhatsApp Disconnected', 'Please link your WhatsApp first to send messages from the CRM.', 'warning');
+      setQrModalOpen(true);
+      return;
+    }
 
     const newMsg: Message = {
       id: 'msg-' + Date.now(),
@@ -1291,6 +1314,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectSimulatorCategory,
     selectSimulatorTreatment,
     dismissNotification,
+    whatsappStatus,
+    qrModalOpen,
+    setQrModalOpen,
   };
 
   return (

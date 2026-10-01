@@ -11,7 +11,10 @@ import {
   Camera,
   User,
   BarChart2,
-  Sparkles
+  Sparkles,
+  QrCode,
+  AlertCircle,
+  RefreshCw
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -30,7 +33,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     categories, 
     treatments,
     replyingMessage,
-    setReplyingMessage
+    setReplyingMessage,
+    whatsappStatus,
+    setQrModalOpen
   } = useCrm();
 
   const [inputVal, setInputVal] = useState('');
@@ -360,6 +365,33 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
+      {/* 4b. WhatsApp Connection State Status Banner */}
+      {whatsappStatus === 'syncing' && (
+        <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between shadow-sm animate-pulse">
+          <div className="flex items-center gap-2">
+            <RefreshCw className="w-3.5 h-3.5 text-emerald-400 animate-spin" />
+            <span className="font-medium">Synchronizing WhatsApp conversation history... Please wait.</span>
+          </div>
+        </div>
+      )}
+
+      {(whatsappStatus === 'disconnected' || whatsappStatus === 'connecting' || whatsappStatus === 'qr_ready') && (
+        <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between shadow-sm">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="truncate font-medium">Please link your WhatsApp first to send messages from the CRM.</span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setQrModalOpen(true)}
+            className="ml-3 px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 shadow transition-all active:scale-95"
+          >
+            <QrCode className="w-3.5 h-3.5" />
+            <span>Link Device</span>
+          </button>
+        </div>
+      )}
+
       {/* 5. Main Composer Row (Exact 1:1 Match of Screenshot 2) */}
       <div className="flex items-center gap-3">
         {/* Plus / Attach Button */}
@@ -367,6 +399,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
+            if (whatsappStatus !== 'connected') {
+              setQrModalOpen(true);
+              return;
+            }
             setShowAttachMenu(!showAttachMenu);
             setShowEmojiPicker(false);
           }}
@@ -415,7 +451,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               type="text"
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
-              placeholder="Type a message"
+              placeholder={whatsappStatus === 'connected' ? 'Type a message' : 'Please link your WhatsApp first to send messages from the CRM...'}
               className="w-full bg-[#2a3942] text-[#d1d7db] placeholder-[#8696a0] text-sm rounded-lg px-4 py-2 outline-none border-none focus:ring-1 focus:ring-[#00a884] transition-all"
             />
           </form>
@@ -434,7 +470,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         ) : (
           <button
             type="button"
-            onClick={() => setIsRecording(!isRecording)}
+            onClick={() => {
+              if (whatsappStatus !== 'connected') {
+                setQrModalOpen(true);
+                return;
+              }
+              setIsRecording(!isRecording);
+            }}
             className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 ${
               isRecording 
                 ? 'bg-rose-500 text-white' 

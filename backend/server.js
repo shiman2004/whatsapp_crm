@@ -183,7 +183,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   console.log(`Direction: ${isFromMe ? 'OUTBOUND (Staff Phone/CRM)' : 'INBOUND (Customer)'}`);
   console.log(`Remote JID: ${rawJid}`);
   console.log(`Phone: ${canonicalPhone} (Effective: ${effectivePhone})`);
-  console.log(`Push Name: ${pushName}`);
+  console.log(`Push Name: ${msg.pushName || 'N/A'}`);
   console.log(`Timestamp: ${timestampIso}`);
   console.log(`Message Types: ${Object.keys(unwrapped).join(', ')}`);
   console.log(`================================================`);
@@ -194,7 +194,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     const targetMessageId = reaction.key?.id;
     const emoji = reaction.text || '';
 
-    console.log(`❤️ [WHATSAPP REACTION] ${pushName} reacted "${emoji}" to message ${targetMessageId}`);
+    console.log(`❤️ [WHATSAPP REACTION] ${contactName || msg.pushName || 'User'} reacted "${emoji}" to message ${targetMessageId}`);
 
     broadcastSSE({
       type: 'INBOUND_REACTION',
@@ -293,7 +293,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
             ...candidatePhones.map(p => ({ whatsappNumber: p })),
             ...candidateWaIds.map(w => ({ whatsappId: w })),
             ...candidateWaIds.map(w => ({ whatsappNumber: `+${w}` })),
-            ...(!isFromMe && pushName && !pushName.startsWith('+') && pushName !== 'WhatsApp Contact' && pushName !== 'You (Staff)' ? [{ displayName: pushName }] : [])
+            ...(!isFromMe && contactName && !contactName.startsWith('+') && contactName !== 'WhatsApp Contact' && contactName !== 'You (Staff)' ? [{ displayName: contactName }] : [])
           ]
         }
       });
@@ -517,7 +517,13 @@ async function startWhatsAppSocket() {
       if (shouldReconnect) {
         setTimeout(startWhatsAppSocket, 3000);
       } else {
-        console.log('🔒 Logged out from WhatsApp session. Awaiting next user QR scan.');
+        console.log('🔒 Logged out from WhatsApp session. Clearing auth and generating fresh QR code for next scan...');
+        try {
+          if (fs.existsSync(AUTH_FOLDER)) {
+            fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+          }
+        } catch (e) {}
+        setTimeout(startWhatsAppSocket, 1500);
       }
     } else if (connection === 'open') {
       const rawUser = sock.user?.id || '';
@@ -791,11 +797,38 @@ const server = http.createServer(async (req, res) => {
 
   // 3. QR Code Endpoint
   if (req.method === 'GET' && pathname === '/api/qr') {
+    if ((connectionState === 'disconnected' || !sock) && !currentQrDataUrl) {
+      console.log('🔄 QR code requested while disconnected. Initializing socket for QR generation...');
+      try {
+        if (fs.existsSync(AUTH_FOLDER)) {
+          fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+        }
+      } catch (e) {}
+      startWhatsAppSocket();
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       qr: currentQrDataUrl,
       status: connectionState
     }));
+    return;
+  }
+
+  // 3b. Reconnect / Force New QR Endpoint
+  if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect')) {
+    console.log('🔄 Manual reconnect requested. Resetting socket auth and generating fresh QR...');
+    try {
+      if (sock) {
+        sock.end(undefined);
+      }
+      if (fs.existsSync(AUTH_FOLDER)) {
+        fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+      }
+    } catch (e) {}
+    currentQrDataUrl = null;
+    startWhatsAppSocket();
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Reconnection initiated.' }));
     return;
   }
 

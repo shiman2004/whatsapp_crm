@@ -66,7 +66,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   }, []);
 
   // Filter leads based on role & search & category filters
-  const visibleLeads = leads.filter((lead) => {
+  const filteredLeads = leads.filter((lead) => {
     // Role filter
     if (!isSuperAdmin && lead.assignedTo !== currentUser.id) {
       return false;
@@ -95,6 +95,15 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     const timeA = new Date(a.lastCustomerMessageAt || a.updatedAt).getTime();
     const timeB = new Date(b.lastCustomerMessageAt || b.updatedAt).getTime();
     return timeB - timeA;
+  });
+
+  // Deduplicate chats so each customer only ever appears once
+  const seenCustMap = new Set<string>();
+  const visibleLeads = filteredLeads.filter(lead => {
+    const key = lead.customer?.whatsappId || lead.customer?.whatsappNumber || lead.customerId || lead.id;
+    if (seenCustMap.has(key)) return false;
+    seenCustMap.add(key);
+    return true;
   });
 
   const totalUnreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length;

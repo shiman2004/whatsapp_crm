@@ -242,6 +242,12 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     unwrapped.interactiveResponseMessage?.body?.text ||
     (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : '');
 
+  // Filter out internal protocol/status messages that have no text or media
+  const hasContent = (messageText && messageText.trim().length > 0) || Boolean(mediaType);
+  if (!hasContent) {
+    return null;
+  }
+
   // Database Persistence (MySQL)
   const prisma = getPrisma();
   let lead = null;
@@ -250,14 +256,17 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   if (prisma && getDbStatus()) {
     try {
-      // 1. Find or Upsert Customer (Search flexibly across phone formats)
+      // 1. Find or Upsert Customer (Search flexibly across phone formats, LIDs, and push names)
+      const candidatePhones = [canonicalPhone, effectivePhone, realPhone].filter(Boolean).map(p => p.startsWith('+') ? p : `+${p}`);
+      const candidateWaIds = [effectivePhone, senderPhone].filter(Boolean);
+
       customer = await prisma.customer.findFirst({
         where: {
           OR: [
-            { whatsappNumber: canonicalPhone },
-            { whatsappNumber: effectivePhone },
-            { whatsappId: effectivePhone },
-            { whatsappId: senderPhone },
+            ...candidatePhones.map(p => ({ whatsappNumber: p })),
+            ...candidateWaIds.map(w => ({ whatsappId: w })),
+            ...candidateWaIds.map(w => ({ whatsappNumber: `+${w}` })),
+            ...(!isFromMe && pushName && !pushName.startsWith('+') && pushName !== 'WhatsApp Contact' && pushName !== 'You (Staff)' ? [{ displayName: pushName }] : [])
           ]
         }
       });
@@ -273,19 +282,28 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         });
         console.log(`[CRM SYNC] New customer created: ${customer.displayName} (${customer.whatsappNumber}) [ID: ${customer.id}]`);
       } else {
-        // Update display name if new real name is now known
+        const updateData = {};
+        if (realPhone && (!customer.whatsappNumber || customer.whatsappNumber.length > 15 || customer.whatsappNumber.startsWith('+1820') || customer.whatsappNumber.startsWith('+2001') || customer.whatsappNumber.startsWith('+1980') || customer.whatsappNumber.startsWith('+2226') || customer.whatsappNumber.startsWith('+2520') || customer.whatsappNumber.startsWith('+7328') || customer.whatsappNumber.startsWith('+1766'))) {
+          updateData.whatsappNumber = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+        }
+        if (senderPhone && !customer.whatsappId) {
+          updateData.whatsappId = senderPhone;
+        }
         if (!isFromMe && pushName && !pushName.startsWith('+') && (!customer.displayName || customer.displayName.startsWith('+') || customer.displayName === 'WhatsApp Contact')) {
-          await prisma.customer.update({
+          updateData.displayName = pushName;
+        }
+        if (Object.keys(updateData).length > 0) {
+          customer = await prisma.customer.update({
             where: { id: customer.id },
-            data: { displayName: pushName, whatsappId: effectivePhone }
-          }).catch(() => {});
+            data: updateData
+          }).catch(() => customer);
         }
       }
 
-      // 2. Find or Create Lead
+      // 2. Find or Create Lead (Always 1 primary lead per customer)
       lead = await prisma.lead.findFirst({
-        where: { customerId: customer.id, stage: { notIn: ['converted', 'lost'] } },
-        orderBy: { createdAt: 'desc' },
+        where: { customerId: customer.id },
+        orderBy: { updatedAt: 'desc' },
       });
 
       if (!lead) {

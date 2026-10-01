@@ -33,7 +33,22 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   const [searchInChat, setSearchInChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
-  const leadMessages = messages.filter(m => m.leadId === lead.id);
+  const rawLeadMessages = messages.filter(m => 
+    m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId)
+  );
+
+  // Deduplicate messages
+  const seenMsgKeys = new Set<string>();
+  const leadMessages = rawLeadMessages.filter(m => {
+    // Filter out empty messages
+    if ((!m.content || m.content.trim().length === 0) && !m.media) return false;
+    const timeBucket = Math.floor(new Date(m.createdAt).getTime() / 2000);
+    const key = m.waMessageId || m.id || `${m.direction}-${m.content}-${timeBucket}`;
+    if (seenMsgKeys.has(key)) return false;
+    seenMsgKeys.add(key);
+    return true;
+  });
+
   const displayName = lead.customer?.displayName || 'WhatsApp Contact';
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);

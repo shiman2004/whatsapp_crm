@@ -281,64 +281,66 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           });
 
-          setCustomers(prev => {
-            const map = new Map<string, Customer>();
-            prev.forEach(c => map.set(c.id, c));
-            dbCustomers.forEach(c => map.set(c.id, c));
-            return Array.from(map.values());
+          // Hydrate unique customers from DB
+          const custMap = new Map<string, Customer>();
+          dbCustomers.forEach(c => {
+            if (!custMap.has(c.id)) {
+              custMap.set(c.id, c);
+            }
           });
+          setCustomers(Array.from(custMap.values()));
 
-          setLeads(prev => {
-            const map = new Map<string, Lead>();
-            prev.forEach(l => map.set(l.id, l));
-            dbLeads.forEach(l => {
-              const cust = l.customer;
-              map.set(l.id, {
-                ...l,
-                customer: cust ? {
-                  ...cust,
-                  phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
-                  whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
-                } : undefined
-              });
+          // Hydrate unique leads from DB
+          const leadMap = new Map<string, Lead>();
+          dbLeads.forEach(l => {
+            const cust = l.customer;
+            leadMap.set(l.id, {
+              ...l,
+              customer: cust ? {
+                ...cust,
+                phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
+                whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
+              } : undefined
             });
-            return Array.from(map.values());
           });
+          setLeads(Array.from(leadMap.values()));
 
-          setSelectedLeadId(prevId => prevId ? prevId : dbLeads[0]?.id || null);
+          setSelectedLeadId(prevId => {
+            if (prevId && leadMap.has(prevId)) return prevId;
+            return dbLeads[0]?.id || null;
+          });
         }
 
         if (Array.isArray(dbMessages) && dbMessages.length > 0) {
-          const formattedMessages: Message[] = dbMessages.map(m => ({
-            id: m.id,
-            leadId: m.leadId,
-            customerId: m.customerId,
-            direction: m.direction,
-            senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
-            content: m.content || '',
-            status: m.status || 'delivered',
-            createdAt: m.timestamp || new Date().toISOString(),
-            media: m.mediaUrl ? {
-              type: m.mediaType || 'image',
-              url: m.mediaUrl
-            } : undefined,
-            reactions: m.reaction ? [m.reaction] : [],
-            starred: m.starred || false,
-            pinned: m.pinned || false,
-            replyTo: m.replyToId ? {
-              id: m.replyToId,
-              content: m.replyToContent || '',
-              senderName: m.replyToSender || ''
-            } : undefined,
-            waMessageId: m.id,
-          }));
+          const formattedMessages: Message[] = dbMessages
+            .filter(m => (m.content && m.content.trim().length > 0) || Boolean(m.mediaUrl))
+            .map(m => ({
+              id: m.id,
+              leadId: m.leadId,
+              customerId: m.customerId,
+              direction: m.direction,
+              senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+              content: m.content || '',
+              status: m.status || 'delivered',
+              createdAt: m.timestamp || new Date().toISOString(),
+              media: m.mediaUrl ? {
+                type: m.mediaType || 'image',
+                url: m.mediaUrl
+              } : undefined,
+              reactions: m.reaction ? [m.reaction] : [],
+              starred: m.starred || false,
+              pinned: m.pinned || false,
+              replyTo: m.replyToId ? {
+                id: m.replyToId,
+                content: m.replyToContent || '',
+                senderName: m.replyToSender || ''
+              } : undefined,
+              waMessageId: m.id,
+            }));
 
-          setMessages(prev => {
-            const map = new Map<string, Message>();
-            prev.forEach(m => map.set(m.waMessageId || m.id, m));
-            formattedMessages.forEach(m => map.set(m.waMessageId || m.id, m));
-            return Array.from(map.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          });
+          const msgMap = new Map<string, Message>();
+          formattedMessages.forEach(m => msgMap.set(m.waMessageId || m.id, m));
+          setMessages(Array.from(msgMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         }
       }
     } catch (e) {
@@ -366,6 +368,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const data = JSON.parse(event.data);
 
           if (data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE') {
+            // Skip empty protocol messages without text or media
+            if ((!data.text || data.text.trim().length === 0) && !data.media) {
+              return;
+            }
+
             console.log('[CRM SSE DEBUG] event received:', data.type, 'message ID:', data.messageId, 'conversation ID:', data.leadId);
             const { phone, whatsappId, realPhone, name, avatarUrl, text, messageId, timestamp, direction, senderType } = data;
             const isOutbound = direction === 'outbound' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE';

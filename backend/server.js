@@ -7,7 +7,8 @@ import makeWASocketDefault, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  downloadMediaMessage
+  downloadMediaMessage,
+  Browsers
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import dotenv from 'dotenv';
@@ -476,79 +477,114 @@ async function persistOutboundMessage({ leadId, customerId, content, messageId, 
 
 let socketInstanceCounter = 0;
 let syncSafetyTimeout = null;
+let isStartingSocket = false;
+let reconnectTimer = null;
 
-async function startWhatsAppSocket() {
-  const instanceId = ++socketInstanceCounter;
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
-  const { version, isLatest } = await fetchLatestBaileysVersion();
+async function startWhatsAppSocket(forceClean = false) {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 
-  console.log(`\n[WA SOCKET] Created new socket instance #${instanceId} (Baileys v${version.join('.')}, isLatest: ${isLatest})`);
-  setConnectionState('connecting');
+  if (isStartingSocket) {
+    return;
+  }
+  isStartingSocket = true;
 
-  sock = makeWASocket({
-    version,
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
-    auth: state,
-    browser: ['Royal Wellness CRM', 'Chrome', '1.0.0'],
-    syncFullHistory: true, // Request full history sync on connection
-  });
-
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      console.log('\n📸 New WhatsApp QR Code generated! Ready to scan on screen.');
-      currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 }).catch(() => null);
-      setConnectionState('qr_ready', { qrDataUrl: currentQrDataUrl });
-    }
-
-    if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      
-      console.log(`⚠️ [WA SOCKET #${instanceId}] Connection closed. StatusCode: ${statusCode}, Reconnecting: ${shouldReconnect}`);
-      connectedPhoneNumber = null;
-      currentQrDataUrl = null;
-      setConnectionState('disconnected', { phone: null });
-
-      if (shouldReconnect) {
-        setTimeout(startWhatsAppSocket, 3000);
-      } else {
-        console.log('🔒 Logged out from WhatsApp session. Clearing auth and generating fresh QR code for next scan...');
-        try {
-          if (fs.existsSync(AUTH_FOLDER)) {
-            fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-          }
-        } catch (e) {}
-        setTimeout(startWhatsAppSocket, 1500);
-      }
-    } else if (connection === 'open') {
-      const rawUser = sock.user?.id || '';
-      connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
-      currentQrDataUrl = null;
-      
-      console.log(`\n🎉 [WA SOCKET #${instanceId}] WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
-      setConnectionState('syncing', {
-        phone: connectedPhoneNumber,
-        name: sock.user?.name || 'Royal Wellness Center'
-      });
-
-      // Safety timeout: transition from 'syncing' to 'connected' within 3.5s if history sync completes or is empty
-      if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
-      syncSafetyTimeout = setTimeout(() => {
-        if (connectionState === 'syncing') {
-          console.log(`✅ [SYNC READY] Initial connection synchronization window complete.`);
-          setConnectionState('connected', {
-            phone: connectedPhoneNumber,
-            name: sock.user?.name || 'Royal Wellness Center'
-          });
+  try {
+    if (forceClean) {
+      try {
+        if (sock) {
+          sock.ev.removeAllListeners();
+          sock.end(undefined);
+          sock = null;
         }
-      }, 3500);
+        if (fs.existsSync(AUTH_FOLDER)) {
+          fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+        }
+      } catch (e) {}
     }
-  });
+
+    const instanceId = ++socketInstanceCounter;
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+
+    console.log(`\n[WA SOCKET] Created new socket instance #${instanceId} (Baileys v${version.join('.')}, isLatest: ${isLatest})`);
+    setConnectionState('connecting');
+
+    sock = makeWASocket({
+      version,
+      logger: pino({ level: 'silent' }),
+      printQRInTerminal: true,
+      auth: state,
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: true, // Request full history sync on connection
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.log('\n📸 New WhatsApp QR Code generated! Ready to scan on screen.');
+        currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 }).catch(() => null);
+        setConnectionState('qr_ready', { qrDataUrl: currentQrDataUrl });
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const isRestartRequired = statusCode === DisconnectReason.restartRequired; // 515
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut; // 401
+        
+        console.log(`⚠️ [WA SOCKET #${instanceId}] Connection closed. StatusCode: ${statusCode} (${isRestartRequired ? 'Pairing Handshake Restart' : isLoggedOut ? 'Logged Out' : 'Temporary Disconnect'})`);
+
+        if (isRestartRequired) {
+          // Handshake after QR scan: Baileys must restart immediately with the saved auth credentials. DO NOT clear auth folder!
+          console.log('🔄 QR code successfully scanned on phone! Completing device pairing handshake...');
+          setConnectionState('connecting', { message: 'Pairing device...' });
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 500);
+        } else if (isLoggedOut) {
+          console.log('🔒 Logged out from WhatsApp session. Clearing auth and generating fresh QR code for next scan...');
+          connectedPhoneNumber = null;
+          currentQrDataUrl = null;
+          setConnectionState('disconnected', { phone: null });
+          try {
+            if (fs.existsSync(AUTH_FOLDER)) {
+              fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+            }
+          } catch (e) {}
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 1000);
+        } else {
+          // Temporary drop / network timeout
+          connectedPhoneNumber = null;
+          setConnectionState('connecting');
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 2000);
+        }
+      } else if (connection === 'open') {
+        const rawUser = sock.user?.id || '';
+        connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
+        currentQrDataUrl = null;
+        
+        console.log(`\n🎉 [WA SOCKET #${instanceId}] WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
+        setConnectionState('syncing', {
+          phone: connectedPhoneNumber,
+          name: sock.user?.name || 'Royal Wellness Center'
+        });
+
+        // Safety timeout: transition from 'syncing' to 'connected' within 3.5s if history sync completes or is empty
+        if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
+        syncSafetyTimeout = setTimeout(() => {
+          if (connectionState === 'syncing') {
+            console.log(`✅ [SYNC READY] Initial connection synchronization window complete.`);
+            setConnectionState('connected', {
+              phone: connectedPhoneNumber,
+              name: sock.user?.name || 'Royal Wellness Center'
+            });
+          }
+        }, 3500);
+      }
+    });
 
   sock.ev.on('contacts.set', ({ contacts }) => {
     if (Array.isArray(contacts)) {
@@ -725,6 +761,14 @@ async function startWhatsAppSocket() {
     }
     console.log(`=======================================================================\n`);
   });
+  } catch (err) {
+    console.error('⚠️ [WA SOCKET START ERROR]:', err);
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 3000);
+    }
+  } finally {
+    isStartingSocket = false;
+  }
 }
 
 // Start HTTP REST & SSE Gateway Server
@@ -795,16 +839,10 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. QR Code Endpoint
+  // 3. QR Code Endpoint (Read-only, never deletes auth credentials)
   if (req.method === 'GET' && pathname === '/api/qr') {
     if ((connectionState === 'disconnected' || !sock) && !currentQrDataUrl) {
-      console.log('🔄 QR code requested while disconnected. Initializing socket for QR generation...');
-      try {
-        if (fs.existsSync(AUTH_FOLDER)) {
-          fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-        }
-      } catch (e) {}
-      startWhatsAppSocket();
+      startWhatsAppSocket(false);
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
@@ -817,16 +855,8 @@ const server = http.createServer(async (req, res) => {
   // 3b. Reconnect / Force New QR Endpoint
   if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect')) {
     console.log('🔄 Manual reconnect requested. Resetting socket auth and generating fresh QR...');
-    try {
-      if (sock) {
-        sock.end(undefined);
-      }
-      if (fs.existsSync(AUTH_FOLDER)) {
-        fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
-      }
-    } catch (e) {}
     currentQrDataUrl = null;
-    startWhatsAppSocket();
+    startWhatsAppSocket(true);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Reconnection initiated.' }));
     return;

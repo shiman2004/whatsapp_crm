@@ -107,24 +107,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
 
   return (
     <aside className="w-56 border-r border-slate-800 bg-[#111b21] flex flex-col justify-between py-3 select-none shrink-0">
-      <div className="space-y-4">
-        {/* User Card */}
-        <div className="px-3">
-          <div className="p-2.5 rounded-xl bg-[#202c33] border border-slate-700/60 flex items-center gap-2.5">
-            <img 
-              src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'} 
-              alt={currentUser.fullName}
-              className="w-8 h-8 rounded-full object-cover border border-emerald-500/40"
-            />
-            <div className="min-w-0 flex-1">
-              <p className="text-xs font-bold text-slate-100 truncate">{currentUser.fullName}</p>
-              <span className="text-[10px] text-slate-400 capitalize">
-                {isSuperAdmin ? 'Super Admin' : 'Coordinator'}
-              </span>
-            </div>
-          </div>
-        </div>
-
+      <div className="space-y-2">
         {/* Navigation List */}
         <div className="px-2">
           <nav className="space-y-1">

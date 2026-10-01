@@ -97,7 +97,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     return timeB - timeA;
   });
 
-  const totalUnreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length || 65;
+  const totalUnreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length;
 
   const handleContextMenu = (e: React.MouseEvent, leadId: string) => {
     e.preventDefault();
@@ -195,7 +195,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           />
         </div>
 
-        {/* Filter Chips row: All, Unread 65, Favourites, Groups 22, + */}
+        {/* Filter Chips row: All, Unread, Favourites, Groups */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
           <button
             onClick={() => setActiveFilter('all')}
@@ -217,7 +217,9 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             }`}
           >
             <span>Unread</span>
-            <span className="text-[10px] font-bold opacity-80">{totalUnreadCount}</span>
+            {totalUnreadCount > 0 && (
+              <span className="text-[10px] font-bold opacity-80">{totalUnreadCount}</span>
+            )}
           </button>
 
           <button
@@ -240,22 +242,16 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             }`}
           >
             <span>Groups</span>
-            <span className="text-[10px] font-bold opacity-80">22</span>
-          </button>
-
-          <button className="w-6 h-6 rounded-full bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942] flex items-center justify-center shrink-0">
-            <Plus className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>
 
-      {/* 3. Archived Row (From Screenshot) */}
+      {/* 3. Archived Row */}
       <div className="px-4 py-2.5 hover:bg-[#202c33] cursor-pointer flex items-center justify-between border-b border-[#222e35]/60 transition-colors shrink-0">
         <div className="flex items-center gap-4 text-[#8696a0]">
           <Archive className="w-4 h-4 text-[#00a884]" />
           <span className="text-xs font-medium text-[#d1d7db]">Archived</span>
         </div>
-        <span className="text-[11px] text-[#00a884] font-bold">33</span>
       </div>
 
       {/* 4. Chat Items Stream */}

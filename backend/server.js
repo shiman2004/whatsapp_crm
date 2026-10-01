@@ -834,6 +834,14 @@ const server = http.createServer(async (req, res) => {
         const outboundMsgId = sentMsg?.key?.id || `out-${Date.now()}`;
         console.log(`✅ WhatsApp Outbound Delivered! Msg ID: ${outboundMsgId}`);
 
+        if (outboundMsgId) {
+          processedMessageIds.add(outboundMsgId);
+          if (processedMessageIds.size > 1000) {
+            const first = processedMessageIds.values().next().value;
+            processedMessageIds.delete(first);
+          }
+        }
+
         // Save outbound message to MySQL
         persistOutboundMessage({
           leadId,

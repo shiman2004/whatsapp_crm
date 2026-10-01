@@ -507,16 +507,53 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // 3. Add message with deduplication check
             setMessages(prevMsgs => {
-              if (prevMsgs.some(m => m.waMessageId === messageId || m.id === messageId)) {
+              // 1. Exact ID check
+              if (messageId && prevMsgs.some(m => m.waMessageId === messageId || m.id === messageId)) {
                 return prevMsgs;
               }
+
+              const cleanContent = text || (data.media ? (data.media.caption || '') : '');
+
+              // 2. Outbound optimistic placeholder replacement
+              if (isOutbound) {
+                const optIndex = prevMsgs.findIndex(m => 
+                  m.direction === 'outbound' &&
+                  (m.id.startsWith('msg-') || m.waMessageId?.startsWith('wamid.HBg')) &&
+                  m.content === cleanContent &&
+                  Math.abs(new Date(m.createdAt).getTime() - new Date(timestamp || Date.now()).getTime()) < 20000
+                );
+
+                if (optIndex !== -1) {
+                  const updated = [...prevMsgs];
+                  updated[optIndex] = {
+                    ...updated[optIndex],
+                    id: messageId || updated[optIndex].id,
+                    waMessageId: messageId || updated[optIndex].waMessageId,
+                    status: 'sent',
+                    leadId: targetLeadId || updated[optIndex].leadId,
+                    customerId: targetCustomerId || updated[optIndex].customerId
+                  };
+                  return updated;
+                }
+              }
+
+              // 3. Duplicate content within 3-second window check
+              const isDuplicate = prevMsgs.some(m =>
+                m.direction === (isOutbound ? 'outbound' : 'inbound') &&
+                m.content === cleanContent &&
+                Math.abs(new Date(m.createdAt).getTime() - new Date(timestamp || Date.now()).getTime()) < 3000
+              );
+              if (isDuplicate) {
+                return prevMsgs;
+              }
+
               const newMsg: Message = {
                 id: messageId || 'msg-' + Date.now(),
                 leadId: targetLeadId || 'lead-' + Date.now(),
                 customerId: targetCustomerId || 'cust-' + Date.now(),
                 direction: isOutbound ? 'outbound' : 'inbound',
                 senderType: senderType || (isOutbound ? 'coordinator' : 'customer'),
-                content: text || (data.media ? (data.media.caption || '') : ''),
+                content: cleanContent,
                 media: data.media || undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
                 status: isOutbound ? 'sent' : 'delivered',
@@ -798,7 +835,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const err = await res.json();
           console.warn('WhatsApp bridge send error:', err);
         } else {
-          console.log('✅ Outbound WhatsApp message dispatched successfully!');
+          const data = await res.json().catch(() => ({}));
+          console.log('✅ Outbound WhatsApp message dispatched successfully! ID:', data.messageId);
+          if (data.messageId) {
+            setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+              ...m,
+              id: data.messageId,
+              waMessageId: data.messageId,
+              status: 'sent'
+            } : m));
+          }
         }
       }).catch(err => {
         console.warn('WhatsApp bridge offline:', err);

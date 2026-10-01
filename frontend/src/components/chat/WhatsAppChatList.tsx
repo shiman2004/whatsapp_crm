@@ -37,7 +37,9 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     categories,
     markChatAsRead,
     updateLeadStage,
-    deleteMessage
+    deleteMessage,
+    deleteChat,
+    clearChat
   } = useCrm();
 
   const [search, setSearch] = useState('');
@@ -66,7 +68,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   }, []);
 
   // Filter leads based on role & search & category filters
-  const visibleLeads = leads.filter((lead) => {
+  const filteredLeads = leads.filter((lead) => {
     // Role filter
     if (!isSuperAdmin && lead.assignedTo !== currentUser.id) {
       return false;
@@ -95,6 +97,15 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     const timeA = new Date(a.lastCustomerMessageAt || a.updatedAt).getTime();
     const timeB = new Date(b.lastCustomerMessageAt || b.updatedAt).getTime();
     return timeB - timeA;
+  });
+
+  // Deduplicate chats so each customer only ever appears once
+  const seenCustMap = new Set<string>();
+  const visibleLeads = filteredLeads.filter(lead => {
+    const key = lead.customer?.whatsappId || lead.customer?.whatsappNumber || lead.customerId || lead.id;
+    if (seenCustMap.has(key)) return false;
+    seenCustMap.add(key);
+    return true;
   });
 
   const totalUnreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length;
@@ -394,12 +405,24 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
           <div className="h-px bg-slate-700/60 my-1" />
 
-          <div className="wa-context-item" onClick={() => setContextMenuLeadId(null)}>
+          <div 
+            className="wa-context-item" 
+            onClick={() => {
+              if (contextMenuLeadId) clearChat(contextMenuLeadId);
+              setContextMenuLeadId(null);
+            }}
+          >
             <Slash className="w-4 h-4 text-[#8696a0]" />
             <span>Clear chat</span>
           </div>
 
-          <div className="wa-context-item danger" onClick={() => setContextMenuLeadId(null)}>
+          <div 
+            className="wa-context-item danger" 
+            onClick={() => {
+              if (contextMenuLeadId) deleteChat(contextMenuLeadId);
+              setContextMenuLeadId(null);
+            }}
+          >
             <Trash2 className="w-4 h-4 text-rose-400" />
             <span className="text-rose-400">Delete chat</span>
           </div>

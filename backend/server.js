@@ -7,7 +7,9 @@ import makeWASocketDefault, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  downloadMediaMessage
+  downloadMediaMessage,
+  Browsers,
+  makeCacheableSignalKeyStore
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import dotenv from 'dotenv';
@@ -48,25 +50,68 @@ function broadcastSSE(data) {
   });
 }
 
-// Map of LID to Phone number
+function setConnectionState(newState, extra = {}) {
+  const oldState = connectionState;
+  connectionState = newState;
+  console.log(`📡 [WHATSAPP STATUS] Connection state changed: ${oldState} -> ${newState}`);
+  broadcastSSE({
+    type: 'CONNECTION_STATUS',
+    status: connectionState,
+    phone: connectedPhoneNumber,
+    ...extra
+  });
+}
+
+// Maps for contact resolution
 const lidToPhoneMap = new Map();
+const lidToNameMap = new Map();
+const phoneToNameMap = new Map();
 
 function registerContact(c) {
   if (!c) return;
   const jid = c.id || '';
   const lid = c.lid || '';
-  if (jid && jid.endsWith('@s.whatsapp.net')) {
-    const phone = jid.replace('@s.whatsapp.net', '');
-    if (lid && lid.endsWith('@lid')) {
-      const cleanLid = lid.replace('@lid', '');
-      lidToPhoneMap.set(cleanLid, phone);
-    }
+  const name = c.name || c.notify || c.verifiedName || '';
+
+  let phone = '';
+  let cleanLid = '';
+
+  if (jid.endsWith('@s.whatsapp.net')) {
+    phone = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
     jidMap.set(phone, jid);
     jidMap.set(`+${phone}`, jid);
   }
+
+  if (lid.endsWith('@lid')) {
+    cleanLid = lid.replace('@lid', '').replace(/[^0-9]/g, '');
+    jidMap.set(cleanLid, lid);
+    jidMap.set(`+${cleanLid}`, lid);
+  }
+
+  if (cleanLid && phone) {
+    lidToPhoneMap.set(cleanLid, phone);
+  }
+
+  if (name && name.trim().length > 0 && !name.startsWith('+') && name !== 'WhatsApp Contact') {
+    if (phone) phoneToNameMap.set(phone, name);
+    if (cleanLid) lidToNameMap.set(cleanLid, name);
+  }
 }
 
-// Unified Core: Process and Persist WhatsApp Message (Idempotent)
+// Helper: Deeply unwrap message content across various WhatsApp wrappers
+function unwrapMessageContent(rawMessage) {
+  if (!rawMessage) return null;
+  let m = rawMessage;
+  if (m.ephemeralMessage?.message) m = m.ephemeralMessage.message;
+  if (m.viewOnceMessage?.message) m = m.viewOnceMessage.message;
+  if (m.viewOnceMessageV2?.message) m = m.viewOnceMessageV2.message;
+  if (m.documentWithCaptionMessage?.message) m = m.documentWithCaptionMessage.message;
+  if (m.editedMessage?.message?.protocolMessage?.editedMessage) m = m.editedMessage.message.protocolMessage.editedMessage;
+  if (m.templateMessage?.hydratedTemplate) m = m.templateMessage.hydratedTemplate;
+  return m;
+}
+
+// Unified Core: Process and Persist WhatsApp Message (Idempotent & Multi-Directional)
 async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   if (!msg || !msg.message) return null;
 
@@ -88,24 +133,23 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     return null;
   }
 
+  const unwrapped = unwrapMessageContent(msg.message) || msg.message;
+
   // Determine phone number and clean ID
   let senderPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+  const isLid = rawJid.endsWith('@lid') || (senderPhone.length >= 14 && (senderPhone.startsWith('1820') || senderPhone.startsWith('2001') || senderPhone.startsWith('1766') || senderPhone.startsWith('1605') || senderPhone.startsWith('1980') || senderPhone.startsWith('2226') || senderPhone.startsWith('2520') || senderPhone.startsWith('7328') || senderPhone.startsWith('9304') || senderPhone.startsWith('2304') || senderPhone.startsWith('5218')));
   let realPhone = null;
 
   if (rawJid.endsWith('@s.whatsapp.net')) {
     realPhone = senderPhone;
-  } else if (rawJid.endsWith('@lid') && lidToPhoneMap.has(senderPhone)) {
+  } else if (lidToPhoneMap.has(senderPhone)) {
     realPhone = lidToPhoneMap.get(senderPhone);
   } else if (msg.key.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
     realPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
   }
 
-  if (senderPhone.length > 15 && !realPhone) {
-    return null;
-  }
-
   const effectivePhone = realPhone || senderPhone;
-  const canonicalPhone = effectivePhone.startsWith('+') ? effectivePhone : `+${effectivePhone}`;
+  const canonicalPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : (isLid ? '' : `+${senderPhone}`);
 
   // Remember mapping from phone and LID to original JID for sending replies
   jidMap.set(senderPhone, rawJid);
@@ -115,9 +159,17 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     jidMap.set(`+${realPhone}`, rawJid);
   }
 
-  const pushName = msg.pushName && msg.pushName.trim().length > 0
-    ? msg.pushName
-    : (isFromMe ? 'You (Staff)' : canonicalPhone);
+  // Determine Customer Display Name (Never use sender's own pushName on outbound replies)
+  let contactName = null;
+  if (!isFromMe) {
+    contactName = (msg.pushName && !msg.pushName.startsWith('+') && msg.pushName.trim().length > 0) ? msg.pushName : null;
+  }
+  if (!contactName && realPhone && phoneToNameMap.has(realPhone)) {
+    contactName = phoneToNameMap.get(realPhone);
+  }
+  if (!contactName && lidToNameMap.has(senderPhone)) {
+    contactName = lidToNameMap.get(senderPhone);
+  }
 
   // Original timestamp from WhatsApp message (seconds -> ms), fallback to current date
   const rawTimestamp = msg.messageTimestamp;
@@ -126,13 +178,25 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     : new Date();
   const timestampIso = timestampDate.toISOString();
 
+  // Debug event logging
+  console.log(`\n================== [WA EVENT] ==================`);
+  console.log(`Source: ${source}`);
+  console.log(`Message ID: ${messageId}`);
+  console.log(`Direction: ${isFromMe ? 'OUTBOUND (Staff Phone/CRM)' : 'INBOUND (Customer)'}`);
+  console.log(`Remote JID: ${rawJid}`);
+  console.log(`Phone: ${canonicalPhone} (Effective: ${effectivePhone})`);
+  console.log(`Push Name: ${msg.pushName || 'N/A'}`);
+  console.log(`Timestamp: ${timestampIso}`);
+  console.log(`Message Types: ${Object.keys(unwrapped).join(', ')}`);
+  console.log(`================================================`);
+
   // Check for Reaction message
-  if (msg.message.reactionMessage) {
-    const reaction = msg.message.reactionMessage;
+  if (unwrapped.reactionMessage) {
+    const reaction = unwrapped.reactionMessage;
     const targetMessageId = reaction.key?.id;
     const emoji = reaction.text || '';
 
-    console.log(`❤️ [WHATSAPP REACTION] ${pushName} reacted "${emoji}" to message ${targetMessageId}`);
+    console.log(`❤️ [WHATSAPP REACTION] ${contactName || msg.pushName || 'User'} reacted "${emoji}" to message ${targetMessageId}`);
 
     broadcastSSE({
       type: 'INBOUND_REACTION',
@@ -149,7 +213,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         data: { reaction: emoji },
       }).catch(() => {});
     }
-    return null;
+    return { isNew: false, targetMessageId, reaction: emoji };
   }
 
   // Extract text and media
@@ -157,19 +221,19 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   let mediaUrl = null;
   let fileName = null;
 
-  if (msg.message.imageMessage) {
+  if (unwrapped.imageMessage) {
     mediaType = 'image';
-  } else if (msg.message.videoMessage) {
+  } else if (unwrapped.videoMessage) {
     mediaType = 'video';
-  } else if (msg.message.documentMessage) {
+  } else if (unwrapped.documentMessage) {
     mediaType = 'document';
-    fileName = msg.message.documentMessage.fileName || 'document.pdf';
-  } else if (msg.message.audioMessage) {
+    fileName = unwrapped.documentMessage.fileName || 'document.pdf';
+  } else if (unwrapped.audioMessage) {
     mediaType = 'audio';
   }
 
   // Attempt media download if present and live
-  if (mediaType && sock && source === 'live') {
+  if (mediaType && sock && (source === 'live' || source === 'catch_up')) {
     try {
       const buffer = await downloadMediaMessage(
         msg,
@@ -196,39 +260,81 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   }
 
   const messageText =
-    msg.message.conversation ||
-    msg.message.extendedTextMessage?.text ||
-    msg.message.imageMessage?.caption ||
-    msg.message.videoMessage?.caption ||
-    msg.message.documentMessage?.caption ||
-    (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : (msg.message.interactiveResponseMessage ? 'Interactive Response' : ''));
+    unwrapped.conversation ||
+    unwrapped.extendedTextMessage?.text ||
+    unwrapped.imageMessage?.caption ||
+    unwrapped.videoMessage?.caption ||
+    unwrapped.documentMessage?.caption ||
+    unwrapped.templateButtonReplyMessage?.selectedDisplayText ||
+    unwrapped.buttonsResponseMessage?.selectedButtonId ||
+    unwrapped.listResponseMessage?.title ||
+    unwrapped.interactiveResponseMessage?.body?.text ||
+    (mediaType ? (mediaType === 'image' ? 'Photo' : mediaType === 'video' ? 'Video' : mediaType === 'audio' ? 'Voice note' : 'Document') : '');
+
+  // Filter out internal protocol/status messages that have no text or media
+  const hasContent = (messageText && messageText.trim().length > 0) || Boolean(mediaType);
+  if (!hasContent) {
+    return null;
+  }
 
   // Database Persistence (MySQL)
   const prisma = getPrisma();
   let lead = null;
   let customer = null;
+  let isNew = true;
 
   if (prisma && getDbStatus()) {
     try {
-      // 1. Upsert Customer
-      customer = await prisma.customer.upsert({
-        where: { whatsappNumber: canonicalPhone },
-        update: {
-          displayName: !isFromMe && pushName && !pushName.startsWith('+') ? pushName : undefined,
-          whatsappId: effectivePhone,
-        },
-        create: {
-          whatsappNumber: canonicalPhone,
-          whatsappId: effectivePhone,
-          displayName: !isFromMe && pushName ? pushName : canonicalPhone,
-          preferredLanguage: 'en',
-        },
+      // 1. Find or Upsert Customer (Search flexibly across phone formats, LIDs, and push names)
+      const candidatePhones = [canonicalPhone, effectivePhone, realPhone].filter(Boolean).map(p => p.startsWith('+') ? p : `+${p}`);
+      const candidateWaIds = [effectivePhone, senderPhone].filter(Boolean);
+
+      customer = await prisma.customer.findFirst({
+        where: {
+          OR: [
+            ...candidatePhones.map(p => ({ whatsappNumber: p })),
+            ...candidateWaIds.map(w => ({ whatsappId: w })),
+            ...candidateWaIds.map(w => ({ whatsappNumber: `+${w}` })),
+            ...(!isFromMe && contactName && !contactName.startsWith('+') && contactName !== 'WhatsApp Contact' && contactName !== 'You (Staff)' ? [{ displayName: contactName }] : [])
+          ]
+        }
       });
 
-      // 2. Find or Create Lead
+      const resolvedCustomerName = contactName || (customer ? customer.displayName : null) || (realPhone ? `+${realPhone}` : 'WhatsApp Contact');
+
+      if (!customer) {
+        customer = await prisma.customer.create({
+          data: {
+            whatsappNumber: canonicalPhone || `+${senderPhone}`,
+            whatsappId: senderPhone,
+            displayName: resolvedCustomerName,
+            preferredLanguage: 'en',
+          }
+        });
+        console.log(`[CRM SYNC] New customer created: ${customer.displayName} (${customer.whatsappNumber}) [ID: ${customer.id}]`);
+      } else {
+        const updateData = {};
+        if (realPhone && (!customer.whatsappNumber || customer.whatsappNumber.length > 15 || customer.whatsappNumber.startsWith('+1820') || customer.whatsappNumber.startsWith('+2001') || customer.whatsappNumber.startsWith('+1980') || customer.whatsappNumber.startsWith('+2226') || customer.whatsappNumber.startsWith('+2520') || customer.whatsappNumber.startsWith('+7328') || customer.whatsappNumber.startsWith('+1766'))) {
+          updateData.whatsappNumber = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+        }
+        if (senderPhone && !customer.whatsappId) {
+          updateData.whatsappId = senderPhone;
+        }
+        if (!isFromMe && contactName && (!customer.displayName || customer.displayName.startsWith('+') || customer.displayName === 'WhatsApp Contact')) {
+          updateData.displayName = contactName;
+        }
+        if (Object.keys(updateData).length > 0) {
+          customer = await prisma.customer.update({
+            where: { id: customer.id },
+            data: updateData
+          }).catch(() => customer);
+        }
+      }
+
+      // 2. Find or Create Lead (Always 1 primary lead per customer)
       lead = await prisma.lead.findFirst({
-        where: { customerId: customer.id, stage: { notIn: ['converted', 'lost'] } },
-        orderBy: { createdAt: 'desc' },
+        where: { customerId: customer.id },
+        orderBy: { updatedAt: 'desc' },
       });
 
       if (!lead) {
@@ -246,58 +352,75 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
             lastCustomerMessageAt: timestampDate,
           },
         });
+        console.log(`[CRM SYNC] New conversation lead created: Lead ID ${lead.id} for Customer ${customer.displayName}`);
       } else {
-        if (!isFromMe) {
-          await prisma.lead.update({
-            where: { id: lead.id },
-            data: { lastCustomerMessageAt: timestampDate },
-          });
-        }
+        // Always update lastCustomerMessageAt and updatedAt
+        await prisma.lead.update({
+          where: { id: lead.id },
+          data: {
+            lastCustomerMessageAt: timestampDate,
+            updatedAt: new Date()
+          },
+        });
       }
 
-      // 3. Idempotent Message Upsert
-      await prisma.message.upsert({
-        where: { id: messageId },
-        update: {
-          content: messageText || '',
-          status: isFromMe ? 'sent' : 'delivered',
-          mediaUrl: mediaUrl || undefined,
-          mediaType: mediaType || undefined,
-        },
-        create: {
-          id: messageId,
-          leadId: lead.id,
-          customerId: customer.id,
-          direction: isFromMe ? 'outbound' : 'inbound',
-          senderType: isFromMe ? 'coordinator' : 'customer',
-          content: messageText || '',
-          status: isFromMe ? 'sent' : 'delivered',
-          timestamp: timestampDate,
-          mediaUrl: mediaUrl || null,
-          mediaType: mediaType || null,
-        },
+      // 3. Check if message already exists in DB
+      const existing = await prisma.message.findUnique({
+        where: { id: messageId }
       });
+
+      if (existing) {
+        isNew = false;
+        console.log(`[CRM SYNC] Duplicate skipped: Message ${messageId} already stored in DB.`);
+        if (mediaUrl && !existing.mediaUrl) {
+          await prisma.message.update({
+            where: { id: messageId },
+            data: { mediaUrl, mediaType }
+          }).catch(() => {});
+        }
+      } else {
+        // Insert message
+        await prisma.message.create({
+          data: {
+            id: messageId,
+            leadId: lead.id,
+            customerId: customer.id,
+            direction: isFromMe ? 'outbound' : 'inbound',
+            senderType: isFromMe ? 'coordinator' : 'customer',
+            content: messageText || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
+            status: isFromMe ? 'sent' : 'delivered',
+            timestamp: timestampDate,
+            mediaUrl: mediaUrl || null,
+            mediaType: mediaType || null,
+          },
+        });
+        console.log(`[CRM SYNC] Database insert success: Message ${messageId} saved to Lead ${lead.id} (${isFromMe ? 'Staff Phone Outbound' : 'Customer Inbound'}).`);
+      }
     } catch (err) {
       console.warn(`⚠️ [MySQL Sync Error]:`, err.message);
     }
   }
 
   // Structured Logging
+  const finalDisplayName = customer ? customer.displayName : (contactName || (realPhone ? `+${realPhone}` : 'WhatsApp Contact'));
+  const finalDisplayPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : '';
+
   if (source === 'history_sync') {
-    // History sync logging
+    // Suppress individual logs during bulk sync
   } else if (isFromMe) {
-    console.log(`📱 [PHONE OUTBOUND] Staff replied to (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
+    console.log(`📱 [PHONE OUTBOUND] Staff replied to ${finalDisplayName} (${finalDisplayPhone || senderPhone}): "${messageText}" [ID: ${messageId}]`);
   } else {
-    console.log(`💬 [WHATSAPP INBOUND] ${pushName} (${canonicalPhone}): "${messageText}" [ID: ${messageId}]`);
+    console.log(`💬 [WHATSAPP INBOUND] ${finalDisplayName} (${finalDisplayPhone || senderPhone}): "${messageText}" [ID: ${messageId}]`);
   }
 
-  // Real-time broadcast
+  // Real-time broadcast to all connected frontend clients
   const messagePayload = {
     type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
-    phone: canonicalPhone,
-    whatsappId: effectivePhone,
-    name: pushName,
-    text: messageText,
+    phone: finalDisplayPhone,
+    whatsappId: senderPhone,
+    realPhone: finalDisplayPhone,
+    name: finalDisplayName,
+    text: messageText || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
     messageId: messageId,
     timestamp: timestampIso,
     direction: isFromMe ? 'outbound' : 'inbound',
@@ -305,6 +428,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
     leadId: lead?.id,
     customerId: customer?.id,
     source: source,
+    isNew: isNew,
     media: mediaUrl ? {
       type: mediaType,
       url: mediaUrl,
@@ -314,7 +438,8 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   };
 
   broadcastSSE(messagePayload);
-  return messagePayload;
+  console.log(`[CRM SYNC] Frontend SSE broadcast sent for ${messageId} (${messagePayload.type}).`);
+  return { isNew, leadId: lead?.id, customerId: customer?.id, messageId };
 }
 
 // Helper: Save Outbound Message to MySQL (for CRM web client outbound)
@@ -351,76 +476,124 @@ async function persistOutboundMessage({ leadId, customerId, content, messageId, 
   }
 }
 
-async function startWhatsAppSocket() {
-  const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
-  const { version, isLatest } = await fetchLatestBaileysVersion();
+let socketInstanceCounter = 0;
+let syncSafetyTimeout = null;
+let isStartingSocket = false;
+let reconnectTimer = null;
 
-  console.log(`\n📱 Starting WhatsApp Web Socket (Baileys v${version.join('.')}, isLatest: ${isLatest})...`);
+async function startWhatsAppSocket(forceClean = false) {
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
 
-  sock = makeWASocket({
-    version,
-    logger: pino({ level: 'silent' }),
-    printQRInTerminal: true,
-    auth: state,
-    browser: ['Royal Wellness CRM', 'Chrome', '1.0.0'],
-    syncFullHistory: true, // Request full history sync on connection
-  });
+  if (isStartingSocket) {
+    return;
+  }
+  isStartingSocket = true;
 
-  sock.ev.on('creds.update', saveCreds);
-
-  sock.ev.on('connection.update', async (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      console.log('\n📸 New WhatsApp QR Code generated! Ready to scan on screen.');
-      connectionState = 'qr_ready';
+  try {
+    // Always cleanly terminate previous socket and listeners
+    if (sock) {
       try {
-        currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 });
-        broadcastSSE({
-          type: 'QR_CODE',
-          qrDataUrl: currentQrDataUrl
+        sock.ev.removeAllListeners();
+        sock.end(undefined);
+      } catch (e) {}
+      sock = null;
+    }
+
+    if (forceClean) {
+      try {
+        if (fs.existsSync(AUTH_FOLDER)) {
+          fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+        }
+      } catch (e) {}
+    }
+
+    const instanceId = ++socketInstanceCounter;
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_FOLDER);
+    const { version, isLatest } = await fetchLatestBaileysVersion();
+    const logger = pino({ level: 'silent' });
+
+    console.log(`\n[WA SOCKET] Created new socket instance #${instanceId} (Baileys v${version.join('.')}, isLatest: ${isLatest})`);
+    if (connectionState !== 'connected') {
+      setConnectionState('connecting');
+    }
+
+    sock = makeWASocket({
+      version,
+      logger,
+      printQRInTerminal: true,
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, logger)
+      },
+      browser: Browsers.ubuntu('Chrome'),
+      syncFullHistory: false, // Prevent socket timeouts on large historical syncs
+      markOnlineOnConnect: true,
+      generateHighQualityLinkPreview: true,
+      connectTimeoutMs: 60000,
+      defaultQueryTimeoutMs: 60000,
+      keepAliveIntervalMs: 25000,
+    });
+
+    sock.ev.on('creds.update', saveCreds);
+
+    sock.ev.on('connection.update', async (update) => {
+      // Guard against events from stale/superseded socket instances
+      if (instanceId !== socketInstanceCounter) {
+        return;
+      }
+
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        console.log('\n📸 New WhatsApp QR Code generated! Ready to scan on screen.');
+        currentQrDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 }).catch(() => null);
+        setConnectionState('qr_ready', { qrDataUrl: currentQrDataUrl });
+      }
+
+      if (connection === 'close') {
+        const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const isRestartRequired = statusCode === DisconnectReason.restartRequired; // 515
+        const isLoggedOut = statusCode === DisconnectReason.loggedOut; // 401
+        
+        console.log(`⚠️ [WA SOCKET #${instanceId}] Connection closed. StatusCode: ${statusCode} (${isRestartRequired ? 'Pairing Handshake Restart' : isLoggedOut ? 'Logged Out' : 'Temporary Disconnect'})`);
+
+        if (isRestartRequired) {
+          // Handshake after QR scan: Baileys must restart immediately with the saved auth credentials. DO NOT clear auth folder!
+          console.log('🔄 QR code successfully scanned on phone! Completing device pairing handshake...');
+          setConnectionState('connecting', { message: 'Pairing device...' });
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 500);
+        } else if (isLoggedOut) {
+          console.log('🔒 Logged out from WhatsApp session. Clearing auth and generating fresh QR code for next scan...');
+          connectedPhoneNumber = null;
+          currentQrDataUrl = null;
+          setConnectionState('disconnected', { phone: null });
+          try {
+            if (fs.existsSync(AUTH_FOLDER)) {
+              fs.rmSync(AUTH_FOLDER, { recursive: true, force: true });
+            }
+          } catch (e) {}
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 1500);
+        } else {
+          // Temporary drop / network timeout / stream error
+          console.log(`🔄 WhatsApp temporary reconnect (code: ${statusCode}). Reconnecting with existing auth in 2s...`);
+          setConnectionState('connecting');
+          reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 2000);
+        }
+      } else if (connection === 'open') {
+        const rawUser = sock?.user?.id || '';
+        connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
+        currentQrDataUrl = null;
+        
+        console.log(`\n🎉 [WA SOCKET #${instanceId}] WhatsApp Linked Successfully! Phone: +${connectedPhoneNumber}`);
+        setConnectionState('connected', {
+          phone: connectedPhoneNumber,
+          name: sock?.user?.name || 'Royal Wellness Center'
         });
-      } catch (err) {
-        console.error('Error generating QR data URL:', err);
       }
-    }
-
-    if (connection === 'close') {
-      const statusCode = lastDisconnect?.error?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-      
-      console.log(`⚠️ WhatsApp connection closed. StatusCode: ${statusCode} , Reconnecting: ${shouldReconnect}`);
-      connectionState = 'disconnected';
-      connectedPhoneNumber = null;
-      currentQrDataUrl = null;
-
-      broadcastSSE({
-        type: 'CONNECTION_STATUS',
-        status: 'disconnected'
-      });
-
-      if (shouldReconnect) {
-        setTimeout(startWhatsAppSocket, 3000);
-      } else {
-        console.log('🔒 Logged out from WhatsApp. Clear auth_info_baileys to re-scan.');
-      }
-    } else if (connection === 'open') {
-      console.log('\n🎉 WhatsApp Linked Successfully via QR Code!');
-      connectionState = 'connected';
-      currentQrDataUrl = null;
-      
-      const rawUser = sock.user?.id || '';
-      connectedPhoneNumber = rawUser.split(':')[0].replace(/[^0-9]/g, '');
-      console.log(`✅ Connected Phone Number: +${connectedPhoneNumber}`);
-
-      broadcastSSE({
-        type: 'CONNECTION_STATUS',
-        status: connectionState,
-        phone: connectedPhoneNumber,
-        name: sock.user?.name || 'Royal Wellness Center'
-      });
-    }
-  });
+    });
 
   sock.ev.on('contacts.set', ({ contacts }) => {
     if (Array.isArray(contacts)) {
@@ -443,36 +616,148 @@ async function startWhatsAppSocket() {
 
   // History Sync Event (Multi-device conversation history)
   sock.ev.on('messaging-history.set', async ({ chats, contacts, messages, isLatest }) => {
-    console.log(`\n⏳ [HISTORY SYNC STARTED] WhatsApp history received: ${contacts?.length || 0} contacts, ${chats?.length || 0} chats, ${messages?.length || 0} messages (isLatest: ${isLatest}).`);
+    console.log(`\n⏳ [SYNC STARTED] WhatsApp multi-device history set received: ${contacts?.length || 0} contacts, ${chats?.length || 0} chats, ${messages?.length || 0} messages (isLatest: ${isLatest}).`);
     
     if (Array.isArray(contacts)) {
       contacts.forEach(registerContact);
     }
 
+    let found = messages?.length || 0;
+    let inserted = 0;
+    let skipped = 0;
+    let updatedConversations = new Set();
+
     if (Array.isArray(messages) && messages.length > 0) {
-      let syncedCount = 0;
       for (const msg of messages) {
         try {
           const res = await processAndPersistWhatsAppMessage(msg, 'history_sync');
-          if (res) syncedCount++;
+          if (res) {
+            if (res.isNew) inserted++;
+            else skipped++;
+            if (res.leadId) updatedConversations.add(res.leadId);
+          }
         } catch (e) {
           // ignore individual sync errors
         }
       }
-      console.log(`✅ [HISTORY SYNC COMPLETED] Successfully synchronized ${syncedCount} historical messages into CRM database.`);
-      broadcastSSE({ type: 'HISTORY_SYNC_COMPLETED', count: syncedCount });
+    }
+
+    console.log(`✅ [SYNC COMPLETED] Full synchronization finished: Total messages found: ${found}, Inserted: ${inserted}, Skipped (duplicates): ${skipped}, Conversations updated: ${updatedConversations.size}.`);
+    
+    broadcastSSE({
+      type: 'HISTORY_SYNC_COMPLETED',
+      count: inserted,
+      stats: {
+        found,
+        inserted,
+        skipped,
+        conversationsUpdated: updatedConversations.size
+      }
+    });
+
+    if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
+    setConnectionState('connected', {
+      phone: connectedPhoneNumber,
+      syncStats: { found, inserted, skipped, conversationsUpdated: updatedConversations.size }
+    });
+  });
+
+  // Listen for chat deletion from physical phone
+  sock.ev.on('chats.delete', async (deletedJids) => {
+    console.log(`🗑️ [WA EVENT] chats.delete fired from phone:`, deletedJids);
+    if (!Array.isArray(deletedJids)) return;
+
+    for (const rawJid of deletedJids) {
+      try {
+        const cleanDigits = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+        const realPhone = lidToPhoneMap.get(cleanDigits) || cleanDigits;
+        const canonicalPhone = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const cust = await prisma.customer.findFirst({
+            where: {
+              OR: [
+                { whatsappNumber: canonicalPhone },
+                { whatsappNumber: realPhone },
+                { whatsappId: cleanDigits },
+                { whatsappId: realPhone }
+              ]
+            },
+            include: { leads: true }
+          });
+
+          if (cust) {
+            for (const l of cust.leads) {
+              await prisma.message.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.leadNote.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.followup.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.leadStageHistory.deleteMany({ where: { leadId: l.id } }).catch(() => {});
+              await prisma.lead.delete({ where: { id: l.id } }).catch(() => {});
+            }
+            await prisma.customer.delete({ where: { id: cust.id } }).catch(() => {});
+            console.log(`🗑️ [PHONE CHAT DELETED] Customer ${cust.displayName} (${cust.whatsappNumber}) and leads removed.`);
+
+            broadcastSSE({
+              type: 'CHAT_DELETED',
+              customerId: cust.id,
+              phone: cust.whatsappNumber,
+              whatsappId: cust.whatsappId
+            });
+          }
+        }
+      } catch (err) {
+        console.warn('Error handling phone chats.delete:', err.message);
+      }
     }
   });
 
-  // Handle live and catch-up messages (both notify & append)
+  // Listen for message deletion/revocation from physical phone
+  sock.ev.on('messages.delete', async (item) => {
+    console.log(`🗑️ [WA EVENT] messages.delete fired:`, item);
+    const keys = item?.keys || (Array.isArray(item) ? item : [item]);
+    const prisma = getPrisma();
+    for (const k of keys) {
+      const msgId = k?.id;
+      if (msgId) {
+        if (prisma && getDbStatus()) {
+          await prisma.message.delete({ where: { id: msgId } }).catch(() => {});
+        }
+        broadcastSSE({ type: 'MESSAGE_DELETED', messageId: msgId });
+      }
+    }
+  });
+
+  // Register messages.upsert listener on the active socket
+  console.log(`[WA SOCKET #${instanceId}] Registering messages.upsert listener`);
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    console.log(`\n================== [WA DEBUG] messages.upsert FIRED ==================`);
+    console.log(`type: ${type}`);
+    console.log(`message count: ${messages?.length || 0}`);
+
     const isCatchUp = type === 'append';
     for (const msg of messages) {
       const messageId = msg.key?.id;
+      const unwrapped = unwrapMessageContent(msg.message) || msg.message || {};
+
+      console.log(`\n[WA DEBUG MESSAGE METADATA]`);
+      console.log(`messageId: ${messageId}`);
+      console.log(`remoteJid: ${msg.key?.remoteJid}`);
+      console.log(`participant: ${msg.key?.participant || 'N/A'}`);
+      console.log(`fromMe: ${Boolean(msg.key?.fromMe)}`);
+      console.log(`pushName: ${msg.pushName || 'N/A'}`);
+      console.log(`messageTimestamp: ${msg.messageTimestamp}`);
+      console.log(`messageType: ${Object.keys(unwrapped).join(', ')}`);
+      console.log(`hasMessage: ${Boolean(msg.message)}`);
+      console.log(`hasConversation: ${Boolean(unwrapped.conversation)}`);
+      console.log(`hasExtendedText: ${Boolean(unwrapped.extendedTextMessage)}`);
+      console.log(`hasEphemeral: ${Boolean(msg.message?.ephemeralMessage)}`);
+      console.log(`hasViewOnce: ${Boolean(msg.message?.viewOnceMessage || msg.message?.viewOnceMessageV2)}`);
+
       if (!messageId) continue;
 
       if (processedMessageIds.has(messageId)) {
-        // Skip duplicate
+        console.log(`[WA DEBUG] In-memory duplicate skipped for message ${messageId}`);
         continue;
       }
       processedMessageIds.add(messageId);
@@ -483,7 +768,16 @@ async function startWhatsAppSocket() {
 
       await processAndPersistWhatsAppMessage(msg, isCatchUp ? 'catch_up' : 'live');
     }
+    console.log(`=======================================================================\n`);
   });
+  } catch (err) {
+    console.error('⚠️ [WA SOCKET START ERROR]:', err);
+    if (!reconnectTimer) {
+      reconnectTimer = setTimeout(() => startWhatsAppSocket(false), 3000);
+    }
+  } finally {
+    isStartingSocket = false;
+  }
 }
 
 // Start HTTP REST & SSE Gateway Server
@@ -554,13 +848,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. QR Code Endpoint
+  // 3. QR Code Endpoint (Read-only, never deletes auth credentials)
   if (req.method === 'GET' && pathname === '/api/qr') {
+    if ((connectionState === 'disconnected' || !sock) && !currentQrDataUrl && !isStartingSocket) {
+      startWhatsAppSocket(false);
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       qr: currentQrDataUrl,
-      status: connectionState
+      status: connectionState,
+      phone: connectedPhoneNumber
     }));
+    return;
+  }
+
+  // 3b. Reconnect / Force New QR Endpoint
+  if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect')) {
+    console.log('🔄 Manual reconnect requested. Resetting socket auth and generating fresh QR...');
+    currentQrDataUrl = null;
+    startWhatsAppSocket(true);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, message: 'Reconnection initiated.' }));
     return;
   }
 
@@ -615,8 +923,13 @@ const server = http.createServer(async (req, res) => {
         }
 
         if (connectionState !== 'connected' || !sock) {
-          res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'WhatsApp is not linked yet.' }));
+          console.warn(`⛔ [CRM SEND BLOCKED] Attempted to send WhatsApp message while state is "${connectionState}".`);
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: 'Please link your WhatsApp first to send messages from the CRM.',
+            status: connectionState
+          }));
           return;
         }
 
@@ -693,6 +1006,14 @@ const server = http.createServer(async (req, res) => {
         const outboundMsgId = sentMsg?.key?.id || `out-${Date.now()}`;
         console.log(`✅ WhatsApp Outbound Delivered! Msg ID: ${outboundMsgId}`);
 
+        if (outboundMsgId) {
+          processedMessageIds.add(outboundMsgId);
+          if (processedMessageIds.size > 1000) {
+            const first = processedMessageIds.values().next().value;
+            processedMessageIds.delete(first);
+          }
+        }
+
         // Save outbound message to MySQL
         persistOutboundMessage({
           leadId,
@@ -721,15 +1042,140 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 5b. Delete Entire Chat from CRM & Physical WhatsApp Phone
+  if (req.method === 'POST' && (pathname === '/api/chats/delete' || pathname === '/api/leads/delete')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const leadId = payload.leadId;
+        const customerId = payload.customerId;
+        const phone = payload.phone || payload.to || '';
+        const whatsappId = payload.whatsappId || '';
+
+        console.log(`🗑️ [CRM ACTION] Deleting chat for Lead: "${leadId}", Customer: "${customerId}", Phone: "${phone}"...`);
+
+        // 1. Delete chat on WhatsApp Multi-Device / Physical Phone if connected
+        const cleanWaId = String(whatsappId).replace(/[^0-9]/g, '');
+        const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+        let targetJid = null;
+        if (cleanWaId && jidMap.has(cleanWaId)) targetJid = jidMap.get(cleanWaId);
+        if (!targetJid && cleanPhone && jidMap.has(cleanPhone)) targetJid = jidMap.get(cleanPhone);
+        if (!targetJid && cleanWaId && jidMap.has(`+${cleanWaId}`)) targetJid = jidMap.get(`+${cleanWaId}`);
+        if (!targetJid && cleanPhone && jidMap.has(`+${cleanPhone}`)) targetJid = jidMap.get(`+${cleanPhone}`);
+        if (!targetJid) {
+          if (cleanWaId && cleanWaId.length > 15) targetJid = `${cleanWaId}@lid`;
+          else if (cleanPhone) targetJid = `${cleanPhone}@s.whatsapp.net`;
+          else if (cleanWaId) targetJid = `${cleanWaId}@s.whatsapp.net`;
+        }
+
+        if (sock && targetJid) {
+          try {
+            await sock.chatModify({ delete: true, lastMessages: [] }, targetJid);
+            console.log(`📱 [WA SYNC] Chat delete instruction sent to WhatsApp for JID: ${targetJid}`);
+          } catch (e) {
+            console.warn(`⚠️ Could not sync chat delete to WhatsApp:`, e.message);
+          }
+        }
+
+        // 2. Delete from MySQL Database
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          if (leadId) {
+            await prisma.message.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.leadNote.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.followup.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.leadStageHistory.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.lead.delete({ where: { id: leadId } }).catch(() => {});
+          }
+          if (customerId) {
+            const otherLeads = await prisma.lead.count({ where: { customerId } });
+            if (otherLeads === 0) {
+              await prisma.message.deleteMany({ where: { customerId } }).catch(() => {});
+              await prisma.customer.delete({ where: { id: customerId } }).catch(() => {});
+            }
+          }
+          console.log(`📦 [MySQL] Lead ${leadId} and messages successfully removed from DB.`);
+        }
+
+        // 3. Broadcast Real-Time SSE to all CRM tabs
+        broadcastSSE({
+          type: 'CHAT_DELETED',
+          leadId,
+          customerId,
+          phone,
+          whatsappId
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Chat deleted from CRM and WhatsApp.' }));
+      } catch (err) {
+        console.error('❌ Error deleting chat:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 5c. Clear Chat Messages from CRM & Physical WhatsApp Phone
+  if (req.method === 'POST' && pathname === '/api/chats/clear') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const leadId = payload.leadId;
+        const customerId = payload.customerId;
+        const phone = payload.phone || '';
+        const whatsappId = payload.whatsappId || '';
+
+        const cleanWaId = String(whatsappId).replace(/[^0-9]/g, '');
+        const cleanPhone = String(phone).replace(/[^0-9]/g, '');
+        let targetJid = null;
+        if (cleanWaId && jidMap.has(cleanWaId)) targetJid = jidMap.get(cleanWaId);
+        if (!targetJid && cleanPhone && jidMap.has(cleanPhone)) targetJid = jidMap.get(cleanPhone);
+        if (!targetJid && cleanWaId && cleanWaId.length > 15) targetJid = `${cleanWaId}@lid`;
+        else if (!targetJid && cleanPhone) targetJid = `${cleanPhone}@s.whatsapp.net`;
+
+        if (sock && targetJid) {
+          try {
+            await sock.chatModify({ clear: { messages: [] } }, targetJid);
+          } catch (e) {}
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus() && leadId) {
+          await prisma.message.deleteMany({ where: { leadId } }).catch(() => {});
+        }
+
+        broadcastSSE({
+          type: 'CHAT_CLEARED',
+          leadId,
+          customerId
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Chat cleared.' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 6. Disconnect / Logout / Unlink (Preserves Database History)
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink')) {
-    console.log('🔄 [WhatsApp Unlink] Disconnecting session and unlinking device (CRM message history preserved)...');
+    console.log('🔄 [WHATSAPP DISCONNECT] Coordinator unlinked WhatsApp from CRM (Conversation history preserved)...');
     try {
+      if (syncSafetyTimeout) clearTimeout(syncSafetyTimeout);
       if (sock) {
         try {
           await sock.logout();
         } catch (e) {
-          try { sock.end(new Error('User unlinked session')); } catch (e2) {}
+          try { sock.end(new Error('Coordinator unlinked session')); } catch (e2) {}
         }
         sock = null;
       }
@@ -743,22 +1189,23 @@ const server = http.createServer(async (req, res) => {
         }
       }
 
-      connectionState = 'disconnected';
       connectedPhoneNumber = null;
       currentQrDataUrl = null;
       jidMap.clear();
 
-      broadcastSSE({
-        type: 'CONNECTION_STATUS',
-        status: 'disconnected',
-        phone: null,
-      });
+      setConnectionState('disconnected', { phone: null });
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, message: 'Unlinked successfully. CRM message history preserved in database.' }));
+      res.end(JSON.stringify({ 
+        success: true, 
+        status: 'disconnected',
+        message: 'Unlinked successfully. CRM conversation history preserved in database.' 
+      }));
 
       setTimeout(() => {
-        startWhatsAppSocket().catch(err => console.error('Error restarting WhatsApp socket:', err));
+        startWhatsAppSocket().catch(err => {
+          console.error('Failed to restart WhatsApp socket after unlink:', err);
+        });
       }, 1000);
     } catch (err) {
       console.error('❌ Error during disconnect:', err);

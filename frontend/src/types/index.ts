@@ -198,3 +198,5 @@ export interface OnboardingSession {
   selectedTreatment?: string;
   updatedAt: string;
 }
+
+export type WhatsAppConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'qr_ready' | 'syncing' | 'sync_error';

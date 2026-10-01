@@ -20,11 +20,13 @@ export const Header: React.FC = () => {
     isSuperAdmin,
     simulatorOpen, 
     setSimulatorOpen,
-    clearAllData
+    clearAllData,
+    whatsappStatus,
+    qrModalOpen,
+    setQrModalOpen
   } = useCrm();
 
   const [metaModalOpen, setMetaModalOpen] = useState(false);
-  const [qrModalOpen, setQrModalOpen] = useState(false);
 
   const handleClearData = () => {
     if (window.confirm('Are you sure you want to remove all leads, messages, and test data? Authentic clinic treatments and templates will be kept.')) {
@@ -50,13 +52,25 @@ export const Header: React.FC = () => {
         {/* Right Controls: Link Device (QR) + Meta API + Simulator + Clear Data + Role Switcher */}
         <div className="flex items-center gap-2.5">
           
-          {/* WhatsApp Web QR Code Link Device Button */}
+          {/* WhatsApp Web QR Code Link Device Button with Real-time Status */}
           <button
             onClick={() => setQrModalOpen(true)}
-            className="px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all bg-whatsapp hover:bg-emerald-500 text-slate-950 shadow-md active:scale-95"
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 ${
+              whatsappStatus === 'connected'
+                ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
+                : whatsappStatus === 'syncing'
+                ? 'bg-amber-950/80 border border-amber-500/50 text-amber-300 hover:bg-amber-900/80 animate-pulse'
+                : 'bg-whatsapp hover:bg-emerald-500 text-slate-950'
+            }`}
           >
             <QrCode className="w-4 h-4" />
-            <span>Link Device (QR)</span>
+            <span>
+              {whatsappStatus === 'connected' 
+                ? '🟢 Linked' 
+                : whatsappStatus === 'syncing' 
+                ? '🔄 Syncing...' 
+                : 'Link Device (QR)'}
+            </span>
           </button>
 
           {/* Meta Cloud API Live Bridge Toggle */}

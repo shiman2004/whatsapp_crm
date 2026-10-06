@@ -1,13 +1,14 @@
-// Royal Wellness CRM — MySQL Prisma Schema
-// Database Provider: MySQL with utf8mb4 charset support
+// Royal Wellness CRM — Supabase PostgreSQL Prisma Schema
+// Database Provider: PostgreSQL with UTF-8 support
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "mysql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {

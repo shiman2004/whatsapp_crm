@@ -35,9 +35,9 @@ const jidMap = new Map();
 // Initialize database connection on start
 checkDbConnection().then(res => {
   if (res.connected) {
-    console.log('📦 [MySQL Database Storage] Active and ready for persistence.');
+    console.log('📦 [Cloud Database Storage] Active and ready for persistence (Supabase PostgreSQL).');
   } else {
-    console.log('ℹ️ [Storage Mode] Running in memory / SSE mode (Configure DATABASE_URL in backend/.env for MySQL storage).');
+    console.log('ℹ️ [Storage Mode] Running in memory / SSE mode (Configure DATABASE_URL in backend/.env for Cloud storage).');
   }
 });
 

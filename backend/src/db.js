@@ -35,11 +35,11 @@ export const checkDbConnection = async () => {
   try {
     await prisma.$queryRaw`SELECT 1`;
     isDbConnected = true;
-    console.log('✅ Connected to MySQL Database successfully via Prisma!');
-    return { connected: true, message: 'MySQL Connected' };
+    console.log('✅ Connected to Supabase Cloud Database successfully via Prisma!');
+    return { connected: true, message: 'Supabase Postgres Connected' };
   } catch (err) {
     isDbConnected = false;
-    console.warn('⚠️ MySQL connection check failed (fallback to in-memory/SSE mode):', err.message);
+    console.warn('⚠️ Cloud Database connection check failed (fallback to in-memory/SSE mode):', err.message);
     return { connected: false, error: err.message };
   }
 };

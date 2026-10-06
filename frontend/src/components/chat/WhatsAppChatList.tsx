@@ -67,6 +67,39 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Compute the absolute newest activity timestamp for a lead (including latest message from messages array)
+  const getLeadLatestTime = (lead: Lead): number => {
+    let latest = 0;
+    
+    // 1. Check all messages associated with this lead or customer
+    const leadMsgs = messages.filter(m => 
+      m.leadId === lead.id || 
+      (lead.customerId && m.customerId === lead.customerId)
+    );
+    for (const m of leadMsgs) {
+      if (m.createdAt) {
+        const t = new Date(m.createdAt).getTime();
+        if (!isNaN(t) && t > latest) latest = t;
+      }
+    }
+
+    // 2. Check lead timestamps
+    if (lead.lastCustomerMessageAt) {
+      const t = new Date(lead.lastCustomerMessageAt).getTime();
+      if (!isNaN(t) && t > latest) latest = t;
+    }
+    if (lead.updatedAt) {
+      const t = new Date(lead.updatedAt).getTime();
+      if (!isNaN(t) && t > latest) latest = t;
+    }
+    if (lead.createdAt) {
+      const t = new Date(lead.createdAt).getTime();
+      if (!isNaN(t) && t > latest) latest = t;
+    }
+
+    return latest;
+  };
+
   // Filter leads based on role & search & category filters
   const filteredLeads = leads.filter((lead) => {
     // Role filter
@@ -94,8 +127,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     if (isPinnedA && !isPinnedB) return -1;
     if (!isPinnedA && isPinnedB) return 1;
 
-    const timeA = new Date(a.lastCustomerMessageAt || a.updatedAt).getTime();
-    const timeB = new Date(b.lastCustomerMessageAt || b.updatedAt).getTime();
+    const timeA = getLeadLatestTime(a);
+    const timeB = getLeadLatestTime(b);
     return timeB - timeA;
   });
 
@@ -275,16 +308,20 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           visibleLeads.map((lead) => {
             const isSelected = selectedLeadId === lead.id;
             const leadMsgs = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
+            leadMsgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             const lastMsg = leadMsgs[leadMsgs.length - 1];
             const isPinned = pinnedLeadIds.has(lead.id);
             const isFav = favouriteLeadIds.has(lead.id);
 
             // Format timestamp matching WhatsApp Web: "12:27", "Sunday", "Yesterday"
-            const msgDate = new Date(lead.lastCustomerMessageAt || lead.updatedAt);
+            const latestTimeMs = getLeadLatestTime(lead);
+            const msgDate = latestTimeMs > 0 ? new Date(latestTimeMs) : new Date(lead.updatedAt || lead.createdAt);
             const isToday = new Date().toDateString() === msgDate.toDateString();
-            const timeDisplay = isToday 
-              ? msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-              : msgDate.toLocaleDateString([], { weekday: 'short' });
+            const timeDisplay = isNaN(msgDate.getTime())
+              ? ''
+              : (isToday 
+                  ? msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+                  : msgDate.toLocaleDateString([], { weekday: 'short' }));
 
             const displayName = lead.customer?.displayName || formatWhatsAppDisplay(lead.customer?.whatsappNumber || '');
 

@@ -23,7 +23,8 @@ import {
 import { 
   formatWhatsAppDisplay, 
   normalizeWhatsAppNumber, 
-  getCleanWhatsAppDigits 
+  getCleanWhatsAppDigits,
+  isHardwareLid 
 } from '../../utils/phoneUtils';
 
 interface CrmIntelligencePanelProps {
@@ -150,16 +151,12 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           ) : (
             <div className="space-y-1">
               <p className="text-xs font-mono font-bold text-white tracking-wide">
-                {displayPhone || rawPhone || (
-                  <span className="text-slate-500 font-sans text-[11px] italic font-normal">
-                    Not available (Click "Add")
-                  </span>
-                )}
+                {displayPhone || (rawPhone ? (rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`) : 'WhatsApp Contact')}
               </p>
-              {waId && (
+              {waId && waId !== getCleanWhatsAppDigits(rawPhone) && (
                 <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
-                  <span className="text-slate-500">WhatsApp ID:</span>
-                  <span className="font-mono text-slate-300">{waId}</span>
+                  <span className="text-slate-500">Linked Device ID:</span>
+                  <span className="font-mono text-slate-300 text-[10px]">{waId}</span>
                 </div>
               )}
             </div>

@@ -22,12 +22,25 @@ export const getCleanWhatsAppDigits = (phone?: string): string => {
 };
 
 /**
- * Checks if a string is a raw internal hardware LID (14-15 digits, typically starts with 1820)
+ * Checks if a string is a raw internal hardware LID (13-16 digits, e.g. starting with 2384, 1820, 1857, 2001, etc.)
  */
 export const isHardwareLid = (num?: string): boolean => {
   if (!num) return false;
   const digits = num.replace(/[^0-9]/g, '');
-  return digits.length >= 14 || digits.startsWith('1820');
+  // Standard phone numbers across the world are 9-12 digits (e.g., +94770049469 is 11 digits)
+  if (digits.length <= 12) return false;
+  return digits.length >= 13 && (
+    digits.startsWith('2384') || 
+    digits.startsWith('1820') || 
+    digits.startsWith('1857') || 
+    digits.startsWith('2001') || 
+    digits.startsWith('1766') || 
+    digits.startsWith('1605') || 
+    digits.startsWith('1980') || 
+    digits.startsWith('2226') || 
+    digits.startsWith('2520') || 
+    digits.startsWith('7328')
+  );
 };
 
 /**
@@ -39,8 +52,8 @@ export const formatWhatsAppDisplay = (phone?: string): string => {
   
   if (!digits) return '';
 
-  // Internal WhatsApp LID (14+ digits) is an internal hardware ID, not a real phone number
-  if (digits.length >= 14 || digits.startsWith('1820') || digits.startsWith('2001') || digits.startsWith('1766') || digits.startsWith('1605') || digits.startsWith('1980') || digits.startsWith('2226') || digits.startsWith('2520') || digits.startsWith('7328')) {
+  // Internal WhatsApp LID is an internal hardware ID, not a real phone number
+  if (isHardwareLid(phone)) {
     return '';
   }
 

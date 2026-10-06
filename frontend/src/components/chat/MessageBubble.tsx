@@ -24,6 +24,7 @@ import { useCrm } from '../../context/CrmContext';
 import { MessageInfoModal } from './MessageInfoModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { MessageMetaAiModal } from './MessageMetaAiModal';
+import { WhatsAppVoiceNotePlayer } from './WhatsAppVoiceNotePlayer';
 
 interface MessageBubbleProps {
   message: Message;
@@ -35,6 +36,7 @@ const EXTENDED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥
 
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) => {
   const { 
+    currentUser,
     setReplyingMessage, 
     reactToMessage, 
     starMessage, 
@@ -231,8 +233,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           )}
 
           {/* Rich Media Attachment (Image, Video, Audio, Document) */}
+          {/* Rich Media Attachment (Image, Video, Audio, Document) */}
           {message.media && (
-            <div className="mb-1.5 rounded-lg overflow-hidden">
+            <div className="mb-1 rounded-lg overflow-hidden">
               {message.media.type === 'image' || message.media.url.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) ? (
                 <div 
                   className="relative group/media cursor-pointer rounded-lg overflow-hidden bg-black/20"
@@ -247,7 +250,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                     <Maximize2 className="w-6 h-6 text-white drop-shadow-lg" />
                   </div>
                 </div>
-              ) : message.media.type === 'video' || message.media.url.match(/\.(mp4|webm|mov|ogg)($|\?)/i) ? (
+              ) : message.media.type === 'video' || message.media.url.match(/\.(mp4|webm|mov)($|\?)/i) ? (
                 <div className="relative rounded-lg overflow-hidden bg-black/40">
                   <video 
                     src={message.media.url} 
@@ -256,10 +259,13 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                     className="w-full max-h-80 rounded-lg"
                   />
                 </div>
-              ) : message.media.type === 'audio' ? (
-                <div className="p-2 rounded-lg bg-black/25 border border-white/10 flex items-center gap-2">
-                  <audio src={message.media.url} controls className="w-full h-8" />
-                </div>
+              ) : (message.media.type === 'audio' || message.media.url.match(/\.(ogg|mp3|wav|m4a|aac)($|\?)/i)) ? (
+                <WhatsAppVoiceNotePlayer 
+                  message={message}
+                  senderName={isOutbound ? currentUser.fullName : (lead?.customer?.displayName || 'Customer')}
+                  senderAvatar={isOutbound ? currentUser.avatar : lead?.customer?.avatarUrl}
+                  isOutbound={isOutbound}
+                />
               ) : (
                 <a 
                   href={message.media.url} 
@@ -281,32 +287,34 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             </div>
           )}
 
-          {/* Message Content & Inline Timestamp (WhatsApp Web 1:1 format) */}
-          <div className="text-[13.5px] leading-[19px] text-[#e9edef] break-words select-text">
-            <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
-            
-            {/* Inline float-right timestamp container */}
-            <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#8696a0] font-normal">
-              {message.pinned && (
-                <Pin className="w-3 h-3 fill-[#8696a0] text-[#8696a0] -rotate-45" />
-              )}
-              {message.starred && (
-                <Star className="w-3 h-3 fill-[#8696a0] text-[#8696a0]" />
-              )}
-              <span className="whitespace-nowrap">
-                {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+          {/* Message Content & Inline Timestamp (WhatsApp Web 1:1 format) - Suppress if standalone voice note */}
+          {(!message.media || message.media.type !== 'audio' || (message.content && message.content !== 'Voice note' && message.content.trim().length > 0)) && (
+            <div className="text-[13.5px] leading-[19px] text-[#e9edef] break-words select-text">
+              <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
+              
+              {/* Inline float-right timestamp container */}
+              <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#8696a0] font-normal">
+                {message.pinned && (
+                  <Pin className="w-3 h-3 fill-[#8696a0] text-[#8696a0] -rotate-45" />
+                )}
+                {message.starred && (
+                  <Star className="w-3 h-3 fill-[#8696a0] text-[#8696a0]" />
+                )}
+                <span className="whitespace-nowrap">
+                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                </span>
+                {isOutbound && (
+                  message.status === 'read' ? (
+                    <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                  ) : message.status === 'delivered' ? (
+                    <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                  ) : (
+                    <span title="Sent"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                  )
+                )}
               </span>
-              {isOutbound && (
-                message.status === 'read' ? (
-                  <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
-                ) : message.status === 'delivered' ? (
-                  <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
-                ) : (
-                  <span title="Sent"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
-                )
-              )}
-            </span>
-          </div>
+            </div>
+          )}
 
           {/* Dropdown Menu (WhatsApp Web Style with Upward/Downward Float) */}
           {menuOpen && (

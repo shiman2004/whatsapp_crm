@@ -18,7 +18,8 @@ import {
   Camera,
   PhoneCall,
   VolumeX,
-  Sparkles
+  Sparkles,
+  Mic
 } from 'lucide-react';
 import { Lead } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
@@ -365,9 +366,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                       {lastMsg?.direction === 'outbound' && (
                         <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] shrink-0" />
                       )}
-                      {lastMsg?.content?.includes('[Media') ? (
+                      {lastMsg?.content?.includes('[Media') || lastMsg?.media?.type === 'image' ? (
                         <span className="flex items-center gap-1 text-[#8696a0]">
                           <Camera className="w-3 h-3" /> Photo
+                        </span>
+                      ) : lastMsg?.media?.type === 'audio' || lastMsg?.content === 'Voice note' || lastMsg?.media?.url?.match(/\.(ogg|mp3|wav|m4a)($|\?)/i) ? (
+                        <span className="flex items-center gap-1 text-[#8696a0]">
+                          <Mic className="w-3 h-3 text-[#00a884]" /> Voice message
                         </span>
                       ) : (
                         <span className="truncate">{lastMsg?.content || 'Started WhatsApp chat'}</span>

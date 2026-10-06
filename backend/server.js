@@ -403,7 +403,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   // Structured Logging
   const finalDisplayName = customer ? customer.displayName : (contactName || (realPhone ? `+${realPhone}` : 'WhatsApp Contact'));
-  const finalDisplayPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : '';
+  const finalDisplayPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : (customer?.whatsappNumber || (isLid ? '' : `+${senderPhone}`));
 
   if (source === 'history_sync') {
     // Suppress individual logs during bulk sync
@@ -416,9 +416,9 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   // Real-time broadcast to all connected frontend clients
   const messagePayload = {
     type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
-    phone: finalDisplayPhone,
+    phone: finalDisplayPhone || customer?.whatsappNumber || senderPhone,
     whatsappId: senderPhone,
-    realPhone: finalDisplayPhone,
+    realPhone: finalDisplayPhone || customer?.whatsappNumber || '',
     name: finalDisplayName,
     text: messageText || (mediaType ? `[${mediaType.toUpperCase()}]` : ''),
     messageId: messageId,
@@ -731,6 +731,9 @@ async function startWhatsAppSocket(forceClean = false) {
   // Register messages.upsert listener on the active socket
   console.log(`[WA SOCKET #${instanceId}] Registering messages.upsert listener`);
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
+    if (instanceId !== socketInstanceCounter) {
+      return;
+    }
     console.log(`\n================== [WA DEBUG] messages.upsert FIRED ==================`);
     console.log(`type: ${type}`);
     console.log(`message count: ${messages?.length || 0}`);

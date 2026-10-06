@@ -355,6 +355,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedLeadIdRef.current = selectedLeadId;
   }, [selectedLeadId]);
 
+  const leadsRef = useRef<Lead[]>(leads);
+  useEffect(() => {
+    leadsRef.current = leads;
+  }, [leads]);
+
+  const customersRef = useRef<Customer[]>(customers);
+  useEffect(() => {
+    customersRef.current = customers;
+  }, [customers]);
+
   // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server
   useEffect(() => {
     let eventSource: EventSource | null = null;
@@ -392,26 +402,54 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ? name 
               : (displayPhone || 'WhatsApp Contact');
 
-            let targetLeadId = data.leadId || '';
-            let targetCustomerId = data.customerId || '';
+            // Find matching customer and lead from current memory
+            let resolvedCustomerId = data.customerId || '';
+            let resolvedLeadId = data.leadId || '';
+
+            const currentLeads = leadsRef.current || [];
+            const currentCusts = customersRef.current || [];
+
+            let matchedLead = currentLeads.find(l => {
+              const lCustDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber);
+              const lIdDigits = getCleanWhatsAppDigits(l.customer?.whatsappId);
+              return (
+                (resolvedLeadId && l.id === resolvedLeadId) ||
+                (resolvedCustomerId && l.customerId === resolvedCustomerId) ||
+                (cleanDigits && lCustDigits && (cleanDigits === lCustDigits || cleanDigits.includes(lCustDigits) || lCustDigits.includes(cleanDigits))) ||
+                (rawWaId && l.customer?.whatsappId && (l.customer.whatsappId === rawWaId || lIdDigits === rawWaId)) ||
+                (canonicalPhone && l.customer?.whatsappNumber && (l.customer.whatsappNumber === canonicalPhone || l.customer.whatsappNumber.includes(canonicalPhone))) ||
+                (!isOutbound && cleanDisplayName && l.customer?.displayName && l.customer.displayName === cleanDisplayName)
+              );
+            });
+
+            let matchedCust = currentCusts.find(c => {
+              const cDigits = getCleanWhatsAppDigits(c.whatsappNumber);
+              const cIdDigits = getCleanWhatsAppDigits(c.whatsappId);
+              return (
+                (resolvedCustomerId && c.id === resolvedCustomerId) ||
+                (cleanDigits && cDigits && (cleanDigits === cDigits || cleanDigits.includes(cDigits) || cDigits.includes(cleanDigits))) ||
+                (rawWaId && c.whatsappId && (c.whatsappId === rawWaId || cIdDigits === rawWaId)) ||
+                (canonicalPhone && c.whatsappNumber && (c.whatsappNumber === canonicalPhone || c.whatsappNumber.includes(canonicalPhone))) ||
+                (!isOutbound && cleanDisplayName && c.displayName && c.displayName === cleanDisplayName)
+              );
+            });
+
+            if (matchedLead) {
+              resolvedLeadId = matchedLead.id;
+              resolvedCustomerId = matchedLead.customerId || resolvedCustomerId;
+            } else if (matchedCust) {
+              resolvedCustomerId = matchedCust.id;
+            }
+
+            if (!resolvedCustomerId) resolvedCustomerId = 'cust-' + Date.now();
+            if (!resolvedLeadId) resolvedLeadId = 'lead-' + Date.now();
 
             // 1. Update/Create Customer
             setCustomers(prevCusts => {
-              let cust = prevCusts.find(c => {
-                const cDigits = getCleanWhatsAppDigits(c.whatsappNumber);
-                const cIdDigits = getCleanWhatsAppDigits(c.whatsappId);
-                return (
-                  (targetCustomerId && c.id === targetCustomerId) ||
-                  (cleanDigits && cDigits && (cleanDigits === cDigits || cleanDigits.includes(cDigits) || cDigits.includes(cleanDigits))) ||
-                  (rawWaId && c.whatsappId && (c.whatsappId === rawWaId || cIdDigits === rawWaId)) ||
-                  (canonicalPhone && c.whatsappNumber && (c.whatsappNumber === canonicalPhone || c.whatsappNumber.includes(canonicalPhone)))
-                );
-              });
-
-              if (!cust) {
-                targetCustomerId = targetCustomerId || 'cust-' + Date.now();
+              const exists = prevCusts.some(c => c.id === resolvedCustomerId);
+              if (!exists) {
                 const newCust: Customer = {
-                  id: targetCustomerId,
+                  id: resolvedCustomerId,
                   whatsappNumber: canonicalPhone || rawNumber,
                   whatsappId: rawWaId,
                   phoneNumber: displayPhone,
@@ -422,9 +460,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 };
                 return [newCust, ...prevCusts];
               } else {
-                targetCustomerId = cust.id;
                 return prevCusts.map(c => {
-                  if (c.id === cust!.id) {
+                  if (c.id === resolvedCustomerId) {
                     const shouldUpdatePhone = canonicalPhone && (!c.whatsappNumber || isHardwareLid(c.whatsappNumber));
                     const shouldUpdateName = !isOutbound && name && name.trim().length > 0 && !isHardwareLid(name) && !name.includes('You (Staff)') && !name.includes('Shiman Nafaas');
                     return {
@@ -443,24 +480,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // 2. Update/Create Lead
             setLeads(prevLeads => {
-              let lead = prevLeads.find(l => {
-                const lCustDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber);
-                const lIdDigits = getCleanWhatsAppDigits(l.customer?.whatsappId);
-                return (
-                  (targetLeadId && l.id === targetLeadId) ||
-                  (targetCustomerId && l.customerId === targetCustomerId) ||
-                  (cleanDigits && lCustDigits && (cleanDigits === lCustDigits || cleanDigits.includes(lCustDigits) || lCustDigits.includes(cleanDigits))) ||
-                  (rawWaId && l.customer?.whatsappId && (l.customer.whatsappId === rawWaId || lIdDigits === rawWaId))
-                );
-              });
-              
-              if (!lead) {
-                targetLeadId = targetLeadId || 'lead-' + Date.now();
+              const exists = prevLeads.some(l => l.id === resolvedLeadId || (l.customerId && l.customerId === resolvedCustomerId));
+              const isCurrentlyActive = selectedLeadIdRef.current === resolvedLeadId;
+
+              if (!exists) {
                 const newLead: Lead = {
-                  id: targetLeadId,
-                  customerId: targetCustomerId || 'cust-' + Date.now(),
+                  id: resolvedLeadId,
+                  customerId: resolvedCustomerId,
                   customer: {
-                    id: targetCustomerId || 'cust-' + Date.now(),
+                    id: resolvedCustomerId,
                     whatsappNumber: canonicalPhone || rawNumber,
                     whatsappId: rawWaId,
                     phoneNumber: displayPhone,
@@ -482,14 +510,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   updatedAt: new Date().toISOString(),
                 };
 
-                // Auto-select first lead if none selected
-                setSelectedLeadId(prevId => prevId ? prevId : targetLeadId);
                 return [newLead, ...prevLeads];
               } else {
-                targetLeadId = lead.id;
-                const isCurrentlyActive = selectedLeadIdRef.current === lead.id;
                 return prevLeads.map(l => {
-                  if (l.id === lead!.id) {
+                  if (l.id === resolvedLeadId || (l.customerId && l.customerId === resolvedCustomerId)) {
                     const shouldUpdatePhone = canonicalPhone && (!l.customer?.whatsappNumber || isHardwareLid(l.customer?.whatsappNumber));
                     const updatedCustomer = l.customer ? {
                       ...l.customer,
@@ -538,8 +562,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     id: messageId || updated[optIndex].id,
                     waMessageId: messageId || updated[optIndex].waMessageId,
                     status: 'sent',
-                    leadId: targetLeadId || updated[optIndex].leadId,
-                    customerId: targetCustomerId || updated[optIndex].customerId
+                    leadId: resolvedLeadId || updated[optIndex].leadId,
+                    customerId: resolvedCustomerId || updated[optIndex].customerId,
+                    media: data.media ? {
+                      type: data.media.type || 'image',
+                      url: data.media.url,
+                      caption: cleanContent,
+                      fileName: data.media.fileName
+                    } : updated[optIndex].media
                   };
                   return updated;
                 }
@@ -557,12 +587,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
               const newMsg: Message = {
                 id: messageId || 'msg-' + Date.now(),
-                leadId: targetLeadId || 'lead-' + Date.now(),
-                customerId: targetCustomerId || 'cust-' + Date.now(),
+                leadId: resolvedLeadId,
+                customerId: resolvedCustomerId,
                 direction: isOutbound ? 'outbound' : 'inbound',
                 senderType: senderType || (isOutbound ? 'coordinator' : 'customer'),
                 content: cleanContent,
-                media: data.media || undefined,
+                media: data.media ? {
+                  type: data.media.type || 'image',
+                  url: data.media.url,
+                  caption: cleanContent,
+                  fileName: data.media.fileName
+                } : undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
                 status: isOutbound ? 'sent' : 'delivered',
                 createdAt: timestamp || new Date().toISOString(),

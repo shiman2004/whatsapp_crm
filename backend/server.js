@@ -14,6 +14,7 @@ import makeWASocketDefault, {
 import pino from 'pino';
 import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
+import { evaluateAutoReply, pauseAutoReply } from './src/autoReplyEngine.js';
 
 dotenv.config();
 
@@ -439,6 +440,74 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   broadcastSSE(messagePayload);
   console.log(`[CRM SYNC] Frontend SSE broadcast sent for ${messageId} (${messagePayload.type}).`);
+
+  // Auto-Reply Concierge Intake Funnel Dispatch
+  if (!isFromMe && source === 'live' && sock && (messageText || mediaType)) {
+    setTimeout(async () => {
+      try {
+        const autoReply = await evaluateAutoReply({
+          senderPhone: effectivePhone || realPhone || senderPhone,
+          messageText: messageText || '',
+          customer: customer,
+          lead: lead
+        });
+
+        if (autoReply && autoReply.shouldReply && autoReply.replyText) {
+          const targetJid = jid || `${senderPhone}@s.whatsapp.net`;
+          
+          // Realistic typing simulation on WhatsApp
+          try {
+            await sock.sendPresenceUpdate('composing', targetJid);
+          } catch (e) {}
+
+          await new Promise(r => setTimeout(r, 1200));
+
+          const sent = await sock.sendMessage(targetJid, { text: autoReply.replyText });
+          const replyId = sent?.key?.id || `bot-${Date.now()}`;
+
+          if (replyId) {
+            processedMessageIds.add(replyId);
+          }
+
+          // Persist bot reply in Supabase PostgreSQL
+          persistOutboundMessage({
+            leadId: lead?.id,
+            customerId: customer?.id,
+            content: autoReply.replyText,
+            messageId: replyId,
+            senderType: 'system',
+            mediaUrl: null,
+            mediaType: null
+          });
+
+          // Broadcast to CRM screen in real time
+          broadcastSSE({
+            type: 'OUTBOUND_WHATSAPP_MESSAGE',
+            phone: finalDisplayPhone || customer?.whatsappNumber || senderPhone,
+            whatsappId: senderPhone,
+            realPhone: finalDisplayPhone || customer?.whatsappNumber || '',
+            name: 'Royal Wellness Concierge (Auto-Reply)',
+            text: autoReply.replyText,
+            messageId: replyId,
+            timestamp: new Date().toISOString(),
+            direction: 'outbound',
+            senderType: 'system',
+            leadId: lead?.id,
+            customerId: customer?.id,
+            source: 'auto_reply'
+          });
+
+          console.log(`🤖 [CONCIERGE BOT DISPATCH] Sent auto-reply to ${finalDisplayName} [Msg ID: ${replyId}]`);
+        }
+      } catch (botErr) {
+        console.warn('⚠️ Auto-reply dispatch error:', botErr.message);
+      }
+    }, 600);
+  } else if (isFromMe) {
+    // If staff/coordinator replied manually, pause bot for this customer
+    pauseAutoReply(effectivePhone || realPhone || senderPhone);
+  }
+
   return { isNew, leadId: lead?.id, customerId: customer?.id, messageId };
 }
 
@@ -1017,7 +1086,7 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // Save outbound message to MySQL
+        // Save outbound message to Supabase
         persistOutboundMessage({
           leadId,
           customerId,
@@ -1027,6 +1096,9 @@ const server = http.createServer(async (req, res) => {
           mediaUrl: savedMediaUrl,
           mediaType: media ? media.type : null,
         });
+
+        // Pause auto-reply bot for this customer so coordinator has full human control
+        pauseAutoReply(to || whatsappId);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({

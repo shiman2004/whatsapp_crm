@@ -14,7 +14,7 @@ import makeWASocketDefault, {
 import pino from 'pino';
 import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
-import { evaluateAutoReply, pauseAutoReply } from './src/autoReplyEngine.js';
+import { evaluateAutoReply, pauseAutoReply, clearAutoReplySessions } from './src/autoReplyEngine.js';
 
 dotenv.config();
 
@@ -434,11 +434,14 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
       const resolvedCustomerName = contactName || (customer ? customer.displayName : null) || (realPhone ? `+${realPhone}` : 'WhatsApp Contact');
 
+      const effectiveFormattedPhone = canonicalPhone || (realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : `+${senderPhone}`);
+
       if (!customer) {
         customer = await prisma.customer.create({
           data: {
-            whatsappNumber: canonicalPhone || `+${senderPhone}`,
+            whatsappNumber: effectiveFormattedPhone,
             whatsappId: senderPhone,
+            phoneNumber: effectiveFormattedPhone,
             displayName: resolvedCustomerName,
             preferredLanguage: 'en',
           }
@@ -446,8 +449,12 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         console.log(`[CRM SYNC] New customer created: ${customer.displayName} (${customer.whatsappNumber}) [ID: ${customer.id}]`);
       } else {
         const updateData = {};
-        if (realPhone && (!customer.whatsappNumber || customer.whatsappNumber.length > 15 || customer.whatsappNumber.startsWith('+1820') || customer.whatsappNumber.startsWith('+2001') || customer.whatsappNumber.startsWith('+1980') || customer.whatsappNumber.startsWith('+2226') || customer.whatsappNumber.startsWith('+2520') || customer.whatsappNumber.startsWith('+7328') || customer.whatsappNumber.startsWith('+1766'))) {
-          updateData.whatsappNumber = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+        if (realPhone) {
+          const formattedReal = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+          updateData.whatsappNumber = formattedReal;
+          updateData.phoneNumber = formattedReal;
+        } else if (!customer.phoneNumber && customer.whatsappNumber) {
+          updateData.phoneNumber = customer.whatsappNumber;
         }
         if (senderPhone && !customer.whatsappId) {
           updateData.whatsappId = senderPhone;
@@ -1438,6 +1445,7 @@ const server = http.createServer(async (req, res) => {
         console.warn('Error clearing database:', e.message);
       }
     }
+    clearAutoReplySessions();
     broadcastSSE({ type: 'SESSION_CLEARED' });
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Database cleared successfully.' }));

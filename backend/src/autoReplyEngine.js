@@ -186,6 +186,11 @@ export const pauseAutoReply = (phone) => {
   console.log(`🤖 [AUTO-REPLY] Bot paused for ${digits} (Staff active).`);
 };
 
+export const clearAutoReplySessions = () => {
+  autoReplySessions.clear();
+  console.log('🤖 [AUTO-REPLY] All auto-reply sessions reset.');
+};
+
 /**
  * Main Auto-Reply Decision Engine
  * Evaluates inbound message and returns the next automated reply (if any), along with database updates.
@@ -203,19 +208,20 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
   }
 
   const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
-  const session = autoReplySessions.get(cleanPhone) || { stage: 'IDLE', lastUpdated: new Date() };
+  const cleanText = messageText.trim().toLowerCase();
+  
+  // Common greetings that should ALWAYS initiate or re-trigger the welcome intake menu
+  const isGreeting = ['hi', 'hello', 'hey', 'start', 'menu', 'vanakkam', 'ayubowan', 'hy', 'hlo', 'hola', 'gm', 'good morning', 'good evening', 'good afternoon', 'inquiry', 'help'].includes(cleanText) || cleanText.startsWith('hi ') || cleanText.startsWith('hello ');
 
-  // If chat is actively assigned or handled by a coordinator, don't interrupt human conversations
-  if (session.stage === 'PAUSED' || (lead && lead.assignedTo)) {
-    return { shouldReply: false };
+  let session = autoReplySessions.get(cleanPhone);
+  if (!session || isGreeting) {
+    session = { stage: 'IDLE', lastUpdated: new Date() };
+    autoReplySessions.set(cleanPhone, session);
   }
 
-  // If conversation was already completed recently (> 24 hours ago resets), stay silent
-  if (session.stage === 'COMPLETED') {
-    const hoursSinceLast = (new Date() - new Date(session.lastUpdated)) / (1000 * 60 * 60);
-    if (hoursSinceLast < 24) {
-      return { shouldReply: false };
-    }
+  // If chat is explicitly assigned to a coordinator, do not interrupt human conversation unless greeting
+  if (lead && lead.assignedTo && !isGreeting) {
+    return { shouldReply: false };
   }
 
   const prisma = getPrisma();
@@ -224,13 +230,13 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
   // STEP 1: INITIAL CONTACT -> Send Welcome & Language Menu
   // ----------------------------------------------------
   if (session.stage === 'IDLE') {
-    // Check if this is a brand new lead or existing completed lead
+    // Advance to AWAITING_LANGUAGE
     autoReplySessions.set(cleanPhone, {
       stage: 'AWAITING_LANGUAGE',
       lastUpdated: new Date()
     });
 
-    console.log(`🤖 [AUTO-REPLY STEP 1] Sending Welcome & Language Menu to ${cleanPhone}`);
+    console.log(`🤖 [AUTO-REPLY STEP 1] Sending Welcome & Language Menu to ${cleanPhone} (Triggered by: "${messageText}")`);
     return {
       shouldReply: true,
       replyText: WELCOME_LANGUAGE_MESSAGE

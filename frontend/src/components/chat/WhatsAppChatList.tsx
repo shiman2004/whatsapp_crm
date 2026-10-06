@@ -274,7 +274,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         ) : (
           visibleLeads.map((lead) => {
             const isSelected = selectedLeadId === lead.id;
-            const leadMsgs = messages.filter(m => m.leadId === lead.id);
+            const leadMsgs = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
             const lastMsg = leadMsgs[leadMsgs.length - 1];
             const isPinned = pinnedLeadIds.has(lead.id);
             const isFav = favouriteLeadIds.has(lead.id);

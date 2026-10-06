@@ -453,7 +453,8 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
         });
 
         if (autoReply && autoReply.shouldReply && autoReply.replyText) {
-          const targetJid = jid || `${senderPhone}@s.whatsapp.net`;
+          const targetJid = rawJid || jidMap.get(senderPhone) || (isLid ? `${senderPhone}@lid` : `${senderPhone}@s.whatsapp.net`);
+          console.log(`🤖 [AUTO-REPLY TRIGGER] Sending auto-reply to JID: ${targetJid}...`);
           
           // Realistic typing simulation on WhatsApp
           try {

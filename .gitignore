@@ -32,6 +32,16 @@ backend/auth_info_baileys/
 auth_info_*/
 backend/auth_info_*/
 
+# Local Media & Uploads
+public/uploads/
+backend/public/
+media_*
+*.jpg
+*.png
+*.mp4
+*.ogg
+*.pdf
+
 # Editor & OS files
 .vscode/*
 !.vscode/extensions.json

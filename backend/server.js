@@ -67,34 +67,171 @@ function setConnectionState(newState, extra = {}) {
 const lidToPhoneMap = new Map();
 const lidToNameMap = new Map();
 const phoneToNameMap = new Map();
+const nameToPhoneMap = new Map();
+
+// Helper: Preload all WhatsApp multi-device reverse LID mappings stored on disk
+function loadAllLidMappingsFromAuthFolder() {
+  if (!fs.existsSync(AUTH_FOLDER)) return;
+  try {
+    const files = fs.readdirSync(AUTH_FOLDER);
+    let count = 0;
+    for (const f of files) {
+      if (f.startsWith('lid-mapping-') && f.endsWith('_reverse.json')) {
+        const lidUser = f.replace('lid-mapping-', '').replace('_reverse.json', '');
+        try {
+          const content = fs.readFileSync(path.join(AUTH_FOLDER, f), 'utf-8');
+          const pn = JSON.parse(content);
+          if (pn && typeof pn === 'string') {
+            const cleanPn = pn.replace(/[^0-9]/g, '');
+            if (cleanPn) {
+              lidToPhoneMap.set(lidUser, cleanPn);
+              jidMap.set(cleanPn, `${cleanPn}@s.whatsapp.net`);
+              jidMap.set(`+${cleanPn}`, `${cleanPn}@s.whatsapp.net`);
+              jidMap.set(lidUser, `${lidUser}@lid`);
+              count++;
+            }
+          }
+        } catch (e) {}
+      } else if (f.startsWith('lid-mapping-') && f.endsWith('.json') && !f.includes('_reverse')) {
+        const pnUser = f.replace('lid-mapping-', '').replace('.json', '');
+        try {
+          const content = fs.readFileSync(path.join(AUTH_FOLDER, f), 'utf-8');
+          const lid = JSON.parse(content);
+          if (lid && typeof lid === 'string') {
+            const cleanLid = lid.replace(/[^0-9]/g, '');
+            const cleanPn = pnUser.replace(/[^0-9]/g, '');
+            if (cleanLid && cleanPn) {
+              lidToPhoneMap.set(cleanLid, cleanPn);
+              jidMap.set(cleanPn, `${cleanPn}@s.whatsapp.net`);
+              jidMap.set(`+${cleanPn}`, `${cleanPn}@s.whatsapp.net`);
+              jidMap.set(cleanLid, `${cleanLid}@lid`);
+              count++;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    if (count > 0) {
+      console.log(`📇 [LID STORE] Preloaded ${count} WhatsApp LID-to-Phone reverse mappings.`);
+    }
+  } catch (err) {
+    console.warn('⚠️ Could not load LID mappings from disk:', err.message);
+  }
+}
+
+// Initial load on startup
+loadAllLidMappingsFromAuthFolder();
+
+async function resolveRealPhoneNumber(rawJid, msg = null) {
+  if (!rawJid) return null;
+  const digits = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+
+  if (rawJid.endsWith('@s.whatsapp.net')) {
+    return digits;
+  }
+
+  // 1. Check in-memory map
+  if (lidToPhoneMap.has(digits)) {
+    return lidToPhoneMap.get(digits);
+  }
+
+  // 2. Check message metadata
+  if (msg) {
+    if (msg.key?.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
+      const p = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+      if (p) {
+        lidToPhoneMap.set(digits, p);
+        return p;
+      }
+    }
+    if (msg.key?.participantPn) {
+      const p = String(msg.key.participantPn).replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+      if (p) {
+        lidToPhoneMap.set(digits, p);
+        return p;
+      }
+    }
+    if (msg.key?.remoteJidAlt && msg.key.remoteJidAlt.endsWith('@s.whatsapp.net')) {
+      const p = msg.key.remoteJidAlt.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+      if (p) {
+        lidToPhoneMap.set(digits, p);
+        return p;
+      }
+    }
+  }
+
+  // 3. Check auth folder on disk
+  const reverseFilePath = path.join(AUTH_FOLDER, `lid-mapping-${digits}_reverse.json`);
+  if (fs.existsSync(reverseFilePath)) {
+    try {
+      const content = fs.readFileSync(reverseFilePath, 'utf-8');
+      const pn = JSON.parse(content);
+      if (pn && typeof pn === 'string') {
+        const cleanPn = pn.replace(/[^0-9]/g, '');
+        if (cleanPn) {
+          lidToPhoneMap.set(digits, cleanPn);
+          console.log(`🔗 [DISK RESOLVED] LID ${digits} -> Real Phone: +${cleanPn}`);
+          return cleanPn;
+        }
+      }
+    } catch (e) {}
+  }
+
+  // 4. Query Baileys Signal lidMapping store
+  if (sock?.signalRepository?.lidMapping?.getPNForLID) {
+    try {
+      const pnJid = await sock.signalRepository.lidMapping.getPNForLID(`${digits}@lid`);
+      if (pnJid) {
+        const cleanPn = String(pnJid).replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+        if (cleanPn && cleanPn.length >= 7) {
+          lidToPhoneMap.set(digits, cleanPn);
+          console.log(`🔗 [BAILEYS RESOLVED] LID ${digits} -> Real Phone: +${cleanPn}`);
+          return cleanPn;
+        }
+      }
+    } catch (e) {}
+  }
+
+  return null;
+}
 
 function registerContact(c) {
   if (!c) return;
   const jid = c.id || '';
-  const lid = c.lid || '';
+  const lid = c.lid || (jid.endsWith('@lid') ? jid : '');
+  const rawPn = c.phoneNumber || c.phone || c.pn || (jid.endsWith('@s.whatsapp.net') ? jid : '');
   const name = c.name || c.notify || c.verifiedName || '';
 
   let phone = '';
   let cleanLid = '';
 
-  if (jid.endsWith('@s.whatsapp.net')) {
-    phone = jid.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
-    jidMap.set(phone, jid);
-    jidMap.set(`+${phone}`, jid);
+  if (rawPn) {
+    phone = String(rawPn).replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
+    if (phone) {
+      jidMap.set(phone, `${phone}@s.whatsapp.net`);
+      jidMap.set(`+${phone}`, `${phone}@s.whatsapp.net`);
+    }
   }
 
-  if (lid.endsWith('@lid')) {
-    cleanLid = lid.replace('@lid', '').replace(/[^0-9]/g, '');
-    jidMap.set(cleanLid, lid);
-    jidMap.set(`+${cleanLid}`, lid);
+  if (lid) {
+    cleanLid = String(lid).replace('@lid', '').replace(/[^0-9]/g, '');
+    if (cleanLid) {
+      jidMap.set(cleanLid, `${cleanLid}@lid`);
+      jidMap.set(`+${cleanLid}`, `${cleanLid}@lid`);
+    }
   }
 
   if (cleanLid && phone) {
     lidToPhoneMap.set(cleanLid, phone);
+    console.log(`🔗 [LID RESOLVED] Linked LID ${cleanLid} -> Real Phone: +${phone} (${name || 'Contact'})`);
   }
 
   if (name && name.trim().length > 0 && !name.startsWith('+') && name !== 'WhatsApp Contact') {
-    if (phone) phoneToNameMap.set(phone, name);
+    const cleanKey = name.trim().toLowerCase();
+    if (phone) {
+      phoneToNameMap.set(phone, name);
+      nameToPhoneMap.set(cleanKey, phone);
+    }
     if (cleanLid) lidToNameMap.set(cleanLid, name);
   }
 }
@@ -138,29 +275,11 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
 
   // Determine phone number and clean ID
   let senderPhone = rawJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
-  const isLid = rawJid.endsWith('@lid') || (senderPhone.length >= 14 && (senderPhone.startsWith('1820') || senderPhone.startsWith('2001') || senderPhone.startsWith('1766') || senderPhone.startsWith('1605') || senderPhone.startsWith('1980') || senderPhone.startsWith('2226') || senderPhone.startsWith('2520') || senderPhone.startsWith('7328') || senderPhone.startsWith('9304') || senderPhone.startsWith('2304') || senderPhone.startsWith('5218')));
-  let realPhone = null;
+  const isLid = rawJid.endsWith('@lid') || (senderPhone.length >= 13 && (senderPhone.startsWith('1820') || senderPhone.startsWith('1857') || senderPhone.startsWith('2001') || senderPhone.startsWith('1766') || senderPhone.startsWith('1605') || senderPhone.startsWith('1980') || senderPhone.startsWith('2226') || senderPhone.startsWith('2520') || senderPhone.startsWith('7328') || senderPhone.startsWith('9304') || senderPhone.startsWith('2304') || senderPhone.startsWith('5218')));
+  
+  let realPhone = await resolveRealPhoneNumber(rawJid, msg);
 
-  if (rawJid.endsWith('@s.whatsapp.net')) {
-    realPhone = senderPhone;
-  } else if (lidToPhoneMap.has(senderPhone)) {
-    realPhone = lidToPhoneMap.get(senderPhone);
-  } else if (msg.key.participant && msg.key.participant.endsWith('@s.whatsapp.net')) {
-    realPhone = msg.key.participant.replace('@s.whatsapp.net', '').replace(/[^0-9]/g, '');
-  }
-
-  const effectivePhone = realPhone || senderPhone;
-  const canonicalPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : (isLid ? '' : `+${senderPhone}`);
-
-  // Remember mapping from phone and LID to original JID for sending replies
-  jidMap.set(senderPhone, rawJid);
-  jidMap.set(`+${senderPhone}`, rawJid);
-  if (realPhone) {
-    jidMap.set(realPhone, rawJid);
-    jidMap.set(`+${realPhone}`, rawJid);
-  }
-
-  // Determine Customer Display Name (Never use sender's own pushName on outbound replies)
+  // Determine Customer Display Name
   let contactName = null;
   if (!isFromMe) {
     contactName = (msg.pushName && !msg.pushName.startsWith('+') && msg.pushName.trim().length > 0) ? msg.pushName : null;
@@ -171,6 +290,18 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   if (!contactName && lidToNameMap.has(senderPhone)) {
     contactName = lidToNameMap.get(senderPhone);
   }
+
+  // Cross-reference by name to find phone number if LID did not provide one directly
+  if (!realPhone && contactName && nameToPhoneMap.has(contactName.trim().toLowerCase())) {
+    realPhone = nameToPhoneMap.get(contactName.trim().toLowerCase());
+    if (realPhone) {
+      lidToPhoneMap.set(senderPhone, realPhone);
+      console.log(`🔗 [AUTO-MATCHED BY NAME] Linked LID ${senderPhone} -> Real Phone: +${realPhone} (${contactName})`);
+    }
+  }
+
+  const effectivePhone = realPhone || senderPhone;
+  const canonicalPhone = realPhone ? (realPhone.startsWith('+') ? realPhone : `+${realPhone}`) : (isLid ? '' : `+${senderPhone}`);
 
   // Original timestamp from WhatsApp message (seconds -> ms), fallback to current date
   const rawTimestamp = msg.messageTimestamp;
@@ -185,7 +316,7 @@ async function processAndPersistWhatsAppMessage(msg, source = 'live') {
   console.log(`Message ID: ${messageId}`);
   console.log(`Direction: ${isFromMe ? 'OUTBOUND (Staff Phone/CRM)' : 'INBOUND (Customer)'}`);
   console.log(`Remote JID: ${rawJid}`);
-  console.log(`Phone: ${canonicalPhone} (Effective: ${effectivePhone})`);
+  console.log(`Phone: ${canonicalPhone || effectivePhone} (Effective: ${effectivePhone})`);
   console.log(`Push Name: ${msg.pushName || 'N/A'}`);
   console.log(`Timestamp: ${timestampIso}`);
   console.log(`Message Types: ${Object.keys(unwrapped).join(', ')}`);
@@ -1385,6 +1516,39 @@ const server = http.createServer(async (req, res) => {
           },
           orderBy: { updatedAt: 'desc' },
         });
+
+        // Automatically heal and resolve any LID numbers to real mobile numbers
+        for (const l of leads) {
+          if (l.customer) {
+            const raw = l.customer.whatsappNumber || '';
+            const rawWaId = l.customer.whatsappId || '';
+            const digits = raw.replace(/[^0-9]/g, '');
+            const isLidNum = digits.length >= 13 || digits.startsWith('1820') || digits.startsWith('1857') || digits.startsWith('2001') || digits.startsWith('1766') || digits.startsWith('1605') || digits.startsWith('1980') || digits.startsWith('2226') || digits.startsWith('2520') || digits.startsWith('7328');
+
+            let resolved = await resolveRealPhoneNumber(rawWaId || raw);
+            if (!resolved && isLidNum) {
+              resolved = await resolveRealPhoneNumber(digits);
+            }
+
+            if (resolved) {
+              const formattedReal = resolved.startsWith('+') ? resolved : `+${resolved}`;
+              if (l.customer.whatsappNumber !== formattedReal) {
+                l.customer.whatsappNumber = formattedReal;
+                l.customer.phoneNumber = formattedReal;
+                // Update in database asynchronously
+                prisma.customer.update({
+                  where: { id: l.customer.id },
+                  data: {
+                    whatsappNumber: formattedReal,
+                    phoneNumber: formattedReal,
+                    whatsappId: rawWaId || digits
+                  }
+                }).catch(() => {});
+              }
+            }
+          }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(leads));
         return;

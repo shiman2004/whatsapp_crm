@@ -22,21 +22,25 @@ export const getCleanWhatsAppDigits = (phone?: string): string => {
 };
 
 /**
- * Checks if a string is a raw internal hardware LID (13-16 digits, e.g. starting with 2384, 1820, 2001, etc.)
+ * Checks if a string is a raw internal hardware LID (13-16 digits, e.g. starting with 2384, 1820, 1857, 2001, etc.)
  */
 export const isHardwareLid = (num?: string): boolean => {
   if (!num) return false;
   const digits = num.replace(/[^0-9]/g, '');
-  return digits.length >= 13 || 
+  // Standard phone numbers across the world are 9-12 digits (e.g., +94770049469 is 11 digits)
+  if (digits.length <= 12) return false;
+  return digits.length >= 13 && (
     digits.startsWith('2384') || 
     digits.startsWith('1820') || 
+    digits.startsWith('1857') || 
     digits.startsWith('2001') || 
     digits.startsWith('1766') || 
     digits.startsWith('1605') || 
     digits.startsWith('1980') || 
     digits.startsWith('2226') || 
     digits.startsWith('2520') || 
-    digits.startsWith('7328');
+    digits.startsWith('7328')
+  );
 };
 
 /**

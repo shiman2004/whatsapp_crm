@@ -138,7 +138,7 @@ export const Header: React.FC = () => {
                   {currentUser?.fullName?.split(' ')[0]}
                 </p>
                 <p className="text-[10px] text-emerald-400 leading-tight">
-                  {isSuperAdmin ? 'Super Admin' : 'Staff'}
+                  {currentUser?.role === 'super_admin' ? 'Super Admin' : (currentUser?.role === 'leads_officer' ? 'Leads Officer' : 'Coordinator')}
                 </p>
               </div>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />

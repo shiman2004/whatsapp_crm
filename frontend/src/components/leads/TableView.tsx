@@ -17,7 +17,7 @@ interface TableViewProps {
 }
 
 export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => {
-  const { categories, treatments, users, selectedLeadId, isSuperAdmin, assignLead } = useCrm();
+  const { categories, treatments, users, selectedLeadId, isSuperAdmin, canAssignLeads, assignLead } = useCrm();
 
   const coordinators = users.filter(u => u.role === 'coordinator');
 
@@ -95,7 +95,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
 
                     {/* Coordinator */}
                     <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                      {isSuperAdmin ? (
+                      {canAssignLeads ? (
                         <select
                           value={lead.assignedTo || ''}
                           onChange={(e) => assignLead(lead.id, e.target.value)}

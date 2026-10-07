@@ -30,7 +30,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
-  const { isSuperAdmin, currentUser, leads, followups } = useCrm();
+  const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups } = useCrm();
 
   const unassignedCount = leads.filter(l => l.stage === 'new').length;
   const myAssignedCount = leads.filter(l => l.assignedTo === currentUser.id).length;
@@ -41,7 +41,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       id: 'chat' as NavTab,
       label: 'Live WhatsApp',
       icon: MessageSquare,
-      badge: isSuperAdmin ? (unassignedCount > 0 ? unassignedCount : undefined) : (myAssignedCount > 0 ? myAssignedCount : undefined),
+      badge: canAssignLeads ? (unassignedCount > 0 ? unassignedCount : undefined) : (myAssignedCount > 0 ? myAssignedCount : undefined),
       badgeColor: 'bg-whatsapp text-slate-950',
       adminOnly: false,
     },
@@ -61,13 +61,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       id: 'treatments' as NavTab,
       label: 'Treatments',
       icon: Sparkles,
-      adminOnly: true,
-    },
-    {
-      id: 'coordinators' as NavTab,
-      label: 'Coordinators',
-      icon: Users,
-      adminOnly: true,
+      adminOnly: false,
     },
     {
       id: 'templates' as NavTab,
@@ -75,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       icon: FileText,
       badge: pendingFollowupsCount > 0 ? pendingFollowupsCount : undefined,
       badgeColor: 'bg-emerald-600 text-white',
-      adminOnly: true,
+      adminOnly: false,
     },
     {
       id: 'reports' as NavTab,
@@ -84,10 +78,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => 
       adminOnly: false,
     },
     {
+      id: 'coordinators' as NavTab,
+      label: 'Coordinators',
+      icon: Users,
+      adminOnly: true, // Super Admin only
+    },
+    {
       id: 'audit' as NavTab,
       label: 'Audit Trail',
       icon: ScrollText,
-      adminOnly: true,
+      adminOnly: true, // Super Admin only
     },
     {
       id: 'webhook-sandbox' as NavTab,

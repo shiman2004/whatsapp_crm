@@ -24,7 +24,8 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
     categories, 
     treatments, 
     users, 
-    isSuperAdmin, 
+    isSuperAdmin,
+    canAssignLeads, 
     assignLead, 
     updateLeadStage 
   } = useCrm();
@@ -115,12 +116,12 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Assigned Coordinator
             </label>
-            {isSuperAdmin && (
+            {canAssignLeads && (
               <span className="text-[9px] text-gold-400 font-semibold">Change</span>
             )}
           </div>
 
-          {isSuperAdmin ? (
+          {canAssignLeads ? (
             <div className="relative">
               <select
                 value={lead.assignedTo || ''}

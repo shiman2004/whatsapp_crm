@@ -59,6 +59,9 @@ interface CrmContextType {
   users: User[];
   setCurrentUser: (user: User) => void;
   isSuperAdmin: boolean;
+  isLeadsOfficer: boolean;
+  isCoordinator: boolean;
+  canAssignLeads: boolean;
 
   // Data collections
   leads: Lead[];
@@ -416,6 +419,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [currentUser?.id]);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
+  const isLeadsOfficer = currentUser.role === 'leads_officer';
+  const isCoordinator = currentUser.role === 'coordinator';
+  const canAssignLeads = isSuperAdmin || isLeadsOfficer;
 
   const selectedLeadIdRef = useRef<string | null>(selectedLeadId);
   useEffect(() => {
@@ -1641,6 +1647,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     users,
     setCurrentUser,
     isSuperAdmin,
+    isLeadsOfficer,
+    isCoordinator,
+    canAssignLeads,
     leads: hydratedLeads,
     customers,
     messages,

@@ -45,11 +45,11 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
   const payload = `data: ${JSON.stringify(data)}\n\n`;
   sseClients.forEach(client => {
     try {
-      // Super Admin receives all events; Coordinators receive ONLY their own scoped events
-      const isSuperAdmin = client.userRole === 'super_admin';
+      // Super Admin and Leads Officer receive all events; Coordinators receive ONLY their own scoped events
+      const hasFullVisibility = client.userRole === 'super_admin' || client.userRole === 'leads_officer';
       const isTargetCoordinator = !targetCoordinatorId || client.coordinatorId === targetCoordinatorId;
 
-      if (isSuperAdmin || isTargetCoordinator) {
+      if (hasFullVisibility || isTargetCoordinator) {
         client.res.write(payload);
       }
     } catch (e) {}
@@ -117,12 +117,15 @@ async function authenticateRequest(req, parsedUrl) {
 
       if (!user) {
         const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
+        const isOfficer = cleanId === 'user-officer-1' || cleanId.includes('officer');
+        const role = isSuper ? 'super_admin' : (isOfficer ? 'leads_officer' : 'coordinator');
+        const fullName = isSuper ? 'Super Admin' : (isOfficer ? 'Sarah Fernando (Leads Officer)' : `Coordinator ${cleanId.slice(-4)}`);
         user = await prisma.user.create({
           data: {
             id: cleanId,
-            fullName: isSuper ? 'Super Admin' : `Coordinator ${cleanId.slice(-4)}`,
-            email: isSuper ? 'admin@royalwellness.lk' : `${cleanId}@royalwellness.lk`,
-            role: isSuper ? 'super_admin' : 'coordinator',
+            fullName,
+            email: isSuper ? 'admin@royalwellness.lk' : (isOfficer ? 'sarah@royalwellness.lk' : `${cleanId}@royalwellness.lk`),
+            role,
           }
         }).catch(() => null);
       }
@@ -139,11 +142,12 @@ async function authenticateRequest(req, parsedUrl) {
   }
 
   const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
+  const isOfficer = cleanId === 'user-officer-1' || cleanId.includes('officer');
   return {
     id: cleanId,
-    role: isSuper ? 'super_admin' : 'coordinator',
-    email: `${cleanId}@royalwellness.lk`,
-    fullName: isSuper ? 'Super Admin' : 'Staff Coordinator'
+    role: isSuper ? 'super_admin' : (isOfficer ? 'leads_officer' : 'coordinator'),
+    email: isSuper ? 'admin@royalwellness.lk' : (isOfficer ? 'sarah@royalwellness.lk' : `${cleanId}@royalwellness.lk`),
+    fullName: isSuper ? 'Super Admin' : (isOfficer ? 'Sarah Fernando (Leads Officer)' : 'Staff Coordinator')
   };
 }
 
@@ -417,6 +421,19 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        // RBAC: Check coordinator authorization for this specific lead
+        if (authUser.role === 'coordinator' && leadId) {
+          const prisma = getPrisma();
+          if (prisma && getDbStatus()) {
+            const lead = await prisma.lead.findUnique({ where: { id: leadId } });
+            if (lead && lead.assignedTo && lead.assignedTo !== authUser.id) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Forbidden: You can only message leads assigned to you.' }));
+              return;
+            }
+          }
+        }
+
         logWaSessionDebug('/api/send', authUser, targetCoordinatorId, sessionManager.getRuntimeSession(targetCoordinatorId), null);
 
         const sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
@@ -505,12 +522,9 @@ const server = http.createServer(async (req, res) => {
         }
 
         // Coordinators can only query messages from their assigned leads
-        if (authUser.role !== 'super_admin') {
+        if (authUser.role === 'coordinator') {
           whereClause.lead = {
-            OR: [
-              { assignedTo: authUser.id },
-              { whatsappSession: { coordinatorId: authUser.id } }
-            ]
+            assignedTo: authUser.id
           };
         }
 
@@ -537,12 +551,9 @@ const server = http.createServer(async (req, res) => {
       try {
         const whereClause = {};
         
-        // Coordinators can only see leads assigned to them or received on their WhatsApp line
-        if (authUser.role !== 'super_admin') {
-          whereClause.OR = [
-            { assignedTo: authUser.id },
-            { whatsappSession: { coordinatorId: authUser.id } }
-          ];
+        // Coordinators can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
+        if (authUser.role === 'coordinator') {
+          whereClause.assignedTo = authUser.id;
         }
 
         const leads = await prisma.lead.findMany({
@@ -572,12 +583,19 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 10b. REST: Assign Lead to Coordinator (Admin Dispatches to Coordinator)
+  // 10b. REST: Assign Lead to Coordinator (Admin or Leads Officer Dispatches to Coordinator)
   if (req.method === 'POST' && (pathname === '/api/leads/assign' || pathname === '/api/assign')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
+        // RBAC: Only Super Admin and Leads Officer can assign leads
+        if (authUser.role === 'coordinator') {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Forbidden: Coordinators cannot assign leads.' }));
+          return;
+        }
+
         const payload = JSON.parse(body || '{}');
         const { leadId, coordinatorId, coordinatorName, customerId, phone, whatsappId } = payload;
 

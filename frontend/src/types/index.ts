@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'coordinator';
+export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator';
 
 export type LeadStage = 'new' | 'assigned' | 'contacted' | 'interested' | 'follow_up' | 'converted' | 'lost';
 

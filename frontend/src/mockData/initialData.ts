@@ -26,6 +26,17 @@ export const INITIAL_USERS: User[] = [
     activeLeadsCount: 0,
   },
   {
+    id: 'user-officer-1',
+    fullName: 'Sarah Fernando (Leads Officer)',
+    email: 'sarah@royalwellness.lk',
+    password: 'staff',
+    pin: '4321',
+    role: 'leads_officer',
+    active: true,
+    createdAt: '2026-01-02T08:00:00Z',
+    activeLeadsCount: 0,
+  },
+  {
     id: 'user-coord-1',
     fullName: 'Dr. Shenali (Trichology)',
     email: 'shenali@royalwellness.lk',

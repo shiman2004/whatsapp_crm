@@ -35,7 +35,8 @@ interface CrmIntelligencePanelProps {
 export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead, onClose }) => {
   const { 
     users, 
-    isSuperAdmin, 
+    isSuperAdmin,
+    canAssignLeads, 
     assignLead, 
     updateLeadStage,
     updateCustomer
@@ -168,7 +169,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             Assigned Coordinator
           </label>
 
-          {isSuperAdmin ? (
+          {canAssignLeads ? (
             <div className="relative">
               <select
                 value={lead.assignedTo || ''}

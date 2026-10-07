@@ -480,14 +480,15 @@ class WhatsAppSessionManager {
       }
     }
 
-    // Emit Real-Time SSE strictly to this coordinator's channel
-    this.emitToCoordinator(coordinatorId, {
+    // Emit Real-Time SSE to assigned coordinator channel
+    const targetCoordinator = lead?.assignedTo || coordinatorId;
+    this.emitToCoordinator(targetCoordinator, {
       type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
       messageId,
       leadId: lead?.id,
       customerId: customer?.id,
       whatsappSessionId: sessionCtx.sessionId,
-      coordinatorId,
+      coordinatorId: targetCoordinator,
       phone: canonicalPhone,
       realPhone: canonicalPhone || null,
       whatsappId: rawSenderDigits,
@@ -502,12 +503,23 @@ class WhatsAppSessionManager {
   }
 
   /**
-   * Outbound Message Dispatcher (uses coordinator's specific Baileys socket)
+   * Outbound Message Dispatcher (uses coordinator's specific socket or shared Clinic WhatsApp line)
    */
   async sendMessage(coordinatorId, { to, whatsappId, message, media, leadId, customerId }) {
-    const sessionCtx = this.sessions.get(coordinatorId);
+    let sessionCtx = this.sessions.get(coordinatorId);
     if (!sessionCtx || sessionCtx.status !== 'connected' || !sessionCtx.sock) {
-      throw new Error(`WhatsApp is not connected for your account. Please scan the pairing QR code first.`);
+      sessionCtx = this.sessions.get('user-admin-1');
+    }
+    if (!sessionCtx || sessionCtx.status !== 'connected' || !sessionCtx.sock) {
+      for (const [id, s] of this.sessions.entries()) {
+        if (s.status === 'connected' && s.sock) {
+          sessionCtx = s;
+          break;
+        }
+      }
+    }
+    if (!sessionCtx || sessionCtx.status !== 'connected' || !sessionCtx.sock) {
+      throw new Error(`Clinic WhatsApp line is not connected. Please connect WhatsApp from the Admin Dashboard first.`);
     }
 
     const cleanPhone = (to || '').replace(/[^0-9]/g, '');

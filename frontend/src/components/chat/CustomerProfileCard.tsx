@@ -131,7 +131,7 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
                 <option value="" disabled>-- Select Coordinator --</option>
                 {coordinators.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.fullName} ({c.activeLeadsCount || 0} active)
+                    {c.fullName}
                   </option>
                 ))}
               </select>

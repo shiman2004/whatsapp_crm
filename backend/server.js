@@ -411,6 +411,7 @@ const server = http.createServer(async (req, res) => {
         const media = payload.media;
         const leadId = payload.leadId;
         const customerId = payload.customerId;
+        const targetCoordinatorId = payload.coordinatorId || authUser?.id || masterLineId;
 
         if (!to && !whatsappId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -458,9 +459,10 @@ const server = http.createServer(async (req, res) => {
           authenticatedUserId: authUser.id
         }));
       } catch (err) {
-        console.error(`❌ [Send Error] Coordinator [${targetCoordinatorId}]:`, err.message);
+        const errorCoordinatorId = authUser?.id || masterLineId;
+        console.error(`❌ [Send Error] Coordinator [${errorCoordinatorId}]:`, err.message);
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message, coordinatorId: targetCoordinatorId }));
+        res.end(JSON.stringify({ success: false, error: err.message, coordinatorId: errorCoordinatorId }));
       }
     });
     return;

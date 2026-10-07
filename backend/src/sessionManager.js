@@ -656,24 +656,20 @@ class WhatsAppSessionManager {
   }
 
   /**
-   * Render Boot / Server Recovery: Restore all active connected sessions
+   * Render Boot / Server Recovery: Restore central clinic WhatsApp connection from Supabase PostgreSQL
    */
   async restoreAllActiveSessions() {
     const prisma = getPrisma();
     if (!prisma || !getDbStatus()) return;
 
     try {
-      const activeRecords = await prisma.whatsAppSession.findMany({
-        where: { status: 'connected' },
+      const masterLineId = 'user-admin-1';
+      console.log(`\n📦 [SessionManager] Ensuring Central Clinic WhatsApp Line [${masterLineId}] is active & connected from Supabase PostgreSQL...`);
+      
+      // Auto-restore master clinic socket using persistent PostgreSQL keys
+      this.startCoordinatorSocket(masterLineId, false).catch(err => {
+        console.warn(`[SessionManager] Auto-restore master clinic session status:`, err.message);
       });
-
-      console.log(`\n📦 [SessionManager] Found ${activeRecords.length} active WhatsApp sessions to restore from Supabase...`);
-      for (const rec of activeRecords) {
-        console.log(`🔄 [SessionManager] Restoring WhatsApp connection for Coordinator [${rec.coordinatorId}] (Phone: +${rec.phoneNumber})...`);
-        this.startCoordinatorSocket(rec.coordinatorId, false).catch(err => {
-          console.warn(`[SessionManager] Could not auto-restore session for ${rec.coordinatorId}:`, err.message);
-        });
-      }
     } catch (err) {
       console.warn('[SessionManager] Error during session restoration:', err.message);
     }

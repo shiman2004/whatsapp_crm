@@ -152,28 +152,31 @@ export const Header: React.FC = () => {
                   <p className="text-[11px] text-slate-400 font-mono truncate">{currentUser?.email}</p>
                 </div>
 
-                <div className="space-y-0.5">
-                  <label className="text-[10px] font-bold text-slate-500 px-3 uppercase tracking-wider block pt-1">
-                    Switch Profile
-                  </label>
-                  {users.map((u: any) => (
-                    <button
-                      key={u.id}
-                      onClick={() => {
-                        setCurrentUser(u);
-                        setUserDropdownOpen(false);
-                      }}
-                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all ${
-                        currentUser?.id === u.id 
-                          ? 'bg-emerald-950/60 text-emerald-300 font-bold' 
-                          : 'text-slate-300 hover:bg-[#202c33] hover:text-white'
-                      }`}
-                    >
-                      <span className="truncate">{u.fullName}</span>
-                      {currentUser?.id === u.id && <span className="text-[10px] text-emerald-400 font-bold">Active</span>}
-                    </button>
-                  ))}
-                </div>
+                {/* Switch Profile Section - ONLY for Super Admin */}
+                {isSuperAdmin && (
+                  <div className="space-y-0.5">
+                    <label className="text-[10px] font-bold text-slate-500 px-3 uppercase tracking-wider block pt-1">
+                      Switch Profile (Admin View)
+                    </label>
+                    {users.map((u: any) => (
+                      <button
+                        key={u.id}
+                        onClick={() => {
+                          setCurrentUser(u);
+                          setUserDropdownOpen(false);
+                        }}
+                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all ${
+                          currentUser?.id === u.id 
+                            ? 'bg-emerald-950/60 text-emerald-300 font-bold' 
+                            : 'text-slate-300 hover:bg-[#202c33] hover:text-white'
+                        }`}
+                      >
+                        <span className="truncate">{u.fullName}</span>
+                        {currentUser?.id === u.id && <span className="text-[10px] text-emerald-400 font-bold">Active</span>}
+                      </button>
+                    ))}
+                  </div>
+                )}
 
                 <div className="pt-1 border-t border-slate-800">
                   <button

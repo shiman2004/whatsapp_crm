@@ -38,6 +38,7 @@ import {
   isHardwareLid, 
   formatWhatsAppDisplay 
 } from '../utils/phoneUtils';
+import { API_BASE_URL } from '../config/api';
 import { aiService } from '../services/aiService';
 
 interface NotificationToast {
@@ -247,8 +248,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const fetchInitialData = async () => {
     try {
       const [leadsRes, msgsRes] = await Promise.all([
-        fetch('http://localhost:3001/api/leads'),
-        fetch('http://localhost:3001/api/messages')
+        fetch(`${API_BASE_URL}/api/leads`),
+        fetch(`${API_BASE_URL}/api/messages`)
       ]);
 
       if (leadsRes.ok && msgsRes.ok) {
@@ -371,7 +372,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handledMsgIds = new Set<string>();
 
     try {
-      eventSource = new EventSource('http://localhost:3001/api/events');
+      eventSource = new EventSource(`${API_BASE_URL}/api/events`);
       
       eventSource.onmessage = (event) => {
         try {
@@ -910,7 +911,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const savedToken = localStorage.getItem('meta_access_token');
     
     if ((recipientPhone || recipientWaId) && !leadId.startsWith('lead-sim')) {
-      fetch('http://localhost:3001/api/send-message', {
+      fetch(`${API_BASE_URL}/api/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1011,7 +1012,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Chat Deleted 🗑️', `Chat with ${targetLead.customer?.displayName || 'contact'} deleted from CRM & WhatsApp.`, 'info');
 
     try {
-      await fetch('http://localhost:3001/api/chats/delete', {
+      await fetch(`${API_BASE_URL}/api/chats/delete`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1035,7 +1036,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Chat Cleared 🧹', `Messages cleared for ${targetLead.customer?.displayName || 'contact'}.`, 'info');
 
     try {
-      await fetch('http://localhost:3001/api/chats/clear', {
+      await fetch(`${API_BASE_URL}/api/chats/clear`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -1222,7 +1223,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Also purge MySQL backend storage
-    fetch('http://localhost:3001/api/clear-db', { method: 'POST' }).catch(() => {});
+    fetch(`${API_BASE_URL}/api/clear-db`, { method: 'POST' }).catch(() => {});
 
     setNotifications(prev => [
       {

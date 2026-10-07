@@ -8,8 +8,9 @@
  */
 export const normalizeWhatsAppNumber = (phone?: string): string => {
   if (!phone) return '';
+  if (isHardwareLid(phone)) return '';
   const digits = phone.replace(/[^0-9]/g, '');
-  if (!digits) return '';
+  if (!digits || digits.length >= 13) return '';
   return `+${digits}`;
 };
 
@@ -22,25 +23,15 @@ export const getCleanWhatsAppDigits = (phone?: string): string => {
 };
 
 /**
- * Checks if a string is a raw internal hardware LID (13-16 digits, e.g. starting with 2384, 1820, 1857, 2001, etc.)
+ * Checks if a string is a raw internal hardware LID (13-16 digits e.g. 1766..., 2384..., etc.)
  */
 export const isHardwareLid = (num?: string): boolean => {
   if (!num) return false;
+  if (num.includes('@lid')) return true;
   const digits = num.replace(/[^0-9]/g, '');
-  // Standard phone numbers across the world are 9-12 digits (e.g., +94770049469 is 11 digits)
+  // Standard phone numbers worldwide are 7 to 12 digits (e.g., +94771234567 is 11 digits)
   if (digits.length <= 12) return false;
-  return digits.length >= 13 && (
-    digits.startsWith('2384') || 
-    digits.startsWith('1820') || 
-    digits.startsWith('1857') || 
-    digits.startsWith('2001') || 
-    digits.startsWith('1766') || 
-    digits.startsWith('1605') || 
-    digits.startsWith('1980') || 
-    digits.startsWith('2226') || 
-    digits.startsWith('2520') || 
-    digits.startsWith('7328')
-  );
+  return digits.length >= 13;
 };
 
 /**

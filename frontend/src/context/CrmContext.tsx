@@ -848,6 +848,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return l;
     }));
 
+    // Sync assignment to Supabase PostgreSQL backend in real-time
+    fetch(`${API_BASE_URL}/api/leads/assign`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({ leadId, coordinatorId })
+    }).catch(err => console.warn('Could not sync lead assignment to backend:', err));
+
     notify('Lead Assigned', `Lead successfully assigned to ${coord.fullName}`, 'success');
   };
 

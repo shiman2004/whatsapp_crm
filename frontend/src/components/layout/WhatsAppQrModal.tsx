@@ -23,6 +23,8 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'disconnected' | 'syncing' | 'sync_error'>('connecting');
   const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const { notify } = useCrm() as any;
 
   // Poll or listen for QR code & status
@@ -36,21 +38,44 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
         if (res.ok) {
           const data = await res.json();
           setStatus(data.status);
-          if (data.qr) setQrCode(data.qr);
+          if (data.qr) {
+            setQrCode(data.qr);
+            setFetchError(null);
+          }
           if (data.phone) setConnectedPhone(data.phone);
         }
-      } catch (err) {
+      } catch (err: any) {
         console.warn('QR Bridge offline or starting up...', err);
+        setFetchError('Connecting to WhatsApp Gateway server...');
       }
     };
 
     fetchStatus();
-    const interval = setInterval(fetchStatus, 2500);
+    const interval = setInterval(fetchStatus, 2000);
 
     return () => clearInterval(interval);
   }, [isOpen]);
 
   if (!isOpen) return null;
+
+  const handleForceRefresh = async () => {
+    setIsRefreshing(true);
+    setFetchError(null);
+    try {
+      await fetch(`${API_BASE_URL}/api/reconnect`, { method: 'POST' });
+      const res = await fetch(`${API_BASE_URL}/api/qr`);
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data.status);
+        if (data.qr) setQrCode(data.qr);
+      }
+    } catch (e: any) {
+      console.error('Refresh QR error:', e);
+      setFetchError('Unable to generate QR code. Server waking up, please wait a moment.');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
 
   const handleLogout = async () => {
     setIsLoggingOut(true);
@@ -216,15 +241,25 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                       className="w-full h-full object-contain"
                     />
                   ) : (
-                    <div className="flex flex-col items-center justify-center text-slate-800 space-y-2">
+                    <div className="flex flex-col items-center justify-center text-slate-800 space-y-2 p-4 text-center">
                       <RefreshCw className="w-8 h-8 animate-spin text-whatsapp" />
-                      <p className="text-[11px] font-semibold text-slate-600">Generating QR Code...</p>
+                      <p className="text-xs font-semibold text-slate-700">Connecting to WhatsApp...</p>
+                      <p className="text-[10px] text-slate-500">Generating pairing QR code</p>
                     </div>
                   )}
                 </div>
-                <p className="text-[11px] text-slate-500 mt-2 flex items-center gap-1">
-                  <RefreshCw className="w-3 h-3" /> Auto-refreshes every 30 seconds
-                </p>
+                
+                <div className="mt-2.5 flex items-center gap-2">
+                  <button
+                    onClick={handleForceRefresh}
+                    disabled={isRefreshing}
+                    className="px-2.5 py-1 bg-[#202c33] hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-[11px] font-medium border border-slate-700/80 flex items-center gap-1.5 transition-all shadow-sm disabled:opacity-50"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin text-whatsapp' : ''}`} />
+                    <span>{isRefreshing ? 'Generating...' : 'Refresh QR'}</span>
+                  </button>
+                  <span className="text-[10px] text-slate-500">• Auto-syncs live</span>
+                </div>
               </div>
 
             </div>

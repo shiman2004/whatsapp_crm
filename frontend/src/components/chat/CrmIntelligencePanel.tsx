@@ -181,7 +181,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 </option>
                 {coordinators.map((c) => (
                   <option key={c.id} value={c.id} className="bg-slate-900">
-                    {c.fullName} ({c.activeLeadsCount || 0} active)
+                    {c.fullName}
                   </option>
                 ))}
               </select>

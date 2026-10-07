@@ -1,0 +1,613 @@
+import path from 'path';
+import QRCode from 'qrcode';
+import makeWASocketDefault, {
+  DisconnectReason,
+  fetchLatestBaileysVersion,
+  downloadMediaMessage,
+  Browsers,
+  makeCacheableSignalKeyStore
+} from '@whiskeysockets/baileys';
+import pino from 'pino';
+import fs from 'fs';
+import { getPrisma, getDbStatus } from './db.js';
+import { useSupabaseAuthState } from './supabaseAuthState.js';
+import { evaluateAutoReply, pauseAutoReply } from './autoReplyEngine.js';
+
+const makeWASocket = makeWASocketDefault.default || makeWASocketDefault;
+
+/**
+ * Enterprise Multi-Session WhatsApp Manager
+ * 
+ * Guarantees strict coordinator isolation:
+ * - 1 Isolated Baileys Socket per coordinator
+ * - Persistent credentials in Supabase PostgreSQL
+ * - Zero cross-session interference on link / unlink / send / receive
+ * - Automatic recovery on Render reboot
+ */
+class WhatsAppSessionManager {
+  constructor() {
+    // Map of coordinatorId -> SessionInstance
+    this.sessions = new Map();
+    // Broadcaster callback for coordinator-scoped SSE
+    this.sseEmitter = null;
+    // Processed message cache to prevent duplicates per session
+    this.processedMessageIds = new Set();
+  }
+
+  setSseEmitter(emitterFn) {
+    this.sseEmitter = emitterFn;
+  }
+
+  emitToCoordinator(coordinatorId, eventData) {
+    if (this.sseEmitter) {
+      this.sseEmitter(coordinatorId, eventData);
+    }
+  }
+
+  /**
+   * Fetch or create database record for a coordinator's WhatsApp session
+   */
+  async getOrCreateSessionRecord(coordinatorId) {
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) {
+      return {
+        id: `sess-${coordinatorId}`,
+        coordinatorId,
+        status: 'disconnected',
+        phoneNumber: null,
+      };
+    }
+
+    try {
+      let session = await prisma.whatsAppSession.findUnique({
+        where: { coordinatorId },
+      });
+
+      if (!session) {
+        // Find coordinator user to verify existence
+        const user = await prisma.user.findUnique({ where: { id: coordinatorId } });
+        if (!user) {
+          // If default admin, auto-create user record if missing
+          await prisma.user.create({
+            data: {
+              id: coordinatorId,
+              fullName: coordinatorId === 'user-admin-1' ? 'Admin' : 'Staff Coordinator',
+              email: coordinatorId === 'user-admin-1' ? 'admin@royalwellness.lk' : `${coordinatorId}@royalwellness.lk`,
+              role: coordinatorId === 'user-admin-1' ? 'super_admin' : 'coordinator',
+            }
+          }).catch(() => {});
+        }
+
+        session = await prisma.whatsAppSession.create({
+          data: {
+            coordinatorId,
+            status: 'disconnected',
+          },
+        });
+        console.log(`✨ [SessionManager] Created new WhatsAppSession record for coordinator ${coordinatorId} [Session ID: ${session.id}]`);
+      }
+
+      return session;
+    } catch (err) {
+      console.error(`[SessionManager] DB error in getOrCreateSessionRecord (${coordinatorId}):`, err.message);
+      return {
+        id: `sess-${coordinatorId}`,
+        coordinatorId,
+        status: 'disconnected',
+        phoneNumber: null,
+      };
+    }
+  }
+
+  /**
+   * Get active runtime session context
+   */
+  getRuntimeSession(coordinatorId) {
+    return this.sessions.get(coordinatorId) || null;
+  }
+
+  /**
+   * Start or restart an isolated WhatsApp socket for a specific coordinator
+   */
+  async startCoordinatorSocket(coordinatorId, forceClean = false) {
+    const existing = this.sessions.get(coordinatorId);
+    
+    // Concurrency Lock: prevent duplicate socket creations
+    if (existing && existing.isStarting) {
+      console.log(`⏳ [SessionManager] Socket startup already in progress for coordinator ${coordinatorId}. Reusing lock.`);
+      return existing;
+    }
+
+    const sessionRecord = await this.getOrCreateSessionRecord(coordinatorId);
+    const sessionId = sessionRecord.id;
+
+    const sessionCtx = existing || {
+      coordinatorId,
+      sessionId,
+      sock: null,
+      status: 'connecting',
+      qrCodeDataUrl: null,
+      connectedPhoneNumber: sessionRecord.phoneNumber || null,
+      isStarting: true,
+      reconnectTimer: null,
+      lidToPhoneMap: new Map(),
+      jidMap: new Map(),
+      instanceCounter: 0,
+    };
+
+    sessionCtx.isStarting = true;
+    this.sessions.set(coordinatorId, sessionCtx);
+
+    if (sessionCtx.reconnectTimer) {
+      clearTimeout(sessionCtx.reconnectTimer);
+      sessionCtx.reconnectTimer = null;
+    }
+
+    try {
+      // Gracefully terminate prior socket if existing
+      if (sessionCtx.sock) {
+        try {
+          sessionCtx.sock.ev.removeAllListeners();
+          sessionCtx.sock.end(undefined);
+        } catch (e) {}
+        sessionCtx.sock = null;
+      }
+
+      // Initialize Supabase-backed auth state
+      const { state, saveCreds, clearSessionAuth } = await useSupabaseAuthState(sessionId);
+
+      if (forceClean) {
+        await clearSessionAuth();
+      }
+
+      const instanceId = ++sessionCtx.instanceCounter;
+      const { version, isLatest } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307], isLatest: true }));
+      const logger = pino({ level: 'silent' });
+
+      console.log(`\n🚀 [SessionManager] Launching Socket #${instanceId} for Coordinator [${coordinatorId}] (Baileys v${version.join('.')})`);
+      
+      sessionCtx.status = 'connecting';
+      this.updateDbStatus(coordinatorId, 'connecting', null);
+
+      const sock = makeWASocket({
+        version,
+        logger,
+        printQRInTerminal: false,
+        auth: {
+          creds: state.creds,
+          keys: makeCacheableSignalKeyStore(state.keys, logger)
+        },
+        browser: Browsers.ubuntu(`RoyalCRM-${coordinatorId.slice(-4)}`),
+        syncFullHistory: false,
+        markOnlineOnConnect: true,
+        generateHighQualityLinkPreview: true,
+        connectTimeoutMs: 60000,
+        defaultQueryTimeoutMs: 60000,
+        keepAliveIntervalMs: 25000,
+      });
+
+      sessionCtx.sock = sock;
+      sessionCtx.saveCreds = saveCreds;
+      sessionCtx.clearSessionAuth = clearSessionAuth;
+
+      // Register Event Listeners
+      sock.ev.on('creds.update', saveCreds);
+
+      sock.ev.on('connection.update', async (update) => {
+        if (sessionCtx.instanceCounter !== instanceId) return;
+
+        const { connection, lastDisconnect, qr } = update;
+
+        if (qr) {
+          console.log(`📸 [QR READY] New QR Code generated for Coordinator [${coordinatorId}]`);
+          sessionCtx.qrCodeDataUrl = await QRCode.toDataURL(qr, { margin: 2, scale: 8 }).catch(() => null);
+          sessionCtx.status = 'qr_ready';
+          
+          await this.updateDbStatus(coordinatorId, 'qr_ready', null, sessionCtx.qrCodeDataUrl);
+          this.emitToCoordinator(coordinatorId, {
+            type: 'CONNECTION_STATUS',
+            status: 'qr_ready',
+            qrDataUrl: sessionCtx.qrCodeDataUrl,
+            coordinatorId
+          });
+        }
+
+        if (connection === 'close') {
+          const statusCode = lastDisconnect?.error?.output?.statusCode;
+          const isRestartRequired = statusCode === DisconnectReason.restartRequired; // 515
+          const isLoggedOut = statusCode === DisconnectReason.loggedOut; // 401
+
+          console.log(`⚠️ [SessionManager] Socket #${instanceId} for [${coordinatorId}] closed. Status: ${statusCode} (Restart: ${isRestartRequired}, LoggedOut: ${isLoggedOut})`);
+
+          if (isRestartRequired) {
+            console.log(`🔄 [${coordinatorId}] Device pairing handshake in progress... restarting socket.`);
+            sessionCtx.status = 'connecting';
+            sessionCtx.reconnectTimer = setTimeout(() => this.startCoordinatorSocket(coordinatorId, false), 600);
+          } else if (isLoggedOut) {
+            console.log(`🔒 [${coordinatorId}] Logged out from phone. Resetting credentials for coordinator.`);
+            sessionCtx.status = 'disconnected';
+            sessionCtx.connectedPhoneNumber = null;
+            sessionCtx.qrCodeDataUrl = null;
+            await clearSessionAuth();
+            await this.updateDbStatus(coordinatorId, 'disconnected', null, null);
+            this.emitToCoordinator(coordinatorId, {
+              type: 'CONNECTION_STATUS',
+              status: 'disconnected',
+              phone: null,
+              coordinatorId
+            });
+          } else {
+            console.log(`🔄 [${coordinatorId}] Temporary network drop. Reconnecting in 2.5s...`);
+            sessionCtx.status = 'connecting';
+            sessionCtx.reconnectTimer = setTimeout(() => this.startCoordinatorSocket(coordinatorId, false), 2500);
+          }
+        } else if (connection === 'open') {
+          const rawUser = sock?.user?.id || '';
+          const phone = rawUser.split(':')[0].replace(/[^0-9]/g, '');
+          const accountName = sock?.user?.name || 'Clinic WhatsApp';
+
+          sessionCtx.connectedPhoneNumber = phone;
+          sessionCtx.status = 'connected';
+          sessionCtx.qrCodeDataUrl = null;
+
+          console.log(`\n🎉 [SessionManager] Coordinator [${coordinatorId}] WhatsApp LINKED! Phone: +${phone}`);
+          await this.updateDbStatus(coordinatorId, 'connected', phone, null, accountName);
+          this.emitToCoordinator(coordinatorId, {
+            type: 'CONNECTION_STATUS',
+            status: 'connected',
+            phone,
+            name: accountName,
+            coordinatorId
+          });
+        }
+      });
+
+      // Register Incoming / Outbound Message Listeners
+      sock.ev.on('messages.upsert', async ({ messages, type }) => {
+        if (sessionCtx.instanceCounter !== instanceId) return;
+
+        for (const msg of messages) {
+          try {
+            await this.processIncomingMessage(coordinatorId, sessionCtx, msg, type === 'append' ? 'catch_up' : 'live');
+          } catch (err) {
+            console.error(`[SessionManager] Error processing message for [${coordinatorId}]:`, err.message);
+          }
+        }
+      });
+
+      return sessionCtx;
+    } catch (err) {
+      console.error(`❌ [SessionManager] Fatal error initializing socket for [${coordinatorId}]:`, err);
+      sessionCtx.status = 'disconnected';
+      return sessionCtx;
+    } finally {
+      sessionCtx.isStarting = false;
+    }
+  }
+
+  /**
+   * Update database session status
+   */
+  async updateDbStatus(coordinatorId, status, phoneNumber = null, qrDataUrl = null, accountName = null) {
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) return;
+
+    try {
+      const data = {
+        status,
+        lastActiveAt: new Date(),
+      };
+      if (phoneNumber !== undefined) data.phoneNumber = phoneNumber;
+      if (qrDataUrl !== undefined) data.qrCodeDataUrl = qrDataUrl;
+      if (accountName !== undefined) data.accountName = accountName;
+      if (status === 'connected') data.lastConnectedAt = new Date();
+
+      await prisma.whatsAppSession.update({
+        where: { coordinatorId },
+        data,
+      });
+    } catch (e) {
+      console.warn(`[SessionManager] Failed to update DB status for ${coordinatorId}:`, e.message);
+    }
+  }
+
+  /**
+   * Process & persist inbound/outbound WhatsApp message scoped to this coordinator
+   */
+  async processIncomingMessage(coordinatorId, sessionCtx, msg, eventSource = 'live') {
+    if (!msg?.message || !msg?.key) return;
+
+    const messageId = msg.key.id;
+    if (this.processedMessageIds.has(messageId)) return;
+    this.processedMessageIds.add(messageId);
+    if (this.processedMessageIds.size > 2000) {
+      const first = this.processedMessageIds.values().next().value;
+      this.processedMessageIds.delete(first);
+    }
+
+    const isFromMe = Boolean(msg.key.fromMe);
+    const remoteJid = msg.key.remoteJid || '';
+
+    // Ignore broadcast/status updates
+    if (remoteJid.includes('status@broadcast') || remoteJid.includes('@g.us')) return;
+
+    const rawSenderDigits = remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
+    const realPhone = sessionCtx.lidToPhoneMap.get(rawSenderDigits) || rawSenderDigits;
+    const canonicalPhone = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+
+    // Extract Message Text & Media Content
+    const unwrapped = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
+    const messageText = unwrapped.conversation ||
+      unwrapped.extendedTextMessage?.text ||
+      unwrapped.imageMessage?.caption ||
+      unwrapped.videoMessage?.caption ||
+      unwrapped.documentMessage?.caption ||
+      unwrapped.buttonsResponseMessage?.selectedDisplayText ||
+      unwrapped.templateButtonReplyMessage?.selectedDisplayText || '';
+
+    let mediaType = null;
+    let mediaUrl = null;
+
+    if (unwrapped.imageMessage) mediaType = 'image';
+    else if (unwrapped.videoMessage) mediaType = 'video';
+    else if (unwrapped.audioMessage) mediaType = 'audio';
+    else if (unwrapped.documentMessage) mediaType = 'document';
+
+    if (!messageText && !mediaType) return;
+
+    const contactName = msg.pushName || null;
+    const timestampDate = new Date((msg.messageTimestamp ? Number(msg.messageTimestamp) : Math.floor(Date.now() / 1000)) * 1000);
+
+    const prisma = getPrisma();
+    let customer = null;
+    let lead = null;
+
+    if (prisma && getDbStatus()) {
+      try {
+        // 1. Find or Upsert Customer
+        customer = await prisma.customer.findFirst({
+          where: {
+            OR: [
+              { whatsappNumber: canonicalPhone },
+              { whatsappNumber: realPhone },
+              { whatsappId: rawSenderDigits }
+            ]
+          }
+        });
+
+        const displayName = contactName || customer?.displayName || canonicalPhone;
+
+        if (!customer) {
+          customer = await prisma.customer.create({
+            data: {
+              whatsappNumber: canonicalPhone,
+              whatsappId: rawSenderDigits,
+              phoneNumber: canonicalPhone,
+              displayName,
+              preferredLanguage: 'en',
+            }
+          });
+        }
+
+        // 2. Find or Create Lead specifically scoped to this coordinator's WhatsApp session
+        lead = await prisma.lead.findFirst({
+          where: {
+            customerId: customer.id,
+            whatsappSessionId: sessionCtx.sessionId,
+          },
+          orderBy: { updatedAt: 'desc' },
+        });
+
+        if (!lead) {
+          const firstCat = await prisma.treatmentCategory.findFirst();
+          const firstTrt = await prisma.treatment.findFirst();
+
+          lead = await prisma.lead.create({
+            data: {
+              customerId: customer.id,
+              categoryId: firstCat?.id || 'cat-hair-care',
+              treatmentId: firstTrt?.id || 'trt-hair-prp',
+              assignedTo: coordinatorId,
+              whatsappSessionId: sessionCtx.sessionId,
+              stage: isFromMe ? 'contacted' : 'new',
+              source: 'whatsapp',
+              language: 'en',
+              lastCustomerMessageAt: timestampDate,
+            }
+          });
+        } else {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: {
+              lastCustomerMessageAt: timestampDate,
+              updatedAt: new Date(),
+              whatsappSessionId: sessionCtx.sessionId,
+            }
+          });
+        }
+
+        // 3. Save Message with Session & Coordinator Scope
+        await prisma.message.upsert({
+          where: { id: messageId },
+          create: {
+            id: messageId,
+            leadId: lead.id,
+            customerId: customer.id,
+            whatsappSessionId: sessionCtx.sessionId,
+            coordinatorId: isFromMe ? coordinatorId : null,
+            direction: isFromMe ? 'outbound' : 'inbound',
+            senderType: isFromMe ? 'coordinator' : 'customer',
+            content: messageText || `[${mediaType?.toUpperCase()}]`,
+            status: 'delivered',
+            timestamp: timestampDate,
+            mediaType,
+            mediaUrl,
+          },
+          update: {
+            content: messageText || `[${mediaType?.toUpperCase()}]`,
+            status: 'delivered',
+          }
+        });
+      } catch (dbErr) {
+        console.warn(`[SessionManager] DB Sync Warning for message ${messageId}:`, dbErr.message);
+      }
+    }
+
+    // Emit Real-Time SSE strictly to this coordinator's channel
+    this.emitToCoordinator(coordinatorId, {
+      type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
+      messageId,
+      leadId: lead?.id,
+      customerId: customer?.id,
+      whatsappSessionId: sessionCtx.sessionId,
+      coordinatorId,
+      phone: canonicalPhone,
+      realPhone,
+      whatsappId: rawSenderDigits,
+      name: contactName || customer?.displayName || canonicalPhone,
+      text: messageText,
+      media: mediaType ? { type: mediaType, url: mediaUrl } : null,
+      direction: isFromMe ? 'outbound' : 'inbound',
+      senderType: isFromMe ? 'coordinator' : 'customer',
+      timestamp: timestampDate.toISOString(),
+      source: eventSource,
+    });
+  }
+
+  /**
+   * Outbound Message Dispatcher (uses coordinator's specific Baileys socket)
+   */
+  async sendMessage(coordinatorId, { to, whatsappId, message, media, leadId, customerId }) {
+    const sessionCtx = this.sessions.get(coordinatorId);
+    if (!sessionCtx || sessionCtx.status !== 'connected' || !sessionCtx.sock) {
+      throw new Error(`WhatsApp is not connected for your account. Please scan the pairing QR code first.`);
+    }
+
+    const cleanPhone = (to || '').replace(/[^0-9]/g, '');
+    const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+    let targetJid = null;
+
+    if (cleanPhone) targetJid = `${cleanPhone}@s.whatsapp.net`;
+    else if (cleanWaId && cleanWaId.length > 15) targetJid = `${cleanWaId}@lid`;
+    else if (cleanWaId) targetJid = `${cleanWaId}@s.whatsapp.net`;
+
+    if (!targetJid) {
+      throw new Error(`Invalid recipient phone number or WhatsApp ID.`);
+    }
+
+    let payload = {};
+    if (message) payload.text = message;
+
+    if (media && media.dataUrl) {
+      const base64Data = media.dataUrl.split(';base64,').pop();
+      const buffer = Buffer.from(base64Data, 'base64');
+      if (media.type === 'image') payload = { image: buffer, caption: message || media.caption || '' };
+      else if (media.type === 'video') payload = { video: buffer, caption: message || media.caption || '' };
+      else if (media.type === 'audio') payload = { audio: buffer, mimetype: 'audio/mp4', ptt: true };
+      else payload = { document: buffer, mimetype: 'application/pdf', fileName: media.fileName || 'document.pdf', caption: message || '' };
+    }
+
+    const sent = await sessionCtx.sock.sendMessage(targetJid, payload);
+    const outboundMsgId = sent?.key?.id;
+
+    if (outboundMsgId) {
+      this.processedMessageIds.add(outboundMsgId);
+    }
+
+    // Persist Outbound in Supabase
+    const prisma = getPrisma();
+    if (prisma && getDbStatus() && leadId && customerId) {
+      try {
+        await prisma.message.create({
+          data: {
+            id: outboundMsgId || `out-${Date.now()}`,
+            leadId,
+            customerId,
+            whatsappSessionId: sessionCtx.sessionId,
+            coordinatorId,
+            direction: 'outbound',
+            senderType: 'coordinator',
+            content: message || (media ? `[${media.type.toUpperCase()}]` : ''),
+            status: 'sent',
+            timestamp: new Date(),
+            mediaType: media ? media.type : null,
+          }
+        });
+      } catch (e) {}
+    }
+
+    pauseAutoReply(to || whatsappId);
+    return { success: true, messageId: outboundMsgId, status: 'sent' };
+  }
+
+  /**
+   * Unlink & Logout Coordinator WhatsApp Session
+   * Guarantees other coordinators are NOT affected!
+   */
+  async unlinkSession(coordinatorId) {
+    console.log(`🔌 [SessionManager] Unlinking WhatsApp session for coordinator [${coordinatorId}]...`);
+    const sessionCtx = this.sessions.get(coordinatorId);
+
+    if (sessionCtx) {
+      if (sessionCtx.reconnectTimer) {
+        clearTimeout(sessionCtx.reconnectTimer);
+        sessionCtx.reconnectTimer = null;
+      }
+
+      if (sessionCtx.sock) {
+        try {
+          await sessionCtx.sock.logout();
+        } catch (e) {
+          try { sessionCtx.sock.end(new Error('User unlinked session')); } catch (e2) {}
+        }
+        sessionCtx.sock = null;
+      }
+
+      if (sessionCtx.clearSessionAuth) {
+        await sessionCtx.clearSessionAuth();
+      }
+
+      sessionCtx.status = 'disconnected';
+      sessionCtx.connectedPhoneNumber = null;
+      sessionCtx.qrCodeDataUrl = null;
+      this.sessions.delete(coordinatorId);
+    }
+
+    await this.updateDbStatus(coordinatorId, 'disconnected', null, null, null);
+    this.emitToCoordinator(coordinatorId, {
+      type: 'CONNECTION_STATUS',
+      status: 'disconnected',
+      phone: null,
+      coordinatorId
+    });
+
+    console.log(`✅ [SessionManager] Coordinator [${coordinatorId}] session successfully unlinked. Other sessions remain active.`);
+    return { success: true, message: 'WhatsApp session unlinked successfully.' };
+  }
+
+  /**
+   * Render Boot / Server Recovery: Restore all active connected sessions
+   */
+  async restoreAllActiveSessions() {
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) return;
+
+    try {
+      const activeRecords = await prisma.whatsAppSession.findMany({
+        where: { status: 'connected' },
+      });
+
+      console.log(`\n📦 [SessionManager] Found ${activeRecords.length} active WhatsApp sessions to restore from Supabase...`);
+      for (const rec of activeRecords) {
+        console.log(`🔄 [SessionManager] Restoring WhatsApp connection for Coordinator [${rec.coordinatorId}] (Phone: +${rec.phoneNumber})...`);
+        this.startCoordinatorSocket(rec.coordinatorId, false).catch(err => {
+          console.warn(`[SessionManager] Could not auto-restore session for ${rec.coordinatorId}:`, err.message);
+        });
+      }
+    } catch (err) {
+      console.warn('[SessionManager] Error during session restoration:', err.message);
+    }
+  }
+}
+
+export const sessionManager = new WhatsAppSessionManager();

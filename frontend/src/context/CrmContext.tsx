@@ -277,12 +277,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  // Automatically load persistent conversation history and leads from MySQL Database
+  // Automatically load persistent conversation history and leads from Supabase Database scoped to user
   const fetchInitialData = async () => {
     try {
+      const authHeaders = {
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      };
+
       const [leadsRes, msgsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/leads`),
-        fetch(`${API_BASE_URL}/api/messages`)
+        fetch(`${API_BASE_URL}/api/leads`, { headers: authHeaders }),
+        fetch(`${API_BASE_URL}/api/messages`, { headers: authHeaders })
       ]);
 
       if (leadsRes.ok && msgsRes.ok) {
@@ -377,10 +382,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Hydrate on mount
+  // Hydrate on mount & whenever logged-in staff switches
   useEffect(() => {
     fetchInitialData();
-  }, []);
+  }, [currentUser?.id]);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
 
@@ -399,13 +404,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customersRef.current = customers;
   }, [customers]);
 
-  // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server
+  // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server scoped to current user
   useEffect(() => {
     let eventSource: EventSource | null = null;
     const handledMsgIds = new Set<string>();
 
     try {
-      eventSource = new EventSource(`${API_BASE_URL}/api/events`);
+      const coordId = currentUser?.id || 'user-admin-1';
+      eventSource = new EventSource(`${API_BASE_URL}/api/events?token=${coordId}&coordinatorId=${coordId}`);
       
       eventSource.onmessage = (event) => {
         try {
@@ -733,7 +739,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (eventSource) eventSource.close();
     };
-  }, []);
+  }, [currentUser?.id]);
 
   // Mark chat as read and clear unread badge
   const markChatAsRead = (leadId: string) => {
@@ -946,7 +952,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if ((recipientPhone || recipientWaId) && !leadId.startsWith('lead-sim')) {
       fetch(`${API_BASE_URL}/api/send-message`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
         body: JSON.stringify({
           to: recipientPhone,
           whatsappId: recipientWaId,

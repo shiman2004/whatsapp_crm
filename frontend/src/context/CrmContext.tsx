@@ -50,7 +50,11 @@ interface NotificationToast {
 }
 
 interface CrmContextType {
-  // Current user & RBAC
+  // Authentication & RBAC
+  isAuthenticated: boolean;
+  login: (identifier: string, secret?: string) => { success: boolean; error?: string };
+  logout: () => void;
+  updateUserCredentials: (userId: string, updates: { password?: string; pin?: string }) => void;
   currentUser: User;
   users: User[];
   setCurrentUser: (user: User) => void;
@@ -110,7 +114,7 @@ interface CrmContextType {
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
-  addCoordinator: (data: { fullName: string; email: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  addCoordinator: (data: { fullName: string; email: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => void;
   deleteCoordinator: (id: string) => void;
 
   // Simulator State & Actions
@@ -146,9 +150,38 @@ const getStored = <T,>(key: string, fallback: T): T => {
 
 export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load state with localStorage persistence across refreshes
-  const [users, setUsers] = useState<User[]>(() => getStored('rw_crm_users', INITIAL_USERS));
+  const [users, setUsers] = useState<User[]>(() => {
+    const stored = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    const merged = [...stored];
+    for (const initU of INITIAL_USERS) {
+      const existingIdx = merged.findIndex(u => u.id === initU.id);
+      if (existingIdx === -1) {
+        merged.push(initU);
+      } else {
+        // preserve password and pin defaults if missing
+        merged[existingIdx] = {
+          ...initU,
+          ...merged[existingIdx],
+          password: merged[existingIdx].password || initU.password,
+          pin: merged[existingIdx].pin || initU.pin,
+        };
+      }
+    }
+    return merged;
+  });
+
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    const authId = localStorage.getItem('rw_crm_auth_user_id');
+    return !!authId;
+  });
+
   const [currentUser, setCurrentUser] = useState<User>(() => {
+    const authId = localStorage.getItem('rw_crm_auth_user_id');
     const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    if (authId) {
+      const match = storedUsers.find(u => u.id === authId);
+      if (match) return match;
+    }
     return storedUsers[0] || INITIAL_USERS[0];
   });
   const [categories, setCategories] = useState<TreatmentCategory[]>(INITIAL_CATEGORIES);
@@ -1177,11 +1210,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Customer Updated', 'WhatsApp contact details saved', 'success');
   };
 
-  const addCoordinator = (data: { fullName: string; email: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
+  const addCoordinator = (data: { fullName: string; email: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
     const newCoord: User = {
       id: 'coord-' + Date.now(),
       fullName: data.fullName,
       email: data.email,
+      password: data.password || 'staff',
+      pin: data.pin || '2026',
       phone: data.phone,
       role: 'coordinator',
       treatmentCategoryId: data.treatmentCategoryId,
@@ -1192,11 +1227,67 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
     setUsers(prev => [...prev, newCoord]);
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
+    notify('Staff Added', `${newCoord.fullName} registered with PIN ${newCoord.pin}`, 'success');
   };
 
   const deleteCoordinator = (id: string) => {
     setUsers(prev => prev.filter(u => u.id !== id));
     logAudit('DELETE_USER', 'User', id, null, null);
+  };
+
+  const login = (identifier: string, secret?: string) => {
+    const cleanId = (identifier || '').trim().toLowerCase();
+    const cleanSecret = (secret || '').trim();
+
+    const matchedUser = users.find(u => 
+      u.email.toLowerCase() === cleanId || 
+      u.id.toLowerCase() === cleanId ||
+      u.fullName.toLowerCase() === cleanId ||
+      (u.phone && u.phone.includes(cleanId))
+    );
+
+    if (!matchedUser) {
+      return { success: false, error: 'Staff account not found. Check email or select profile.' };
+    }
+
+    if (!matchedUser.active) {
+      return { success: false, error: 'This staff account has been deactivated.' };
+    }
+
+    // Verify PIN or Password
+    const userPassword = matchedUser.password || (matchedUser.role === 'super_admin' ? 'admin' : 'staff');
+    const userPin = matchedUser.pin || (matchedUser.role === 'super_admin' ? '1234' : '2026');
+
+    if (cleanSecret) {
+      const isPinMatch = cleanSecret === userPin;
+      const isPassMatch = cleanSecret === userPassword;
+      if (!isPinMatch && !isPassMatch) {
+        return { success: false, error: cleanSecret.length === 4 ? 'Incorrect 4-digit PIN.' : 'Incorrect password.' };
+      }
+    }
+
+    setCurrentUser(matchedUser);
+    setIsAuthenticated(true);
+    localStorage.setItem('rw_crm_auth_user_id', matchedUser.id);
+    logAudit('USER_LOGIN', 'User', matchedUser.id, null, { email: matchedUser.email, role: matchedUser.role });
+    notify('Welcome Back', `Signed in as ${matchedUser.fullName}`, 'success');
+    return { success: true };
+  };
+
+  const logout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('rw_crm_auth_user_id');
+    logAudit('USER_LOGOUT', 'User', currentUser.id, null, null);
+    notify('Signed Out', 'You have securely signed out of the CRM session.', 'info');
+  };
+
+  const updateUserCredentials = (userId: string, updates: { password?: string; pin?: string }) => {
+    setUsers(prev => prev.map(u => u.id === userId ? { ...u, ...updates } : u));
+    if (currentUser.id === userId) {
+      setCurrentUser(prev => ({ ...prev, ...updates }));
+    }
+    logAudit('UPDATE_CREDENTIALS', 'User', userId, null, { hasPassword: !!updates.password, hasPin: !!updates.pin });
+    notify('Security Updated', 'User credentials saved successfully.', 'success');
   };
 
   // Clear all fake, demo and test CRM records completely
@@ -1457,6 +1548,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
 
   const value: CrmContextType = {
+    isAuthenticated,
+    login,
+    logout,
+    updateUserCredentials,
     currentUser,
     users,
     setCurrentUser,

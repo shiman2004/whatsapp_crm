@@ -13,6 +13,7 @@ import { TemplatesManager } from './components/admin/TemplatesManager';
 import { AuditLogsViewer } from './components/admin/AuditLogsViewer';
 import { ArchitectureBlueprint } from './components/admin/ArchitectureBlueprint';
 import { WebhookSimulatorPlayground } from './components/admin/WebhookSimulatorPlayground';
+import { LoginScreen } from './components/auth/LoginScreen';
 
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -59,10 +60,25 @@ const MainLayout: React.FC = () => {
   );
 };
 
+const RootApp: React.FC = () => {
+  const { isAuthenticated } = useCrm();
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <LoginScreen />
+        <ToastContainer />
+      </>
+    );
+  }
+
+  return <MainLayout />;
+};
+
 export default function App() {
   return (
     <CrmProvider>
-      <MainLayout />
+      <RootApp />
     </CrmProvider>
   );
 }

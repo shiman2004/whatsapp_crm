@@ -8,7 +8,9 @@ import {
   Mail, 
   Phone,
   Trash2,
-  X
+  X,
+  KeyRound,
+  Lock
 } from 'lucide-react';
 
 export const CoordinatorsManager: React.FC = () => {
@@ -19,6 +21,8 @@ export const CoordinatorsManager: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [pin, setPin] = useState('2026');
+  const [password, setPassword] = useState('staff');
   const [treatmentCategoryId, setTreatmentCategoryId] = useState('');
   const [language, setLanguage] = useState<LanguageCode>('en');
 
@@ -32,6 +36,8 @@ export const CoordinatorsManager: React.FC = () => {
       fullName: fullName.trim(),
       email: email.trim(),
       phone: phone.trim() || undefined,
+      pin: pin.trim() || '2026',
+      password: password.trim() || 'staff',
       treatmentCategoryId: treatmentCategoryId || undefined,
       language: language,
     });
@@ -40,6 +46,8 @@ export const CoordinatorsManager: React.FC = () => {
     setFullName('');
     setEmail('');
     setPhone('');
+    setPin('2026');
+    setPassword('staff');
     setTreatmentCategoryId('');
     setLanguage('en');
     setShowAddModal(false);
@@ -122,13 +130,23 @@ export const CoordinatorsManager: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Specialty */}
-                  <div className="bg-[#202c33]/60 p-2.5 rounded-xl border border-slate-800 text-xs">
-                    <span className="text-[10px] text-slate-400 font-medium block">Specialty / Department:</span>
-                    <span className="font-bold text-emerald-300 flex items-center gap-1 mt-0.5">
-                      <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-                      {specialty ? specialty.name : 'All Treatments'}
-                    </span>
+                  {/* Specialty & Login PIN */}
+                  <div className="bg-[#202c33]/60 p-2.5 rounded-xl border border-slate-800 text-xs space-y-1.5">
+                    <div>
+                      <span className="text-[10px] text-slate-400 font-medium block">Specialty / Department:</span>
+                      <span className="font-bold text-emerald-300 flex items-center gap-1 mt-0.5">
+                        <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
+                        {specialty ? specialty.name : 'All Treatments'}
+                      </span>
+                    </div>
+                    <div className="pt-1 border-t border-slate-700/60 flex items-center justify-between text-[11px]">
+                      <span className="text-slate-400 flex items-center gap-1">
+                        <KeyRound className="w-3 h-3 text-amber-400" /> Quick PIN:
+                      </span>
+                      <span className="font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/30 px-2 py-0.5 rounded-md">
+                        {coord.pin || '2026'}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -203,6 +221,36 @@ export const CoordinatorsManager: React.FC = () => {
                   onChange={(e) => setPhone(e.target.value)}
                   className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    Security PIN (4-Digits) <span className="text-rose-400">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    required
+                    placeholder="2026"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs font-mono text-emerald-400 outline-none focus:border-emerald-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    Web Password
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="staff"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
+                  />
+                </div>
               </div>
 
               <div className="space-y-1">

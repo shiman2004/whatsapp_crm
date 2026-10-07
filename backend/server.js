@@ -1649,11 +1649,11 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Endpoint Not Found' }));
 });
 
-server.listen(PORT, () => {
-  console.log(`\n🚀 Royal Wellness Unified WhatsApp Server running on http://localhost:${PORT}`);
+server.listen(PORT, '0.0.0.0', () => {
+  console.log(`\n🚀 Royal Wellness Unified WhatsApp Server running on port ${PORT}`);
   console.log(`   - WhatsApp Web Socket: Active (Baileys)`);
-  console.log(`   - Meta Cloud API Webhook: http://localhost:${PORT}/api/webhook`);
-  console.log(`   - Real-Time SSE Hub: http://localhost:${PORT}/api/events`);
+  console.log(`   - Meta Cloud API Webhook: /api/webhook`);
+  console.log(`   - Real-Time SSE Hub: /api/events`);
   console.log(`   - MySQL Storage Support: Active (Prisma ORM)`);
 
   startWhatsAppSocket().catch(err => {

@@ -9,6 +9,7 @@ import {
   Link2
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
+import { API_BASE_URL } from '../../config/api';
 
 interface MetaApiModalProps {
   isOpen: boolean;
@@ -53,7 +54,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
     setSendResult(null);
 
     try {
-      const response = await fetch('http://localhost:3001/api/send-message', {
+      const response = await fetch(`${API_BASE_URL}/api/send-message`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

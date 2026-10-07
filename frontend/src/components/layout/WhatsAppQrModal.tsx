@@ -11,6 +11,7 @@ import {
   Info
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
+import { API_BASE_URL } from '../../config/api';
 
 interface WhatsAppQrModalProps {
   isOpen: boolean;
@@ -31,7 +32,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
     // Fetch initial status
     const fetchStatus = async () => {
       try {
-        const res = await fetch('http://localhost:3001/api/qr');
+        const res = await fetch(`${API_BASE_URL}/api/qr`);
         if (res.ok) {
           const data = await res.json();
           setStatus(data.status);
@@ -54,7 +55,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await fetch('http://localhost:3001/api/disconnect', { method: 'POST' });
+      await fetch(`${API_BASE_URL}/api/disconnect`, { method: 'POST' });
       setStatus('connecting');
       setQrCode(null);
       setConnectedPhone(null);
@@ -63,7 +64,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
       // Re-fetch new QR code after a short delay
       setTimeout(async () => {
         try {
-          const res = await fetch('http://localhost:3001/api/qr');
+          const res = await fetch(`${API_BASE_URL}/api/qr`);
           if (res.ok) {
             const data = await res.json();
             setStatus(data.status);

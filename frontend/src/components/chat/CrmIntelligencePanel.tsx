@@ -172,11 +172,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           {canAssignLeads ? (
             <div className="relative">
               <select
-                value={lead.assignedTo || ''}
+                value={coordinators.some(c => c.id === lead.assignedTo) ? (lead.assignedTo || '') : ''}
                 onChange={(e) => assignLead(lead.id, e.target.value)}
                 className="w-full bg-[#111b21] border border-slate-700/80 hover:border-teal-500 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-300 outline-none transition-colors cursor-pointer appearance-none"
               >
-                <option value="" disabled>
+                <option value="">
                   {coordinators.length > 0 ? '-- Assign to Coordinator --' : '-- No Coordinators Added (Add in Coordinators Tab) --'}
                 </option>
                 {coordinators.map((c) => (

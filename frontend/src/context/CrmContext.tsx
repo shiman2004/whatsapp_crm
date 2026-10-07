@@ -154,9 +154,12 @@ const getStored = <T,>(key: string, fallback: T): T => {
 export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load state with localStorage persistence across refreshes
   const [users, setUsers] = useState<User[]>(() => {
+    const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
     const stored = getStored<User[]>('rw_crm_users', INITIAL_USERS);
-    const merged = [...stored];
+    const filteredStored = stored.filter(u => !deletedUserIds.includes(u.id));
+    const merged = [...filteredStored];
     for (const initU of INITIAL_USERS) {
+      if (deletedUserIds.includes(initU.id)) continue;
       const existingIdx = merged.findIndex(u => u.id === initU.id);
       if (existingIdx === -1) {
         merged.push(initU);
@@ -328,11 +331,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           setCustomers(Array.from(custMap.values()));
 
           // Hydrate unique leads from DB
+          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const leadMap = new Map<string, Lead>();
           dbLeads.forEach(l => {
             const cust = l.customer;
+            const isAssignedDeleted = l.assignedTo && deletedUserIds.includes(l.assignedTo);
+            const assignedTo = isAssignedDeleted ? undefined : l.assignedTo;
+            const stage = isAssignedDeleted ? 'new' : l.stage;
+
             leadMap.set(l.id, {
               ...l,
+              assignedTo,
+              stage,
               customer: cust ? {
                 ...cust,
                 phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
@@ -465,16 +475,39 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 nextLeads[matchIdx] = {
                   ...nextLeads[matchIdx],
                   id: incomingLead?.id || nextLeads[matchIdx].id,
-                  assignedTo: assignedCoordId,
-                  stage: nextLeads[matchIdx].stage === 'new' ? 'assigned' : nextLeads[matchIdx].stage,
+                  assignedTo: assignedCoordId || undefined,
+                  stage: assignedCoordId ? (nextLeads[matchIdx].stage === 'new' ? 'assigned' : nextLeads[matchIdx].stage) : 'new',
                   updatedAt: new Date().toISOString(),
                 };
                 return nextLeads;
-              } else if (incomingLead && (currentUser?.role === 'super_admin' || assignedCoordId === currentUser?.id)) {
+              } else if (incomingLead && (currentUser?.role === 'super_admin' || currentUser?.role === 'leads_officer' || assignedCoordId === currentUser?.id)) {
                 return [incomingLead, ...prevLeads];
               }
               return prevLeads;
             });
+            return;
+          }
+
+          if (data.type === 'COORDINATOR_DELETED') {
+            const { coordinatorId: deletedCoordId } = data;
+            if (deletedCoordId) {
+              const deletedIds = getStored<string[]>('rw_crm_deleted_users', []);
+              if (!deletedIds.includes(deletedCoordId)) {
+                localStorage.setItem('rw_crm_deleted_users', JSON.stringify([...deletedIds, deletedCoordId]));
+              }
+              setUsers(prev => prev.filter(u => u.id !== deletedCoordId));
+              setLeads(prev => prev.map(l => {
+                if (l.assignedTo === deletedCoordId) {
+                  return {
+                    ...l,
+                    assignedTo: undefined,
+                    stage: 'new',
+                    updatedAt: new Date().toISOString()
+                  };
+                }
+                return l;
+              }));
+            }
             return;
           }
 
@@ -852,10 +885,47 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Assign lead
   const assignLead = (leadId: string, coordinatorId: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
+
+    // If unassigning (-- Assign to Coordinator --)
+    if (!coordinatorId) {
+      setLeads(prev => prev.map(l => {
+        if (l.id === leadId) {
+          logAudit('LEAD_UNASSIGNED', 'Assignment', leadId, { assignedTo: l.assignedTo }, { assignedTo: undefined, stage: 'new' });
+          return {
+            ...l,
+            assignedTo: undefined,
+            stage: 'new' as LeadStage,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return l;
+      }));
+
+      // Sync unassignment to backend
+      fetch(`${API_BASE_URL}/api/leads/assign`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
+        body: JSON.stringify({
+          leadId,
+          coordinatorId: '',
+          unassign: true,
+          customerId: targetLead?.customerId,
+          phone: targetLead?.customer?.whatsappNumber,
+          whatsappId: targetLead?.customer?.whatsappId
+        })
+      }).catch(err => console.warn('Could not sync lead unassignment to backend:', err));
+
+      notify('Lead Unassigned', 'Lead marked as Unassigned', 'info');
+      return;
+    }
+
     const coord = users.find(u => u.id === coordinatorId);
     if (!coord) return;
-
-    const targetLead = leads.find(l => l.id === leadId);
 
     setLeads(prev => prev.map(l => {
       if (l.id === leadId) {
@@ -1302,8 +1372,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addCoordinator = (data: { fullName: string; email: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
+    const newCoordId = 'coord-' + Date.now();
     const newCoord: User = {
-      id: 'coord-' + Date.now(),
+      id: newCoordId,
       fullName: data.fullName,
       email: data.email,
       password: data.password || 'staff',
@@ -1316,14 +1387,91 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       createdAt: new Date().toISOString(),
       activeLeadsCount: 0,
     };
-    setUsers(prev => [...prev, newCoord]);
+
+    // Remove from deleted list if re-added
+    const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
+    if (deletedUserIds.includes(newCoordId)) {
+      const updatedDeleted = deletedUserIds.filter(id => id !== newCoordId);
+      localStorage.setItem('rw_crm_deleted_users', JSON.stringify(updatedDeleted));
+    }
+
+    setUsers(prev => {
+      const updated = [...prev, newCoord];
+      localStorage.setItem('rw_crm_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Sync coordinator creation to backend
+    fetch(`${API_BASE_URL}/api/coordinators`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({
+        fullName: data.fullName,
+        email: data.email,
+        pin: data.pin || '2026',
+        phone: data.phone
+      })
+    }).catch(err => console.warn('Could not sync new coordinator to backend:', err));
+
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
     notify('Staff Added', `${newCoord.fullName} registered with PIN ${newCoord.pin}`, 'success');
   };
 
   const deleteCoordinator = (id: string) => {
-    setUsers(prev => prev.filter(u => u.id !== id));
+    // 1. Record deleted coordinator ID
+    const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
+    if (!deletedUserIds.includes(id)) {
+      const updatedDeleted = [...deletedUserIds, id];
+      localStorage.setItem('rw_crm_deleted_users', JSON.stringify(updatedDeleted));
+    }
+
+    // 2. Remove coordinator from state & localStorage
+    setUsers(prev => {
+      const updated = prev.filter(u => u.id !== id);
+      localStorage.setItem('rw_crm_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    // 3. Revert any leads assigned to this deleted coordinator back to Unassigned / 'new'
+    setLeads(prev => {
+      return prev.map(lead => {
+        if (lead.assignedTo === id) {
+          return {
+            ...lead,
+            assignedTo: undefined,
+            stage: 'new' as LeadStage,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return lead;
+      });
+    });
+
+    // 4. If current logged in user was this coordinator, fallback to admin
+    if (currentUser.id === id) {
+      setCurrentUser(prev => {
+        const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS).filter(u => u.id !== id);
+        const fallback = storedUsers[0] || INITIAL_USERS[0];
+        localStorage.setItem('rw_crm_auth_user_id', fallback.id);
+        return fallback;
+      });
+    }
+
+    // 5. Notify backend to permanently remove coordinator & unassign database records
+    fetch(`${API_BASE_URL}/api/coordinators/${id}`, {
+      method: 'DELETE',
+      headers: {
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      }
+    }).catch(err => console.warn('Could not sync coordinator deletion to backend:', err));
+
     logAudit('DELETE_USER', 'User', id, null, null);
+    notify('Coordinator Deleted', 'Coordinator removed and assigned leads reverted to Unassigned.', 'info');
   };
 
   const login = (identifier: string, secret?: string) => {

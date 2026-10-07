@@ -605,16 +605,49 @@ const server = http.createServer(async (req, res) => {
         }
 
         const payload = JSON.parse(body || '{}');
-        const { leadId, coordinatorId, coordinatorName, customerId, phone, whatsappId } = payload;
+        const { leadId, coordinatorId, coordinatorName, customerId, phone, whatsappId, unassign } = payload;
+
+        const prisma = getPrisma();
+        let updatedLead = null;
+
+        // Handle Unassignment
+        if (unassign || !coordinatorId) {
+          if (prisma && getDbStatus() && leadId) {
+            updatedLead = await prisma.lead.update({
+              where: { id: leadId },
+              data: {
+                assignedTo: null,
+                stage: 'new',
+                updatedAt: new Date()
+              },
+              include: {
+                customer: true,
+                category: true,
+                treatment: true,
+                assignedCoordinator: true,
+                messages: { orderBy: { timestamp: 'asc' } }
+              }
+            }).catch(() => null);
+          }
+
+          broadcastScopedSSE('user-admin-1', {
+            type: 'LEAD_ASSIGNED',
+            leadId,
+            clientLeadId: leadId,
+            coordinatorId: null,
+            lead: updatedLead
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, unassigned: true, lead: updatedLead }));
+          return;
+        }
 
         if (!leadId || !coordinatorId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'Missing leadId or coordinatorId' }));
           return;
         }
-
-        const prisma = getPrisma();
-        let updatedLead = null;
 
         if (prisma && getDbStatus()) {
           // 1. Ensure the coordinator exists in the database to satisfy the foreign key constraint
@@ -812,6 +845,60 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+  }
+
+  // 10d. REST: Delete Coordinator
+  if (req.method === 'DELETE' && (pathname.startsWith('/api/coordinators') || pathname.startsWith('/api/users/'))) {
+    try {
+      if (authUser.role === 'coordinator') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Forbidden: Coordinators cannot delete staff.' }));
+        return;
+      }
+
+      // Extract ID from URL path or query
+      const urlParts = pathname.split('/');
+      const coordId = urlParts[3] || parsedUrl.query.id || parsedUrl.query.coordinatorId;
+
+      if (!coordId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Missing coordinator ID' }));
+        return;
+      }
+
+      const prisma = getPrisma();
+      if (prisma && getDbStatus()) {
+        // 1. Unassign all leads assigned to this coordinator
+        await prisma.lead.updateMany({
+          where: { assignedTo: coordId },
+          data: { assignedTo: null, stage: 'new' }
+        }).catch(e => console.warn('Could not unassign leads in DB:', e.message));
+
+        // 2. Delete WhatsAppSession for this coordinator
+        await prisma.whatsAppSession.deleteMany({
+          where: { coordinatorId: coordId }
+        }).catch(() => {});
+
+        // 3. Delete user record
+        await prisma.user.deleteMany({
+          where: { id: coordId }
+        }).catch(e => console.warn('Could not delete user in DB:', e.message));
+      }
+
+      // 4. Broadcast SSE deletion event to all connected clients
+      broadcastScopedSSE('user-admin-1', {
+        type: 'COORDINATOR_DELETED',
+        coordinatorId: coordId
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deletedId: coordId }));
+    } catch (err) {
+      console.error('❌ [Delete Coordinator Error]:', err.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
   }
 
   // 11. Clear Data Endpoint

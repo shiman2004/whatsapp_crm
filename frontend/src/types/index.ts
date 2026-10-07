@@ -11,6 +11,7 @@ export interface User {
   password?: string;
   pin?: string;
   phone?: string;
+  branch?: string;
   role: UserRole;
   treatmentCategoryId?: string;
   language?: LanguageCode;

@@ -579,7 +579,7 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const { leadId, coordinatorId } = payload;
+        const { leadId, coordinatorId, coordinatorName, customerId, phone, whatsappId } = payload;
 
         if (!leadId || !coordinatorId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -591,34 +591,127 @@ const server = http.createServer(async (req, res) => {
         let updatedLead = null;
 
         if (prisma && getDbStatus()) {
-          updatedLead = await prisma.lead.update({
-            where: { id: leadId },
-            data: {
-              assignedTo: coordinatorId,
-              stage: 'assigned',
-              updatedAt: new Date()
-            },
-            include: {
-              customer: true,
-              category: true,
-              treatment: true,
-              assignedCoordinator: true,
-              messages: { orderBy: { timestamp: 'asc' } }
+          // 1. Ensure the coordinator exists in the database to satisfy the foreign key constraint
+          let coordUser = await prisma.user.findUnique({ where: { id: coordinatorId } });
+          if (!coordUser) {
+            const name = coordinatorName || (coordinatorId.includes('1') ? 'Dr. Shenali (Trichology)' : (coordinatorId.includes('2') ? 'Dilini Perera (Skin Care)' : `Coordinator ${coordinatorId.slice(-4)}`));
+            coordUser = await prisma.user.create({
+              data: {
+                id: coordinatorId,
+                fullName: name,
+                email: `${coordinatorId.replace(/[^a-z0-9]/gi, '').toLowerCase()}@royalwellness.lk`,
+                role: 'coordinator',
+                password: 'staff',
+                pin: '2026'
+              }
+            }).catch(() => null);
+          }
+
+          // 2. Ensure WhatsApp session record exists for coordinator
+          await sessionManager.getOrCreateSessionRecord(coordinatorId);
+
+          // 3. Find lead by id, customerId, or phone
+          let targetLead = null;
+          if (leadId) {
+            targetLead = await prisma.lead.findUnique({ where: { id: leadId } });
+          }
+
+          if (!targetLead && customerId) {
+            targetLead = await prisma.lead.findFirst({
+              where: { customerId: customerId },
+              orderBy: { updatedAt: 'desc' }
+            });
+          }
+
+          if (!targetLead && (phone || whatsappId)) {
+            const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+            const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+            const cust = await prisma.customer.findFirst({
+              where: {
+                OR: [
+                  ...(cleanPhone ? [{ whatsappNumber: `+${cleanPhone}` }, { whatsappNumber: cleanPhone }] : []),
+                  ...(cleanWaId ? [{ whatsappId: cleanWaId }] : [])
+                ]
+              }
+            });
+            if (cust) {
+              targetLead = await prisma.lead.findFirst({
+                where: { customerId: cust.id },
+                orderBy: { updatedAt: 'desc' }
+              });
             }
-          });
+          }
+
+          if (targetLead) {
+            updatedLead = await prisma.lead.update({
+              where: { id: targetLead.id },
+              data: {
+                assignedTo: coordinatorId,
+                stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
+                updatedAt: new Date()
+              },
+              include: {
+                customer: true,
+                category: true,
+                treatment: true,
+                assignedCoordinator: true,
+                messages: { orderBy: { timestamp: 'asc' } }
+              }
+            });
+          } else {
+            // Create customer & lead if neither exists yet in DB
+            let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }) : null;
+            if (!cust && (phone || whatsappId)) {
+              const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+              const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+              cust = await prisma.customer.create({
+                data: {
+                  whatsappNumber: cleanPhone ? (cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`) : cleanWaId,
+                  whatsappId: cleanWaId || cleanPhone,
+                  displayName: 'WhatsApp Contact',
+                  preferredLanguage: 'en'
+                }
+              }).catch(() => null);
+            }
+            if (cust) {
+              const firstCat = await prisma.treatmentCategory.findFirst();
+              const firstTrt = await prisma.treatment.findFirst();
+              updatedLead = await prisma.lead.create({
+                data: {
+                  id: leadId && !leadId.startsWith('lead-') ? leadId : undefined,
+                  customerId: cust.id,
+                  categoryId: firstCat?.id || 'cat-hair-care',
+                  treatmentId: firstTrt?.id || 'trt-prp-hair',
+                  assignedTo: coordinatorId,
+                  stage: 'assigned',
+                  source: 'whatsapp',
+                  language: 'en'
+                },
+                include: {
+                  customer: true,
+                  category: true,
+                  treatment: true,
+                  assignedCoordinator: true,
+                  messages: { orderBy: { timestamp: 'asc' } }
+                }
+              }).catch(() => null);
+            }
+          }
         }
 
         // Broadcast to both Admin and the assigned Coordinator in real-time
         broadcastScopedSSE(coordinatorId, {
           type: 'LEAD_ASSIGNED',
-          leadId,
+          leadId: updatedLead ? updatedLead.id : leadId,
+          clientLeadId: leadId,
           coordinatorId,
           lead: updatedLead
         });
 
         broadcastScopedSSE('user-admin-1', {
           type: 'LEAD_ASSIGNED',
-          leadId,
+          leadId: updatedLead ? updatedLead.id : leadId,
+          clientLeadId: leadId,
           coordinatorId,
           lead: updatedLead
         });
@@ -626,6 +719,7 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, lead: updatedLead }));
       } catch (err) {
+        console.error('❌ [Assign Error]:', err.message);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
       }

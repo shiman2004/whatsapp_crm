@@ -445,6 +445,33 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const data = JSON.parse(event.data);
 
+          if (data.type === 'LEAD_ASSIGNED') {
+            const { leadId: incomingLeadId, clientLeadId, coordinatorId: assignedCoordId, lead: incomingLead } = data;
+            setLeads(prevLeads => {
+              const matchIdx = prevLeads.findIndex(l => 
+                l.id === incomingLeadId || 
+                (clientLeadId && l.id === clientLeadId) || 
+                (incomingLead && l.id === incomingLead.id) ||
+                (incomingLead?.customerId && l.customerId === incomingLead.customerId)
+              );
+              if (matchIdx !== -1) {
+                const nextLeads = [...prevLeads];
+                nextLeads[matchIdx] = {
+                  ...nextLeads[matchIdx],
+                  id: incomingLead?.id || nextLeads[matchIdx].id,
+                  assignedTo: assignedCoordId,
+                  stage: nextLeads[matchIdx].stage === 'new' ? 'assigned' : nextLeads[matchIdx].stage,
+                  updatedAt: new Date().toISOString(),
+                };
+                return nextLeads;
+              } else if (incomingLead && (currentUser?.role === 'super_admin' || assignedCoordId === currentUser?.id)) {
+                return [incomingLead, ...prevLeads];
+              }
+              return prevLeads;
+            });
+            return;
+          }
+
           if (data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE') {
             // Skip empty protocol messages without text or media
             if ((!data.text || data.text.trim().length === 0) && !data.media) {
@@ -822,6 +849,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const coord = users.find(u => u.id === coordinatorId);
     if (!coord) return;
 
+    const targetLead = leads.find(l => l.id === leadId);
+
     setLeads(prev => prev.map(l => {
       if (l.id === leadId) {
         const prevStage = l.stage;
@@ -863,7 +892,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
-      body: JSON.stringify({ leadId, coordinatorId })
+      body: JSON.stringify({
+        leadId,
+        coordinatorId,
+        coordinatorName: coord.fullName,
+        customerId: targetLead?.customerId,
+        phone: targetLead?.customer?.whatsappNumber,
+        whatsappId: targetLead?.customer?.whatsappId
+      })
     }).catch(err => console.warn('Could not sync lead assignment to backend:', err));
 
     notify('Lead Assigned', `Lead successfully assigned to ${coord.fullName}`, 'success');

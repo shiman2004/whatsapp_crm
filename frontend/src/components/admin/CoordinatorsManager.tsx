@@ -122,7 +122,11 @@ export const CoordinatorsManager: React.FC = () => {
                       </div>
                     </div>
                     <button
-                      onClick={() => deleteCoordinator(coord.id)}
+                      onClick={() => {
+                        if (window.confirm(`Are you sure you want to delete coordinator "${coord.fullName}"?\n\nAll leads assigned to this coordinator will be reverted to Unassigned.`)) {
+                          deleteCoordinator(coord.id);
+                        }
+                      }}
                       className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
                       title="Remove Coordinator"
                     >

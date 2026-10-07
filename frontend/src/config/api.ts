@@ -11,7 +11,7 @@ const isLocal = typeof window !== 'undefined' && (
 
 const envUrl = (import.meta.env.VITE_API_URL as string)?.replace(/\/$/, '');
 
-// If envUrl is pointing to localhost or the typo '00v6', automatically fix to live 60v6
-export const API_BASE_URL: string = (envUrl && !envUrl.includes('00v6')) 
+// If envUrl is pointing to localhost or the typo '00v6', automatically fix to live royal-wellness-backend
+export const API_BASE_URL: string = (envUrl && !envUrl.includes('00v6') && !envUrl.includes('whatsapp-crm-60v6')) 
   ? envUrl 
-  : (isLocal ? 'http://localhost:3001' : 'https://whatsapp-crm-60v6.onrender.com');
+  : (isLocal ? 'http://localhost:3001' : 'https://royal-wellness-backend.onrender.com');

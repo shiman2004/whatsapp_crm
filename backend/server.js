@@ -572,6 +572,128 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b. REST: Assign Lead to Coordinator (Admin Dispatches to Coordinator)
+  if (req.method === 'POST' && (pathname === '/api/leads/assign' || pathname === '/api/assign')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const { leadId, coordinatorId } = payload;
+
+        if (!leadId || !coordinatorId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing leadId or coordinatorId' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        let updatedLead = null;
+
+        if (prisma && getDbStatus()) {
+          updatedLead = await prisma.lead.update({
+            where: { id: leadId },
+            data: {
+              assignedTo: coordinatorId,
+              stage: 'assigned',
+              updatedAt: new Date()
+            },
+            include: {
+              customer: true,
+              category: true,
+              treatment: true,
+              assignedCoordinator: true,
+              messages: { orderBy: { timestamp: 'asc' } }
+            }
+          });
+        }
+
+        // Broadcast to both Admin and the assigned Coordinator in real-time
+        broadcastScopedSSE(coordinatorId, {
+          type: 'LEAD_ASSIGNED',
+          leadId,
+          coordinatorId,
+          lead: updatedLead
+        });
+
+        broadcastScopedSSE('user-admin-1', {
+          type: 'LEAD_ASSIGNED',
+          leadId,
+          coordinatorId,
+          lead: updatedLead
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, lead: updatedLead }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 10c. REST: Get/Create Coordinators
+  if (pathname === '/api/coordinators') {
+    const prisma = getPrisma();
+    if (req.method === 'GET') {
+      if (prisma && getDbStatus()) {
+        try {
+          const users = await prisma.user.findMany({
+            orderBy: { createdAt: 'asc' }
+          });
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(users));
+          return;
+        } catch (e) {}
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify([]));
+      return;
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const fullName = (payload.fullName || payload.name || '').trim();
+          const email = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
+          const pin = payload.pin || '2026';
+          const phone = payload.phone || null;
+
+          if (!fullName) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Full name is required' }));
+            return;
+          }
+
+          let newUser = null;
+          if (prisma && getDbStatus()) {
+            newUser = await prisma.user.create({
+              data: {
+                fullName,
+                email,
+                pin,
+                phone,
+                role: 'coordinator',
+                password: 'staff'
+              }
+            });
+          }
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, user: newUser }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+  }
+
   // 11. Clear Data Endpoint
   if (req.method === 'POST' && pathname === '/api/clear-db') {
     if (authUser.role !== 'super_admin') {

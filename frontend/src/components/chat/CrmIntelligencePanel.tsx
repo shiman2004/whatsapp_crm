@@ -151,7 +151,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           ) : (
             <div className="space-y-1">
               <p className="text-xs font-mono font-bold text-white tracking-wide">
-                {displayPhone || (rawPhone ? (rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`) : 'WhatsApp Contact')}
+                {displayPhone || (rawPhone && !isHardwareLid(rawPhone) ? (rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`) : 'WhatsApp Direct (Linked Device)')}
               </p>
               {waId && waId !== getCleanWhatsAppDigits(rawPhone) && (
                 <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">

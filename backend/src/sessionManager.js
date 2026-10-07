@@ -332,8 +332,24 @@ class WhatsAppSessionManager {
     if (remoteJid.includes('status@broadcast') || remoteJid.includes('@g.us')) return;
 
     const rawSenderDigits = remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
-    const realPhone = sessionCtx.lidToPhoneMap.get(rawSenderDigits) || rawSenderDigits;
-    const canonicalPhone = realPhone.startsWith('+') ? realPhone : `+${realPhone}`;
+    const isLid = remoteJid.endsWith('@lid') || (rawSenderDigits.length >= 13);
+
+    // Extract real phone number if modern Baileys provides remoteJidAlt / participantPn
+    const altJid = msg.key?.remoteJidAlt || msg.key?.participantPn || msg.key?.participantAlt || msg.key?.participant || '';
+    const altDigits = altJid ? altJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '') : '';
+    
+    let resolvedPhoneDigits = null;
+    if (altDigits && altDigits.length <= 12 && !altDigits.startsWith('1766') && !altDigits.startsWith('2384')) {
+      resolvedPhoneDigits = altDigits;
+      sessionCtx.lidToPhoneMap.set(rawSenderDigits, altDigits);
+    } else if (sessionCtx.lidToPhoneMap.has(rawSenderDigits)) {
+      resolvedPhoneDigits = sessionCtx.lidToPhoneMap.get(rawSenderDigits);
+    } else if (!isLid && rawSenderDigits.length <= 12) {
+      resolvedPhoneDigits = rawSenderDigits;
+    }
+
+    const canonicalPhone = resolvedPhoneDigits ? `+${resolvedPhoneDigits}` : '';
+    const realPhone = resolvedPhoneDigits || '';
 
     // Extract Message Text & Media Content
     const unwrapped = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
@@ -365,26 +381,37 @@ class WhatsAppSessionManager {
     if (prisma && getDbStatus()) {
       try {
         // 1. Find or Upsert Customer
+        const searchConditions = [{ whatsappId: rawSenderDigits }];
+        if (canonicalPhone) {
+          searchConditions.push({ whatsappNumber: canonicalPhone });
+        }
+        if (realPhone) {
+          searchConditions.push({ whatsappNumber: realPhone });
+        }
+
         customer = await prisma.customer.findFirst({
-          where: {
-            OR: [
-              { whatsappNumber: canonicalPhone },
-              { whatsappNumber: realPhone },
-              { whatsappId: rawSenderDigits }
-            ]
-          }
+          where: { OR: searchConditions }
         });
 
-        const displayName = contactName || customer?.displayName || canonicalPhone;
+        const displayName = contactName || customer?.displayName || (canonicalPhone || 'WhatsApp Contact');
 
         if (!customer) {
           customer = await prisma.customer.create({
             data: {
-              whatsappNumber: canonicalPhone,
+              whatsappNumber: canonicalPhone || rawSenderDigits,
               whatsappId: rawSenderDigits,
-              phoneNumber: canonicalPhone,
+              phoneNumber: canonicalPhone || null,
               displayName,
               preferredLanguage: 'en',
+            }
+          });
+        } else if (canonicalPhone && (!customer.phoneNumber || customer.phoneNumber.includes('1766') || customer.phoneNumber.length > 13)) {
+          customer = await prisma.customer.update({
+            where: { id: customer.id },
+            data: {
+              whatsappNumber: canonicalPhone,
+              phoneNumber: canonicalPhone,
+              displayName: contactName || customer.displayName
             }
           });
         }
@@ -462,9 +489,9 @@ class WhatsAppSessionManager {
       whatsappSessionId: sessionCtx.sessionId,
       coordinatorId,
       phone: canonicalPhone,
-      realPhone,
+      realPhone: canonicalPhone || null,
       whatsappId: rawSenderDigits,
-      name: contactName || customer?.displayName || canonicalPhone,
+      name: contactName || customer?.displayName || canonicalPhone || 'WhatsApp Contact',
       text: messageText,
       media: mediaType ? { type: mediaType, url: mediaUrl } : null,
       direction: isFromMe ? 'outbound' : 'inbound',
@@ -487,9 +514,24 @@ class WhatsAppSessionManager {
     const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
     let targetJid = null;
 
-    if (cleanPhone) targetJid = `${cleanPhone}@s.whatsapp.net`;
-    else if (cleanWaId && cleanWaId.length > 15) targetJid = `${cleanWaId}@lid`;
-    else if (cleanWaId) targetJid = `${cleanWaId}@s.whatsapp.net`;
+    // Detect if the target is a WhatsApp LID (13-16 digits e.g. 176643482067061) or standard phone number
+    const isLidTarget = (whatsappId && (whatsappId.includes('@lid') || cleanWaId.length >= 13 || cleanWaId.startsWith('1766') || cleanWaId.startsWith('2384'))) ||
+                        (to && (to.includes('@lid') || (cleanPhone.length >= 13 && (cleanPhone.startsWith('1766') || cleanPhone.startsWith('2384')))));
+
+    if (isLidTarget) {
+      const lidDigits = cleanWaId && cleanWaId.length >= 13 ? cleanWaId : cleanPhone;
+      targetJid = `${lidDigits}@lid`;
+    } else if (cleanPhone && cleanPhone.length <= 12) {
+      targetJid = `${cleanPhone}@s.whatsapp.net`;
+    } else if (cleanWaId && cleanWaId.length <= 12) {
+      targetJid = `${cleanWaId}@s.whatsapp.net`;
+    } else if (to && to.includes('@')) {
+      targetJid = to;
+    } else if (whatsappId && whatsappId.includes('@')) {
+      targetJid = whatsappId;
+    }
+
+    console.log(`📤 [SessionManager] Sending message via Coordinator [${coordinatorId}] to target JID: ${targetJid}`);
 
     if (!targetJid) {
       throw new Error(`Invalid recipient phone number or WhatsApp ID.`);

@@ -117,7 +117,7 @@ interface CrmContextType {
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
-  addCoordinator: (data: { fullName: string; email: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  addCoordinator: (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => void;
   deleteCoordinator: (id: string) => void;
 
   // Simulator State & Actions
@@ -1371,12 +1371,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Customer Updated', 'WhatsApp contact details saved', 'success');
   };
 
-  const addCoordinator = (data: { fullName: string; email: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
+  const addCoordinator = (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
     const newCoordId = 'coord-' + Date.now();
+    const cleanBranch = data.branch || 'Colombo Branch';
+    const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'coord' + Date.now()}@royalwellness.lk`;
+
     const newCoord: User = {
       id: newCoordId,
       fullName: data.fullName,
-      email: data.email,
+      branch: cleanBranch,
+      email: autoEmail,
       password: data.password || 'staff',
       pin: data.pin || '2026',
       phone: data.phone,
@@ -1411,14 +1415,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       },
       body: JSON.stringify({
         fullName: data.fullName,
-        email: data.email,
+        branch: cleanBranch,
+        email: autoEmail,
         pin: data.pin || '2026',
         phone: data.phone
       })
     }).catch(err => console.warn('Could not sync new coordinator to backend:', err));
 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
-    notify('Staff Added', `${newCoord.fullName} registered with PIN ${newCoord.pin}`, 'success');
+    notify('Staff Added', `${newCoord.fullName} (${cleanBranch}) registered with PIN ${newCoord.pin}`, 'success');
   };
 
   const deleteCoordinator = (id: string) => {

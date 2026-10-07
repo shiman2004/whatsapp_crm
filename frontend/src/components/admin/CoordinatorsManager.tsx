@@ -1,55 +1,56 @@
 import React, { useState } from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { LanguageCode } from '../../types';
 import { 
   Users, 
   UserPlus, 
-  Sparkles, 
-  Mail, 
-  Phone,
-  Trash2,
-  X,
-  KeyRound,
-  Lock
+  Building2, 
+  Trash2, 
+  X, 
+  KeyRound, 
+  Lock 
 } from 'lucide-react';
 
+const BRANCH_OPTIONS = [
+  'Colombo Branch',
+  'Kandy Branch',
+  'Galle Branch',
+  'All Branches (Central)',
+];
+
 export const CoordinatorsManager: React.FC = () => {
-  const { users, categories, leads, addCoordinator, deleteCoordinator } = useCrm();
+  const { users, leads, addCoordinator, deleteCoordinator } = useCrm();
   const [showAddModal, setShowAddModal] = useState(false);
 
   // Form State
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [phone, setPhone] = useState('');
+  const [branch, setBranch] = useState('Colombo Branch');
+  const [customBranch, setCustomBranch] = useState('');
+  const [isCustomBranch, setIsCustomBranch] = useState(false);
   const [pin, setPin] = useState('2026');
   const [password, setPassword] = useState('staff');
-  const [treatmentCategoryId, setTreatmentCategoryId] = useState('');
-  const [language, setLanguage] = useState<LanguageCode>('en');
 
   const coordinators = users.filter(u => u.role === 'coordinator');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !email.trim()) return;
+    if (!fullName.trim()) return;
+
+    const finalBranch = isCustomBranch ? (customBranch.trim() || 'Colombo Branch') : branch;
 
     addCoordinator({
       fullName: fullName.trim(),
-      email: email.trim(),
-      phone: phone.trim() || undefined,
+      branch: finalBranch,
       pin: pin.trim() || '2026',
       password: password.trim() || 'staff',
-      treatmentCategoryId: treatmentCategoryId || undefined,
-      language: language,
     });
 
     // Reset Form
     setFullName('');
-    setEmail('');
-    setPhone('');
+    setBranch('Colombo Branch');
+    setCustomBranch('');
+    setIsCustomBranch(false);
     setPin('2026');
     setPassword('staff');
-    setTreatmentCategoryId('');
-    setLanguage('en');
     setShowAddModal(false);
   };
 
@@ -59,7 +60,7 @@ export const CoordinatorsManager: React.FC = () => {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl font-bold text-slate-100 font-serif">Clinical Coordinators & Staff</h2>
-          <p className="text-xs text-slate-400">Add your staff members and assign them to incoming WhatsApp patient inquiries</p>
+          <p className="text-xs text-slate-400">Add your staff members, assign their branch location, and route incoming WhatsApp patient inquiries</p>
         </div>
         <button
           onClick={() => setShowAddModal(true)}
@@ -77,7 +78,7 @@ export const CoordinatorsManager: React.FC = () => {
           </div>
           <h3 className="text-sm font-bold text-slate-200">No Coordinators Added Yet</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Click the <span className="text-emerald-400 font-semibold">"Add Coordinator"</span> button above to register your team coordinators. Once added, you can assign them to chats right from the WhatsApp panel.
+            Click the <span className="text-emerald-400 font-semibold">"Add Coordinator"</span> button above to register your team coordinators with their designated branch.
           </p>
           <button
             onClick={() => setShowAddModal(true)}
@@ -91,7 +92,6 @@ export const CoordinatorsManager: React.FC = () => {
         /* Coordinator Cards Grid */
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {coordinators.map((coord) => {
-            const specialty = categories.find(c => c.id === coord.treatmentCategoryId);
             const activeLeads = leads.filter(l => l.assignedTo === coord.id && l.stage !== 'converted' && l.stage !== 'lost');
             const convertedLeads = leads.filter(l => l.assignedTo === coord.id && l.stage === 'converted');
 
@@ -109,16 +109,10 @@ export const CoordinatorsManager: React.FC = () => {
                       </div>
                       <div>
                         <h4 className="font-bold text-sm text-slate-100">{coord.fullName}</h4>
-                        <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
-                          <Mail className="w-3 h-3" />
-                          <span>{coord.email}</span>
+                        <div className="flex items-center gap-1 text-[11px] text-emerald-400 mt-0.5">
+                          <Building2 className="w-3 h-3" />
+                          <span>{coord.branch || 'Colombo Branch'}</span>
                         </div>
-                        {coord.phone && (
-                          <div className="flex items-center gap-1 text-[11px] text-slate-400">
-                            <Phone className="w-3 h-3" />
-                            <span>{coord.phone}</span>
-                          </div>
-                        )}
                       </div>
                     </div>
                     <button
@@ -134,13 +128,13 @@ export const CoordinatorsManager: React.FC = () => {
                     </button>
                   </div>
 
-                  {/* Specialty & Login PIN */}
+                  {/* Branch & Login PIN */}
                   <div className="bg-[#202c33]/60 p-2.5 rounded-xl border border-slate-800 text-xs space-y-1.5">
-                    <div>
-                      <span className="text-[10px] text-slate-400 font-medium block">Specialty / Department:</span>
-                      <span className="font-bold text-emerald-300 flex items-center gap-1 mt-0.5">
-                        <Sparkles className="w-3.5 h-3.5 text-emerald-500" />
-                        {specialty ? specialty.name : 'All Treatments'}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-medium">Branch Location:</span>
+                      <span className="font-bold text-emerald-300 flex items-center gap-1 text-xs">
+                        <Building2 className="w-3.5 h-3.5 text-emerald-400" />
+                        {coord.branch || 'Colombo Branch'}
                       </span>
                     </div>
                     <div className="pt-1 border-t border-slate-700/60 flex items-center justify-between text-[11px]">
@@ -185,7 +179,8 @@ export const CoordinatorsManager: React.FC = () => {
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="space-y-3.5">
+            <form onSubmit={handleSubmit} className="space-y-4">
+              {/* Coordinator Full Name */}
               <div className="space-y-1">
                 <label className="text-xs font-bold text-slate-300 block">
                   Coordinator Full Name <span className="text-rose-400">*</span>
@@ -200,33 +195,45 @@ export const CoordinatorsManager: React.FC = () => {
                 />
               </div>
 
+              {/* Branch */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">
-                  Email Address <span className="text-rose-400">*</span>
-                </label>
-                <input
-                  type="email"
-                  required
-                  placeholder="e.g. sarah@royalwellness.lk"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
-                />
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-300 block">
+                    Branch <span className="text-rose-400">*</span>
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => setIsCustomBranch(!isCustomBranch)}
+                    className="text-[11px] text-emerald-400 hover:underline"
+                  >
+                    {isCustomBranch ? 'Select from list' : '+ Custom Branch'}
+                  </button>
+                </div>
+                {isCustomBranch ? (
+                  <input
+                    type="text"
+                    required
+                    placeholder="Enter branch name (e.g. Negombo Branch)"
+                    value={customBranch}
+                    onChange={(e) => setCustomBranch(e.target.value)}
+                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
+                  />
+                ) : (
+                  <select
+                    value={branch}
+                    onChange={(e) => setBranch(e.target.value)}
+                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer"
+                  >
+                    {BRANCH_OPTIONS.map((b) => (
+                      <option key={b} value={b}>
+                        {b}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">
-                  WhatsApp Number (Optional)
-                </label>
-                <input
-                  type="tel"
-                  placeholder="e.g. +94771234567"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
-                />
-              </div>
-
+              {/* Security PIN & Password */}
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-xs font-bold text-slate-300 block">
@@ -257,39 +264,6 @@ export const CoordinatorsManager: React.FC = () => {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">
-                  Department / Specialty
-                </label>
-                <select
-                  value={treatmentCategoryId}
-                  onChange={(e) => setTreatmentCategoryId(e.target.value)}
-                  className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer"
-                >
-                  <option value="">All Treatments / General Concierge</option>
-                  {categories.map((cat) => (
-                    <option key={cat.id} value={cat.id}>
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">
-                  Preferred Communication Language
-                </label>
-                <select
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value as LanguageCode)}
-                  className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer"
-                >
-                  <option value="en">English</option>
-                  <option value="si">Sinhala (සිංහල)</option>
-                  <option value="ta">Tamil (தமிழ்)</option>
-                </select>
-              </div>
-
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
                 <button
                   type="button"
@@ -300,8 +274,8 @@ export const CoordinatorsManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!fullName.trim() || !email.trim()}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-colors"
+                  disabled={!fullName.trim()}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-colors shadow-md"
                 >
                   Save Coordinator
                 </button>

@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Crown, 
   Smartphone, 
   ShieldCheck, 
-  UserCheck,
-  QrCode,
-  Radio,
-  Trash2
+  UserCheck, 
+  QrCode, 
+  Radio, 
+  Trash2,
+  LogOut,
+  ChevronDown
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { MetaApiModal } from './MetaApiModal';
@@ -17,16 +19,29 @@ export const Header: React.FC = () => {
     currentUser, 
     users, 
     setCurrentUser, 
-    isSuperAdmin,
+    logout,
+    isSuperAdmin, 
     simulatorOpen, 
-    setSimulatorOpen,
-    clearAllData,
-    whatsappStatus,
-    qrModalOpen,
-    setQrModalOpen
-  } = useCrm();
+    setSimulatorOpen, 
+    clearAllData, 
+    whatsappStatus, 
+    qrModalOpen, 
+    setQrModalOpen 
+  } = useCrm() as any;
 
   const [metaModalOpen, setMetaModalOpen] = useState(false);
+  const [userDropdownOpen, setUserDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setUserDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleClearData = () => {
     if (window.confirm('Are you sure you want to remove all leads, messages, and test data? Authentic clinic treatments and templates will be kept.')) {
@@ -40,7 +55,7 @@ export const Header: React.FC = () => {
         {/* Brand Title */}
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center shadow">
-            <Crown className="w-4 h-4 text-gold-200" />
+            <Crown className="w-4 h-4 text-amber-200" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-white font-serif tracking-wide">
@@ -49,7 +64,7 @@ export const Header: React.FC = () => {
           </div>
         </div>
 
-        {/* Right Controls: Link Device (QR) + Meta API + Simulator + Clear Data + Role Switcher */}
+        {/* Right Controls: Link Device (QR) + Meta API + Simulator + Clear Data + User Profile Dropdown */}
         <div className="flex items-center gap-2.5">
           
           {/* WhatsApp Web QR Code Link Device Button with Real-time Status */}
@@ -109,28 +124,73 @@ export const Header: React.FC = () => {
             <span className="hidden sm:inline">Clear Data</span>
           </button>
 
-          {/* User Role Switcher */}
-          <div className="flex items-center gap-1.5 bg-[#202c33] border border-slate-700/60 rounded-lg px-2 py-0.5">
-            {isSuperAdmin ? (
-              <ShieldCheck className="w-3.5 h-3.5 text-gold-400 shrink-0" />
-            ) : (
-              <UserCheck className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
-            )}
-            <select
-              value={currentUser.id}
-              onChange={(e) => {
-                const selected = users.find(u => u.id === e.target.value);
-                if (selected) setCurrentUser(selected);
-              }}
-              className="bg-transparent text-xs font-medium text-slate-200 outline-none cursor-pointer py-1"
+          {/* Authenticated User Profile Badge & Dropdown */}
+          <div className="relative" ref={dropdownRef}>
+            <button
+              onClick={() => setUserDropdownOpen(!userDropdownOpen)}
+              className="flex items-center gap-2 bg-[#202c33] hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2.5 py-1 transition-all shadow-sm"
             >
-              {users.map(u => (
-                <option key={u.id} value={u.id} className="bg-slate-900">
-                  {u.fullName} ({u.role === 'super_admin' ? 'Admin' : 'Coordinator'})
-                </option>
-              ))}
-            </select>
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-bold text-[11px]">
+                {currentUser?.fullName?.charAt(0) || 'U'}
+              </div>
+              <div className="text-left hidden md:block">
+                <p className="text-xs font-bold text-slate-200 leading-tight truncate max-w-[110px]">
+                  {currentUser?.fullName?.split(' ')[0]}
+                </p>
+                <p className="text-[10px] text-emerald-400 leading-tight">
+                  {isSuperAdmin ? 'Super Admin' : 'Staff'}
+                </p>
+              </div>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+            </button>
+
+            {/* Dropdown Menu */}
+            {userDropdownOpen && (
+              <div className="absolute right-0 mt-2 w-56 bg-[#111b21] border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 space-y-1.5">
+                <div className="px-3 py-2 border-b border-slate-800">
+                  <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
+                  <p className="text-[11px] text-slate-400 font-mono truncate">{currentUser?.email}</p>
+                </div>
+
+                <div className="space-y-0.5">
+                  <label className="text-[10px] font-bold text-slate-500 px-3 uppercase tracking-wider block pt-1">
+                    Switch Profile
+                  </label>
+                  {users.map((u: any) => (
+                    <button
+                      key={u.id}
+                      onClick={() => {
+                        setCurrentUser(u);
+                        setUserDropdownOpen(false);
+                      }}
+                      className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all ${
+                        currentUser?.id === u.id 
+                          ? 'bg-emerald-950/60 text-emerald-300 font-bold' 
+                          : 'text-slate-300 hover:bg-[#202c33] hover:text-white'
+                      }`}
+                    >
+                      <span className="truncate">{u.fullName}</span>
+                      {currentUser?.id === u.id && <span className="text-[10px] text-emerald-400 font-bold">Active</span>}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="pt-1 border-t border-slate-800">
+                  <button
+                    onClick={() => {
+                      setUserDropdownOpen(false);
+                      logout();
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 flex items-center gap-2 transition-all"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Lock & Log Out</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
+
         </div>
       </header>
 

@@ -11,10 +11,8 @@ import {
 } from 'lucide-react';
 
 const BRANCH_OPTIONS = [
-  'Colombo Branch',
-  'Kandy Branch',
-  'Galle Branch',
-  'All Branches (Central)',
+  'Colombo',
+  'Maruthamunai',
 ];
 
 export const CoordinatorsManager: React.FC = () => {
@@ -23,9 +21,7 @@ export const CoordinatorsManager: React.FC = () => {
 
   // Form State
   const [fullName, setFullName] = useState('');
-  const [branch, setBranch] = useState('Colombo Branch');
-  const [customBranch, setCustomBranch] = useState('');
-  const [isCustomBranch, setIsCustomBranch] = useState(false);
+  const [branch, setBranch] = useState('Colombo');
   const [pin, setPin] = useState('2026');
   const [password, setPassword] = useState('staff');
 
@@ -35,20 +31,16 @@ export const CoordinatorsManager: React.FC = () => {
     e.preventDefault();
     if (!fullName.trim()) return;
 
-    const finalBranch = isCustomBranch ? (customBranch.trim() || 'Colombo Branch') : branch;
-
     addCoordinator({
       fullName: fullName.trim(),
-      branch: finalBranch,
+      branch: branch || 'Colombo',
       pin: pin.trim() || '2026',
       password: password.trim() || 'staff',
     });
 
     // Reset Form
     setFullName('');
-    setBranch('Colombo Branch');
-    setCustomBranch('');
-    setIsCustomBranch(false);
+    setBranch('Colombo');
     setPin('2026');
     setPassword('staff');
     setShowAddModal(false);
@@ -196,41 +188,27 @@ export const CoordinatorsManager: React.FC = () => {
               </div>
 
               {/* Branch */}
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-bold text-slate-300 block">
-                    Branch <span className="text-rose-400">*</span>
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomBranch(!isCustomBranch)}
-                    className="text-[11px] text-emerald-400 hover:underline"
-                  >
-                    {isCustomBranch ? 'Select from list' : '+ Custom Branch'}
-                  </button>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 block">
+                  Branch Location <span className="text-rose-400">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  {BRANCH_OPTIONS.map((b) => (
+                    <button
+                      key={b}
+                      type="button"
+                      onClick={() => setBranch(b)}
+                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                        branch === b
+                          ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500 shadow-sm'
+                          : 'bg-[#202c33] text-slate-400 border-slate-700 hover:border-slate-600'
+                      }`}
+                    >
+                      <Building2 className="w-3.5 h-3.5" />
+                      <span>{b}</span>
+                    </button>
+                  ))}
                 </div>
-                {isCustomBranch ? (
-                  <input
-                    type="text"
-                    required
-                    placeholder="Enter branch name (e.g. Negombo Branch)"
-                    value={customBranch}
-                    onChange={(e) => setCustomBranch(e.target.value)}
-                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
-                  />
-                ) : (
-                  <select
-                    value={branch}
-                    onChange={(e) => setBranch(e.target.value)}
-                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer"
-                  >
-                    {BRANCH_OPTIONS.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                )}
               </div>
 
               {/* Security PIN & Password */}

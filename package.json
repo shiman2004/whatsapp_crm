@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.4.1",
-    "@supabase/supabase-js": "^2.117.2",
+    "@supabase/supabase-js": "^2.49.1",
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",

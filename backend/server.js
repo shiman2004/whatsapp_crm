@@ -277,28 +277,26 @@ const server = http.createServer(async (req, res) => {
   // Authenticate caller for all subsequent API operations
   const authUser = await authenticateRequest(req, parsedUrl);
 
-  // Strict Scoping: Super Admin can inspect another coordinator line; coordinators are locked to authUser.id
-  const targetCoordinatorId = (authUser.role === 'super_admin' && parsedUrl.query.coordinatorId)
-    ? String(parsedUrl.query.coordinatorId)
-    : authUser.id;
+  // Central Clinic WhatsApp Master Session ID
+  const masterLineId = 'user-admin-1';
 
-  // 1. Health & Coordinator WhatsApp Status
+  // 1. Health & Central Clinic WhatsApp Status
   if (req.method === 'GET' && (pathname === '/api/status' || pathname === '/api/whatsapp/status')) {
-    const runtimeSession = sessionManager.getRuntimeSession(targetCoordinatorId);
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(targetCoordinatorId);
+    const runtimeSession = sessionManager.getRuntimeSession(masterLineId);
+    const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
 
     const status = runtimeSession?.status || dbRecord.status || 'disconnected';
     const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
     const hasQr = Boolean(runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl);
 
-    logWaSessionDebug('/api/status', authUser, targetCoordinatorId, runtimeSession, dbRecord);
+    logWaSessionDebug('/api/status', authUser, masterLineId, runtimeSession, dbRecord);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status,
       phone,
       hasQr,
-      coordinatorId: targetCoordinatorId,
+      coordinatorId: masterLineId,
       authenticatedUserId: authUser.id,
       sessionId: runtimeSession?.sessionId || dbRecord.id,
       db: {
@@ -316,42 +314,47 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. Coordinator-Scoped QR Code Endpoint
+  // 3. Central Clinic WhatsApp QR Code Endpoint
   if (req.method === 'GET' && (pathname === '/api/qr' || pathname === '/api/whatsapp/qr')) {
-    let runtimeSession = sessionManager.getRuntimeSession(targetCoordinatorId);
+    let runtimeSession = sessionManager.getRuntimeSession(masterLineId);
     
     if (!runtimeSession || (runtimeSession.status === 'disconnected' && !runtimeSession.qrCodeDataUrl && !runtimeSession.isStarting)) {
-      runtimeSession = await sessionManager.startCoordinatorSocket(targetCoordinatorId, false);
+      runtimeSession = await sessionManager.startCoordinatorSocket(masterLineId, false);
     }
 
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(targetCoordinatorId);
+    const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
     const status = runtimeSession?.status || dbRecord.status || 'disconnected';
     const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
     const qr = runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null;
 
-    logWaSessionDebug('/api/qr', authUser, targetCoordinatorId, runtimeSession, dbRecord);
+    logWaSessionDebug('/api/qr', authUser, masterLineId, runtimeSession, dbRecord);
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       qr,
       status,
       phone,
-      coordinatorId: targetCoordinatorId,
+      coordinatorId: masterLineId,
       authenticatedUserId: authUser.id,
       sessionId: runtimeSession?.sessionId || dbRecord.id
     }));
     return;
   }
 
-  // 3b. Reconnect / Force Fresh QR for Coordinator
+  // 3b. Reconnect / Force Fresh QR for Central Clinic Line (Super Admin only)
   if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect' || pathname === '/api/whatsapp/reconnect')) {
-    logWaSessionDebug('/api/reconnect', authUser, targetCoordinatorId, null, null);
-    const session = await sessionManager.startCoordinatorSocket(targetCoordinatorId, true);
+    if (authUser.role !== 'super_admin') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can reconnect the clinic WhatsApp line.' }));
+      return;
+    }
+    logWaSessionDebug('/api/reconnect', authUser, masterLineId, null, null);
+    const session = await sessionManager.startCoordinatorSocket(masterLineId, true);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
-      message: 'Reconnection initiated for your account.',
-      coordinatorId: targetCoordinatorId,
+      message: 'Clinic WhatsApp reconnection initiated.',
+      coordinatorId: masterLineId,
       authenticatedUserId: authUser.id
     }));
     return;
@@ -463,13 +466,18 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Disconnect / Unlink ONLY Coordinator's WhatsApp Session
+  // 6. Disconnect / Unlink Central Clinic WhatsApp Line (Super Admin only)
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink' || pathname === '/api/whatsapp/disconnect')) {
     try {
-      logWaSessionDebug('/api/disconnect', authUser, targetCoordinatorId, sessionManager.getRuntimeSession(targetCoordinatorId), null);
-      const unlinkRes = await sessionManager.unlinkSession(targetCoordinatorId);
+      if (authUser.role !== 'super_admin') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can unlink the clinic WhatsApp line.' }));
+        return;
+      }
+      logWaSessionDebug('/api/disconnect', authUser, masterLineId, sessionManager.getRuntimeSession(masterLineId), null);
+      const unlinkRes = await sessionManager.unlinkSession(masterLineId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ...unlinkRes, coordinatorId: targetCoordinatorId, authenticatedUserId: authUser.id }));
+      res.end(JSON.stringify({ ...unlinkRes, coordinatorId: masterLineId, authenticatedUserId: authUser.id }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: err.message }));

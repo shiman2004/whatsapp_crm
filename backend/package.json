@@ -6,6 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "build": "prisma generate",
+    "postinstall": "prisma generate",
     "webhook": "node webhook-standalone.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
@@ -19,9 +21,7 @@
     "@whiskeysockets/baileys": "^7.0.0-rc14",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
+    "prisma": "^6.4.1",
     "qrcode": "^1.5.4"
-  },
-  "devDependencies": {
-    "prisma": "^6.4.1"
   }
 }

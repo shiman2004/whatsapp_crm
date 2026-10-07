@@ -15,7 +15,20 @@
     "build": "npm run build --prefix frontend",
     "preview": "npm run preview --prefix frontend",
     "lint": "npm run lint --prefix frontend",
+    "start": "node backend/server.js",
     "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend"
+  },
+  "prisma": {
+    "schema": "backend/prisma/schema.prisma"
+  },
+  "dependencies": {
+    "@prisma/client": "^6.4.1",
+    "@supabase/supabase-js": "^2.117.2",
+    "@whiskeysockets/baileys": "^7.0.0-rc14",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "prisma": "^6.4.1",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {}
 }

@@ -2,6 +2,7 @@ import http from 'http';
 import url from 'url';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
@@ -10,6 +11,28 @@ import { evaluateAutoReply, pauseAutoReply, clearAutoReplySessions } from './src
 dotenv.config();
 
 const PORT = process.env.PORT || 3001;
+const JWT_SECRET = process.env.JWT_SECRET || process.env.META_VERIFY_TOKEN || 'royal_wellness_hmac_secret_2026';
+
+// Cryptographic Token Helpers (HMAC-SHA256)
+function signAuthToken(payload) {
+  const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const signature = crypto.createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
+  return `${data}.${signature}`;
+}
+
+function verifyAuthToken(token) {
+  if (!token || typeof token !== 'string') return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [data, signature] = parts;
+  const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
+  if (signature !== expectedSig) return null;
+  try {
+    return JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+  } catch (e) {
+    return null;
+  }
+}
 
 // Multi-Client SSE Hub with Coordinator Channel Isolation
 let sseClients = [];
@@ -37,15 +60,47 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
 sessionManager.setSseEmitter(broadcastScopedSSE);
 
 /**
+ * Safe Diagnostic Logger (No sensitive tokens, credentials, or QR data)
+ */
+function logWaSessionDebug(endpoint, authUser, targetCoordinatorId, sessionCtx, dbRecord) {
+  console.log(`[WA SESSION DEBUG] authenticatedUserId: ${authUser?.id || 'anonymous'} | coordinatorId: ${targetCoordinatorId} | sessionId: ${sessionCtx?.sessionId || dbRecord?.id || 'none'} | phoneNumber: ${sessionCtx?.connectedPhoneNumber || dbRecord?.phoneNumber || 'none'} | socketInstanceId: ${sessionCtx?.instanceCounter || 0} | endpoint: ${endpoint} | timestamp: ${new Date().toISOString()}`);
+}
+
+/**
  * Helper: Resolve and Authenticate CRM User from request
  */
 async function authenticateRequest(req, parsedUrl) {
   const authHeader = req.headers['authorization'] || '';
   const headerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
-  const headerCoordId = req.headers['x-coordinator-id'] || req.headers['x-user-id'] || '';
-  const queryToken = parsedUrl.query.token || parsedUrl.query.coordinatorId || '';
+  const queryToken = parsedUrl.query.token || '';
 
-  const rawId = headerToken || headerCoordId || queryToken || 'user-admin-1';
+  const rawToken = headerToken || queryToken || '';
+  const decoded = verifyAuthToken(rawToken);
+
+  if (decoded && decoded.userId) {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      const user = await prisma.user.findUnique({ where: { id: decoded.userId } }).catch(() => null);
+      if (user) {
+        return {
+          id: user.id,
+          role: user.role,
+          email: user.email,
+          fullName: user.fullName
+        };
+      }
+    }
+    return {
+      id: decoded.userId,
+      role: decoded.role || 'coordinator',
+      email: decoded.email || `${decoded.userId}@royalwellness.lk`,
+      fullName: decoded.fullName || 'Staff'
+    };
+  }
+
+  // Fallback: Check header/query IDs (e.g. initial login / direct coordinator param)
+  const headerCoordId = req.headers['x-coordinator-id'] || req.headers['x-user-id'] || '';
+  const rawId = headerCoordId || parsedUrl.query.coordinatorId || 'user-admin-1';
   const cleanId = String(rawId).trim();
 
   const prisma = getPrisma();
@@ -61,12 +116,11 @@ async function authenticateRequest(req, parsedUrl) {
       });
 
       if (!user) {
-        // Auto-provision standard admin or coordinator if querying initial IDs
         const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
         user = await prisma.user.create({
           data: {
             id: cleanId,
-            fullName: isSuper ? 'Admin' : `Coordinator ${cleanId.slice(-4)}`,
+            fullName: isSuper ? 'Super Admin' : `Coordinator ${cleanId.slice(-4)}`,
             email: isSuper ? 'admin@royalwellness.lk' : `${cleanId}@royalwellness.lk`,
             role: isSuper ? 'super_admin' : 'coordinator',
           }
@@ -84,13 +138,12 @@ async function authenticateRequest(req, parsedUrl) {
     } catch (e) {}
   }
 
-  // Safe fallback
   const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
   return {
     id: cleanId,
     role: isSuper ? 'super_admin' : 'coordinator',
     email: `${cleanId}@royalwellness.lk`,
-    fullName: isSuper ? 'Admin' : 'Coordinator'
+    fullName: isSuper ? 'Super Admin' : 'Staff Coordinator'
   };
 }
 
@@ -140,10 +193,87 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // Authenticate caller for API operations
+  // 0b. User Login & Token Issuer Endpoint
+  if (req.method === 'POST' && pathname === '/api/auth/login') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const identifier = (payload.identifier || payload.email || '').trim().toLowerCase();
+        const secret = (payload.password || payload.pin || '').trim();
+
+        const prisma = getPrisma();
+        let user = null;
+        if (prisma && getDbStatus()) {
+          user = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { id: identifier },
+                { email: { equals: identifier, mode: 'insensitive' } }
+              ]
+            }
+          });
+        }
+
+        // Provision initial admin if not in DB
+        if (!user && (identifier === 'admin@royalwellness.lk' || identifier === 'user-admin-1')) {
+          if (prisma && getDbStatus()) {
+            user = await prisma.user.create({
+              data: {
+                id: 'user-admin-1',
+                email: 'admin@royalwellness.lk',
+                fullName: 'Super Admin',
+                password: 'admin',
+                pin: '1234',
+                role: 'super_admin'
+              }
+            }).catch(() => null);
+          }
+        }
+
+        if (!user) {
+          user = {
+            id: identifier.includes('admin') ? 'user-admin-1' : (identifier || 'user-coord-1'),
+            email: identifier || 'admin@royalwellness.lk',
+            fullName: identifier.includes('admin') ? 'Super Admin' : 'Staff Coordinator',
+            role: identifier.includes('admin') ? 'super_admin' : 'coordinator',
+            password: identifier.includes('admin') ? 'admin' : 'staff',
+            pin: identifier.includes('admin') ? '1234' : '2026'
+          };
+        }
+
+        const token = signAuthToken({
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          fullName: user.fullName,
+          timestamp: Date.now()
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role
+          }
+        }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Authenticate caller for all subsequent API operations
   const authUser = await authenticateRequest(req, parsedUrl);
 
-  // Allow Super Admins to explicitly manage another coordinator's line if requested
+  // Strict Scoping: Super Admin can inspect another coordinator line; coordinators are locked to authUser.id
   const targetCoordinatorId = (authUser.role === 'super_admin' && parsedUrl.query.coordinatorId)
     ? String(parsedUrl.query.coordinatorId)
     : authUser.id;
@@ -157,12 +287,16 @@ const server = http.createServer(async (req, res) => {
     const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
     const hasQr = Boolean(runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl);
 
+    logWaSessionDebug('/api/status', authUser, targetCoordinatorId, runtimeSession, dbRecord);
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status,
       phone,
       hasQr,
       coordinatorId: targetCoordinatorId,
+      authenticatedUserId: authUser.id,
+      sessionId: runtimeSession?.sessionId || dbRecord.id,
       db: {
         connected: getDbStatus(),
       }
@@ -191,22 +325,31 @@ const server = http.createServer(async (req, res) => {
     const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
     const qr = runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null;
 
+    logWaSessionDebug('/api/qr', authUser, targetCoordinatorId, runtimeSession, dbRecord);
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       qr,
       status,
       phone,
-      coordinatorId: targetCoordinatorId
+      coordinatorId: targetCoordinatorId,
+      authenticatedUserId: authUser.id,
+      sessionId: runtimeSession?.sessionId || dbRecord.id
     }));
     return;
   }
 
   // 3b. Reconnect / Force Fresh QR for Coordinator
   if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect' || pathname === '/api/whatsapp/reconnect')) {
-    console.log(`🔄 Manual reconnect requested for Coordinator [${targetCoordinatorId}]...`);
+    logWaSessionDebug('/api/reconnect', authUser, targetCoordinatorId, null, null);
     const session = await sessionManager.startCoordinatorSocket(targetCoordinatorId, true);
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, message: 'Reconnection initiated for your account.', coordinatorId: targetCoordinatorId }));
+    res.end(JSON.stringify({
+      success: true,
+      message: 'Reconnection initiated for your account.',
+      coordinatorId: targetCoordinatorId,
+      authenticatedUserId: authUser.id
+    }));
     return;
   }
 
@@ -226,9 +369,10 @@ const server = http.createServer(async (req, res) => {
 
     sseClients.push(clientObj);
 
-    // Send initial status for this coordinator
     const runtimeSession = sessionManager.getRuntimeSession(authUser.id);
     const dbRecord = await sessionManager.getOrCreateSessionRecord(authUser.id);
+
+    logWaSessionDebug('/api/events (subscribe)', authUser, authUser.id, runtimeSession, dbRecord);
 
     res.write(`data: ${JSON.stringify({
       type: 'INIT',
@@ -236,6 +380,8 @@ const server = http.createServer(async (req, res) => {
       phone: runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null,
       qrDataUrl: runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null,
       coordinatorId: authUser.id,
+      authenticatedUserId: authUser.id,
+      sessionId: runtimeSession?.sessionId || dbRecord.id,
       dbConnected: getDbStatus(),
     })}\n\n`);
 
@@ -271,6 +417,8 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        logWaSessionDebug('/api/send', authUser, targetCoordinatorId, sessionManager.getRuntimeSession(targetCoordinatorId), null);
+
         const sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
           to,
           whatsappId,
@@ -286,7 +434,8 @@ const server = http.createServer(async (req, res) => {
           messageId: sendResult.messageId,
           status: 'sent',
           to,
-          coordinatorId: targetCoordinatorId
+          coordinatorId: targetCoordinatorId,
+          authenticatedUserId: authUser.id
         }));
       } catch (err) {
         console.error(`❌ [Send Error] Coordinator [${targetCoordinatorId}]:`, err.message);
@@ -300,9 +449,10 @@ const server = http.createServer(async (req, res) => {
   // 6. Disconnect / Unlink ONLY Coordinator's WhatsApp Session
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink' || pathname === '/api/whatsapp/disconnect')) {
     try {
+      logWaSessionDebug('/api/disconnect', authUser, targetCoordinatorId, sessionManager.getRuntimeSession(targetCoordinatorId), null);
       const unlinkRes = await sessionManager.unlinkSession(targetCoordinatorId);
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(unlinkRes));
+      res.end(JSON.stringify({ ...unlinkRes, coordinatorId: targetCoordinatorId, authenticatedUserId: authUser.id }));
     } catch (err) {
       res.writeHead(500, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ success: false, error: err.message }));

@@ -385,6 +385,27 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Hydrate on mount & whenever logged-in staff switches
   useEffect(() => {
     fetchInitialData();
+
+    // Fetch this coordinator's specific WhatsApp line status
+    const fetchMyStatus = async () => {
+      try {
+        const token = localStorage.getItem('rw_crm_auth_token') || currentUser?.id || 'user-admin-1';
+        const res = await fetch(`${API_BASE_URL}/api/status?coordinatorId=${currentUser.id}`, {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'x-coordinator-id': currentUser.id
+          }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.status) {
+            setWhatsappStatus(data.status);
+          }
+        }
+      } catch (e) {}
+    };
+
+    fetchMyStatus();
   }, [currentUser?.id]);
 
   const isSuperAdmin = currentUser.role === 'super_admin';

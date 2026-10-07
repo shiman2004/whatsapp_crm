@@ -374,7 +374,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
           const msgMap = new Map<string, Message>();
           formattedMessages.forEach(m => msgMap.set(m.waMessageId || m.id, m));
-          setMessages(Array.from(msgMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
+          setMessages(prev => {
+            const combinedMap = new Map<string, Message>();
+            // Preserve pending optimistic messages from the last 60 seconds so they never disappear
+            prev.filter(m => m.id.startsWith('msg-') && (Date.now() - new Date(m.createdAt).getTime() < 60000))
+                .forEach(m => combinedMap.set(m.id, m));
+            formattedMessages.forEach(m => combinedMap.set(m.waMessageId || m.id, m));
+            return Array.from(combinedMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          });
         }
       }
     } catch (e) {

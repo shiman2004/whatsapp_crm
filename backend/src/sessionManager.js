@@ -514,17 +514,20 @@ class WhatsAppSessionManager {
     const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
     let targetJid = null;
 
-    // Detect if the target is a WhatsApp LID (13-16 digits e.g. 176643482067061) or standard phone number
-    const isLidTarget = (whatsappId && (whatsappId.includes('@lid') || cleanWaId.length >= 13 || cleanWaId.startsWith('1766') || cleanWaId.startsWith('2384'))) ||
-                        (to && (to.includes('@lid') || (cleanPhone.length >= 13 && (cleanPhone.startsWith('1766') || cleanPhone.startsWith('2384')))));
-
-    if (isLidTarget) {
-      const lidDigits = cleanWaId && cleanWaId.length >= 13 ? cleanWaId : cleanPhone;
-      targetJid = `${lidDigits}@lid`;
-    } else if (cleanPhone && cleanPhone.length <= 12) {
+    // Standard WhatsApp routing rule:
+    // 1. If we have a valid phone number (7-12 digits e.g. 94770049469), ALWAYS use @s.whatsapp.net
+    if (cleanPhone && cleanPhone.length >= 7 && cleanPhone.length <= 12) {
       targetJid = `${cleanPhone}@s.whatsapp.net`;
-    } else if (cleanWaId && cleanWaId.length <= 12) {
+    } 
+    // 2. If WhatsApp ID is a valid phone number (7-12 digits), use @s.whatsapp.net
+    else if (cleanWaId && cleanWaId.length >= 7 && cleanWaId.length <= 12) {
       targetJid = `${cleanWaId}@s.whatsapp.net`;
+    }
+    // 3. If WhatsApp ID or phone is a 13-16 digit LID, use @lid
+    else if (cleanWaId && cleanWaId.length >= 13) {
+      targetJid = `${cleanWaId}@lid`;
+    } else if (cleanPhone && cleanPhone.length >= 13) {
+      targetJid = `${cleanPhone}@lid`;
     } else if (to && to.includes('@')) {
       targetJid = to;
     } else if (whatsappId && whatsappId.includes('@')) {
@@ -549,7 +552,20 @@ class WhatsAppSessionManager {
       else payload = { document: buffer, mimetype: 'application/pdf', fileName: media.fileName || 'document.pdf', caption: message || '' };
     }
 
-    const sent = await sessionCtx.sock.sendMessage(targetJid, payload);
+    let sent = null;
+    try {
+      sent = await sessionCtx.sock.sendMessage(targetJid, payload);
+    } catch (primaryErr) {
+      console.warn(`⚠️ [SessionManager] Primary send to ${targetJid} failed: ${primaryErr.message}. Trying fallback JID...`);
+      if (targetJid.endsWith('@s.whatsapp.net') && cleanWaId && cleanWaId.length >= 13) {
+        sent = await sessionCtx.sock.sendMessage(`${cleanWaId}@lid`, payload);
+      } else if (targetJid.endsWith('@lid') && cleanPhone && cleanPhone.length <= 12) {
+        sent = await sessionCtx.sock.sendMessage(`${cleanPhone}@s.whatsapp.net`, payload);
+      } else {
+        throw primaryErr;
+      }
+    }
+
     const outboundMsgId = sent?.key?.id;
 
     if (outboundMsgId) {

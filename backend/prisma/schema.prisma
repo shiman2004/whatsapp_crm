@@ -66,28 +66,74 @@ enum TemplateStatus {
 
 // 1. Users / Staff / Coordinators
 model User {
-  id                  String            @id @default(uuid()) @db.VarChar(36)
-  fullName            String            @db.VarChar(255)
-  email               String            @unique @db.VarChar(255)
-  phone               String?           @db.VarChar(50)
-  role                UserRole          @default(coordinator)
-  treatmentCategoryId String?           @db.VarChar(50)
-  language            LanguageCode      @default(en)
-  avatar              String?           @db.VarChar(500)
-  active              Boolean           @default(true)
-  createdAt           DateTime          @default(now())
-  updatedAt           DateTime          @updatedAt
+  id                  String             @id @default(uuid()) @db.VarChar(36)
+  fullName            String             @db.VarChar(255)
+  email               String             @unique @db.VarChar(255)
+  password            String?            @db.VarChar(255)
+  pin                 String?            @db.VarChar(10)
+  phone               String?            @db.VarChar(50)
+  role                UserRole           @default(coordinator)
+  treatmentCategoryId String?            @db.VarChar(50)
+  language            LanguageCode       @default(en)
+  avatar              String?            @db.VarChar(500)
+  active              Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
 
   // Relations
   category            TreatmentCategory? @relation(fields: [treatmentCategoryId], references: [id], onDelete: SetNull)
-  assignedLeads       Lead[]            @relation("AssignedCoordinator")
+  assignedLeads       Lead[]             @relation("AssignedCoordinator")
   notesWritten        LeadNote[]
   stageChanges        LeadStageHistory[]
+  whatsappSession     WhatsAppSession?   @relation("CoordinatorWhatsAppSession")
+  messagesAuthored    Message[]          @relation("CoordinatorAuthoredMessages")
 
   @@map("users")
 }
 
-// 2. Treatment Categories (e.g., Hair Care, Skin Care, IV Wellness)
+// 2. WhatsApp Multi-Session Architecture
+model WhatsAppSession {
+  id               String               @id @default(uuid()) @db.VarChar(50)
+  coordinatorId    String               @unique @db.VarChar(36)
+  phoneNumber      String?              @db.VarChar(50) // Canonical E.164 e.g. +94771234567
+  whatsappJid      String?              @db.VarChar(100) // e.g. 94771234567@s.whatsapp.net
+  status           String               @default("disconnected") @db.VarChar(30) // connecting, qr_ready, connected, disconnected
+  qrCodeDataUrl    String?              @db.Text
+  accountName      String?              @db.VarChar(255) // Push name from WhatsApp
+  lastConnectedAt  DateTime?
+  lastActiveAt     DateTime             @default(now())
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  // Relations
+  coordinator      User                 @relation("CoordinatorWhatsAppSession", fields: [coordinatorId], references: [id], onDelete: Cascade)
+  sessionKeys      WhatsAppSessionKey[] @relation("SessionToKeys")
+  leads            Lead[]               @relation("SessionLeads")
+  messages         Message[]            @relation("SessionMessages")
+
+  @@index([coordinatorId])
+  @@index([status])
+  @@map("whatsapp_sessions")
+}
+
+// 2b. Granular Cloud Baileys Auth State Keys (PostgreSQL persistence)
+model WhatsAppSessionKey {
+  id               String          @id @default(uuid()) @db.VarChar(100)
+  sessionId        String          @db.VarChar(50)
+  keyType          String          @db.VarChar(50) // creds, pre-key, session, sender-key, app-state-sync-key
+  keyId            String          @db.VarChar(150)
+  value            Json            // Serialized Baileys Key/Creds Data
+  updatedAt        DateTime        @default(now()) @updatedAt
+
+  // Relations
+  session          WhatsAppSession @relation("SessionToKeys", fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, keyType, keyId])
+  @@index([sessionId, keyType])
+  @@map("whatsapp_session_keys")
+}
+
+// 3. Treatment Categories (e.g., Hair Care, Skin Care, IV Wellness)
 model TreatmentCategory {
   id          String      @id @db.VarChar(50)
   name        String      @db.VarChar(255)
@@ -107,7 +153,7 @@ model TreatmentCategory {
   @@map("treatment_categories")
 }
 
-// 3. Treatment Catalog
+// 4. Treatment Catalog
 model Treatment {
   id              String            @id @db.VarChar(50)
   categoryId      String            @db.VarChar(50)
@@ -131,7 +177,7 @@ model Treatment {
   @@map("treatments")
 }
 
-// 4. WhatsApp Customers / Patients
+// 5. WhatsApp Customers / Patients
 model Customer {
   id                String        @id @default(uuid()) @db.VarChar(50)
   whatsappNumber    String        @unique @db.VarChar(50) // Canonical E.164: +94771234567
@@ -152,13 +198,14 @@ model Customer {
   @@map("customers")
 }
 
-// 5. CRM Leads / Patient Inquiries
+// 6. CRM Leads / Patient Inquiries
 model Lead {
   id                    String            @id @default(uuid()) @db.VarChar(50)
   customerId            String            @db.VarChar(50)
   categoryId            String            @db.VarChar(50)
   treatmentId           String            @db.VarChar(50)
   assignedTo            String?           @db.VarChar(36)
+  whatsappSessionId     String?           @db.VarChar(50)
   stage                 LeadStage         @default(new)
   source                String            @default("whatsapp") @db.VarChar(50)
   language              LanguageCode      @default(en)
@@ -171,6 +218,7 @@ model Lead {
   category              TreatmentCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
   treatment             Treatment         @relation(fields: [treatmentId], references: [id], onDelete: Restrict)
   assignedCoordinator   User?             @relation("AssignedCoordinator", fields: [assignedTo], references: [id], onDelete: SetNull)
+  whatsappSession       WhatsAppSession?  @relation("SessionLeads", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
   messages              Message[]
   followups             Followup[]
   notes                 LeadNote[]
@@ -180,40 +228,47 @@ model Lead {
   @@index([categoryId])
   @@index([treatmentId])
   @@index([assignedTo])
+  @@index([whatsappSessionId])
   @@index([stage])
   @@map("leads")
 }
 
-// 6. WhatsApp Messages
+// 7. WhatsApp Messages
 model Message {
-  id              String            @id @db.VarChar(100) // WhatsApp Message ID e.g. wamid.HBg...
-  leadId          String            @db.VarChar(50)
-  customerId      String            @db.VarChar(50)
-  direction       MessageDirection
-  senderType      SenderType
-  content         String            @db.Text
-  status          MessageStatus     @default(sent)
-  timestamp       DateTime          @default(now())
-  reaction        String?           @db.VarChar(50)
-  starred         Boolean           @default(false)
-  pinned          Boolean           @default(false)
-  replyToId       String?           @db.VarChar(100)
-  replyToContent  String?           @db.Text
-  replyToSender   String?           @db.VarChar(255)
-  mediaUrl        String?           @db.VarChar(500)
-  mediaType       String?           @db.VarChar(50)
+  id                  String            @id @db.VarChar(100) // WhatsApp Message ID e.g. wamid.HBg...
+  leadId              String            @db.VarChar(50)
+  customerId          String            @db.VarChar(50)
+  whatsappSessionId   String?           @db.VarChar(50)
+  coordinatorId       String?           @db.VarChar(36)
+  direction           MessageDirection
+  senderType          SenderType
+  content             String            @db.Text
+  status              MessageStatus     @default(sent)
+  timestamp           DateTime          @default(now())
+  reaction            String?           @db.VarChar(50)
+  starred             Boolean           @default(false)
+  pinned              Boolean           @default(false)
+  replyToId           String?           @db.VarChar(100)
+  replyToContent      String?           @db.Text
+  replyToSender       String?           @db.VarChar(255)
+  mediaUrl            String?           @db.VarChar(500)
+  mediaType           String?           @db.VarChar(50)
 
   // Relations
-  lead            Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
-  customer        Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  lead                Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer            Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  whatsappSession     WhatsAppSession?  @relation("SessionMessages", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
+  coordinator         User?             @relation("CoordinatorAuthoredMessages", fields: [coordinatorId], references: [id], onDelete: SetNull)
 
   @@index([leadId])
   @@index([customerId])
+  @@index([whatsappSessionId])
+  @@index([coordinatorId])
   @@index([timestamp])
   @@map("messages")
 }
 
-// 7. Automated Follow-up Tasks (BullMQ / Cron)
+// 8. Automated Follow-up Tasks (BullMQ / Cron)
 model Followup {
   id                  String          @id @default(uuid()) @db.VarChar(50)
   leadId              String          @db.VarChar(50)
@@ -234,7 +289,7 @@ model Followup {
   @@map("followups")
 }
 
-// 8. Lead Notes & Clinical Annotations
+// 9. Lead Notes & Clinical Annotations
 model LeadNote {
   id          String    @id @default(uuid()) @db.VarChar(50)
   leadId      String    @db.VarChar(50)
@@ -252,7 +307,7 @@ model LeadNote {
   @@map("lead_notes")
 }
 
-// 9. Lead Stage Audit & Pipeline History
+// 10. Lead Stage Audit & Pipeline History
 model LeadStageHistory {
   id            String    @id @default(uuid()) @db.VarChar(50)
   leadId        String    @db.VarChar(50)
@@ -272,7 +327,7 @@ model LeadStageHistory {
   @@map("lead_stage_histories")
 }
 
-// 10. System Audit Logs
+// 11. System Audit Logs
 model AuditLog {
   id              String    @id @default(uuid()) @db.VarChar(50)
   action          String    @db.VarChar(100)
@@ -289,7 +344,7 @@ model AuditLog {
   @@map("audit_logs")
 }
 
-// 11. WhatsApp Pre-Approved HSM Templates
+// 12. WhatsApp Pre-Approved HSM Templates
 model WhatsAppTemplate {
   id          String          @id @db.VarChar(50)
   name        String          @db.VarChar(255)

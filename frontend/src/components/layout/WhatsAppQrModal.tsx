@@ -6,9 +6,10 @@ import {
   CheckCircle2, 
   RefreshCw, 
   LogOut,
-  ShieldCheck,
+  ShieldCheck, 
   Zap,
-  Info
+  User,
+  AlertCircle
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { API_BASE_URL } from '../../config/api';
@@ -19,22 +20,34 @@ interface WhatsAppQrModalProps {
 }
 
 export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClose }) => {
+  const { currentUser, isSuperAdmin, notify } = useCrm() as any;
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'disconnected' | 'syncing' | 'sync_error'>('connecting');
   const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const { notify } = useCrm() as any;
 
-  // Poll or listen for QR code & status
+  const authHeaders = {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+    'x-coordinator-id': currentUser?.id || 'user-admin-1'
+  };
+
+  // Poll or listen for QR code & status scoped to current coordinator
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || !currentUser) return;
 
-    // Fetch initial status
+    // Reset local view state on user change
+    setQrCode(null);
+    setStatus('connecting');
+    setConnectedPhone(null);
+
     const fetchStatus = async () => {
       try {
-        const res = await fetch(`${API_BASE_URL}/api/qr`);
+        const res = await fetch(`${API_BASE_URL}/api/qr?coordinatorId=${currentUser.id}`, {
+          headers: authHeaders
+        });
         if (res.ok) {
           const data = await res.json();
           setStatus(data.status);
@@ -54,7 +67,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
     const interval = setInterval(fetchStatus, 2000);
 
     return () => clearInterval(interval);
-  }, [isOpen]);
+  }, [isOpen, currentUser?.id]);
 
   if (!isOpen) return null;
 
@@ -62,8 +75,13 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
     setIsRefreshing(true);
     setFetchError(null);
     try {
-      await fetch(`${API_BASE_URL}/api/reconnect`, { method: 'POST' });
-      const res = await fetch(`${API_BASE_URL}/api/qr`);
+      await fetch(`${API_BASE_URL}/api/reconnect?coordinatorId=${currentUser.id}`, { 
+        method: 'POST',
+        headers: authHeaders 
+      });
+      const res = await fetch(`${API_BASE_URL}/api/qr?coordinatorId=${currentUser.id}`, {
+        headers: authHeaders
+      });
       if (res.ok) {
         const data = await res.json();
         setStatus(data.status);
@@ -80,16 +98,21 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
-      await fetch(`${API_BASE_URL}/api/disconnect`, { method: 'POST' });
+      await fetch(`${API_BASE_URL}/api/disconnect?coordinatorId=${currentUser.id}`, { 
+        method: 'POST',
+        headers: authHeaders 
+      });
       setStatus('connecting');
       setQrCode(null);
       setConnectedPhone(null);
-      if (notify) notify('WhatsApp Disconnected', 'Session unlinked. Conversation history preserved in CRM database.', 'info');
+      if (notify) notify('WhatsApp Disconnected', `${currentUser.fullName}'s WhatsApp unlinked. Other staff remain connected.`, 'info');
       
-      // Re-fetch new QR code after a short delay
+      // Re-fetch new QR code for this coordinator after a short delay
       setTimeout(async () => {
         try {
-          const res = await fetch(`${API_BASE_URL}/api/qr`);
+          const res = await fetch(`${API_BASE_URL}/api/qr?coordinatorId=${currentUser.id}`, {
+            headers: authHeaders
+          });
           if (res.ok) {
             const data = await res.json();
             setStatus(data.status);
@@ -116,7 +139,8 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                Link WhatsApp via QR Code
+                Link WhatsApp
+                <span className="text-xs text-emerald-400 font-medium">({currentUser?.fullName})</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
                   status === 'connected' 
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
@@ -127,11 +151,11 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                   {status === 'connected' 
                     ? '🟢 Linked & Online' 
                     : status === 'syncing'
-                    ? '🔄 Syncing History...'
+                    ? '🔄 Syncing History...' 
                     : 'Scan to Connect'}
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">Use your personal or clinic WhatsApp directly in this CRM</p>
+              <p className="text-xs text-slate-400">Personal line for {currentUser?.fullName} ({isSuperAdmin ? 'Admin' : 'Coordinator'})</p>
             </div>
           </div>
           <button 
@@ -145,35 +169,19 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
         {/* Content Body */}
         <div className="p-6 space-y-6">
           
-          {status === 'syncing' ? (
-            /* Syncing State */
-            <div className="p-6 bg-[#202c33] rounded-2xl border border-amber-500/40 text-center space-y-4 shadow-lg animate-pulse">
-              <div className="w-16 h-16 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center mx-auto border border-amber-500/40 shadow-inner">
-                <RefreshCw className="w-8 h-8 animate-spin" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-white">Synchronizing WhatsApp Conversation History</h3>
-                <p className="text-xs text-slate-300 mt-1 font-mono">
-                  Connected Number: <span className="text-emerald-400 font-bold">+{connectedPhone || 'Active SIM'}</span>
-                </p>
-                <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
-                  Catching up on missed messages, phone replies, and previous chat history...
-                </p>
-              </div>
-            </div>
-          ) : status === 'connected' ? (
+          {status === 'connected' ? (
             /* Connected State */
             <div className="p-6 bg-[#202c33] rounded-2xl border border-emerald-500/40 text-center space-y-4 shadow-lg">
               <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto border border-emerald-500/40 shadow-inner">
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">WhatsApp Successfully Linked!</h3>
+                <h3 className="text-base font-bold text-white">{currentUser?.fullName}'s WhatsApp is Active!</h3>
                 <p className="text-xs text-slate-300 mt-1 font-mono">
-                  Connected Number: <span className="text-emerald-400 font-bold">+{connectedPhone || 'Active SIM'}</span>
+                  Connected Line: <span className="text-emerald-400 font-bold">+{connectedPhone || 'Active SIM'}</span>
                 </p>
                 <p className="text-xs text-slate-400 mt-2 max-w-sm mx-auto">
-                  Incoming customer messages on this WhatsApp account will stream directly into your CRM chats.
+                  Incoming patient inquiries on this WhatsApp account stream strictly into your coordinator dashboard.
                 </p>
               </div>
 
@@ -184,7 +192,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                   className="px-4 py-2 bg-red-950/60 hover:bg-red-900/60 border border-red-500/40 text-red-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all"
                 >
                   <LogOut className="w-3.5 h-3.5" />
-                  <span>{isLoggingOut ? 'Unlinking...' : 'Unlink / Switch Device'}</span>
+                  <span>{isLoggingOut ? 'Unlinking...' : 'Unlink / Switch My Line'}</span>
                 </button>
               </div>
             </div>
@@ -195,7 +203,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
               {/* Instructions */}
               <div className="space-y-4">
                 <h3 className="text-xs font-bold text-slate-200 tracking-wide uppercase text-whatsapp flex items-center gap-1.5">
-                  <Smartphone className="w-4 h-4" /> Steps to link:
+                  <Smartphone className="w-4 h-4" /> Steps to link {currentUser?.fullName?.split(' ')[0]}'s Phone:
                 </h3>
 
                 <ol className="space-y-3 text-xs text-slate-300">
@@ -209,7 +217,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                     <span className="w-5 h-5 rounded-full bg-[#202c33] border border-slate-700 text-slate-200 font-bold flex items-center justify-center shrink-0 text-[11px]">
                       2
                     </span>
-                    <span>Tap <strong>Menu ⋮</strong> (Android) or <strong>Settings ⚙️</strong> (iPhone).</span>
+                    <span>Tap <strong>Menu ⋮</strong> or <strong>Settings ⚙️</strong>.</span>
                   </li>
                   <li className="flex items-start gap-2.5">
                     <span className="w-5 h-5 rounded-full bg-[#202c33] border border-slate-700 text-slate-200 font-bold flex items-center justify-center shrink-0 text-[11px]">
@@ -227,7 +235,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
 
                 <div className="p-3 bg-[#202c33]/60 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
                   <ShieldCheck className="w-4 h-4 text-whatsapp shrink-0 mt-0.5" />
-                  <span>End-to-end encrypted. Your chats sync live in real-time.</span>
+                  <span>Scoped to your profile. Other staff accounts will not be affected.</span>
                 </div>
               </div>
 
@@ -243,7 +251,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                   ) : (
                     <div className="flex flex-col items-center justify-center text-slate-800 space-y-2 p-4 text-center">
                       <RefreshCw className="w-8 h-8 animate-spin text-whatsapp" />
-                      <p className="text-xs font-semibold text-slate-700">Connecting to WhatsApp...</p>
+                      <p className="text-xs font-semibold text-slate-700">Connecting Socket...</p>
                       <p className="text-[10px] text-slate-500">Generating pairing QR code</p>
                     </div>
                   )}
@@ -270,7 +278,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
         {/* Footer */}
         <div className="px-6 py-3 border-t border-slate-800 bg-[#202c33] flex items-center justify-between">
           <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-            <Zap className="w-3.5 h-3.5 text-whatsapp" /> Instant Multi-Device Sync
+            <Zap className="w-3.5 h-3.5 text-whatsapp" /> Isolated Coordinator Channel
           </span>
           <button
             onClick={onClose}

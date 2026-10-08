@@ -469,14 +469,26 @@ class WhatsAppSessionManager {
         }
 
         // 3. Save Message with Session & Coordinator Scope
+        let validSessionId = null;
+        if (sessionCtx?.sessionId) {
+          const sExists = await prisma.whatsAppSession.findUnique({ where: { id: sessionCtx.sessionId } }).catch(() => null);
+          if (sExists) validSessionId = sExists.id;
+        }
+
+        let validCoordinatorId = null;
+        if (isFromMe && coordinatorId) {
+          const cExists = await prisma.user.findUnique({ where: { id: coordinatorId } }).catch(() => null);
+          if (cExists) validCoordinatorId = cExists.id;
+        }
+
         await prisma.message.upsert({
           where: { id: messageId },
           create: {
             id: messageId,
             leadId: lead.id,
             customerId: customer.id,
-            whatsappSessionId: sessionCtx.sessionId,
-            coordinatorId: isFromMe ? coordinatorId : null,
+            whatsappSessionId: validSessionId,
+            coordinatorId: validCoordinatorId,
             direction: isFromMe ? 'outbound' : 'inbound',
             senderType: isFromMe ? 'coordinator' : 'customer',
             content: messageText || `[${mediaType?.toUpperCase()}]`,
@@ -598,13 +610,25 @@ class WhatsAppSessionManager {
     const prisma = getPrisma();
     if (prisma && getDbStatus() && leadId && customerId) {
       try {
+        let validSessionId = null;
+        if (sessionCtx?.sessionId) {
+          const sExists = await prisma.whatsAppSession.findUnique({ where: { id: sessionCtx.sessionId } }).catch(() => null);
+          if (sExists) validSessionId = sExists.id;
+        }
+
+        let validCoordinatorId = null;
+        if (coordinatorId) {
+          const cExists = await prisma.user.findUnique({ where: { id: coordinatorId } }).catch(() => null);
+          if (cExists) validCoordinatorId = cExists.id;
+        }
+
         await prisma.message.create({
           data: {
             id: outboundMsgId || `out-${Date.now()}`,
             leadId,
             customerId,
-            whatsappSessionId: sessionCtx.sessionId,
-            coordinatorId,
+            whatsappSessionId: validSessionId,
+            coordinatorId: validCoordinatorId,
             direction: 'outbound',
             senderType: 'coordinator',
             content: message || (media ? `[${media.type.toUpperCase()}]` : ''),
@@ -613,7 +637,9 @@ class WhatsAppSessionManager {
             mediaType: media ? media.type : null,
           }
         });
-      } catch (e) {}
+      } catch (e) {
+        console.warn(`[SessionManager] Outbound message create DB warning:`, e.message);
+      }
     }
 
     // Broadcast Real-time Outbound SSE Event

@@ -1014,7 +1014,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST') {
       let body = '';
       req.on('data', chunk => { body += chunk; });
-      req.on('end', () => {
+      req.on('end', async () => {
         try {
           const payload = JSON.parse(body);
           if (payload.object === 'whatsapp_business_account' && Array.isArray(payload.entry)) {

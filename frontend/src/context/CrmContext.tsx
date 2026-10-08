@@ -197,29 +197,42 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', []));
+  const [leads, setLeads] = useState<Lead[]>(() => getStored('rw_crm_leads', []));
+  const [messages, setMessages] = useState<Message[]>(() => getStored('rw_crm_messages', []));
   const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
   const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
   
-  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(null);
+  const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
+    const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
+    return cachedLeads.length > 0 ? cachedLeads[0].id : null;
+  });
   const [notifications, setNotifications] = useState<NotificationToast[]>([]);
   const [simulatorOpen, setSimulatorOpen] = useState<boolean>(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
 
-  // Clear legacy localStorage cache keys so MySQL remains the single source of truth
+  // Sync state to localStorage
   useEffect(() => {
     try {
-      localStorage.removeItem('rw_crm_leads');
-      localStorage.removeItem('rw_crm_customers');
-      localStorage.removeItem('rw_crm_messages');
+      localStorage.setItem('rw_crm_customers', JSON.stringify(customers));
     } catch (e) {}
-  }, []);
+  }, [customers]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_leads', JSON.stringify(leads));
+    } catch (e) {}
+  }, [leads]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_messages', JSON.stringify(messages));
+    } catch (e) {}
+  }, [messages]);
 
   // Sync users to localStorage
   useEffect(() => {
@@ -323,40 +336,47 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           });
 
-          // Hydrate unique customers from DB
-          const custMap = new Map<string, Customer>();
-          dbCustomers.forEach(c => {
-            if (!custMap.has(c.id)) {
-              custMap.set(c.id, c);
-            }
-          });
-          setCustomers(Array.from(custMap.values()));
-
-          // Hydrate unique leads from DB
-          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
-          const leadMap = new Map<string, Lead>();
-          dbLeads.forEach(l => {
-            const cust = l.customer;
-            const isAssignedDeleted = l.assignedTo && deletedUserIds.includes(l.assignedTo);
-            const assignedTo = isAssignedDeleted ? undefined : l.assignedTo;
-            const stage = isAssignedDeleted ? 'new' : l.stage;
-
-            leadMap.set(l.id, {
-              ...l,
-              assignedTo,
-              stage,
-              customer: cust ? {
-                ...cust,
-                phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
-                whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
-              } : undefined
+          // Hydrate unique customers from DB merged with cached customers
+          setCustomers(prevCusts => {
+            const custMap = new Map<string, Customer>();
+            prevCusts.forEach(c => custMap.set(c.id, c));
+            dbCustomers.forEach(c => {
+              const existing = custMap.get(c.id);
+              custMap.set(c.id, existing ? { ...existing, ...c } : c);
             });
+            return Array.from(custMap.values());
           });
-          setLeads(Array.from(leadMap.values()));
 
-          setSelectedLeadId(prevId => {
-            if (prevId && leadMap.has(prevId)) return prevId;
-            return dbLeads[0]?.id || null;
+          // Hydrate unique leads from DB merged with cached leads
+          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
+          setLeads(prevLeads => {
+            const leadMap = new Map<string, Lead>();
+            prevLeads.forEach(l => leadMap.set(l.id, l));
+            dbLeads.forEach(l => {
+              const cust = l.customer;
+              const isAssignedDeleted = l.assignedTo && deletedUserIds.includes(l.assignedTo);
+              const assignedTo = isAssignedDeleted ? undefined : l.assignedTo;
+              const stage = isAssignedDeleted ? 'new' : l.stage;
+
+              const hydratedLead: Lead = {
+                ...l,
+                assignedTo,
+                stage,
+                customer: cust ? {
+                  ...cust,
+                  phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
+                  whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
+                } : undefined
+              };
+              leadMap.set(l.id, hydratedLead);
+            });
+
+            const mergedLeads = Array.from(leadMap.values());
+            setSelectedLeadId(prevId => {
+              if (prevId && leadMap.has(prevId)) return prevId;
+              return mergedLeads[0]?.id || null;
+            });
+            return mergedLeads;
           });
         }
 
@@ -387,13 +407,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               waMessageId: m.id,
             }));
 
-          const msgMap = new Map<string, Message>();
-          formattedMessages.forEach(m => msgMap.set(m.waMessageId || m.id, m));
           setMessages(prev => {
             const combinedMap = new Map<string, Message>();
-            // Preserve pending optimistic messages from the last 60 seconds so they never disappear
-            prev.filter(m => m.id.startsWith('msg-') && (Date.now() - new Date(m.createdAt).getTime() < 60000))
-                .forEach(m => combinedMap.set(m.id, m));
+            // 1. First keep all local cached messages
+            prev.forEach(m => combinedMap.set(m.waMessageId || m.id, m));
+            // 2. Overwrite / merge with verified database messages
             formattedMessages.forEach(m => combinedMap.set(m.waMessageId || m.id, m));
             return Array.from(combinedMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
           });

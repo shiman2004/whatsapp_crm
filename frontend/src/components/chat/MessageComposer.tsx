@@ -35,7 +35,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     replyingMessage,
     setReplyingMessage,
     whatsappStatus,
-    setQrModalOpen
+    setQrModalOpen,
+    hasMetaConfig
   } = useCrm();
 
   const [inputVal, setInputVal] = useState('');
@@ -375,7 +376,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
-      {(!whatsappStatus || whatsappStatus === 'disconnected' || whatsappStatus === 'connecting' || whatsappStatus === 'qr_ready') && !localStorage.getItem('meta_access_token') && (
+      {(!whatsappStatus || whatsappStatus === 'disconnected' || whatsappStatus === 'connecting' || whatsappStatus === 'qr_ready') && !hasMetaConfig && (
         <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2 min-w-0">
             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
@@ -399,7 +400,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (whatsappStatus !== 'connected' && !localStorage.getItem('meta_access_token')) {
+            if (whatsappStatus !== 'connected' && !hasMetaConfig) {
               setQrModalOpen(true);
               return;
             }

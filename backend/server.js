@@ -932,6 +932,49 @@ const server = http.createServer(async (req, res) => {
 
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
+    const defaultCoordinators = [
+      {
+        id: 'user-admin-1',
+        fullName: 'Admin',
+        email: 'admin@royalwellness.lk',
+        branch: 'Colombo (Head Office)',
+        password: 'admin',
+        pin: '1234',
+        role: 'super_admin',
+        active: true,
+        createdAt: '2026-01-01T08:00:00Z',
+        activeLeadsCount: 0,
+      },
+      {
+        id: 'user-coord-shiman',
+        fullName: 'Shiman',
+        email: 'shiman@royalwellness.lk',
+        branch: 'Colombo Branch',
+        password: 'staff',
+        pin: '2026',
+        role: 'coordinator',
+        treatmentCategoryId: 'cat-hair-care',
+        language: 'en',
+        active: true,
+        createdAt: '2026-01-05T08:00:00Z',
+        activeLeadsCount: 0,
+      },
+      {
+        id: 'user-coord-shim',
+        fullName: 'Shim',
+        email: 'shim@royalwellness.lk',
+        branch: 'Colombo Branch',
+        password: 'staff',
+        pin: '2026',
+        role: 'coordinator',
+        treatmentCategoryId: 'cat-hair-care',
+        language: 'en',
+        active: true,
+        createdAt: '2026-01-06T08:00:00Z',
+        activeLeadsCount: 0,
+      }
+    ];
+
     const prisma = getPrisma();
     if (req.method === 'GET') {
       if (prisma && getDbStatus()) {
@@ -939,13 +982,15 @@ const server = http.createServer(async (req, res) => {
           const users = await prisma.user.findMany({
             orderBy: { createdAt: 'asc' }
           });
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(users));
-          return;
+          if (users && users.length > 0) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(users));
+            return;
+          }
         } catch (e) {}
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify([]));
+      res.end(JSON.stringify(defaultCoordinators));
       return;
     }
 

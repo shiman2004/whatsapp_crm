@@ -438,8 +438,26 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // If Meta Cloud API token is supplied, dispatch directly to Meta Graph API
-        if (payload.token) {
+        // Check if runtime Baileys session is active
+        const coordSession = sessionManager.getRuntimeSession(targetCoordinatorId);
+        const masterSession = sessionManager.getRuntimeSession(masterLineId);
+        const isBaileysConnected = (coordSession && coordSession.status === 'connected' && coordSession.sock) ||
+                                  (masterSession && masterSession.status === 'connected' && masterSession.sock);
+
+        let sendResult = null;
+
+        if (isBaileysConnected || !payload.token) {
+          logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
+          sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
+            to,
+            whatsappId,
+            message: msgContent,
+            media,
+            leadId,
+            customerId,
+          });
+        } else {
+          // If Baileys is not connected and Meta Cloud API token is supplied, dispatch directly to Meta Graph API
           const cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
           const phoneId = payload.phoneNumberId || '1302468252956177';
           const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
@@ -460,27 +478,39 @@ const server = http.createServer(async (req, res) => {
           if (!metaRes.ok) {
             throw new Error(metaData.error?.message || 'Meta Cloud API dispatch failed');
           }
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
+          const messageId = metaData.messages?.[0]?.id || `meta-${Date.now()}`;
+          sendResult = {
             success: true,
-            messageId: metaData.messages?.[0]?.id || `meta-${Date.now()}`,
+            messageId,
             status: 'sent',
             to: cleanTo,
             meta: metaData
-          }));
-          return;
+          };
+
+          // Save message to Prisma database
+          const prisma = getPrisma();
+          if (prisma && getDbStatus() && leadId && customerId) {
+            try {
+              await prisma.message.create({
+                data: {
+                  id: messageId,
+                  leadId,
+                  customerId,
+                  whatsappSessionId: `meta-${phoneId}`,
+                  coordinatorId: targetCoordinatorId,
+                  direction: 'outbound',
+                  senderType: 'coordinator',
+                  content: msgContent || (media ? `[${media.type.toUpperCase()}]` : ''),
+                  status: 'sent',
+                  timestamp: new Date(),
+                  mediaType: media ? media.type : null,
+                }
+              });
+            } catch (dbErr) {
+              console.warn('[DB Error saving Meta message]:', dbErr.message);
+            }
+          }
         }
-
-        logWaSessionDebug('/api/send', authUser, targetCoordinatorId, sessionManager.getRuntimeSession(targetCoordinatorId), null);
-
-        const sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
-          to,
-          whatsappId,
-          message: msgContent,
-          media,
-          leadId,
-          customerId,
-        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({

@@ -136,6 +136,8 @@ interface CrmContextType {
   setWhatsappStatus: (status: WhatsAppConnectionStatus) => void;
   qrModalOpen: boolean;
   setQrModalOpen: (open: boolean) => void;
+  hasMetaConfig: boolean;
+  setHasMetaConfig: (val: boolean) => void;
 
   // Toasts
   dismissNotification: (id: string) => void;
@@ -219,6 +221,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
+  const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => Boolean(localStorage.getItem('meta_access_token')));
 
   // Sync state to localStorage
   useEffect(() => {
@@ -303,7 +306,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   }, []);
 
-  // Automatically load persistent conversation history and leads from Supabase Database scoped to user
+  // Automatically load persistent conversation history, leads, coordinators, and Meta configuration
   const fetchInitialData = async () => {
     try {
       const authHeaders = {
@@ -311,12 +314,48 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
-      const [leadsRes, msgsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/leads`, { headers: authHeaders }),
-        fetch(`${API_BASE_URL}/api/messages`, { headers: authHeaders })
+      const [leadsRes, msgsRes, metaRes, coordsRes] = await Promise.all([
+        fetch(`${API_BASE_URL}/api/leads`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/api/messages`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/api/meta/config`).catch(() => null),
+        fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null)
       ]);
 
-      if (leadsRes.ok && msgsRes.ok) {
+      if (metaRes && metaRes.ok) {
+        const metaData = await metaRes.json().catch(() => null);
+        if (metaData && metaData.accessToken) {
+          localStorage.setItem('meta_access_token', metaData.accessToken);
+          setHasMetaConfig(true);
+        }
+      }
+
+      if (coordsRes && coordsRes.ok) {
+        const dbCoords: any[] = await coordsRes.json().catch(() => []);
+        if (Array.isArray(dbCoords) && dbCoords.length > 0) {
+          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
+          setUsers(prevUsers => {
+            const userMap = new Map<string, User>();
+            INITIAL_USERS.forEach(u => userMap.set(u.id, u));
+            prevUsers.forEach(u => userMap.set(u.id, u));
+            dbCoords.forEach(u => {
+              if (!deletedUserIds.includes(u.id)) {
+                userMap.set(u.id, {
+                  ...u,
+                  password: u.password || 'staff',
+                  pin: u.pin || '2026',
+                  active: u.active ?? true,
+                  activeLeadsCount: u.activeLeadsCount || 0
+                });
+              }
+            });
+            const updated = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
+            localStorage.setItem('rw_crm_users', JSON.stringify(updated));
+            return updated;
+          });
+        }
+      }
+
+      if (leadsRes && leadsRes.ok && msgsRes && msgsRes.ok) {
         const dbLeads: any[] = await leadsRes.json();
         const dbMessages: any[] = await msgsRes.json();
 
@@ -1948,6 +1987,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setWhatsappStatus,
     qrModalOpen,
     setQrModalOpen,
+    hasMetaConfig,
+    setHasMetaConfig,
   };
 
   return (

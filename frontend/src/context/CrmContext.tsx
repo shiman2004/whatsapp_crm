@@ -350,13 +350,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      let fetchedDbLeads: any[] = [];
       if (leadsRes && leadsRes.ok) {
-        const dbLeads: any[] = await leadsRes.json().catch(() => []);
-        if (Array.isArray(dbLeads)) {
+        fetchedDbLeads = await leadsRes.json().catch(() => []);
+        if (Array.isArray(fetchedDbLeads)) {
           const dbCustomers: Customer[] = [];
           const hydratedLeads: Lead[] = [];
 
-          dbLeads.forEach(l => {
+          fetchedDbLeads.forEach(l => {
             let finalCust: Customer | undefined = undefined;
             if (l.customer) {
               const rawCust = l.customer;
@@ -403,39 +404,57 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      const collectedRawMessages: any[] = [];
+      if (Array.isArray(fetchedDbLeads)) {
+        fetchedDbLeads.forEach(l => {
+          if (Array.isArray(l.messages)) {
+            l.messages.forEach((m: any) => collectedRawMessages.push(m));
+          }
+        });
+      }
+
       if (msgsRes && msgsRes.ok) {
         const dbMessages: any[] = await msgsRes.json().catch(() => []);
         if (Array.isArray(dbMessages)) {
-          const formattedMessages: Message[] = dbMessages
-            .filter(m => (m.content && m.content.trim().length > 0) || Boolean(m.mediaUrl))
-            .map(m => ({
-              id: m.id,
-              leadId: m.leadId,
-              customerId: m.customerId,
-              direction: m.direction,
-              senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
-              content: m.content || '',
-              status: m.status || 'delivered',
-              createdAt: m.timestamp || new Date().toISOString(),
-              media: m.mediaUrl ? {
-                type: m.mediaType || 'image',
-                url: m.mediaUrl
-              } : undefined,
-              reactions: m.reaction ? [m.reaction] : [],
-              starred: m.starred || false,
-              pinned: m.pinned || false,
-              replyTo: m.replyToId ? {
-                id: m.replyToId,
-                content: m.replyToContent || '',
-                senderName: m.replyToSender || ''
-              } : undefined,
-              waMessageId: m.id,
-            }));
-
-          setMessages(formattedMessages);
-          localStorage.setItem('rw_crm_messages', JSON.stringify(formattedMessages));
+          dbMessages.forEach((m: any) => collectedRawMessages.push(m));
         }
       }
+
+      const msgMap = new Map<string, Message>();
+      collectedRawMessages
+        .filter(m => (m.content && m.content.trim().length > 0) || Boolean(m.mediaUrl))
+        .forEach(m => {
+          const formatted: Message = {
+            id: m.id,
+            leadId: m.leadId,
+            customerId: m.customerId,
+            direction: m.direction,
+            senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+            content: m.content || '',
+            status: m.status || 'delivered',
+            createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
+            media: m.mediaUrl ? {
+              type: m.mediaType || 'image',
+              url: m.mediaUrl
+            } : undefined,
+            reactions: m.reaction ? [m.reaction] : [],
+            starred: m.starred || false,
+            pinned: m.pinned || false,
+            replyTo: m.replyToId ? {
+              id: m.replyToId,
+              content: m.replyToContent || '',
+              senderName: m.replyToSender || ''
+            } : undefined,
+            waMessageId: m.id,
+          };
+          msgMap.set(formatted.id, formatted);
+        });
+
+      const finalMessages = Array.from(msgMap.values()).sort(
+        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+      );
+      setMessages(finalMessages);
+      localStorage.setItem('rw_crm_messages', JSON.stringify(finalMessages));
     } catch (e) {
       console.warn('Could not fetch persistent MySQL database state:', e);
     }

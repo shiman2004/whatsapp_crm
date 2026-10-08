@@ -462,6 +462,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         try {
           const data = JSON.parse(event.data);
 
+          if (data.type === 'CONNECTION_STATUS') {
+            if (data.status) {
+              setWhatsappStatus(data.status);
+            }
+            return;
+          }
+
           if (data.type === 'LEAD_ASSIGNED') {
             const { leadId: incomingLeadId, clientLeadId, coordinatorId: assignedCoordId, lead: incomingLead } = data;
             setLeads(prevLeads => {

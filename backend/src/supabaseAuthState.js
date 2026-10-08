@@ -8,7 +8,7 @@ import { getPrisma, getDbStatus } from './db.js';
  * Guarantees zero credential loss across Render deployments, restarts,
  * and ephemeral filesystem resets.
  */
-export async function useSupabaseAuthState(sessionId) {
+export async function useSupabaseAuthState(sessionId, forceClean = false) {
   const prisma = getPrisma();
 
   // In-memory local fallback cache if database is temporarily unavailable
@@ -78,8 +78,22 @@ export async function useSupabaseAuthState(sessionId) {
     }
   };
 
+  if (forceClean) {
+    inMemoryCache.clear();
+    if (prisma && getDbStatus()) {
+      try {
+        await prisma.whatsAppSessionKey.deleteMany({
+          where: { sessionId },
+        });
+        console.log(`🧹 [SupabaseAuthState] All authentication keys cleared for clean start: ${sessionId}`);
+      } catch (err) {
+        console.warn(`[SupabaseAuthState] Error clearing keys for ${sessionId}:`, err.message);
+      }
+    }
+  }
+
   // 1. Initialize or fetch credentials for this session
-  let creds = await readKey('creds', 'creds');
+  let creds = forceClean ? null : await readKey('creds', 'creds');
   if (!creds) {
     creds = initAuthCreds();
     await writeKey('creds', 'creds', creds);
@@ -158,6 +172,12 @@ export async function useSupabaseAuthState(sessionId) {
           console.warn(`[SupabaseAuthState] Error clearing keys for ${sessionId}:`, err.message);
         }
       }
+      const fresh = initAuthCreds();
+      for (const k in creds) {
+        delete creds[k];
+      }
+      Object.assign(creds, fresh);
+      await writeKey('creds', 'creds', creds);
     },
   };
 }

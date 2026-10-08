@@ -39,7 +39,7 @@ let sseClients = [];
 
 // Meta Cloud API Shared Server Configuration (Persists token across all staff sessions)
 let metaConfig = {
-  accessToken: process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '',
+  accessToken: process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || 'EAAPKSYZBDcu8BSv6YCceNu36eSytOR06TXco721oZAWjnpOaFQkeZA5lOhln4a980PlEfSo1AQKa6bRZAH9kjdtOe2RAPEqJGJgCEbWZAxoMdHMHvlrHDDvaKqY3XVu30vHPZBLdBgdHoDeJDB7qRYJl9r0R2cFcNlhqj3At5zp6QTZAWzwohz7JR3c6QuQf2VRMAZDZD',
   phoneNumberId: process.env.META_PHONE_NUMBER_ID || '1358157244046701',
   wabaId: process.env.META_WABA_ID || '2332922997481634'
 };

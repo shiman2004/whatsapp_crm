@@ -18,8 +18,8 @@ interface MetaApiModalProps {
 
 export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) => {
   const { notify } = useCrm() as any;
-  const [phoneNumberId, setPhoneNumberId] = useState('1302468252956177');
-  const [wabaId, setWabaId] = useState('1715869669491270');
+  const [phoneNumberId, setPhoneNumberId] = useState('1358157244046701');
+  const [wabaId, setWabaId] = useState('2332922997481634');
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem('meta_access_token') || '');
   const [testNumber, setTestNumber] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from Royal Wellness Center! 🌿 Your consultation is confirmed.');
@@ -73,7 +73,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
         text: { body: testMessage }
       };
 
-      const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId || '1302468252956177'}/messages`, {
+      const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId || '1358157244046701'}/messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,

@@ -88,8 +88,11 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
         setSendResult({ success: true, msg: useTemplate ? '✅ Official Template (hello_world) sent and delivered to WhatsApp!' : '✅ Custom message sent via Meta Cloud API!' });
         if (notify) notify('WhatsApp Delivered', `Message successfully sent to ${testNumber}`, 'success');
       } else {
-        const errMsg = result.error?.message || result.error?.error_user_msg || JSON.stringify(result.error) || 'Failed to send message';
-        setSendResult({ success: false, msg: `Meta API: ${errMsg}` });
+        let errMsg = result.error?.message || result.error?.error_user_msg || JSON.stringify(result.error) || 'Failed to send message';
+        if (result.error?.code === 131030) {
+          errMsg = '⚠️ Number Not Allowed Yet: You must add this phone number to the "To" Recipient list in your Meta Developer Portal (Step 1 -> Manage phone number list) and verify it with a 6-digit OTP code before Meta allows sending test messages to it.';
+        }
+        setSendResult({ success: false, msg: errMsg });
       }
     } catch (err: any) {
       setSendResult({ success: false, msg: err.message || 'Error connecting to Meta API' });

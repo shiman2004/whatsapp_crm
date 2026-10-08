@@ -37,6 +37,13 @@ function verifyAuthToken(token) {
 // Multi-Client SSE Hub with Coordinator Channel Isolation
 let sseClients = [];
 
+// Meta Cloud API Shared Server Configuration (Persists token across all staff sessions)
+let metaConfig = {
+  accessToken: process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '',
+  phoneNumberId: process.env.META_PHONE_NUMBER_ID || '1358157244046701',
+  wabaId: process.env.META_WABA_ID || '2332922997481634'
+};
+
 // Periodic SSE Keep-Alive Heartbeat (Prevents proxy/Render timeout drops)
 setInterval(() => {
   const keepAlive = ': keepalive\n\n';
@@ -451,14 +458,23 @@ const server = http.createServer(async (req, res) => {
 
         let sendResult = null;
 
-        // If Meta Cloud API token is supplied, dispatch directly to Meta Graph API; otherwise use Baileys socket
-        if (payload.token) {
-          const cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
-          const phoneId = payload.phoneNumberId || '1358157244046701';
+        // If Meta Cloud API token is supplied or configured on server, dispatch directly to Meta Graph API; otherwise use Baileys socket
+        const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        const phoneId = (payload.phoneNumberId || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
+
+        let cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
+        if (cleanTo.startsWith('0') && cleanTo.length === 10) {
+          cleanTo = '94' + cleanTo.slice(1);
+        } else if (cleanTo.length === 9 && (cleanTo.startsWith('7') || cleanTo.startsWith('1'))) {
+          cleanTo = '94' + cleanTo;
+        }
+
+        if (metaToken) {
+          console.log(`🚀 [Meta Graph API] Dispatching message to ${cleanTo} via Phone ID ${phoneId}...`);
           const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
             method: 'POST',
             headers: {
-              'Authorization': `Bearer ${payload.token}`,
+              'Authorization': `Bearer ${metaToken}`,
               'Content-Type': 'application/json'
             },
             body: JSON.stringify({
@@ -471,9 +487,12 @@ const server = http.createServer(async (req, res) => {
           });
           const metaData = await metaRes.json().catch(() => ({}));
           if (!metaRes.ok) {
-            throw new Error(metaData.error?.message || 'Meta Cloud API dispatch failed');
+            console.error('❌ [Meta Graph API Error]:', JSON.stringify(metaData));
+            const errMsg = metaData.error?.message || metaData.error?.error_user_msg || (metaData.error ? JSON.stringify(metaData.error) : 'Meta Cloud API dispatch failed');
+            throw new Error(`Meta API: ${errMsg}`);
           }
           const messageId = metaData.messages?.[0]?.id || `meta-${Date.now()}`;
+          console.log(`✅ [Meta Graph API] Delivered to customer WhatsApp! Message ID: ${messageId}`);
           sendResult = {
             success: true,
             messageId,
@@ -1025,6 +1044,47 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ success: false, error: err.message }));
     }
     return;
+  }
+
+  // 10e. REST: Get/Save Meta Cloud API Configuration
+  if (pathname === '/api/meta/config' || pathname === '/api/meta/token') {
+    if (req.method === 'GET') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        hasToken: Boolean(metaConfig.accessToken),
+        accessToken: metaConfig.accessToken || '',
+        phoneNumberId: metaConfig.phoneNumberId,
+        wabaId: metaConfig.wabaId
+      }));
+      return;
+    }
+
+    if (req.method === 'POST') {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          if (payload.accessToken !== undefined) metaConfig.accessToken = String(payload.accessToken || '').trim();
+          if (payload.phoneNumberId) metaConfig.phoneNumberId = String(payload.phoneNumberId).trim();
+          if (payload.wabaId) metaConfig.wabaId = String(payload.wabaId).trim();
+
+          console.log(`🔑 [Meta Config Updated] Phone ID: ${metaConfig.phoneNumberId}, Token Length: ${metaConfig.accessToken.length}`);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            hasToken: Boolean(metaConfig.accessToken),
+            phoneNumberId: metaConfig.phoneNumberId,
+            wabaId: metaConfig.wabaId
+          }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
   }
 
   // 11. Clear Data Endpoint

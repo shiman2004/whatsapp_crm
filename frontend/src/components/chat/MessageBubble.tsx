@@ -17,7 +17,8 @@ import {
   Sparkles, 
   Star, 
   Trash2,
-  Plus
+  Plus,
+  AlertCircle
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -304,7 +305,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                   {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
                 </span>
                 {isOutbound && (
-                  message.status === 'read' ? (
+                  message.status === 'failed' ? (
+                    <span title="Delivery failed. Please check Meta API Token or WhatsApp connection."><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
+                  ) : message.status === 'read' ? (
                     <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
                   ) : message.status === 'delivered' ? (
                     <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>

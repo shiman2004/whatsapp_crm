@@ -37,6 +37,16 @@ function verifyAuthToken(token) {
 // Multi-Client SSE Hub with Coordinator Channel Isolation
 let sseClients = [];
 
+// Periodic SSE Keep-Alive Heartbeat (Prevents proxy/Render timeout drops)
+setInterval(() => {
+  const keepAlive = ': keepalive\n\n';
+  sseClients.forEach(client => {
+    try {
+      client.res.write(keepAlive);
+    } catch (e) {}
+  });
+}, 15000);
+
 /**
  * Isolated SSE Dispatcher
  * Guarantees Coordinator A NEVER receives events belonging to Coordinator B

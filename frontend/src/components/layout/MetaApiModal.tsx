@@ -6,7 +6,9 @@ import {
   Copy, 
   Check, 
   Sparkles,
-  Link2
+  Link2,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { API_BASE_URL } from '../../config/api';
@@ -21,6 +23,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   const [phoneNumberId, setPhoneNumberId] = useState('1358157244046701');
   const [wabaId, setWabaId] = useState('2332922997481634');
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem('meta_access_token') || '');
+  const [showToken, setShowToken] = useState(false);
   const [testNumber, setTestNumber] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from Royal Wellness Center! 🌿 Your consultation is confirmed.');
   const [isSending, setIsSending] = useState(false);
@@ -48,13 +51,15 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   if (!isOpen) return null;
 
   const handleSaveToken = async () => {
-    localStorage.setItem('meta_access_token', accessToken);
+    const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '').replace(/["']/g, '');
+    setAccessToken(cleanToken);
+    localStorage.setItem('meta_access_token', cleanToken);
     try {
       await fetch(`${API_BASE_URL}/api/meta/config`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          accessToken,
+          accessToken: cleanToken,
           phoneNumberId,
           wabaId
         })
@@ -74,7 +79,8 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
       alert('Please enter a recipient WhatsApp number (with country code)');
       return;
     }
-    if (!accessToken) {
+    const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '').replace(/["']/g, '');
+    if (!cleanToken) {
       alert('Please paste your Meta Access Token first');
       return;
     }
@@ -83,7 +89,13 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
     setSendResult(null);
 
     try {
-      const cleanTo = testNumber.replace(/[^0-9]/g, '');
+      let cleanTo = testNumber.replace(/[^0-9]/g, '');
+      if (cleanTo.startsWith('0') && cleanTo.length === 10) {
+        cleanTo = '94' + cleanTo.slice(1);
+      } else if (cleanTo.length === 9 && (cleanTo.startsWith('7') || cleanTo.startsWith('1'))) {
+        cleanTo = '94' + cleanTo;
+      }
+
       const payload = useTemplate ? {
         messaging_product: 'whatsapp',
         to: cleanTo,
@@ -103,7 +115,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
       const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId || '1358157244046701'}/messages`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
+          'Authorization': `Bearer ${cleanToken}`,
           'Content-Type': 'application/json'
         },
         body: JSON.stringify(payload)
@@ -116,7 +128,11 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
         if (notify) notify('WhatsApp Delivered', `Message successfully sent to ${testNumber}`, 'success');
       } else {
         let errMsg = result.error?.message || result.error?.error_user_msg || JSON.stringify(result.error) || 'Failed to send message';
-        if (result.error?.code === 131030) {
+        if (result.error?.error_subcode === 463 || result.error?.message?.toLowerCase().includes('expired')) {
+          errMsg = '⚠️ Token Expired: The temporary access token has expired. Please copy a new one from Meta API Setup.';
+        } else if (result.error?.code === 190) {
+          errMsg = `⚠️ Authentication Error (Code 190): ${result.error?.message || 'Invalid OAuth token'}. Check that the token was copied completely without extra spaces.`;
+        } else if (result.error?.code === 131030) {
           errMsg = '⚠️ Number Not Allowed Yet: You must add this phone number to the "To" Recipient list in your Meta Developer Portal (Step 1 -> Manage phone number list) and verify it with a 6-digit OTP code before Meta allows sending test messages to it.';
         }
         setSendResult({ success: false, msg: errMsg });
@@ -202,16 +218,26 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
               <span className="text-[10px] text-slate-400">Saved locally in browser</span>
             </label>
             <div className="flex gap-2">
-              <input
-                type="password"
-                value={accessToken}
-                onChange={(e) => setAccessToken(e.target.value)}
-                placeholder="Paste the generated Access Token here..."
-                className="flex-1 px-3 py-2 bg-[#202c33] border border-slate-700 rounded-xl text-slate-200 text-xs focus:border-emerald-500 outline-none font-mono"
-              />
+              <div className="relative flex-1">
+                <input
+                  type={showToken ? "text" : "password"}
+                  value={accessToken}
+                  onChange={(e) => setAccessToken(e.target.value)}
+                  placeholder="Paste the generated Access Token here..."
+                  className="w-full px-3 py-2 pr-9 bg-[#202c33] border border-slate-700 rounded-xl text-slate-200 text-xs focus:border-emerald-500 outline-none font-mono"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowToken(!showToken)}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-200"
+                  title={showToken ? "Hide token" : "Show token"}
+                >
+                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                </button>
+              </div>
               <button
                 onClick={handleSaveToken}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs transition-all"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs transition-all shrink-0"
               >
                 Save
               </button>

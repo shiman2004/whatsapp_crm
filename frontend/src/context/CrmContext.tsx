@@ -1069,9 +1069,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    // Enforce WhatsApp connection requirement for CRM sending
-    if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected') {
-      notify('WhatsApp Disconnected', 'Please link your WhatsApp first to send messages from the CRM.', 'warning');
+    // Enforce WhatsApp connection requirement for CRM sending (Supports Linked Device OR Meta Cloud API)
+    const hasMetaToken = !!localStorage.getItem('meta_access_token');
+    if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected' && !hasMetaToken) {
+      notify('WhatsApp Disconnected', 'Please link your WhatsApp or configure Meta API first to send messages.', 'warning');
       setQrModalOpen(true);
       return;
     }

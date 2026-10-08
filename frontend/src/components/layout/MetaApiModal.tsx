@@ -27,6 +27,8 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   const [sendResult, setSendResult] = useState<{ success: boolean; msg: string } | null>(null);
   const [copiedField, setCopiedField] = useState<string | null>(null);
 
+  const [useTemplate, setUseTemplate] = useState(true);
+
   if (!isOpen) return null;
 
   const handleSaveToken = () => {
@@ -55,25 +57,35 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
 
     try {
       const cleanTo = testNumber.replace(/[^0-9]/g, '');
+      const payload = useTemplate ? {
+        messaging_product: 'whatsapp',
+        to: cleanTo,
+        type: 'template',
+        template: {
+          name: 'hello_world',
+          language: { code: 'en_US' }
+        }
+      } : {
+        messaging_product: 'whatsapp',
+        recipient_type: 'individual',
+        to: cleanTo,
+        type: 'text',
+        text: { body: testMessage }
+      };
+
       const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId || '1302468252956177'}/messages`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${accessToken}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-          messaging_product: 'whatsapp',
-          recipient_type: 'individual',
-          to: cleanTo,
-          type: 'text',
-          text: { body: testMessage }
-        })
+        body: JSON.stringify(payload)
       });
 
       const result = await response.json();
 
       if (response.ok && (result.messages || result.messaging_product)) {
-        setSendResult({ success: true, msg: '✅ Message sent successfully via Meta Cloud API!' });
+        setSendResult({ success: true, msg: useTemplate ? '✅ Official Template (hello_world) sent and delivered to WhatsApp!' : '✅ Custom message sent via Meta Cloud API!' });
         if (notify) notify('WhatsApp Delivered', `Message successfully sent to ${testNumber}`, 'success');
       } else {
         const errMsg = result.error?.message || result.error?.error_user_msg || JSON.stringify(result.error) || 'Failed to send message';
@@ -178,24 +190,53 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
 
           {/* Live Test Outbound Sender */}
           <div className="p-4 bg-[#202c33] rounded-xl border border-slate-700/80 space-y-3">
-            <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
-              <Send className="w-3.5 h-3.5 text-whatsapp" /> Send Real WhatsApp Test Message
-            </h3>
+            <div className="flex items-center justify-between">
+              <h3 className="text-xs font-bold text-slate-200 flex items-center gap-1.5">
+                <Send className="w-3.5 h-3.5 text-whatsapp" /> Send Real WhatsApp Test Message
+              </h3>
+              <div className="flex items-center gap-1 bg-[#111b21] p-0.5 rounded-lg border border-slate-700/60 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => setUseTemplate(true)}
+                  className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                    useTemplate ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Official Template (hello_world)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setUseTemplate(false)}
+                  className={`px-2 py-0.5 rounded-md font-semibold transition-all ${
+                    !useTemplate ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  Custom Text
+                </button>
+              </div>
+            </div>
             
             <div className="space-y-2">
               <input
                 type="text"
                 value={testNumber}
                 onChange={(e) => setTestNumber(e.target.value)}
-                placeholder="Recipient phone with country code (e.g. 94771234567)"
+                placeholder="Recipient phone with country code (e.g. 94770849469)"
                 className="w-full px-3 py-2 bg-[#111b21] border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-emerald-500 outline-none font-mono"
               />
-              <textarea
-                value={testMessage}
-                onChange={(e) => setTestMessage(e.target.value)}
-                rows={2}
-                className="w-full px-3 py-2 bg-[#111b21] border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-emerald-500 outline-none resize-none"
-              />
+              {!useTemplate && (
+                <textarea
+                  value={testMessage}
+                  onChange={(e) => setTestMessage(e.target.value)}
+                  rows={2}
+                  className="w-full px-3 py-2 bg-[#111b21] border border-slate-700 rounded-lg text-slate-200 text-xs focus:border-emerald-500 outline-none resize-none"
+                />
+              )}
+              {useTemplate && (
+                <div className="p-2 rounded-lg bg-[#111b21]/70 border border-slate-700/60 text-[11px] text-slate-300">
+                  <span className="font-semibold text-emerald-400">Template Mode:</span> Sends Meta's official pre-approved <code className="text-emerald-300 font-mono">hello_world</code> template. Delivers instantly to numbers registered on your Meta test list.
+                </div>
+              )}
             </div>
 
             <button

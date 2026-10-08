@@ -34,6 +34,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     messages, 
     currentUser, 
     isSuperAdmin, 
+    isLeadsOfficer,
     selectedLeadId, 
     categories,
     markChatAsRead,
@@ -103,8 +104,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
   // Filter leads based on role & search & category filters
   const filteredLeads = leads.filter((lead) => {
-    // Role filter
-    if (!isSuperAdmin && lead.assignedTo !== currentUser.id) {
+    // Role filter: Super Admin and Leads Officers can view ALL chats and messages
+    if (!isSuperAdmin && !isLeadsOfficer && lead.assignedTo !== currentUser.id) {
       return false;
     }
 

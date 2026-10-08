@@ -331,43 +331,39 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (coordsRes && coordsRes.ok) {
         const dbCoords: any[] = await coordsRes.json().catch(() => []);
-        if (Array.isArray(dbCoords) && dbCoords.length > 0) {
-          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
-          setUsers(prevUsers => {
-            const userMap = new Map<string, User>();
-            INITIAL_USERS.forEach(u => userMap.set(u.id, u));
-            prevUsers.forEach(u => userMap.set(u.id, u));
-            dbCoords.forEach(u => {
-              if (!deletedUserIds.includes(u.id)) {
-                userMap.set(u.id, {
-                  ...u,
-                  password: u.password || 'staff',
-                  pin: u.pin || '2026',
-                  active: u.active ?? true,
-                  activeLeadsCount: u.activeLeadsCount || 0
-                });
-              }
+        if (Array.isArray(dbCoords)) {
+          const userMap = new Map<string, User>();
+          // Ensure Super Admin is always present
+          INITIAL_USERS.forEach(u => userMap.set(u.id, u));
+          dbCoords.forEach(u => {
+            userMap.set(u.id, {
+              ...u,
+              password: u.password || 'staff',
+              pin: u.pin || '2026',
+              active: u.active ?? true,
+              activeLeadsCount: u.activeLeadsCount || 0
             });
-            const updated = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
-            localStorage.setItem('rw_crm_users', JSON.stringify(updated));
-            return updated;
           });
+          const updatedUsers = Array.from(userMap.values());
+          setUsers(updatedUsers);
+          localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
         }
       }
 
-      if (leadsRes && leadsRes.ok && msgsRes && msgsRes.ok) {
-        const dbLeads: any[] = await leadsRes.json();
-        const dbMessages: any[] = await msgsRes.json();
-
-        if (Array.isArray(dbLeads) && dbLeads.length > 0) {
+      if (leadsRes && leadsRes.ok) {
+        const dbLeads: any[] = await leadsRes.json().catch(() => []);
+        if (Array.isArray(dbLeads)) {
           const dbCustomers: Customer[] = [];
+          const hydratedLeads: Lead[] = [];
+
           dbLeads.forEach(l => {
+            let finalCust: Customer | undefined = undefined;
             if (l.customer) {
               const rawCust = l.customer;
               const cleanDigits = getCleanWhatsAppDigits(rawCust.whatsappNumber);
               const canonicalPhone = normalizeWhatsAppNumber(rawCust.whatsappNumber);
               const displayPhone = formatWhatsAppDisplay(canonicalPhone || rawCust.whatsappNumber);
-              dbCustomers.push({
+              finalCust = {
                 id: rawCust.id,
                 whatsappNumber: canonicalPhone || rawCust.whatsappNumber,
                 phoneNumber: displayPhone,
@@ -376,60 +372,40 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 avatarUrl: rawCust.avatarUrl,
                 preferredLanguage: rawCust.preferredLanguage || 'en',
                 createdAt: rawCust.createdAt || new Date().toISOString(),
-              });
-            }
-          });
-
-          // Hydrate unique customers from DB merged with cached customers
-          setCustomers(prevCusts => {
-            const custMap = new Map<string, Customer>();
-            prevCusts.forEach(c => custMap.set(c.id, c));
-            dbCustomers.forEach(c => {
-              const existing = custMap.get(c.id);
-              custMap.set(c.id, existing ? { ...existing, ...c } : c);
-            });
-            return Array.from(custMap.values());
-          });
-
-          // Hydrate unique leads from DB merged with cached leads
-          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
-          setLeads(prevLeads => {
-            const leadMap = new Map<string, Lead>();
-            prevLeads.forEach(l => leadMap.set(l.id, l));
-            dbLeads.forEach(l => {
-              const cust = l.customer;
-              const isAssignedDeleted = l.assignedTo && deletedUserIds.includes(l.assignedTo);
-              const assignedTo = isAssignedDeleted ? undefined : l.assignedTo;
-              const stage = isAssignedDeleted ? 'new' : l.stage;
-
-              const hydratedLead: Lead = {
-                ...l,
-                assignedTo,
-                stage,
-                customer: cust ? {
-                  ...cust,
-                  phoneNumber: formatWhatsAppDisplay(cust.whatsappNumber),
-                  whatsappId: cust.whatsappId || getCleanWhatsAppDigits(cust.whatsappNumber)
-                } : undefined
               };
-              leadMap.set(l.id, hydratedLead);
-            });
+              dbCustomers.push(finalCust);
+            }
 
-            const mergedLeads = Array.from(leadMap.values());
-            setSelectedLeadId(prevId => {
-              const isOfficerOrAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'leads_officer';
-              const allowedLeads = isOfficerOrAdmin
-                ? mergedLeads
-                : mergedLeads.filter(l => l.assignedTo === currentUser?.id);
-
-              if (prevId && allowedLeads.some(l => l.id === prevId)) return prevId;
-              return allowedLeads[0]?.id || null;
+            hydratedLeads.push({
+              ...l,
+              assignedTo: l.assignedTo || undefined,
+              stage: l.stage || 'new',
+              customer: finalCust
             });
-            return mergedLeads;
+          });
+
+          // Single Source of Truth from Supabase: Replace local arrays directly
+          setCustomers(dbCustomers);
+          localStorage.setItem('rw_crm_customers', JSON.stringify(dbCustomers));
+
+          setLeads(hydratedLeads);
+          localStorage.setItem('rw_crm_leads', JSON.stringify(hydratedLeads));
+
+          setSelectedLeadId(prevId => {
+            const isOfficerOrAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'leads_officer';
+            const allowedLeads = isOfficerOrAdmin
+              ? hydratedLeads
+              : hydratedLeads.filter(l => l.assignedTo === currentUser?.id);
+
+            if (prevId && allowedLeads.some(l => l.id === prevId)) return prevId;
+            return allowedLeads[0]?.id || null;
           });
         }
+      }
 
-        if (Array.isArray(dbMessages) && dbMessages.length > 0) {
+      if (msgsRes && msgsRes.ok) {
+        const dbMessages: any[] = await msgsRes.json().catch(() => []);
+        if (Array.isArray(dbMessages)) {
           const formattedMessages: Message[] = dbMessages
             .filter(m => (m.content && m.content.trim().length > 0) || Boolean(m.mediaUrl))
             .map(m => ({
@@ -456,14 +432,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               waMessageId: m.id,
             }));
 
-          setMessages(prev => {
-            const combinedMap = new Map<string, Message>();
-            // 1. First keep all local cached messages
-            prev.forEach(m => combinedMap.set(m.waMessageId || m.id, m));
-            // 2. Overwrite / merge with verified database messages
-            formattedMessages.forEach(m => combinedMap.set(m.waMessageId || m.id, m));
-            return Array.from(combinedMap.values()).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-          });
+          setMessages(formattedMessages);
+          localStorage.setItem('rw_crm_messages', JSON.stringify(formattedMessages));
         }
       }
     } catch (e) {

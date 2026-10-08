@@ -16,7 +16,7 @@ import {
 export const INITIAL_USERS: User[] = [
   {
     id: 'user-admin-1',
-    fullName: 'Admin',
+    fullName: 'Super Admin',
     email: 'admin@royalwellness.lk',
     branch: 'Colombo (Head Office)',
     password: 'admin',
@@ -24,34 +24,6 @@ export const INITIAL_USERS: User[] = [
     role: 'super_admin',
     active: true,
     createdAt: '2026-01-01T08:00:00Z',
-    activeLeadsCount: 0,
-  },
-  {
-    id: 'user-coord-shiman',
-    fullName: 'Shiman',
-    email: 'shiman@royalwellness.lk',
-    branch: 'Colombo Branch',
-    password: 'staff',
-    pin: '2026',
-    role: 'coordinator',
-    treatmentCategoryId: 'cat-hair-care',
-    language: 'en',
-    active: true,
-    createdAt: '2026-01-05T08:00:00Z',
-    activeLeadsCount: 0,
-  },
-  {
-    id: 'user-coord-shim',
-    fullName: 'Shim',
-    email: 'shim@royalwellness.lk',
-    branch: 'Colombo Branch',
-    password: 'staff',
-    pin: '2026',
-    role: 'coordinator',
-    treatmentCategoryId: 'cat-hair-care',
-    language: 'en',
-    active: true,
-    createdAt: '2026-01-06T08:00:00Z',
     activeLeadsCount: 0,
   }
 ];

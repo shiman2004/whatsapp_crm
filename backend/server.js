@@ -1360,6 +1360,10 @@ server.listen(PORT, '0.0.0.0', async () => {
   // Initialize DB and auto-restore active sessions on Render boot
   checkDbConnection().then(async res => {
     if (res.connected) {
+      const prisma = getPrisma();
+      if (prisma) {
+        await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
+      }
       await autoSeedDbIfEmpty();
       await sessionManager.restoreAllActiveSessions();
     }

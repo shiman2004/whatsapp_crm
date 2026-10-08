@@ -20,7 +20,7 @@ interface WhatsAppQrModalProps {
 }
 
 export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClose }) => {
-  const { currentUser, isSuperAdmin, notify } = useCrm() as any;
+  const { currentUser, isSuperAdmin, notify, setWhatsappStatus } = useCrm() as any;
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [status, setStatus] = useState<'connecting' | 'qr_ready' | 'connected' | 'disconnected' | 'syncing' | 'sync_error'>('connecting');
   const [connectedPhone, setConnectedPhone] = useState<string | null>(null);
@@ -74,6 +74,8 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const handleForceRefresh = async () => {
     setIsRefreshing(true);
     setFetchError(null);
+    setQrCode(null);
+    setStatus('connecting');
     try {
       await fetch(`${API_BASE_URL}/api/reconnect`, { 
         method: 'POST',
@@ -98,28 +100,32 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const handleLogout = async () => {
     setIsLoggingOut(true);
     try {
+      if (setWhatsappStatus) setWhatsappStatus('disconnected');
+      setStatus('connecting');
+      setQrCode(null);
+      setConnectedPhone(null);
+
       await fetch(`${API_BASE_URL}/api/disconnect`, { 
         method: 'POST',
         headers: authHeaders 
       });
-      setStatus('connecting');
-      setQrCode(null);
-      setConnectedPhone(null);
-      if (notify) notify('Clinic WhatsApp Disconnected', 'Official clinic WhatsApp unlinked.', 'info');
+
+      if (notify) notify('Clinic WhatsApp Disconnected', 'Official clinic WhatsApp unlinked. Generating fresh QR code...', 'info');
       
-      // Re-fetch new QR code for clinic line
-      setTimeout(async () => {
-        try {
-          const res = await fetch(`${API_BASE_URL}/api/qr`, {
-            headers: authHeaders
-          });
-          if (res.ok) {
-            const data = await res.json();
-            setStatus(data.status);
-            if (data.qr) setQrCode(data.qr);
-          }
-        } catch (e) {}
-      }, 1200);
+      // Force fresh socket generation immediately
+      await fetch(`${API_BASE_URL}/api/reconnect`, {
+        method: 'POST',
+        headers: authHeaders
+      });
+
+      const res = await fetch(`${API_BASE_URL}/api/qr`, {
+        headers: authHeaders
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setStatus(data.status);
+        if (data.qr) setQrCode(data.qr);
+      }
     } catch (e) {
       console.error('Logout error:', e);
     } finally {
@@ -185,20 +191,14 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
               </div>
 
               <div className="pt-2 flex justify-center gap-3">
-                {isSuperAdmin ? (
-                  <button
-                    onClick={handleLogout}
-                    disabled={isLoggingOut}
-                    className="px-4 py-2 bg-red-950/60 hover:bg-red-900/60 border border-red-500/40 text-red-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all"
-                  >
-                    <LogOut className="w-3.5 h-3.5" />
-                    <span>{isLoggingOut ? 'Unlinking...' : 'Unlink / Switch Clinic Line'}</span>
-                  </button>
-                ) : (
-                  <div className="px-3 py-1.5 rounded-lg bg-emerald-950/40 border border-emerald-500/30 text-emerald-300 text-xs font-medium">
-                    🟢 Managed by Super Admin (Shared Clinic Line)
-                  </div>
-                )}
+                <button
+                  onClick={handleLogout}
+                  disabled={isLoggingOut}
+                  className="px-4 py-2 bg-red-950/60 hover:bg-red-900/60 border border-red-500/40 text-red-300 rounded-xl text-xs font-semibold flex items-center gap-2 transition-all cursor-pointer disabled:opacity-50"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>{isLoggingOut ? 'Unlinking & Generating QR...' : 'Unlink / Switch Clinic Line'}</span>
+                </button>
               </div>
             </div>
           ) : (

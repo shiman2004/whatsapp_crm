@@ -319,7 +319,7 @@ const server = http.createServer(async (req, res) => {
     let runtimeSession = sessionManager.getRuntimeSession(masterLineId);
     
     if (!runtimeSession || (runtimeSession.status === 'disconnected' && !runtimeSession.qrCodeDataUrl && !runtimeSession.isStarting)) {
-      runtimeSession = await sessionManager.startCoordinatorSocket(masterLineId, false);
+      runtimeSession = await sessionManager.startCoordinatorSocket(masterLineId, true);
     }
 
     const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
@@ -341,13 +341,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3b. Reconnect / Force Fresh QR for Central Clinic Line (Super Admin only)
+  // 3b. Reconnect / Force Fresh QR for Central Clinic Line
   if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect' || pathname === '/api/whatsapp/reconnect')) {
-    if (authUser.role !== 'super_admin') {
-      res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can reconnect the clinic WhatsApp line.' }));
-      return;
-    }
     logWaSessionDebug('/api/reconnect', authUser, masterLineId, null, null);
     const session = await sessionManager.startCoordinatorSocket(masterLineId, true);
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -531,14 +526,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Disconnect / Unlink Central Clinic WhatsApp Line (Super Admin only)
+  // 6. Disconnect / Unlink Central Clinic WhatsApp Line
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink' || pathname === '/api/whatsapp/disconnect')) {
     try {
-      if (authUser.role !== 'super_admin') {
-        res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can unlink the clinic WhatsApp line.' }));
-        return;
-      }
       logWaSessionDebug('/api/disconnect', authUser, masterLineId, sessionManager.getRuntimeSession(masterLineId), null);
       const unlinkRes = await sessionManager.unlinkSession(masterLineId);
       res.writeHead(200, { 'Content-Type': 'application/json' });

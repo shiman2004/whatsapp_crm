@@ -132,6 +132,7 @@ interface CrmContextType {
 
   // WhatsApp Connection & QR Modal
   whatsappStatus: WhatsAppConnectionStatus;
+  setWhatsappStatus: (status: WhatsAppConnectionStatus) => void;
   qrModalOpen: boolean;
   setQrModalOpen: (open: boolean) => void;
 
@@ -1858,6 +1859,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectSimulatorTreatment,
     dismissNotification,
     whatsappStatus,
+    setWhatsappStatus,
     qrModalOpen,
     setQrModalOpen,
   };

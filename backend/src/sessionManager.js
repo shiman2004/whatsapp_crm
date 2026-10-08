@@ -112,8 +112,8 @@ class WhatsAppSessionManager {
   async startCoordinatorSocket(coordinatorId, forceClean = false) {
     const existing = this.sessions.get(coordinatorId);
     
-    // Concurrency Lock: prevent duplicate socket creations
-    if (existing && existing.isStarting) {
+    // Concurrency Lock: prevent duplicate socket creations unless forceClean is requested
+    if (existing && existing.isStarting && !forceClean) {
       console.log(`⏳ [SessionManager] Socket startup already in progress for coordinator ${coordinatorId}. Reusing lock.`);
       return existing;
     }
@@ -136,6 +136,11 @@ class WhatsAppSessionManager {
     };
 
     sessionCtx.isStarting = true;
+    if (forceClean) {
+      sessionCtx.status = 'connecting';
+      sessionCtx.qrCodeDataUrl = null;
+      sessionCtx.connectedPhoneNumber = null;
+    }
     this.sessions.set(coordinatorId, sessionCtx);
 
     if (sessionCtx.reconnectTimer) {
@@ -153,21 +158,17 @@ class WhatsAppSessionManager {
         sessionCtx.sock = null;
       }
 
-      // Initialize Supabase-backed auth state
-      const { state, saveCreds, clearSessionAuth } = await useSupabaseAuthState(sessionId);
-
-      if (forceClean) {
-        await clearSessionAuth();
-      }
+      // Initialize Supabase-backed auth state with forceClean
+      const { state, saveCreds, clearSessionAuth } = await useSupabaseAuthState(sessionId, forceClean);
 
       const instanceId = ++sessionCtx.instanceCounter;
-      const { version, isLatest } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307], isLatest: true }));
+      const { version } = await fetchLatestBaileysVersion().catch(() => ({ version: [2, 3000, 1015901307], isLatest: true }));
       const logger = pino({ level: 'silent' });
 
-      console.log(`\n🚀 [SessionManager] Launching Socket #${instanceId} for Coordinator [${coordinatorId}] (Baileys v${version.join('.')})`);
+      console.log(`\n🚀 [SessionManager] Launching Socket #${instanceId} for Coordinator [${coordinatorId}] (Baileys v${version.join('.')}) - Clean: ${forceClean}`);
       
       sessionCtx.status = 'connecting';
-      this.updateDbStatus(coordinatorId, 'connecting', null);
+      await this.updateDbStatus(coordinatorId, 'connecting', null);
 
       const sock = makeWASocket({
         version,
@@ -626,7 +627,8 @@ class WhatsAppSessionManager {
 
       if (sessionCtx.sock) {
         try {
-          await sessionCtx.sock.logout();
+          sessionCtx.sock.ev.removeAllListeners();
+          await sessionCtx.sock.logout().catch(() => {});
         } catch (e) {
           try { sessionCtx.sock.end(new Error('User unlinked session')); } catch (e2) {}
         }
@@ -634,25 +636,55 @@ class WhatsAppSessionManager {
       }
 
       if (sessionCtx.clearSessionAuth) {
-        await sessionCtx.clearSessionAuth();
+        await sessionCtx.clearSessionAuth().catch(() => {});
       }
 
       sessionCtx.status = 'disconnected';
       sessionCtx.connectedPhoneNumber = null;
       sessionCtx.qrCodeDataUrl = null;
+      sessionCtx.isStarting = false;
       this.sessions.delete(coordinatorId);
     }
 
-    await this.updateDbStatus(coordinatorId, 'disconnected', null, null, null);
+    // Always ensure DB keys and session records are wiped
+    const sessionRecord = await this.getOrCreateSessionRecord(coordinatorId);
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        await prisma.whatsAppSessionKey.deleteMany({
+          where: { sessionId: sessionRecord.id }
+        });
+        await prisma.whatsAppSession.update({
+          where: { coordinatorId },
+          data: {
+            status: 'disconnected',
+            phoneNumber: null,
+            qrCodeDataUrl: null,
+            accountName: null,
+            lastActiveAt: new Date()
+          }
+        });
+      } catch (dbErr) {
+        console.warn(`[unlinkSession DB clear error]:`, dbErr.message);
+      }
+    }
+
     this.emitToCoordinator(coordinatorId, {
       type: 'CONNECTION_STATUS',
       status: 'disconnected',
       phone: null,
+      qrDataUrl: null,
       coordinatorId
     });
 
-    console.log(`✅ [SessionManager] Coordinator [${coordinatorId}] session successfully unlinked. Other sessions remain active.`);
-    return { success: true, message: 'WhatsApp session unlinked successfully.' };
+    console.log(`✅ [SessionManager] Coordinator [${coordinatorId}] session successfully unlinked. Starting fresh QR generation...`);
+
+    // Immediately trigger fresh socket with forceClean = true so a new pairing QR code is generated right away
+    setTimeout(() => {
+      this.startCoordinatorSocket(coordinatorId, true);
+    }, 300);
+
+    return { success: true, message: 'WhatsApp session unlinked successfully. New QR code generating...' };
   }
 
   /**

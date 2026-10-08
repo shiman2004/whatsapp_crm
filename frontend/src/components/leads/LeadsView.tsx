@@ -10,7 +10,7 @@ interface LeadsViewProps {
 }
 
 export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
-  const { leads, isSuperAdmin, currentUser, categories, treatments } = useCrm();
+  const { leads, isSuperAdmin, isLeadsOfficer, currentUser, categories, treatments } = useCrm();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -20,8 +20,8 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
 
   // Filter leads based on role & search params
   const filteredLeads = leads.filter((lead) => {
-    // Role filter: If not super admin, restrict to assigned leads only (PRD §1.3)
-    if (!isSuperAdmin && lead.assignedTo !== currentUser.id) {
+    // Role filter: Super Admins and Leads Officers can see all leads; Coordinators see assigned leads only
+    if (!isSuperAdmin && !isLeadsOfficer && lead.assignedTo !== currentUser.id) {
       return false;
     }
 
@@ -43,8 +43,8 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
       return false;
     }
 
-    // Coordinator filter (Admin only)
-    if (isSuperAdmin && selectedCoordinator !== 'all') {
+    // Coordinator filter (Admin & Leads Officer)
+    if ((isSuperAdmin || isLeadsOfficer) && selectedCoordinator !== 'all') {
       if (selectedCoordinator === 'unassigned' && lead.assignedTo) return false;
       if (selectedCoordinator !== 'unassigned' && lead.assignedTo !== selectedCoordinator) return false;
     }

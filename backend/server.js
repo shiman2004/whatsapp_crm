@@ -880,6 +880,7 @@ const server = http.createServer(async (req, res) => {
           const email = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
           const pin = payload.pin || '2026';
           const phone = payload.phone || null;
+          const role = payload.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
 
           if (!fullName) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -895,7 +896,7 @@ const server = http.createServer(async (req, res) => {
                 email,
                 pin,
                 phone,
-                role: 'coordinator',
+                role: role,
                 password: 'staff'
               }
             });

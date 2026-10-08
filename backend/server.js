@@ -451,18 +451,8 @@ const server = http.createServer(async (req, res) => {
 
         let sendResult = null;
 
-        if (isBaileysConnected || !payload.token) {
-          logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
-          sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
-            to,
-            whatsappId,
-            message: msgContent,
-            media,
-            leadId,
-            customerId,
-          });
-        } else {
-          // If Baileys is not connected and Meta Cloud API token is supplied, dispatch directly to Meta Graph API
+        // If Meta Cloud API token is supplied, dispatch directly to Meta Graph API; otherwise use Baileys socket
+        if (payload.token) {
           const cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
           const phoneId = payload.phoneNumberId || '1302468252956177';
           const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
@@ -515,6 +505,18 @@ const server = http.createServer(async (req, res) => {
               console.warn('[DB Error saving Meta message]:', dbErr.message);
             }
           }
+        } else if (isBaileysConnected) {
+          logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
+          sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
+            to,
+            whatsappId,
+            message: msgContent,
+            media,
+            leadId,
+            customerId,
+          });
+        } else {
+          throw new Error('No active WhatsApp line or Meta API token configured.');
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1023,23 +1025,77 @@ const server = http.createServer(async (req, res) => {
                   const contact = val.contacts?.[0];
                   const message = val.messages?.[0];
 
-                  if (message) {
-                    const phone = contact?.wa_id || message.from;
-                    const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
-                    const text = message.text?.body || message.button?.text || '[Media Message]';
-                    const messageId = message.id;
+                    if (message) {
+                      const phone = contact?.wa_id || message.from;
+                      const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
+                      const text = message.text?.body || message.button?.text || '[Media Message]';
+                      const messageId = message.id;
 
-                    broadcastScopedSSE('user-admin-1', {
-                      type: 'INBOUND_WHATSAPP_MESSAGE',
-                      phone: phone ? `+${phone}` : '',
-                      whatsappId: phone,
-                      realPhone: phone ? `+${phone}` : '',
-                      name,
-                      text,
-                      messageId,
-                      timestamp: new Date().toISOString()
-                    });
-                  }
+                      broadcastScopedSSE(null, {
+                        type: 'INBOUND_WHATSAPP_MESSAGE',
+                        phone: phone ? `+${phone}` : '',
+                        whatsappId: phone,
+                        realPhone: phone ? `+${phone}` : '',
+                        name,
+                        text,
+                        messageId,
+                        timestamp: new Date().toISOString()
+                      });
+
+                      // Persist to database
+                      const prisma = getPrisma();
+                      if (prisma && getDbStatus() && phone) {
+                        try {
+                          let cust = await prisma.customer.findFirst({
+                            where: {
+                              OR: [
+                                { whatsappNumber: `+${phone}` },
+                                { whatsappId: phone }
+                              ]
+                            }
+                          });
+                          if (!cust) {
+                            cust = await prisma.customer.create({
+                              data: {
+                                whatsappNumber: `+${phone}`,
+                                whatsappId: phone,
+                                displayName: name || `+${phone}`,
+                                preferredLanguage: 'en'
+                              }
+                            });
+                          }
+                          let lead = await prisma.lead.findFirst({
+                            where: { customerId: cust.id }
+                          });
+                          if (!lead) {
+                            lead = await prisma.lead.create({
+                              data: {
+                                customerId: cust.id,
+                                categoryId: 'cat-ayurveda-1',
+                                treatmentId: 'trt-panchakarma-1',
+                                stage: 'new',
+                                source: 'whatsapp',
+                                language: 'en'
+                              }
+                            });
+                          }
+                          await prisma.message.create({
+                            data: {
+                              id: messageId,
+                              leadId: lead.id,
+                              customerId: cust.id,
+                              direction: 'inbound',
+                              senderType: 'customer',
+                              content: text,
+                              status: 'delivered',
+                              whatsappSessionId: 'meta-cloud'
+                            }
+                          });
+                        } catch (e) {
+                          console.warn('[DB Error saving inbound Meta message]:', e.message);
+                        }
+                      }
+                    }
                 }
               }
             }

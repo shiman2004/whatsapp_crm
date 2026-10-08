@@ -1125,7 +1125,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           media: media || undefined,
           leadId: lead.id,
           customerId: lead.customerId,
-          token: whatsappStatus !== 'connected' ? (savedToken || undefined) : undefined,
+          token: savedToken || undefined,
           phoneNumberId: '1302468252956177'
         })
       }).then(async (res) => {

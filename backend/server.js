@@ -484,23 +484,81 @@ const server = http.createServer(async (req, res) => {
 
           // Save message to Prisma database
           const prisma = getPrisma();
-          if (prisma && getDbStatus() && leadId && customerId) {
+          if (prisma && getDbStatus()) {
             try {
-              await prisma.message.create({
-                data: {
-                  id: messageId,
-                  leadId,
-                  customerId,
-                  whatsappSessionId: `meta-${phoneId}`,
-                  coordinatorId: targetCoordinatorId,
-                  direction: 'outbound',
-                  senderType: 'coordinator',
-                  content: msgContent || (media ? `[${media.type.toUpperCase()}]` : ''),
-                  status: 'sent',
-                  timestamp: new Date(),
-                  mediaType: media ? media.type : null,
+              const formattedTo = cleanTo.startsWith('+') ? cleanTo : `+${cleanTo}`;
+
+              // 1. Resolve Customer
+              let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
+              if (!cust && cleanTo) {
+                cust = await prisma.customer.findFirst({
+                  where: {
+                    OR: [
+                      { whatsappNumber: formattedTo },
+                      { whatsappNumber: cleanTo },
+                      { whatsappId: cleanTo }
+                    ]
+                  }
+                }).catch(() => null);
+                if (!cust) {
+                  cust = await prisma.customer.create({
+                    data: {
+                      whatsappNumber: formattedTo,
+                      whatsappId: cleanTo,
+                      displayName: formattedTo,
+                      preferredLanguage: 'en'
+                    }
+                  }).catch(() => null);
                 }
-              });
+              }
+
+              // 2. Resolve Lead
+              let lead = leadId ? await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null) : null;
+              if (!lead && cust) {
+                lead = await prisma.lead.findFirst({
+                  where: { customerId: cust.id },
+                  orderBy: { updatedAt: 'desc' }
+                }).catch(() => null);
+
+                if (!lead) {
+                  const firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
+                  const firstTrt = await prisma.treatment.findFirst().catch(() => null);
+                  lead = await prisma.lead.create({
+                    data: {
+                      customerId: cust.id,
+                      categoryId: firstCat?.id || 'cat-hair-care',
+                      treatmentId: firstTrt?.id || 'trt-hair-prp',
+                      stage: 'contacted',
+                      source: 'whatsapp',
+                      language: 'en'
+                    }
+                  }).catch(() => null);
+                }
+              }
+
+              if (cust && lead) {
+                await prisma.message.upsert({
+                  where: { id: messageId },
+                  update: {
+                    status: 'sent',
+                    content: msgContent || (media ? `[${media.type.toUpperCase()}]` : '')
+                  },
+                  create: {
+                    id: messageId,
+                    leadId: lead.id,
+                    customerId: cust.id,
+                    whatsappSessionId: `meta-${phoneId}`,
+                    coordinatorId: targetCoordinatorId,
+                    direction: 'outbound',
+                    senderType: 'coordinator',
+                    content: msgContent || (media ? `[${media.type.toUpperCase()}]` : ''),
+                    status: 'sent',
+                    timestamp: new Date(),
+                    mediaType: media ? media.type : null,
+                  }
+                });
+                console.log(`✅ [Meta Send] Outbound message ${messageId} saved to database for Lead ${lead.id}`);
+              }
             } catch (dbErr) {
               console.warn('[DB Error saving Meta message]:', dbErr.message);
             }
@@ -1028,59 +1086,100 @@ const server = http.createServer(async (req, res) => {
                     if (message) {
                       const phone = contact?.wa_id || message.from;
                       const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
-                      const text = message.text?.body || message.button?.text || '[Media Message]';
+                      const text = message.text?.body || message.button?.text || (message.type ? `[${message.type.toUpperCase()} Message]` : '[Media Message]');
                       const messageId = message.id;
 
-                      broadcastScopedSSE(null, {
-                        type: 'INBOUND_WHATSAPP_MESSAGE',
-                        phone: phone ? `+${phone}` : '',
-                        whatsappId: phone,
-                        realPhone: phone ? `+${phone}` : '',
-                        name,
-                        text,
-                        messageId,
-                        timestamp: new Date().toISOString()
-                      });
+                      let savedLeadId = null;
+                      let savedCustomerId = null;
 
-                      // Persist to database
+                      // Persist to Supabase / PostgreSQL database
                       const prisma = getPrisma();
                       if (prisma && getDbStatus() && phone) {
                         try {
+                          const cleanDigits = String(phone).replace(/[^0-9]/g, '');
+                          const canonicalPhone = cleanDigits.startsWith('+') ? cleanDigits : `+${cleanDigits}`;
+
+                          // 1. Find or create Customer
                           let cust = await prisma.customer.findFirst({
                             where: {
                               OR: [
-                                { whatsappNumber: `+${phone}` },
+                                { whatsappNumber: canonicalPhone },
+                                { whatsappNumber: cleanDigits },
+                                { whatsappId: cleanDigits },
                                 { whatsappId: phone }
                               ]
                             }
                           });
+
                           if (!cust) {
                             cust = await prisma.customer.create({
                               data: {
-                                whatsappNumber: `+${phone}`,
-                                whatsappId: phone,
-                                displayName: name || `+${phone}`,
+                                whatsappNumber: canonicalPhone,
+                                whatsappId: cleanDigits,
+                                displayName: name || canonicalPhone,
                                 preferredLanguage: 'en'
                               }
                             });
+                          } else if (name && name !== canonicalPhone && name !== cleanDigits && (!cust.displayName || cust.displayName.startsWith('+'))) {
+                            cust = await prisma.customer.update({
+                              where: { id: cust.id },
+                              data: { displayName: name }
+                            }).catch(() => cust);
                           }
+
+                          savedCustomerId = cust.id;
+
+                          // 2. Find or create Lead
                           let lead = await prisma.lead.findFirst({
-                            where: { customerId: cust.id }
+                            where: { customerId: cust.id },
+                            orderBy: { updatedAt: 'desc' }
                           });
+
                           if (!lead) {
+                            let firstCat = await prisma.treatmentCategory.findFirst();
+                            if (!firstCat) {
+                              firstCat = await prisma.treatmentCategory.create({
+                                data: { id: 'cat-hair-care', name: 'Hair Care & Restoration', nameEn: 'Hair Care', nameSi: 'හිසකෙස් ප්‍රතිකාර', nameTa: 'முடி பராமரிப்பு' }
+                              }).catch(() => null);
+                            }
+                            let firstTrt = await prisma.treatment.findFirst();
+                            if (!firstTrt && firstCat) {
+                              firstTrt = await prisma.treatment.create({
+                                data: { id: 'trt-hair-prp', categoryId: firstCat.id, name: 'Advanced Hair PRP Therapy', nameEn: 'Hair PRP', nameSi: 'PRP ප්‍රතිකාරය', nameTa: 'PRP சிகிச்சை' }
+                              }).catch(() => null);
+                            }
+
                             lead = await prisma.lead.create({
                               data: {
                                 customerId: cust.id,
-                                categoryId: 'cat-ayurveda-1',
-                                treatmentId: 'trt-panchakarma-1',
+                                categoryId: firstCat?.id || 'cat-hair-care',
+                                treatmentId: firstTrt?.id || 'trt-hair-prp',
                                 stage: 'new',
                                 source: 'whatsapp',
-                                language: 'en'
+                                language: 'en',
+                                lastCustomerMessageAt: new Date()
                               }
                             });
+                          } else {
+                            await prisma.lead.update({
+                              where: { id: lead.id },
+                              data: {
+                                lastCustomerMessageAt: new Date(),
+                                updatedAt: new Date()
+                              }
+                            }).catch(() => {});
                           }
-                          await prisma.message.create({
-                            data: {
+
+                          savedLeadId = lead.id;
+
+                          // 3. Save Message to DB
+                          await prisma.message.upsert({
+                            where: { id: messageId },
+                            update: {
+                              content: text,
+                              status: 'delivered'
+                            },
+                            create: {
                               id: messageId,
                               leadId: lead.id,
                               customerId: cust.id,
@@ -1088,13 +1187,29 @@ const server = http.createServer(async (req, res) => {
                               senderType: 'customer',
                               content: text,
                               status: 'delivered',
-                              whatsappSessionId: 'meta-cloud'
+                              whatsappSessionId: 'meta-cloud',
+                              timestamp: new Date()
                             }
                           });
+                          console.log(`✅ [Meta Webhook] Inbound message saved to DB: ID ${messageId}, Lead ${lead.id}`);
                         } catch (e) {
                           console.warn('[DB Error saving inbound Meta message]:', e.message);
                         }
                       }
+
+                      // 4. Broadcast SSE with DB Lead and Customer IDs
+                      broadcastScopedSSE(null, {
+                        type: 'INBOUND_WHATSAPP_MESSAGE',
+                        phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
+                        whatsappId: phone,
+                        realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
+                        name,
+                        text,
+                        messageId,
+                        leadId: savedLeadId,
+                        customerId: savedCustomerId,
+                        timestamp: new Date().toISOString()
+                      });
                     }
                 }
               }
@@ -1115,6 +1230,48 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Endpoint Not Found' }));
 });
 
+async function autoSeedDbIfEmpty() {
+  const prisma = getPrisma();
+  if (!prisma || !getDbStatus()) return;
+  try {
+    const catCount = await prisma.treatmentCategory.count().catch(() => 0);
+    if (catCount === 0) {
+      console.log('🌱 Auto-seeding initial categories & treatments into PostgreSQL...');
+      const defaultCategories = [
+        { id: 'cat-hair-care', name: 'Hair Care & Restoration', nameEn: 'Hair Care & Restoration', nameSi: 'හිසකෙස් ප්‍රතිකාර සහ යථා තත්ත්වයට පත්කිරීම', nameTa: 'முடி பராமரிப்பு மற்றும் சீரமைப்பு', active: true, iconName: 'Sparkles', description: 'Advanced PRP, GFC, and FUE hair transplant solutions.' },
+        { id: 'cat-skin-care', name: 'Aesthetic Skin Care', nameEn: 'Aesthetic Skin Care', nameSi: 'සම රැකවරණ ප්‍රතිකාර', nameTa: 'அழகியல் தோல் பராமரிப்பு', active: true, iconName: 'Smile', description: 'Clinical dermatological facials and laser therapies.' },
+        { id: 'cat-iv-wellness', name: 'IV Drip Therapy & Wellness', nameEn: 'IV Drip Therapy & Wellness', nameSi: 'IV විටමින් ප්‍රතිකාර', nameTa: 'IV டිරිப் மற்றும் ஆரோக்கிய சிகிச்சை', active: true, iconName: 'Zap', description: 'Intravenous wellness blends for rejuvenation.' },
+        { id: 'cat-weight-management', name: 'Weight Management', nameEn: 'Weight Management', nameSi: 'බර පාලනය', nameTa: 'உடல் எடை மேலாண்மை', active: true, iconName: 'Activity', description: 'Non-invasive fat reduction and body contouring.' },
+        { id: 'cat-dental-aesthetics', name: 'Dental Aesthetics & Smile Design', nameEn: 'Dental Aesthetics & Smile Design', nameSi: 'දන්ත සෞන්දර්ය ප්‍රතිකාර', nameTa: 'பல் அழகியல் மற்றும் புன்னகை வடிவமைப்பு', active: true, iconName: 'Sparkles', description: 'Laser teeth whitening and invisible aligners.' },
+        { id: 'cat-ayurveda', name: 'Ayurvedic Rejuvenation', nameEn: 'Ayurvedic Rejuvenation', nameSi: 'ආයුර්වේද ප්‍රතිකාර', nameTa: 'ஆயுர்வேத புத்துணர்ச்சி', active: true, iconName: 'Leaf', description: 'Authentic royal Ceylon herbal detox.' }
+      ];
+      for (const cat of defaultCategories) {
+        await prisma.treatmentCategory.upsert({
+          where: { id: cat.id },
+          update: cat,
+          create: cat
+        }).catch(() => {});
+      }
+
+      const defaultTreatments = [
+        { id: 'trt-hair-prp', categoryId: 'cat-hair-care', name: 'Advanced Hair PRP / GFC Therapy', nameEn: 'Advanced Hair PRP / GFC Therapy', nameSi: 'හිසකෙස් සඳහා PRP ප්‍රතිකාරය', nameTa: 'மேம்பட்ட முடி PRP சிகிச்சை', startingPrice: 25000, currency: 'LKR', durationMinutes: 45, active: true },
+        { id: 'trt-skin-laser', categoryId: 'cat-skin-care', name: 'Pico Laser Pigmentation Correction', nameEn: 'Pico Laser Pigmentation Correction', nameSi: 'සම පැහැපත් කිරීමේ ලේසර් ප්‍රතිකාරය', nameTa: 'பிகோ லேசர் சிகிச்சை', startingPrice: 18000, currency: 'LKR', durationMinutes: 30, active: true },
+        { id: 'trt-panchakarma', categoryId: 'cat-ayurveda', name: 'Royal Panchakarma Detox & Therapy', nameEn: 'Royal Panchakarma Detox & Therapy', nameSi: 'රාජකීය පංචකර්ම ප්‍රතිකාරය', nameTa: 'ராயல் பஞ்சகர்மா சிகிச்சை', startingPrice: 35000, currency: 'LKR', durationMinutes: 90, active: true }
+      ];
+      for (const trt of defaultTreatments) {
+        await prisma.treatment.upsert({
+          where: { id: trt.id },
+          update: trt,
+          create: trt
+        }).catch(() => {});
+      }
+      console.log('✅ Auto-seeding categories and treatments completed.');
+    }
+  } catch (e) {
+    console.warn('⚠️ Auto-seed check error:', e.message);
+  }
+}
+
 server.listen(PORT, '0.0.0.0', async () => {
   console.log(`\n👑 Royal Wellness Multi-Session WhatsApp Server running on port ${PORT}`);
   console.log(`   - Architecture: Centralized Multi-Session WhatsApp Manager`);
@@ -1124,6 +1281,7 @@ server.listen(PORT, '0.0.0.0', async () => {
   // Initialize DB and auto-restore active sessions on Render boot
   checkDbConnection().then(async res => {
     if (res.connected) {
+      await autoSeedDbIfEmpty();
       await sessionManager.restoreAllActiveSessions();
     }
   });

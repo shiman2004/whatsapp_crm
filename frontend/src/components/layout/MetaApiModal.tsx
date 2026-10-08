@@ -29,11 +29,38 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
 
   const [useTemplate, setUseTemplate] = useState(true);
 
+  React.useEffect(() => {
+    if (isOpen) {
+      fetch(`${API_BASE_URL}/api/meta/config`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.accessToken && !localStorage.getItem('meta_access_token')) {
+            setAccessToken(data.accessToken);
+            localStorage.setItem('meta_access_token', data.accessToken);
+          }
+          if (data.phoneNumberId) setPhoneNumberId(data.phoneNumberId);
+          if (data.wabaId) setWabaId(data.wabaId);
+        })
+        .catch(() => {});
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleSaveToken = () => {
+  const handleSaveToken = async () => {
     localStorage.setItem('meta_access_token', accessToken);
-    if (notify) notify('Settings Saved', 'Meta Access Token saved to local configuration', 'success');
+    try {
+      await fetch(`${API_BASE_URL}/api/meta/config`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          accessToken,
+          phoneNumberId,
+          wabaId
+        })
+      });
+    } catch (e) {}
+    if (notify) notify('Settings Saved', 'Meta Access Token saved to local and server configuration', 'success');
   };
 
   const handleCopy = (text: string, field: string) => {

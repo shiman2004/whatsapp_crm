@@ -4,13 +4,19 @@
  */
 
 /**
- * Normalizes any phone input into canonical E.164-style representation (e.g. "+94771234567" or "94771234567")
+ * Normalizes any phone input into canonical E.164-style representation (e.g. "+94771234567")
  */
 export const normalizeWhatsAppNumber = (phone?: string): string => {
   if (!phone) return '';
   if (isHardwareLid(phone)) return '';
-  const digits = phone.replace(/[^0-9]/g, '');
+  let digits = phone.replace(/[^0-9]/g, '');
   if (!digits || digits.length >= 13) return '';
+  // Sri Lanka local (07XXXXXXXX -> +947XXXXXXXX)
+  if (digits.startsWith('0') && digits.length === 10) {
+    digits = '94' + digits.slice(1);
+  } else if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
+    digits = '94' + digits;
+  }
   return `+${digits}`;
 };
 
@@ -19,7 +25,13 @@ export const normalizeWhatsAppNumber = (phone?: string): string => {
  */
 export const getCleanWhatsAppDigits = (phone?: string): string => {
   if (!phone) return '';
-  return phone.replace(/[^0-9]/g, '');
+  let digits = phone.replace(/[^0-9]/g, '');
+  if (digits.startsWith('0') && digits.length === 10) {
+    digits = '94' + digits.slice(1);
+  } else if (digits.length === 9 && (digits.startsWith('7') || digits.startsWith('1'))) {
+    digits = '94' + digits;
+  }
+  return digits;
 };
 
 /**

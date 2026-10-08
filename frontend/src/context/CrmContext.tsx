@@ -446,6 +446,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
 
     fetchMyStatus();
+
+    // Sync Meta API token from backend if not present in local storage
+    if (!localStorage.getItem('meta_access_token')) {
+      fetch(`${API_BASE_URL}/api/meta/config`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.accessToken) {
+            localStorage.setItem('meta_access_token', data.accessToken);
+          }
+        })
+        .catch(() => {});
+    }
   }, [currentUser?.id]);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
@@ -1149,11 +1161,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         })
       }).then(async (res) => {
         if (!res.ok) {
-          const err = await res.json();
-          console.warn('WhatsApp bridge send error:', err);
+          const err = await res.json().catch(() => ({ error: 'Failed to send message via WhatsApp' }));
+          console.warn('❌ WhatsApp send error:', err);
+          setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+            ...m,
+            status: 'failed' as any
+          } : m));
+          notify('Delivery Failed', err.error || 'Could not deliver message to customer.', 'warning');
         } else {
           const data = await res.json().catch(() => ({}));
-          console.log('✅ Outbound WhatsApp message dispatched successfully! ID:', data.messageId);
+          console.log('✅ Outbound WhatsApp message delivered! ID:', data.messageId);
           if (data.messageId) {
             setMessages(prev => prev.map(m => m.id === newMsg.id ? {
               ...m,
@@ -1162,14 +1179,19 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               status: 'sent'
             } : m));
           }
+          notify('Message Delivered', `Outbound WhatsApp message delivered to ${lead.customer?.displayName || 'client'}`, 'success');
         }
       }).catch(err => {
         console.warn('WhatsApp bridge offline:', err);
+        setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+          ...m,
+          status: 'failed' as any
+        } : m));
+        notify('Send Failed', 'Could not reach WhatsApp server.', 'warning');
       });
     }
 
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, updatedAt: new Date().toISOString() } : l));
-    notify('Message Sent', `Outbound WhatsApp message delivered to ${lead.customer?.displayName || 'client'}`, 'success');
   };
 
   // React with Emoji (Single reaction rule)

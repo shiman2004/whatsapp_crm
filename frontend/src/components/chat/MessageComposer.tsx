@@ -375,11 +375,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
-      {(whatsappStatus === 'disconnected' || whatsappStatus === 'connecting' || whatsappStatus === 'qr_ready') && (
+      {(!whatsappStatus || whatsappStatus === 'disconnected' || whatsappStatus === 'connecting' || whatsappStatus === 'qr_ready') && !localStorage.getItem('meta_access_token') && (
         <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between shadow-sm">
           <div className="flex items-center gap-2 min-w-0">
             <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="truncate font-medium">Please link your WhatsApp first to send messages from the CRM.</span>
+            <span className="truncate font-medium">Please link your WhatsApp or configure Meta API to send messages from the CRM.</span>
           </div>
           <button
             type="button"
@@ -399,7 +399,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (whatsappStatus !== 'connected') {
+            if (whatsappStatus !== 'connected' && !localStorage.getItem('meta_access_token')) {
               setQrModalOpen(true);
               return;
             }
@@ -451,7 +451,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               type="text"
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
-              placeholder={whatsappStatus === 'connected' ? 'Type a message' : 'Please link your WhatsApp first to send messages from the CRM...'}
+              placeholder={whatsappStatus === 'connected' || localStorage.getItem('meta_access_token') ? 'Type a message' : 'Please link your WhatsApp or configure Meta API to send messages...'}
               className="w-full bg-[#2a3942] text-[#d1d7db] placeholder-[#8696a0] text-sm rounded-lg px-4 py-2 outline-none border-none focus:ring-1 focus:ring-[#00a884] transition-all"
             />
           </form>

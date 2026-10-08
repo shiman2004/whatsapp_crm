@@ -38,7 +38,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   setViewMode,
   onExportCsv
 }) => {
-  const { categories, users, isSuperAdmin } = useCrm();
+  const { categories, users, isSuperAdmin, isLeadsOfficer } = useCrm();
 
   const coordinators = users.filter(u => u.role === 'coordinator');
 
@@ -92,8 +92,8 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           </select>
         </div>
 
-        {/* Coordinator Filter (Super Admin only) */}
-        {isSuperAdmin && (
+        {/* Coordinator Filter (Super Admin & Leads Officer) */}
+        {(isSuperAdmin || isLeadsOfficer) && (
           <div className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800 text-xs">
             <UserCheck className="w-3.5 h-3.5 text-sky-400" />
             <select

@@ -329,7 +329,7 @@ class WhatsAppSessionManager {
     const isFromMe = Boolean(msg.key.fromMe);
     const remoteJid = msg.key.remoteJid || '';
 
-    // Ignore broadcast/status updates
+    // Ignore broadcast/status updates and group chats
     if (remoteJid.includes('status@broadcast') || remoteJid.includes('@g.us')) return;
 
     const rawSenderDigits = remoteJid.replace('@s.whatsapp.net', '').replace('@lid', '').replace(/[^0-9]/g, '');
@@ -352,25 +352,39 @@ class WhatsAppSessionManager {
     const canonicalPhone = resolvedPhoneDigits ? `+${resolvedPhoneDigits}` : '';
     const realPhone = resolvedPhoneDigits || '';
 
-    // Extract Message Text & Media Content
-    const unwrapped = msg.message?.ephemeralMessage?.message || msg.message?.viewOnceMessage?.message || msg.message;
-    const messageText = unwrapped.conversation ||
-      unwrapped.extendedTextMessage?.text ||
-      unwrapped.imageMessage?.caption ||
-      unwrapped.videoMessage?.caption ||
-      unwrapped.documentMessage?.caption ||
-      unwrapped.buttonsResponseMessage?.selectedDisplayText ||
-      unwrapped.templateButtonReplyMessage?.selectedDisplayText || '';
+    // Safe & Comprehensive Baileys Message Extractor
+    let m = msg.message;
+    while (m?.ephemeralMessage || m?.viewOnceMessage || m?.viewOnceMessageV2 || m?.documentWithCaptionMessage || m?.editedMessage) {
+      m = m.ephemeralMessage?.message ||
+          m.viewOnceMessage?.message ||
+          m.viewOnceMessageV2?.message ||
+          m.documentWithCaptionMessage?.message ||
+          m.editedMessage?.message?.protocolMessage?.editedMessage ||
+          m;
+    }
+
+    const messageText = m?.conversation ||
+      m?.extendedTextMessage?.text ||
+      m?.imageMessage?.caption ||
+      m?.videoMessage?.caption ||
+      m?.documentMessage?.caption ||
+      m?.buttonsResponseMessage?.selectedDisplayText ||
+      m?.templateButtonReplyMessage?.selectedDisplayText ||
+      m?.listResponseMessage?.title ||
+      m?.interactiveResponseMessage?.body?.text ||
+      '';
 
     let mediaType = null;
     let mediaUrl = null;
 
-    if (unwrapped.imageMessage) mediaType = 'image';
-    else if (unwrapped.videoMessage) mediaType = 'video';
-    else if (unwrapped.audioMessage) mediaType = 'audio';
-    else if (unwrapped.documentMessage) mediaType = 'document';
+    if (m?.imageMessage) mediaType = 'image';
+    else if (m?.videoMessage) mediaType = 'video';
+    else if (m?.audioMessage) mediaType = 'audio';
+    else if (m?.documentMessage) mediaType = 'document';
 
     if (!messageText && !mediaType) return;
+
+    console.log(`📩 [WhatsApp Message] [${isFromMe ? 'OUTBOUND' : 'INBOUND'}] From: ${remoteJid} | Content: "${messageText.slice(0, 40)}"`);
 
     const contactName = msg.pushName || null;
     const timestampDate = new Date((msg.messageTimestamp ? Number(msg.messageTimestamp) : Math.floor(Date.now() / 1000)) * 1000);
@@ -481,7 +495,7 @@ class WhatsAppSessionManager {
       }
     }
 
-    // Emit Real-Time SSE to assigned coordinator channel
+    // Emit Real-Time SSE to all staff clients
     const targetCoordinator = lead?.assignedTo || coordinatorId;
     this.emitToCoordinator(targetCoordinator, {
       type: isFromMe ? 'OUTBOUND_WHATSAPP_MESSAGE' : 'INBOUND_WHATSAPP_MESSAGE',
@@ -490,7 +504,7 @@ class WhatsAppSessionManager {
       customerId: customer?.id,
       whatsappSessionId: sessionCtx.sessionId,
       coordinatorId: targetCoordinator,
-      phone: canonicalPhone,
+      phone: canonicalPhone || rawSenderDigits,
       realPhone: canonicalPhone || null,
       whatsappId: rawSenderDigits,
       name: contactName || customer?.displayName || canonicalPhone || 'WhatsApp Contact',
@@ -527,24 +541,19 @@ class WhatsAppSessionManager {
     const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
     let targetJid = null;
 
-    // Standard WhatsApp routing rule:
-    // 1. If we have a valid phone number (7-12 digits e.g. 94770049469), ALWAYS use @s.whatsapp.net
-    if (cleanPhone && cleanPhone.length >= 7 && cleanPhone.length <= 12) {
-      targetJid = `${cleanPhone}@s.whatsapp.net`;
-    } 
-    // 2. If WhatsApp ID is a valid phone number (7-12 digits), use @s.whatsapp.net
-    else if (cleanWaId && cleanWaId.length >= 7 && cleanWaId.length <= 12) {
-      targetJid = `${cleanWaId}@s.whatsapp.net`;
-    }
-    // 3. If WhatsApp ID or phone is a 13-16 digit LID, use @lid
-    else if (cleanWaId && cleanWaId.length >= 13) {
-      targetJid = `${cleanWaId}@lid`;
-    } else if (cleanPhone && cleanPhone.length >= 13) {
-      targetJid = `${cleanPhone}@lid`;
+    // Smart JID resolution
+    if (whatsappId && whatsappId.includes('@')) {
+      targetJid = whatsappId;
     } else if (to && to.includes('@')) {
       targetJid = to;
-    } else if (whatsappId && whatsappId.includes('@')) {
-      targetJid = whatsappId;
+    } else if (cleanWaId && cleanWaId.length >= 13) {
+      targetJid = `${cleanWaId}@lid`;
+    } else if (cleanPhone && cleanPhone.length >= 7 && cleanPhone.length <= 12) {
+      targetJid = `${cleanPhone}@s.whatsapp.net`;
+    } else if (cleanWaId && cleanWaId.length >= 7 && cleanWaId.length <= 12) {
+      targetJid = `${cleanWaId}@s.whatsapp.net`;
+    } else if (cleanPhone && cleanPhone.length >= 13) {
+      targetJid = `${cleanPhone}@lid`;
     }
 
     console.log(`📤 [SessionManager] Sending message via Coordinator [${coordinatorId}] to target JID: ${targetJid}`);
@@ -606,6 +615,25 @@ class WhatsAppSessionManager {
         });
       } catch (e) {}
     }
+
+    // Broadcast Real-time Outbound SSE Event
+    this.emitToCoordinator(coordinatorId, {
+      type: 'OUTBOUND_WHATSAPP_MESSAGE',
+      messageId: outboundMsgId || `out-${Date.now()}`,
+      leadId,
+      customerId,
+      whatsappSessionId: sessionCtx.sessionId,
+      coordinatorId,
+      phone: to,
+      realPhone: to || null,
+      whatsappId: cleanWaId,
+      text: message,
+      media: media ? { type: media.type, url: media.dataUrl } : null,
+      direction: 'outbound',
+      senderType: 'coordinator',
+      timestamp: new Date().toISOString(),
+      source: 'live',
+    });
 
     pauseAutoReply(to || whatsappId);
     return { success: true, messageId: outboundMsgId, status: 'sent' };

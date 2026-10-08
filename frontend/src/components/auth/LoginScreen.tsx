@@ -192,6 +192,22 @@ export const LoginScreen: React.FC = () => {
                 </option>
               ))}
             </select>
+          ) : roleTab === 'leads_officer' && leadsOfficersList.length > 0 ? (
+            <select
+              value={identifierInput}
+              onChange={(e) => {
+                setIdentifierInput(e.target.value);
+                setPinDigits([]);
+                setErrorMsg(null);
+              }}
+              className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-semibold text-white outline-none focus:border-[#00a884] transition-colors cursor-pointer"
+            >
+              {leadsOfficersList.map((o: any) => (
+                <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
+                  {o.fullName} ({o.email})
+                </option>
+              ))}
+            </select>
           ) : (
             <div className="relative">
               <input
@@ -307,7 +323,7 @@ export const LoginScreen: React.FC = () => {
                 })}
               </div>
               <p className="text-[10px] text-[#8696a0] font-mono">
-                Default PIN: <span className="text-[#00a884]">{roleTab === 'super_admin' ? '1234' : (roleTab === 'leads_officer' ? '4321' : (activeUser?.pin || '2026'))}</span>
+                PIN: <span className="text-[#00a884]">{activeUser?.pin || (roleTab === 'super_admin' ? '1234' : (roleTab === 'leads_officer' ? '4321' : '2026'))}</span>
               </p>
             </div>
 

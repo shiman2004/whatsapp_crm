@@ -134,17 +134,13 @@ async function authenticateRequest(req, parsedUrl) {
 
       if (!user) {
         const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
-        const isOfficer = cleanId === 'user-officer-1' || cleanId.includes('officer');
-        const role = isSuper ? 'super_admin' : (isOfficer ? 'leads_officer' : 'coordinator');
-        const fullName = isSuper ? 'Super Admin' : (isOfficer ? 'Sarah Fernando (Leads Officer)' : `Coordinator ${cleanId.slice(-4)}`);
-        user = await prisma.user.create({
-          data: {
-            id: cleanId,
-            fullName,
-            email: isSuper ? 'admin@royalwellness.lk' : (isOfficer ? 'sarah@royalwellness.lk' : `${cleanId}@royalwellness.lk`),
-            role,
-          }
-        }).catch(() => null);
+        const role = isSuper ? 'super_admin' : 'coordinator';
+        return {
+          id: cleanId,
+          role,
+          email: `${cleanId}@royalwellness.lk`,
+          fullName: isSuper ? 'Super Admin' : 'Coordinator'
+        };
       }
 
       if (user) {
@@ -556,6 +552,12 @@ const server = http.createServer(async (req, res) => {
               }
 
               if (cust && lead) {
+                let validCoordinatorId = null;
+                if (targetCoordinatorId) {
+                  const coordExists = await prisma.user.findUnique({ where: { id: targetCoordinatorId } }).catch(() => null);
+                  if (coordExists) validCoordinatorId = coordExists.id;
+                }
+
                 await prisma.message.upsert({
                   where: { id: messageId },
                   update: {
@@ -566,8 +568,8 @@ const server = http.createServer(async (req, res) => {
                     id: messageId,
                     leadId: lead.id,
                     customerId: cust.id,
-                    whatsappSessionId: `meta-${phoneId}`,
-                    coordinatorId: targetCoordinatorId,
+                    whatsappSessionId: null,
+                    coordinatorId: validCoordinatorId,
                     direction: 'outbound',
                     senderType: 'coordinator',
                     content: msgContent || (media ? `[${media.type.toUpperCase()}]` : ''),
@@ -1264,7 +1266,7 @@ const server = http.createServer(async (req, res) => {
                               senderType: 'customer',
                               content: text,
                               status: 'delivered',
-                              whatsappSessionId: 'meta-cloud',
+                              whatsappSessionId: null,
                               timestamp: new Date()
                             }
                           });

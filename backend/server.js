@@ -438,6 +438,39 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
+        // If Meta Cloud API token is supplied, dispatch directly to Meta Graph API
+        if (payload.token) {
+          const cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
+          const phoneId = payload.phoneNumberId || '1302468252956177';
+          const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${payload.token}`,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: cleanTo,
+              type: 'text',
+              text: { body: msgContent }
+            })
+          });
+          const metaData = await metaRes.json().catch(() => ({}));
+          if (!metaRes.ok) {
+            throw new Error(metaData.error?.message || 'Meta Cloud API dispatch failed');
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            messageId: metaData.messages?.[0]?.id || `meta-${Date.now()}`,
+            status: 'sent',
+            to: cleanTo,
+            meta: metaData
+          }));
+          return;
+        }
+
         logWaSessionDebug('/api/send', authUser, targetCoordinatorId, sessionManager.getRuntimeSession(targetCoordinatorId), null);
 
         const sendResult = await sessionManager.sendMessage(targetCoordinatorId, {

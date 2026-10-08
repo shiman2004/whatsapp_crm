@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
 import confetti from 'canvas-confetti';
 import {
   User,
@@ -207,6 +207,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
     const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
+    const cachedUser = getStored<User | null>('rw_crm_user', null);
+    if (cachedUser && cachedUser.role === 'coordinator') {
+      const myLeads = cachedLeads.filter(l => l.assignedTo === cachedUser.id);
+      return myLeads.length > 0 ? myLeads[0].id : null;
+    }
     return cachedLeads.length > 0 ? cachedLeads[0].id : null;
   });
   const [notifications, setNotifications] = useState<NotificationToast[]>([]);
@@ -373,8 +378,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             const mergedLeads = Array.from(leadMap.values());
             setSelectedLeadId(prevId => {
-              if (prevId && leadMap.has(prevId)) return prevId;
-              return mergedLeads[0]?.id || null;
+              const isOfficerOrAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'leads_officer';
+              const allowedLeads = isOfficerOrAdmin
+                ? mergedLeads
+                : mergedLeads.filter(l => l.assignedTo === currentUser?.id);
+
+              if (prevId && allowedLeads.some(l => l.id === prevId)) return prevId;
+              return allowedLeads[0]?.id || null;
             });
             return mergedLeads;
           });
@@ -464,6 +474,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isLeadsOfficer = currentUser.role === 'leads_officer';
   const isCoordinator = currentUser.role === 'coordinator';
   const canAssignLeads = isSuperAdmin || isLeadsOfficer;
+
+  // Strict isolation: if a coordinator has an unassigned lead or someone else's lead selected, reset it
+  useEffect(() => {
+    if (isCoordinator && selectedLeadId) {
+      const target = leads.find(l => l.id === selectedLeadId);
+      if (!target || target.assignedTo !== currentUser.id) {
+        const myLeads = leads.filter(l => l.assignedTo === currentUser.id);
+        setSelectedLeadId(myLeads.length > 0 ? myLeads[0].id : null);
+      }
+    }
+  }, [currentUser.id, currentUser.role, leads, selectedLeadId, isCoordinator]);
 
   const selectedLeadIdRef = useRef<string | null>(selectedLeadId);
   useEffect(() => {
@@ -1845,6 +1866,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   });
 
+  // Strict Role-Based Lead Isolation:
+  // Coordinators can ONLY view leads assigned to their account.
+  const resolvedSelectedLead = useMemo(() => {
+    if (!selectedLeadId) return undefined;
+    const target = hydratedLeads.find(l => l.id === selectedLeadId);
+    if (!target) return undefined;
+    if (!isSuperAdmin && !isLeadsOfficer && target.assignedTo !== currentUser.id) {
+      return undefined;
+    }
+    return target;
+  }, [hydratedLeads, selectedLeadId, isSuperAdmin, isLeadsOfficer, currentUser.id]);
+
   const value: CrmContextType = {
     isAuthenticated,
     login,
@@ -1871,7 +1904,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notifications,
     selectedLeadId,
     setSelectedLeadId,
-    selectedLead: hydratedLeads.find(l => l.id === selectedLeadId),
+    selectedLead: resolvedSelectedLead,
     assignLead,
     updateLeadStage,
     addLeadNote,

@@ -54,14 +54,19 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
     setSendResult(null);
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/send-message`, {
+      const cleanTo = testNumber.replace(/[^0-9]/g, '');
+      const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId || '1302468252956177'}/messages`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Authorization': `Bearer ${accessToken}`,
+          'Content-Type': 'application/json'
+        },
         body: JSON.stringify({
-          to: testNumber,
-          text: testMessage,
-          token: accessToken,
-          phoneNumberId: phoneNumberId
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanTo,
+          type: 'text',
+          text: { body: testMessage }
         })
       });
 
@@ -71,10 +76,11 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
         setSendResult({ success: true, msg: '✅ Message sent successfully via Meta Cloud API!' });
         if (notify) notify('WhatsApp Delivered', `Message successfully sent to ${testNumber}`, 'success');
       } else {
-        setSendResult({ success: false, msg: result.error?.message || result.error || 'Failed to send message' });
+        const errMsg = result.error?.message || result.error?.error_user_msg || JSON.stringify(result.error) || 'Failed to send message';
+        setSendResult({ success: false, msg: `Meta API: ${errMsg}` });
       }
     } catch (err: any) {
-      setSendResult({ success: false, msg: err.message || 'Error connecting to local bridge server' });
+      setSendResult({ success: false, msg: err.message || 'Error connecting to Meta API' });
     } finally {
       setIsSending(false);
     }

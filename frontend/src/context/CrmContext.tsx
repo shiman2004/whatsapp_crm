@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef } from 'r
 import confetti from 'canvas-confetti';
 import {
   User,
+  UserRole,
   Customer,
   Lead,
   Message,
@@ -117,7 +118,7 @@ interface CrmContextType {
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
-  addCoordinator: (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  addCoordinator: (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => void;
   deleteCoordinator: (id: string) => void;
 
   // Simulator State & Actions
@@ -1379,10 +1380,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Customer Updated', 'WhatsApp contact details saved', 'success');
   };
 
-  const addCoordinator = (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; treatmentCategoryId?: string; language?: LanguageCode }) => {
-    const newCoordId = 'coord-' + Date.now();
-    const cleanBranch = data.branch || 'Colombo Branch';
-    const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || 'coord' + Date.now()}@royalwellness.lk`;
+  const addCoordinator = (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
+    const role: UserRole = data.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
+    const newCoordId = (role === 'leads_officer' ? 'officer-' : 'coord-') + Date.now();
+    const cleanBranch = data.branch || 'Colombo';
+    const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || (role === 'leads_officer' ? 'officer' : 'coord') + Date.now()}@royalwellness.lk`;
 
     const newCoord: User = {
       id: newCoordId,
@@ -1392,7 +1394,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       password: data.password || 'staff',
       pin: data.pin || '2026',
       phone: data.phone,
-      role: 'coordinator',
+      role: role,
       treatmentCategoryId: data.treatmentCategoryId,
       language: data.language || 'en',
       active: true,
@@ -1413,7 +1415,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return updated;
     });
 
-    // Sync coordinator creation to backend
+    // Sync coordinator / staff creation to backend
     fetch(`${API_BASE_URL}/api/coordinators`, {
       method: 'POST',
       headers: {
@@ -1422,16 +1424,19 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
+        id: newCoordId,
         fullName: data.fullName,
         branch: cleanBranch,
         email: autoEmail,
         pin: data.pin || '2026',
-        phone: data.phone
+        phone: data.phone,
+        role: role
       })
-    }).catch(err => console.warn('Could not sync new coordinator to backend:', err));
+    }).catch(err => console.warn('Could not sync new staff member to backend:', err));
 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
-    notify('Staff Added', `${newCoord.fullName} (${cleanBranch}) registered with PIN ${newCoord.pin}`, 'success');
+    const roleLabel = role === 'leads_officer' ? 'Leads Officer' : 'Clinical Coordinator';
+    notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered with PIN ${newCoord.pin}`, 'success');
   };
 
   const deleteCoordinator = (id: string) => {

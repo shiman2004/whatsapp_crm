@@ -454,7 +454,7 @@ const server = http.createServer(async (req, res) => {
         // If Meta Cloud API token is supplied, dispatch directly to Meta Graph API; otherwise use Baileys socket
         if (payload.token) {
           const cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
-          const phoneId = payload.phoneNumberId || '1302468252956177';
+          const phoneId = payload.phoneNumberId || '1358157244046701';
           const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
             method: 'POST',
             headers: {

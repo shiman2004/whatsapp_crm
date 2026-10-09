@@ -199,18 +199,23 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
     let effectiveFilename = filename || 'file.bin';
 
     // Normalize audio mime types for Meta Cloud API requirements
-    if (effectiveMime.includes('audio/') || effectiveFilename.endsWith('.ogg') || effectiveFilename.endsWith('.webm') || effectiveFilename.endsWith('.mp3')) {
-      if (effectiveMime.includes('webm') || effectiveMime.includes('opus') || effectiveMime.includes('ogg')) {
-        effectiveMime = 'audio/ogg; codecs=opus';
-        if (!effectiveFilename.endsWith('.ogg')) {
-          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.ogg';
+    if (effectiveMime.includes('audio/') || effectiveFilename.endsWith('.ogg') || effectiveFilename.endsWith('.webm') || effectiveFilename.endsWith('.mp3') || effectiveFilename.endsWith('.wav') || effectiveFilename.endsWith('.m4a')) {
+      if (effectiveMime.includes('mpeg') || effectiveMime.includes('mp3') || effectiveFilename.endsWith('.mp3')) {
+        effectiveMime = 'audio/mpeg';
+        if (!effectiveFilename.endsWith('.mp3')) {
+          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp3';
         }
       } else if (effectiveMime.includes('mp4') || effectiveMime.includes('m4a') || effectiveMime.includes('aac')) {
         effectiveMime = 'audio/mp4';
         if (!effectiveFilename.endsWith('.m4a') && !effectiveFilename.endsWith('.mp4')) {
           effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp4';
         }
-      } else if (effectiveMime.includes('mpeg') || effectiveMime.includes('mp3')) {
+      } else if (effectiveMime.includes('ogg') || effectiveMime.includes('opus')) {
+        effectiveMime = 'audio/ogg; codecs=opus';
+        if (!effectiveFilename.endsWith('.ogg')) {
+          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.ogg';
+        }
+      } else {
         effectiveMime = 'audio/mpeg';
         if (!effectiveFilename.endsWith('.mp3')) {
           effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp3';
@@ -218,38 +223,25 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
       }
     }
 
-    const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
-    const header = Buffer.from(
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${effectiveFilename}"\r\n` +
-      `Content-Type: ${effectiveMime}\r\n\r\n`
-    );
-    const middle = Buffer.from(
-      `\r\n--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="type"\r\n\r\n` +
-      `${effectiveMime}\r\n` +
-      `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="messaging_product"\r\n\r\n` +
-      `whatsapp\r\n` +
-      `--${boundary}--\r\n`
-    );
-
-    const payload = Buffer.concat([header, buffer, middle]);
+    const formData = new FormData();
+    const fileBlob = new Blob([buffer], { type: effectiveMime });
+    formData.append('file', fileBlob, effectiveFilename);
+    formData.append('messaging_product', 'whatsapp');
 
     const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/media`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${metaToken}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`
+        'Authorization': `Bearer ${metaToken}`
       },
-      body: payload
+      body: formData
     });
+
     const data = await res.json().catch(() => ({}));
     if (res.ok && data.id) {
-      console.log(`📤 [Meta Media Uploaded] Media ID: ${data.id}`);
+      console.log(`📤 [Meta Media Uploaded] Media ID: ${data.id} (MIME: ${effectiveMime}, File: ${effectiveFilename})`);
       return data.id;
     } else {
-      console.warn('⚠️ Meta Media Upload response:', JSON.stringify(data));
+      console.warn('⚠️ Meta Media Upload response error:', JSON.stringify(data));
       return null;
     }
   } catch (e) {

@@ -42,19 +42,6 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
             </span>
           )}
         </button>
-
-        {/* Calls Tab */}
-        <button
-          onClick={() => setActiveSection('calls')}
-          className={`relative p-2.5 rounded-full transition-all group ${
-            activeSection === 'calls' 
-              ? 'bg-[#374248] text-white shadow-sm' 
-              : 'text-[#aebac1] hover:bg-[#374248]/60 hover:text-white'
-          }`}
-          title="Calls"
-        >
-          <Phone className="w-5 h-5" />
-        </button>
       </div>
 
       {/* Bottom Profile & Settings */}

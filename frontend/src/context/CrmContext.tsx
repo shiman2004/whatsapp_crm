@@ -742,8 +742,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     preferredLanguage: 'en',
                     createdAt: new Date().toISOString(),
                   },
-                  categoryId: 'cat-hair-care',
-                  treatmentId: 'trt-prp-hair',
+                  categoryId: undefined as any,
+                  treatmentId: undefined as any,
+                  serialNumber: undefined,
                   stage: isOutbound ? 'contacted' : 'new',
                   assignedTo: undefined,
                   source: 'whatsapp',
@@ -1146,6 +1147,39 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const updateLeadTreatment = (leadId: string, treatmentId: string, customSerial?: string) => {
     const targetLead = leads.find(l => l.id === leadId);
     if (!targetLead) return;
+
+    if (!treatmentId) {
+      setLeads(prev => prev.map(l => {
+        if (l.id === leadId) {
+          return {
+            ...l,
+            treatmentId: undefined,
+            categoryId: undefined,
+            serialNumber: undefined,
+            updatedAt: new Date().toISOString()
+          };
+        }
+        return l;
+      }));
+
+      fetch(`${API_BASE_URL}/api/leads/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
+        body: JSON.stringify({
+          leadId,
+          treatmentId: null,
+          categoryId: null,
+          serialNumber: null
+        })
+      }).catch(err => console.warn('Could not sync lead treatment reset to backend:', err));
+
+      notify('Treatment Cleared', 'Treatment reset to Select Treatment', 'info');
+      return;
+    }
 
     const targetTreatment = treatments.find(t => t.id === treatmentId);
     const categoryId = targetTreatment?.categoryId || targetLead.categoryId;
@@ -1550,7 +1584,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       customer: l.customer ? { ...l.customer, ...normalizedUpdates } : undefined
     } : l));
     logAudit('UPDATE_CUSTOMER', 'Lead', id, null, normalizedUpdates);
-    notify('Customer Updated', 'WhatsApp contact details saved', 'success');
+    notify('Customer Updated', 'Contact details saved', 'success');
+
+    // Sync to Supabase PostgreSQL backend in real-time
+    fetch(`${API_BASE_URL}/api/customer/update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({
+        customerId: id,
+        ...normalizedUpdates
+      })
+    }).catch(err => console.warn('Could not sync customer update to backend:', err));
   };
 
   const addCoordinator = (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {

@@ -598,6 +598,8 @@ const server = http.createServer(async (req, res) => {
           throw new Error('No active WhatsApp line or Meta API token configured.');
         }
 
+        pauseAutoReply(to || whatsappId);
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: true,
@@ -941,7 +943,7 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' ? pathname.split('/')[3] : null;
         const leadId = payload.leadId || payload.id || urlLeadId;
-        const { treatmentId, categoryId, serialNumber, stage } = payload;
+        const { treatmentId, categoryId, serialNumber, stage, language } = payload;
 
         if (!leadId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -956,6 +958,7 @@ const server = http.createServer(async (req, res) => {
           if (categoryId !== undefined) updateData.categoryId = categoryId || null;
           if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
           if (stage !== undefined) updateData.stage = stage;
+          if (language !== undefined) updateData.language = language;
           updateData.updatedAt = new Date();
 
           const updated = await prisma.lead.update({
@@ -969,6 +972,13 @@ const server = http.createServer(async (req, res) => {
               messages: { orderBy: { timestamp: 'asc' } }
             }
           });
+
+          if (language && updated.customer?.id) {
+            await prisma.customer.update({
+              where: { id: updated.customer.id },
+              data: { preferredLanguage: language }
+            }).catch(() => {});
+          }
 
           broadcastScopedSSE(null, {
             type: 'LEAD_UPDATED',
@@ -1398,6 +1408,87 @@ const server = http.createServer(async (req, res) => {
                         customerId: savedCustomerId,
                         timestamp: new Date().toISOString()
                       });
+
+                      // 5. Evaluate Auto-Reply Engine (Welcome -> Language -> 24 Treatments -> Handoff)
+                      try {
+                        const autoReplyResult = await evaluateAutoReply({
+                          senderPhone: phone,
+                          messageText: text,
+                          customer: cust,
+                          lead
+                        });
+
+                        if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
+                          const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+                          const autoTime = new Date();
+
+                          // If Meta Cloud API token is configured, send via Meta API
+                          const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+                          const phoneId = (metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
+
+                          if (metaToken) {
+                            fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                              method: 'POST',
+                              headers: { 'Authorization': `Bearer ${metaToken}`, 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                messaging_product: 'whatsapp',
+                                recipient_type: 'individual',
+                                to: String(phone).replace(/[^0-9]/g, ''),
+                                type: 'text',
+                                text: { preview_url: false, body: autoReplyResult.replyText }
+                              })
+                            }).catch(err => console.warn('Meta API auto-reply dispatch error:', err.message));
+                          }
+
+                          if (prisma && getDbStatus() && lead?.id) {
+                            await prisma.message.create({
+                              data: {
+                                id: autoMsgId,
+                                leadId: lead.id,
+                                customerId: cust?.id || lead.customerId,
+                                direction: 'outbound',
+                                senderType: 'ai',
+                                content: autoReplyResult.replyText,
+                                status: 'delivered',
+                                timestamp: autoTime
+                              }
+                            }).catch(() => {});
+                          }
+
+                          broadcastScopedSSE(null, {
+                            type: 'OUTBOUND_WHATSAPP_MESSAGE',
+                            messageId: autoMsgId,
+                            leadId: lead?.id,
+                            customerId: cust?.id,
+                            phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
+                            realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
+                            whatsappId: phone,
+                            name: 'Royal Wellness Concierge',
+                            text: autoReplyResult.replyText,
+                            direction: 'outbound',
+                            senderType: 'ai',
+                            timestamp: autoTime.toISOString(),
+                            source: 'auto_reply'
+                          });
+
+                          if (autoReplyResult.selectedLang || autoReplyResult.treatmentId || autoReplyResult.serialNumber) {
+                            broadcastScopedSSE(null, {
+                              type: 'LEAD_UPDATED',
+                              leadId: lead?.id,
+                              lead: {
+                                id: lead?.id,
+                                language: autoReplyResult.selectedLang || lead?.language,
+                                treatmentId: autoReplyResult.treatmentId || lead?.treatmentId,
+                                categoryId: autoReplyResult.categoryId || lead?.categoryId,
+                                serialNumber: autoReplyResult.serialNumber || lead?.serialNumber,
+                                stage: 'new'
+                              }
+                            });
+                          }
+                        }
+                      } catch (autoErr) {
+                        console.warn('Auto-reply webhook error:', autoErr.message);
+                      }
                     }
                 }
               }

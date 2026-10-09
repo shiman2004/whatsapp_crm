@@ -87,6 +87,7 @@ interface CrmContextType {
   assignLead: (leadId: string, coordinatorId: string) => void;
   updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string) => void;
   updateLeadTreatment: (leadId: string, treatmentId: string, customSerial?: string) => void;
+  updateLeadLanguage: (leadId: string, language: 'en' | 'si' | 'ta') => void;
   addLeadNote: (leadId: string, note: string) => void;
   
   // Messaging actions
@@ -1236,6 +1237,45 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Treatment Updated', `Lead treatment set to ${targetTreatment?.name || 'Selected'} (${finalSerialNumber || 'No Serial'})`, 'success');
   };
 
+  // Update lead language & customer preferred language
+  const updateLeadLanguage = (leadId: string, language: 'en' | 'si' | 'ta') => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    setLeads(prev => prev.map(l => {
+      if (l.id === leadId) {
+        return {
+          ...l,
+          language,
+          customer: l.customer ? { ...l.customer, preferredLanguage: language } : l.customer,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return l;
+    }));
+
+    if (targetLead.customerId) {
+      setCustomers(prev => prev.map(c => c.id === targetLead.customerId ? { ...c, preferredLanguage: language } : c));
+    }
+
+    // Sync to Supabase PostgreSQL backend in real-time
+    fetch(`${API_BASE_URL}/api/leads/update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({
+        leadId,
+        language
+      })
+    }).catch(err => console.warn('Could not sync lead language update to backend:', err));
+
+    const langName = language === 'si' ? 'Sinhala (සිංහල)' : language === 'ta' ? 'Tamil (தமிழ்)' : 'English';
+    notify('Language Updated', `Preferred language set to ${langName}`, 'success');
+  };
+
   // Add internal note
   const addLeadNote = (leadId: string, noteText: string) => {
     if (!noteText.trim()) return;
@@ -2067,6 +2107,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     assignLead,
     updateLeadStage,
     updateLeadTreatment,
+    updateLeadLanguage,
     addLeadNote,
     sendMessage,
     replyingMessage,

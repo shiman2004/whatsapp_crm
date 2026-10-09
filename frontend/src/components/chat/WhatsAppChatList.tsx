@@ -411,6 +411,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                       <span className={`inline-block px-1.5 py-0.2 rounded text-[8.5px] font-extrabold tracking-wider border uppercase shrink-0 shadow-sm ${stageCfg.pillBg} ${stageCfg.pillText} ${stageCfg.pillBorder}`}>
                         {stageCfg.shortLabel}
                       </span>
+                      {/* Language Tag */}
+                      <span className="inline-block px-1.5 py-0.2 rounded text-[8px] font-extrabold tracking-wider border uppercase shrink-0 shadow-sm bg-sky-500/15 text-sky-300 border-sky-500/30">
+                        {((lead.language || lead.customer?.preferredLanguage || 'en').toLowerCase() === 'si' ? 'SI' : (lead.language || lead.customer?.preferredLanguage || 'en').toLowerCase() === 'ta' ? 'TA' : 'EN')}
+                      </span>
                     </div>
 
                     <span className={`text-[10px] font-mono shrink-0 ${

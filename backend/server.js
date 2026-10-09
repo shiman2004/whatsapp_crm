@@ -1214,16 +1214,40 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' ? pathname.split('/')[3] : null;
         const leadId = payload.leadId || payload.id || urlLeadId;
-        const { treatmentId, categoryId, serialNumber, stage, language } = payload;
+        const { treatmentId, categoryId, serialNumber, stage, language, customerId, phone, whatsappId, reason } = payload;
 
-        if (!leadId) {
+        if (!leadId && !customerId && !phone && !whatsappId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Missing leadId' }));
+          res.end(JSON.stringify({ success: false, error: 'Missing leadId or customer identifier' }));
           return;
         }
 
         const prisma = getPrisma();
         if (prisma && getDbStatus()) {
+          // Robust Lead Resolution
+          let targetLead = null;
+          if (leadId) {
+            targetLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+          }
+
+          if (!targetLead && (customerId || phone || whatsappId)) {
+            const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+            const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+            targetLead = await prisma.lead.findFirst({
+              where: {
+                OR: [
+                  ...(customerId ? [{ customerId }] : []),
+                  ...(cleanPhone ? [{ customer: { whatsappNumber: `+${cleanPhone}` } }, { customer: { whatsappNumber: cleanPhone } }] : []),
+                  ...(cleanWaId ? [{ customer: { whatsappId: cleanWaId } }] : [])
+                ]
+              },
+              orderBy: { updatedAt: 'desc' }
+            }).catch(() => null);
+          }
+
+          const actualLeadId = targetLead ? targetLead.id : leadId;
+          const prevStage = targetLead?.stage || null;
+
           const updateData = {};
           if (treatmentId !== undefined) updateData.treatmentId = treatmentId || null;
           if (categoryId !== undefined) updateData.categoryId = categoryId || null;
@@ -1233,7 +1257,7 @@ const server = http.createServer(async (req, res) => {
           updateData.updatedAt = new Date();
 
           const updated = await prisma.lead.update({
-            where: { id: leadId },
+            where: { id: actualLeadId },
             data: updateData,
             include: {
               customer: true,
@@ -1244,6 +1268,19 @@ const server = http.createServer(async (req, res) => {
             }
           });
 
+          // Record Stage History in DB
+          if (stage && prevStage && prevStage !== stage) {
+            await prisma.leadStageHistory.create({
+              data: {
+                leadId: actualLeadId,
+                fromStage: prevStage,
+                toStage: stage,
+                changedBy: authUser?.id || 'user-admin-1',
+                reason: reason || `Stage changed from ${prevStage} to ${stage}`
+              }
+            }).catch(() => {});
+          }
+
           if (language && updated.customer?.id) {
             await prisma.customer.update({
               where: { id: updated.customer.id },
@@ -1251,9 +1288,11 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => {});
           }
 
+          console.log(`✅ [Lead Updated] ID: ${actualLeadId}, Stage: ${stage || 'unchanged'}, Treatment: ${treatmentId || 'unchanged'}`);
+
           broadcastScopedSSE(null, {
             type: 'LEAD_UPDATED',
-            leadId,
+            leadId: actualLeadId,
             lead: updated
           });
 

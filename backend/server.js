@@ -932,6 +932,65 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b2. REST: Update Lead Treatment & Serial Number & Stage
+  if ((req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || pathname.startsWith('/api/leads/'))) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' ? pathname.split('/')[3] : null;
+        const leadId = payload.leadId || payload.id || urlLeadId;
+        const { treatmentId, categoryId, serialNumber, stage } = payload;
+
+        if (!leadId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing leadId' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const updateData = {};
+          if (treatmentId) updateData.treatmentId = treatmentId;
+          if (categoryId) updateData.categoryId = categoryId;
+          if (serialNumber !== undefined) updateData.serialNumber = serialNumber;
+          if (stage) updateData.stage = stage;
+          updateData.updatedAt = new Date();
+
+          const updated = await prisma.lead.update({
+            where: { id: leadId },
+            data: updateData,
+            include: {
+              customer: true,
+              category: true,
+              treatment: true,
+              assignedCoordinator: true,
+              messages: { orderBy: { timestamp: 'asc' } }
+            }
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'LEAD_UPDATED',
+            leadId,
+            lead: updated
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, lead: updated }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
     const defaultCoordinators = [
@@ -1309,42 +1368,82 @@ const server = http.createServer(async (req, res) => {
   res.end(JSON.stringify({ error: 'Endpoint Not Found' }));
 });
 
+const CLINIC_TREATMENTS = [
+  { id: 'trt-htp', code: 'HTP', categoryId: 'cat-hair-care', name: 'Hair Transplantation', nameEn: 'Hair Transplantation', nameSi: 'හිසකෙස් බද්ධ කිරීම', nameTa: 'முடி மாற்று அறுவை சிகிச்சை' },
+  { id: 'trt-prp', code: 'PRP', categoryId: 'cat-hair-care', name: 'PRP', nameEn: 'PRP (Platelet Rich Plasma)', nameSi: 'PRP ප්‍රතිකාරය', nameTa: 'PRP சிகிச்சை' },
+  { id: 'trt-gfc', code: 'GFC', categoryId: 'cat-hair-care', name: 'GFC', nameEn: 'GFC (Growth Factor Concentrate)', nameSi: 'GFC ප්‍රතිකාරය', nameTa: 'GFC சிகிச்சை' },
+  { id: 'trt-hdf', code: 'HDF', categoryId: 'cat-skin-care', name: 'Hydra Facial', nameEn: 'Hydra Facial', nameSi: 'හයිඩ්‍රා ෆේෂල්', nameTa: 'ஹைட்ரா ஃபேஷியல்' },
+  { id: 'trt-hij', code: 'HIJ', categoryId: 'cat-ayurveda', name: 'Hijama', nameEn: 'Hijama / Cupping Therapy', nameSi: 'හිජාමා ප්‍රතිකාරය', nameTa: 'ஹிஜாமா சிகிச்சை' },
+  { id: 'trt-pmt', code: 'PMT', categoryId: 'cat-iv-wellness', name: 'Pain Management', nameEn: 'Pain Management', nameSi: 'වේදනා කළමනාකරණය', nameTa: 'வலி மேலாண்மை சிகிச்சை' },
+  { id: 'trt-let', code: 'LET', categoryId: 'cat-ayurveda', name: 'Leech Treatment', nameEn: 'Leech Treatment', nameSi: 'කූඩැල්ලන් ප්‍රතිකාරය', nameTa: 'அட்டை சிகிச்சை' },
+  { id: 'trt-chp', code: 'CHP', categoryId: 'cat-skin-care', name: 'Chemical Peel', nameEn: 'Chemical Peel', nameSi: 'කෙමිකල් පීල්', nameTa: 'கெமிக்கல் பீல்' },
+  { id: 'trt-cbl', code: 'CBL', categoryId: 'cat-skin-care', name: 'Carbon Laser', nameEn: 'Carbon Laser', nameSi: 'කාබන් ලේසර්', nameTa: 'கார்பன் லேசர்' },
+  { id: 'trt-mcn', code: 'MCN', categoryId: 'cat-skin-care', name: 'Microneedling', nameEn: 'Microneedling', nameSi: 'මයික්‍රොනීඩ්ලින්', nameTa: 'மைக்ரோநீட்லிங்' },
+  { id: 'trt-skb', code: 'SKB', categoryId: 'cat-skin-care', name: 'Skin Boosters', nameEn: 'Skin Boosters', nameSi: 'සම දීප්තිමත් කිරීමේ බූස්ටර්', nameTa: 'ஸ்கின் பூஸ்டர்ஸ்' },
+  { id: 'trt-chr', code: 'CHR', categoryId: 'cat-skin-care', name: 'CO2 Hair Removal', nameEn: 'CO2 Hair Removal', nameSi: 'CO2 අනවශ්‍ය රෝම ඉවත් කිරීම', nameTa: 'CO2 முடி அகற்றுதல்' },
+  { id: 'trt-btx', code: 'BTX', categoryId: 'cat-skin-care', name: 'Botox (Per Unit)', nameEn: 'Botox (Per Unit)', nameSi: 'බොටොක්ස් (ඒකකයකට)', nameTa: 'போடாக்ස් (ஒரு யூனிட்)' },
+  { id: 'trt-flr', code: 'FLR', categoryId: 'cat-skin-care', name: 'Filler (1ml)', nameEn: 'Filler (1ml)', nameSi: 'ෆිලර් (1ml)', nameTa: 'ஃபில்லர் (1ml)' },
+  { id: 'trt-ivg', code: 'IVG', categoryId: 'cat-iv-wellness', name: 'IV Glutathione (Per Session)', nameEn: 'IV Glutathione (Per Session)', nameSi: 'IV ග්ලූටතයෝන්', nameTa: 'IV குளுதாதயோன்' },
+  { id: 'trt-ckf', code: 'CKF', categoryId: 'cat-skin-care', name: 'Cheek Filler (new)', nameEn: 'Cheek Filler (new)', nameSi: 'කම්මුල් ෆිලර්', nameTa: 'கன்ன ஃபில்லர்' },
+  { id: 'trt-ttf', code: 'TTF', categoryId: 'cat-skin-care', name: 'Tear Trough (Under-Eye) Filler (new)', nameEn: 'Tear Trough (Under-Eye) Filler (new)', nameSi: 'ඇස් යට ෆිලර් ප්‍රතිකාරය', nameTa: 'கண்களுக்கு அடியில் ஃபில்லர்' },
+  { id: 'trt-hhb', code: 'HHB', categoryId: 'cat-skin-care', name: 'Hyperhidrosis Botox (Underarm) (new)', nameEn: 'Hyperhidrosis Botox (Underarm) (new)', nameSi: 'කිහිලි අධික දහඩිය දැමීමට බොටොක්ස්', nameTa: 'அக்குள் வியர்வைக்கு போடாக்ஸ்' },
+  { id: 'trt-hif', code: 'HIF', categoryId: 'cat-skin-care', name: 'HIFU', nameEn: 'HIFU (High-Intensity Focused Ultrasound)', nameSi: 'HIFU සම තද කිරීමේ ප්‍රතිකාරය', nameTa: 'HIFU தோல் இறுக்க சிகிச்சை' },
+  { id: 'trt-ebb', code: 'EBB', categoryId: 'cat-skin-care', name: 'Eyebrow Blading', nameEn: 'Eyebrow Blading / Microblading', nameSi: 'ඇහිබැම බ්ලේඩින්', nameTa: 'புருவ பிளேடிங்' },
+  { id: 'trt-smp', code: 'SMP', categoryId: 'cat-hair-care', name: 'Scalp Pigmentation', nameEn: 'Scalp Pigmentation (SMP)', nameSi: 'හිස්කබල පිග්මන්ටේෂන්', nameTa: 'ஸ்கால்ப் பிக்மென்டேஷன்' },
+  { id: 'trt-rfs', code: 'RFS', categoryId: 'cat-skin-care', name: 'RF Skin Tightening', nameEn: 'RF Skin Tightening', nameSi: 'RF සම තද කිරීමේ ප්‍රතිකාරය', nameTa: 'RF தோல் இறுக்கம்' },
+  { id: 'trt-co2', code: 'CO2', categoryId: 'cat-skin-care', name: 'CO2 Laser', nameEn: 'CO2 Fractional Laser', nameSi: 'CO2 ලේසර් ප්‍රතිකාරය', nameTa: 'CO2 ලේசர் சிகிச்சை' },
+  { id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameEn: 'LED Light Therapy', nameSi: 'LED ආලෝක ප්‍රතිකාරය', nameTa: 'LED ஒளி சிகிச்சை' }
+];
+
 async function autoSeedDbIfEmpty() {
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return;
   try {
-    const catCount = await prisma.treatmentCategory.count().catch(() => 0);
-    if (catCount === 0) {
-      console.log('🌱 Auto-seeding initial categories & treatments into PostgreSQL...');
-      const defaultCategories = [
-        { id: 'cat-hair-care', name: 'Hair Care & Restoration', nameEn: 'Hair Care & Restoration', nameSi: 'හිසකෙස් ප්‍රතිකාර සහ යථා තත්ත්වයට පත්කිරීම', nameTa: 'முடி பராமரிப்பு மற்றும் சீரமைப்பு', active: true, iconName: 'Sparkles', description: 'Advanced PRP, GFC, and FUE hair transplant solutions.' },
-        { id: 'cat-skin-care', name: 'Aesthetic Skin Care', nameEn: 'Aesthetic Skin Care', nameSi: 'සම රැකවරණ ප්‍රතිකාර', nameTa: 'அழகியல் தோல் பராமரிப்பு', active: true, iconName: 'Smile', description: 'Clinical dermatological facials and laser therapies.' },
-        { id: 'cat-iv-wellness', name: 'IV Drip Therapy & Wellness', nameEn: 'IV Drip Therapy & Wellness', nameSi: 'IV විටමින් ප්‍රතිකාර', nameTa: 'IV டිරිப் மற்றும் ஆரோக்கிய சிகிச்சை', active: true, iconName: 'Zap', description: 'Intravenous wellness blends for rejuvenation.' },
-        { id: 'cat-weight-management', name: 'Weight Management', nameEn: 'Weight Management', nameSi: 'බර පාලනය', nameTa: 'உடல் எடை மேலாண்மை', active: true, iconName: 'Activity', description: 'Non-invasive fat reduction and body contouring.' },
-        { id: 'cat-dental-aesthetics', name: 'Dental Aesthetics & Smile Design', nameEn: 'Dental Aesthetics & Smile Design', nameSi: 'දන්ත සෞන්දර්ය ප්‍රතිකාර', nameTa: 'பல் அழகியல் மற்றும் புன்னகை வடிவமைப்பு', active: true, iconName: 'Sparkles', description: 'Laser teeth whitening and invisible aligners.' },
-        { id: 'cat-ayurveda', name: 'Ayurvedic Rejuvenation', nameEn: 'Ayurvedic Rejuvenation', nameSi: 'ආයුර්වේද ප්‍රතිකාර', nameTa: 'ஆயுர்வேத புத்துணர்ச்சி', active: true, iconName: 'Leaf', description: 'Authentic royal Ceylon herbal detox.' }
-      ];
-      for (const cat of defaultCategories) {
-        await prisma.treatmentCategory.upsert({
-          where: { id: cat.id },
-          update: cat,
-          create: cat
-        }).catch(() => {});
-      }
+    const defaultCategories = [
+      { id: 'cat-hair-care', name: 'Hair Care & Restoration', nameEn: 'Hair Care & Restoration', nameSi: 'හිසකෙස් ප්‍රතිකාර සහ යථා තත්ත්වයට පත්කිරීම', nameTa: 'முடி பராமரிப்பு மற்றும் சீரமைப்பு', active: true, iconName: 'Sparkles', description: 'Advanced PRP, GFC, and FUE hair transplant solutions.' },
+      { id: 'cat-skin-care', name: 'Aesthetic Skin Care', nameEn: 'Aesthetic Skin Care', nameSi: 'සම රැකවරණ ප්‍රතිකාර', nameTa: 'அழகியல் தோல் பராமரிப்பு', active: true, iconName: 'Smile', description: 'Clinical dermatological facials and laser therapies.' },
+      { id: 'cat-iv-wellness', name: 'IV Drip Therapy & Wellness', nameEn: 'IV Drip Therapy & Wellness', nameSi: 'IV විටමින් ප්‍රතිකාර', nameTa: 'IV டිරිப் மற்றும் ஆரோக்கிய சிகிச்சை', active: true, iconName: 'Zap', description: 'Intravenous wellness blends for rejuvenation.' },
+      { id: 'cat-weight-management', name: 'Weight Management', nameEn: 'Weight Management', nameSi: 'බර පාලනය', nameTa: 'உடல் எடை மேலாண்மை', active: true, iconName: 'Activity', description: 'Non-invasive fat reduction and body contouring.' },
+      { id: 'cat-dental-aesthetics', name: 'Dental Aesthetics & Smile Design', nameEn: 'Dental Aesthetics & Smile Design', nameSi: 'දන්ත සෞන්දර්ය ප්‍රතිකාර', nameTa: 'பல் அழகியல் மற்றும் புன்னகை வடிவமைப்பு', active: true, iconName: 'Sparkles', description: 'Laser teeth whitening and invisible aligners.' },
+      { id: 'cat-ayurveda', name: 'Ayurvedic Rejuvenation', nameEn: 'Ayurvedic Rejuvenation', nameSi: 'ආයුර්වේද ප්‍රතිකාර', nameTa: 'ஆயුර්වේද புத்துணர்ச்சி', active: true, iconName: 'Leaf', description: 'Authentic royal Ceylon herbal detox.' }
+    ];
+    for (const cat of defaultCategories) {
+      await prisma.treatmentCategory.upsert({
+        where: { id: cat.id },
+        update: cat,
+        create: cat
+      }).catch(() => {});
+    }
 
-      const defaultTreatments = [
-        { id: 'trt-hair-prp', categoryId: 'cat-hair-care', name: 'Advanced Hair PRP / GFC Therapy', nameEn: 'Advanced Hair PRP / GFC Therapy', nameSi: 'හිසකෙස් සඳහා PRP ප්‍රතිකාරය', nameTa: 'மேம்பட்ட முடி PRP சிகிச்சை', startingPrice: 25000, currency: 'LKR', durationMinutes: 45, active: true },
-        { id: 'trt-skin-laser', categoryId: 'cat-skin-care', name: 'Pico Laser Pigmentation Correction', nameEn: 'Pico Laser Pigmentation Correction', nameSi: 'සම පැහැපත් කිරීමේ ලේසර් ප්‍රතිකාරය', nameTa: 'பிகோ லேசர் சிகிச்சை', startingPrice: 18000, currency: 'LKR', durationMinutes: 30, active: true },
-        { id: 'trt-panchakarma', categoryId: 'cat-ayurveda', name: 'Royal Panchakarma Detox & Therapy', nameEn: 'Royal Panchakarma Detox & Therapy', nameSi: 'රාජකීය පංචකර්ම ප්‍රතිකාරය', nameTa: 'ராயல் பஞ்சகர்மா சிகிச்சை', startingPrice: 35000, currency: 'LKR', durationMinutes: 90, active: true }
-      ];
-      for (const trt of defaultTreatments) {
+    const trtCount = await prisma.treatment.count().catch(() => 0);
+    if (trtCount < 20) {
+      console.log('🌱 Upserting complete 24 treatment catalog into PostgreSQL...');
+      for (const trt of CLINIC_TREATMENTS) {
         await prisma.treatment.upsert({
           where: { id: trt.id },
-          update: trt,
-          create: trt
+          update: {
+            name: trt.name,
+            nameEn: trt.nameEn,
+            nameSi: trt.nameSi,
+            nameTa: trt.nameTa,
+            categoryId: trt.categoryId,
+            active: true
+          },
+          create: {
+            id: trt.id,
+            categoryId: trt.categoryId,
+            name: trt.name,
+            nameEn: trt.nameEn,
+            nameSi: trt.nameSi,
+            nameTa: trt.nameTa,
+            active: true,
+            startingPrice: 0,
+            currency: 'LKR',
+            durationMinutes: 45
+          }
         }).catch(() => {});
       }
-      console.log('✅ Auto-seeding categories and treatments completed.');
+      console.log('✅ 24 treatments seeding completed.');
     }
   } catch (e) {
     console.warn('⚠️ Auto-seed check error:', e.message);
@@ -1363,6 +1462,7 @@ server.listen(PORT, '0.0.0.0', async () => {
       const prisma = getPrisma();
       if (prisma) {
         await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
+        await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => {});
       }
       await autoSeedDbIfEmpty();
       await sessionManager.restoreAllActiveSessions();

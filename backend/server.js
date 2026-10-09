@@ -952,10 +952,10 @@ const server = http.createServer(async (req, res) => {
         const prisma = getPrisma();
         if (prisma && getDbStatus()) {
           const updateData = {};
-          if (treatmentId) updateData.treatmentId = treatmentId;
-          if (categoryId) updateData.categoryId = categoryId;
-          if (serialNumber !== undefined) updateData.serialNumber = serialNumber;
-          if (stage) updateData.stage = stage;
+          if (treatmentId !== undefined) updateData.treatmentId = treatmentId || null;
+          if (categoryId !== undefined) updateData.categoryId = categoryId || null;
+          if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
+          if (stage !== undefined) updateData.stage = stage;
           updateData.updatedAt = new Date();
 
           const updated = await prisma.lead.update({

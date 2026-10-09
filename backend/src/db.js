@@ -36,6 +36,12 @@ export const checkDbConnection = async () => {
     await prisma.$queryRaw`SELECT 1`;
     isDbConnected = true;
     console.log('✅ Connected to Supabase Cloud Database successfully via Prisma!');
+    
+    // Ensure leads table columns allow NULL when no treatment is selected
+    await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ALTER COLUMN "categoryId" DROP NOT NULL;`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ALTER COLUMN "treatmentId" DROP NOT NULL;`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => null);
+
     return { connected: true, message: 'Supabase Postgres Connected' };
   } catch (err) {
     isDbConnected = false;

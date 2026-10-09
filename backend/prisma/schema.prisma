@@ -202,24 +202,24 @@ model Customer {
 
 // 6. CRM Leads / Patient Inquiries
 model Lead {
-  id                    String            @id @default(uuid()) @db.VarChar(50)
-  customerId            String            @db.VarChar(50)
-  categoryId            String            @db.VarChar(50)
-  treatmentId           String            @db.VarChar(50)
-  serialNumber          String?           @db.VarChar(50)
-  assignedTo            String?           @db.VarChar(36)
-  whatsappSessionId     String?           @db.VarChar(50)
-  stage                 LeadStage         @default(new)
-  source                String            @default("whatsapp") @db.VarChar(50)
-  language              LanguageCode      @default(en)
-  lastCustomerMessageAt DateTime          @default(now())
-  createdAt             DateTime          @default(now())
-  updatedAt             DateTime          @updatedAt
+  id                    String             @id @default(uuid()) @db.VarChar(50)
+  customerId            String             @db.VarChar(50)
+  categoryId            String?            @db.VarChar(50)
+  treatmentId           String?            @db.VarChar(50)
+  serialNumber          String?            @db.VarChar(50)
+  assignedTo            String?            @db.VarChar(36)
+  whatsappSessionId     String?            @db.VarChar(50)
+  stage                 LeadStage          @default(new)
+  source                String             @default("whatsapp") @db.VarChar(50)
+  language              LanguageCode       @default(en)
+  lastCustomerMessageAt DateTime           @default(now())
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 
   // Relations
-  customer              Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  category              TreatmentCategory @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  treatment             Treatment         @relation(fields: [treatmentId], references: [id], onDelete: Restrict)
+  customer              Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category              TreatmentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  treatment             Treatment?         @relation(fields: [treatmentId], references: [id], onDelete: SetNull)
   assignedCoordinator   User?             @relation("AssignedCoordinator", fields: [assignedTo], references: [id], onDelete: SetNull)
   whatsappSession       WhatsAppSession?  @relation("SessionLeads", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
   messages              Message[]

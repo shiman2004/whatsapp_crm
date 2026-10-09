@@ -18,7 +18,7 @@ import {
   Mic,
   User
 } from 'lucide-react';
-import { Lead, LeadStage } from '../../types';
+import { Lead } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 
 interface WhatsAppChatListProps {
@@ -345,7 +345,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         </div>
       </div>
 
-      {/* 4. Chat Items Stream with Stage Tag and Coordinator Tag */}
+      {/* 4. Chat Items Stream with Aesthetic & Compact Tags */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#222e35]/40">
         {visibleLeads.length === 0 ? (
           <div className="p-8 text-center text-[#8696a0] text-xs">
@@ -386,34 +386,33 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   markChatAsRead(lead.id);
                 }}
                 onContextMenu={(e) => handleContextMenu(e, lead.id)}
-                className={`group px-3 py-2.5 flex items-start gap-2.5 cursor-pointer transition-colors relative border-b border-[#222e35]/30 ${
+                className={`group px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors relative border-b border-[#222e35]/30 ${
                   isSelected ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'
                 }`}
               >
-                {/* 1. TAG 1: Lead Stage Pill Badge (Matching User Sample Image) */}
-                <div className="pt-1 shrink-0">
-                  <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider border uppercase text-center min-w-[56px] shadow-sm ${stageCfg.pillBg} ${stageCfg.pillText} ${stageCfg.pillBorder}`}>
-                    {stageCfg.shortLabel}
-                  </span>
-                </div>
-
-                {/* Contact Avatar */}
-                <div className="shrink-0 pt-0.5">
-                  <WhatsAppAvatar
-                    name={displayName}
-                    avatarUrl={lead.customer?.avatarUrl}
-                    size="md"
-                    isOnline={true}
-                  />
-                </div>
+                {/* Contact Avatar on the far-left (Clean & Aligned) */}
+                <WhatsAppAvatar
+                  name={displayName}
+                  avatarUrl={lead.customer?.avatarUrl}
+                  size="md"
+                  isOnline={true}
+                />
 
                 {/* Chat Middle Content */}
                 <div className="flex-1 min-w-0 pr-1">
-                  {/* Top Line: Contact Name & Time */}
-                  <div className="flex items-center justify-between gap-1">
-                    <span className="text-xs font-semibold text-[#e9edef] truncate">
-                      {displayName}
-                    </span>
+                  
+                  {/* Top Line: Contact Name + Micro Stage Badge + Time */}
+                  <div className="flex items-center justify-between gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0">
+                      <span className="text-xs font-semibold text-[#e9edef] truncate">
+                        {displayName}
+                      </span>
+                      {/* Aesthetic Micro Stage Badge */}
+                      <span className={`inline-block px-1.5 py-0.2 rounded text-[8.5px] font-extrabold tracking-wider border uppercase shrink-0 shadow-sm ${stageCfg.pillBg} ${stageCfg.pillText} ${stageCfg.pillBorder}`}>
+                        {stageCfg.shortLabel}
+                      </span>
+                    </div>
+
                     <span className={`text-[10px] font-mono shrink-0 ${
                       (lead.unreadCount || 0) > 0 ? 'text-[#00a884] font-bold' : 'text-[#8696a0]'
                     }`}>
@@ -421,7 +420,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     </span>
                   </div>
 
-                  {/* Middle Line: Last Message Snippet + Indicators */}
+                  {/* Middle Line: Last Message Snippet + Unread Indicator */}
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <div className="flex items-center gap-1 min-w-0 text-[#8696a0] text-[11px] truncate">
                       {lastMsg?.direction === 'outbound' && (
@@ -463,10 +462,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     </div>
                   </div>
 
-                  {/* 2. TAG 2: Assigned Coordinator Name (Matching User Sample Image) */}
-                  <div className="flex items-center gap-1 mt-1 text-[10px] font-medium">
+                  {/* Bottom Line: Aesthetic Coordinator Tag */}
+                  <div className="flex items-center gap-1 mt-0.5 text-[10px] font-medium">
                     <User className="w-2.5 h-2.5 text-teal-400 shrink-0" />
-                    <span className={coordinator ? 'text-teal-300/90 font-semibold' : 'text-slate-500 italic'}>
+                    <span className={coordinator ? 'text-teal-300 font-semibold' : 'text-slate-500 italic'}>
                       Assigned to: {coordinatorName}
                     </span>
                   </div>

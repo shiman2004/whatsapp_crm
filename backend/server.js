@@ -832,7 +832,6 @@ const server = http.createServer(async (req, res) => {
               console.warn('[DB Error saving Meta message]:', dbErr.message);
             }
           }
-          }
         } else if (isBaileysConnected) {
           logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
           sendResult = await sessionManager.sendMessage(targetCoordinatorId, {

@@ -54,8 +54,8 @@ export const Header: React.FC = () => {
       <header className="h-14 border-b border-slate-800 bg-[#111b21] px-5 flex items-center justify-between sticky top-0 z-30">
         {/* Brand Title */}
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-emerald-600 flex items-center justify-center shadow">
-            <Crown className="w-4 h-4 text-amber-200" />
+          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-emerald-500/30">
+            <img src="/logo.png" alt="Royal Wellness Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-sm font-bold text-white font-serif tracking-wide">

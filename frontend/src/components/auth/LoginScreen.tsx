@@ -117,8 +117,8 @@ export const LoginScreen: React.FC = () => {
         
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-500 flex items-center justify-center mx-auto shadow-lg shadow-emerald-950/50">
-            <Crown className="w-6 h-6 text-[#111b21]" />
+          <div className="w-14 h-14 rounded-2xl bg-white p-1 flex items-center justify-center mx-auto shadow-xl shadow-emerald-950/60 overflow-hidden ring-1 ring-emerald-500/30">
+            <img src="/logo.png" alt="Royal Wellness Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-white tracking-wide">

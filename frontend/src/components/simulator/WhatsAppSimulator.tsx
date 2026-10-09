@@ -78,8 +78,8 @@ export const WhatsAppSimulator: React.FC = () => {
       <div className="bg-whatsapp-teal px-3 py-2.5 text-white flex items-center justify-between shrink-0 shadow-md">
         <div className="flex items-center gap-2.5">
           <div className="relative">
-            <div className="w-9 h-9 rounded-full bg-white flex items-center justify-center text-whatsapp-deep font-bold text-sm shadow">
-              RW
+            <div className="w-9 h-9 rounded-full bg-white p-0.5 flex items-center justify-center shadow overflow-hidden">
+              <img src="/logo.png" alt="Royal Wellness" className="w-full h-full object-contain" />
             </div>
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white absolute bottom-0 right-0"></span>
           </div>

@@ -38,6 +38,10 @@ backend/public/
 media_*
 *.jpg
 *.png
+!frontend/public/logo.png
+!frontend/public/logo.jpg
+!frontend/public/favicon.png
+!frontend/src/assets/logo.png
 *.mp4
 *.ogg
 *.pdf

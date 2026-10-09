@@ -3,7 +3,12 @@
  * 
  * Flow:
  * 1. New Inbound Message -> Welcome & Language Prompt (1. English, 2. සිංහල, 3. தமிழ்)
- * 2. Language Selection -> 24 Clinical Treatments Menu in chosen language
+ * 2. Language Selection -> 5 Clinical Treatment Categories Menu in chosen language:
+ *    1. 💇 Hair & Scalp Treatments
+ *    2. ✨ Skin & Facial Treatments
+ *    3. 💉 Injectables & Aesthetic Treatments
+ *    4. 🩺 Pain Management & Other Therapies
+ *    5. 📋 Others
  * 3. Treatment Selection -> Auto-generate unique serial number, save to Supabase, 
  *    and reply "Okay, our coordinator will contact you shortly."
  * 4. Completed -> Bot marks intake complete and stops so human coordinators can converse freely.
@@ -16,32 +21,80 @@ import { getPrisma, getDbStatus } from './db.js';
 // State structure: { stage: 'AWAITING_LANGUAGE' | 'AWAITING_TREATMENT' | 'COMPLETED' | 'PAUSED', lastUpdated: Date, selectedLang?: 'en' | 'si' | 'ta' }
 const autoReplySessions = new Map();
 
-// 24 Official Clinical Treatments Catalog
+// 5 Official Clinical Treatment Categories / Funnel Options
 export const CLINICAL_TREATMENTS = [
-  { num: 1, id: 'trt-htp', code: 'HTP', categoryId: 'cat-hair-care', name: 'Hair Transplantation', nameEn: 'Hair Transplantation', nameSi: 'Hair Transplantation (හිසකෙස් බද්ධ කිරීම)', nameTa: 'Hair Transplantation (முடி மாற்று அறுவை சிகிச்சை)', keywords: ['hair transplantation', 'hair transplant', 'transplantation', 'transplant', 'fue', 'බද්ධ', 'முடி மாற்று'] },
-  { num: 2, id: 'trt-prp', code: 'PRP', categoryId: 'cat-hair-care', name: 'PRP', nameEn: 'PRP', nameSi: 'PRP (ප්ලේට්ලට් ප්‍රතිකාරය)', nameTa: 'PRP (PRP சிகிச்சை)', keywords: ['prp', 'platelet', 'ප්ලේට්ලට්'] },
-  { num: 3, id: 'trt-gfc', code: 'GFC', categoryId: 'cat-hair-care', name: 'GFC', nameEn: 'GFC', nameSi: 'GFC (Growth Factor)', nameTa: 'GFC (Growth Factor)', keywords: ['gfc', 'growth factor'] },
-  { num: 4, id: 'trt-hdf', code: 'HDF', categoryId: 'cat-skin-care', name: 'Hydra Facial', nameEn: 'Hydra Facial', nameSi: 'Hydra Facial (හයිඩ්‍රා ෆේෂල්)', nameTa: 'Hydra Facial (ஹைட்ரா ஃபேஷியல்)', keywords: ['hydra facial', 'hydrafacial', 'facial', 'හයිඩ්‍රා', 'ஃபேஷியல்'] },
-  { num: 5, id: 'trt-hij', code: 'HIJ', categoryId: 'cat-ayurveda', name: 'Hijama', nameEn: 'Hijama', nameSi: 'Hijama (හිජාමා ප්‍රතිකාරය)', nameTa: 'Hijama (ஹிஜாமா சிகிச்சை)', keywords: ['hijama', 'cupping', 'හිජාමා', 'ஹிஜாமா'] },
-  { num: 6, id: 'trt-pmt', code: 'PMT', categoryId: 'cat-iv-wellness', name: 'Pain Management', nameEn: 'Pain Management', nameSi: 'Pain Management (වේදනා කළමනාකරණය)', nameTa: 'Pain Management (வலி மேலாண்மை)', keywords: ['pain', 'pain management', 'වේදනා', 'வலி'] },
-  { num: 7, id: 'trt-let', code: 'LET', categoryId: 'cat-ayurveda', name: 'Leech Treatment', nameEn: 'Leech Treatment', nameSi: 'Leech Treatment (කූඩැල්ලන් ප්‍රතිකාරය)', nameTa: 'Leech Treatment (அட்டை சிகிச்சை)', keywords: ['leech', 'leech treatment', 'කූඩැල්ලන්', 'அட்டை'] },
-  { num: 8, id: 'trt-chp', code: 'CHP', categoryId: 'cat-skin-care', name: 'Chemical Peel', nameEn: 'Chemical Peel', nameSi: 'Chemical Peel (කෙමිකල් පීල්)', nameTa: 'Chemical Peel (கெமிக்கல் பீல்)', keywords: ['chemical peel', 'peel', 'කෙමිකල්', 'பீல்'] },
-  { num: 9, id: 'trt-cbl', code: 'CBL', categoryId: 'cat-skin-care', name: 'Carbon Laser', nameEn: 'Carbon Laser', nameSi: 'Carbon Laser (කාබන් ලේසර්)', nameTa: 'Carbon Laser (கார்பன் லேசர்)', keywords: ['carbon laser', 'carbon', 'කාබන්', 'கார்பன்'] },
-  { num: 10, id: 'trt-mcn', code: 'MCN', categoryId: 'cat-skin-care', name: 'Microneedling', nameEn: 'Microneedling', nameSi: 'Microneedling (මයික්‍රොනීඩ්ලින්)', nameTa: 'Microneedling (மைக்ரோநீட்லிங்)', keywords: ['microneedling', 'needling', 'derma pen', 'මයික්‍රොනීඩ්ලින්'] },
-  { num: 11, id: 'trt-skb', code: 'SKB', categoryId: 'cat-skin-care', name: 'Skin Boosters', nameEn: 'Skin Boosters', nameSi: 'Skin Boosters (සම දීප්තිමත් කිරීමේ බූස්ටර්)', nameTa: 'Skin Boosters (ஸ்கின் பூஸ்டர்ஸ்)', keywords: ['skin boosters', 'skin booster', 'booster', 'බූස්ටර්'] },
-  { num: 12, id: 'trt-chr', code: 'CHR', categoryId: 'cat-skin-care', name: 'CO2 Hair Removal', nameEn: 'CO2 Hair Removal', nameSi: 'CO2 Hair Removal (රෝම ඉවත් කිරීම)', nameTa: 'CO2 Hair Removal (முடி அகற்றுதல்)', keywords: ['hair removal', 'co2 hair removal', 'laser hair', 'රෝම'] },
-  { num: 13, id: 'trt-btx', code: 'BTX', categoryId: 'cat-skin-care', name: 'Botox (Per Unit)', nameEn: 'Botox (Per Unit)', nameSi: 'Botox (බොටොක්ස්)', nameTa: 'Botox (போடாக்ஸ்)', keywords: ['botox', 'botox per unit', 'බොටොක්ස්', 'போடாக்ஸ்'] },
-  { num: 14, id: 'trt-flr', code: 'FLR', categoryId: 'cat-skin-care', name: 'Filler (1ml)', nameEn: 'Filler (1ml)', nameSi: 'Filler (ෆිලර්)', nameTa: 'Filler (ஃபில்லர்)', keywords: ['filler', 'filler 1ml', 'ෆිලර්', 'ஃபில்லர்', 'dermal filler'] },
-  { num: 15, id: 'trt-ivg', code: 'IVG', categoryId: 'cat-iv-wellness', name: 'IV Glutathione (Per Session)', nameEn: 'IV Glutathione (Per Session)', nameSi: 'IV Glutathione (IV ග්ලූටතයෝන්)', nameTa: 'IV Glutathione (IV குளுதாதயோன்)', keywords: ['glutathione', 'iv glutathione', 'iv drip', 'ග්ලූටතයෝන්', 'குளுதாதயோன்'] },
-  { num: 16, id: 'trt-ckf', code: 'CKF', categoryId: 'cat-skin-care', name: 'Cheek Filler (new)', nameEn: 'Cheek Filler (new)', nameSi: 'Cheek Filler (කම්මුල් ෆිලර්)', nameTa: 'Cheek Filler (கன்ன ஃபில்லர்)', keywords: ['cheek filler', 'cheek', 'කම්මුල්', 'கன்ன'] },
-  { num: 17, id: 'trt-ttf', code: 'TTF', categoryId: 'cat-skin-care', name: 'Tear Trough (Under-Eye) Filler (new)', nameEn: 'Tear Trough (Under-Eye) Filler (new)', nameSi: 'Tear Trough Filler (ඇස් යට ෆිලර්)', nameTa: 'Tear Trough Filler (கண்களுக்கு அடியில் ஃபில்லர்)', keywords: ['tear trough', 'under eye filler', 'under eye', 'eye filler', 'ඇස් යට'] },
-  { num: 18, id: 'trt-hhb', code: 'HHB', categoryId: 'cat-skin-care', name: 'Hyperhidrosis Botox (Underarm) (new)', nameEn: 'Hyperhidrosis Botox (Underarm) (new)', nameSi: 'Hyperhidrosis Botox (කිහිලි අධික දහඩියට)', nameTa: 'Hyperhidrosis Botox (அக்குள் வியர்வைக்கு)', keywords: ['hyperhidrosis', 'underarm botox', 'sweat botox', 'sweat', 'දහඩිය'] },
-  { num: 19, id: 'trt-hif', code: 'HIF', categoryId: 'cat-skin-care', name: 'HIFU', nameEn: 'HIFU', nameSi: 'HIFU (සම තද කිරීමේ ප්‍රතිකාරය)', nameTa: 'HIFU (தோல் இறுக்க சிகிச்சை)', keywords: ['hifu', 'ultrasound', 'skin tightening'] },
-  { num: 20, id: 'trt-ebb', code: 'EBB', categoryId: 'cat-skin-care', name: 'Eyebrow Blading', nameEn: 'Eyebrow Blading', nameSi: 'Eyebrow Blading (ඇහිබැම බ්ලේඩින්)', nameTa: 'Eyebrow Blading (புருவ பிளேடிங்)', keywords: ['eyebrow', 'eyebrow blading', 'microblading', 'ඇහිබැම', 'புருவ'] },
-  { num: 21, id: 'trt-smp', code: 'SMP', categoryId: 'cat-hair-care', name: 'Scalp Pigmentation', nameEn: 'Scalp Pigmentation', nameSi: 'Scalp Pigmentation (හිස්කබල පිග්මන්ටේෂන්)', nameTa: 'Scalp Pigmentation (ஸ்கால்ப் பிக்மென்டேஷன்)', keywords: ['scalp pigmentation', 'smp', 'scalp', 'හිස්කබල'] },
-  { num: 22, id: 'trt-rfs', code: 'RFS', categoryId: 'cat-skin-care', name: 'RF Skin Tightening', nameEn: 'RF Skin Tightening', nameSi: 'RF Skin Tightening (RF සම තද කිරීම)', nameTa: 'RF Skin Tightening (RF தோல் இறுக்கம்)', keywords: ['rf skin tightening', 'rf', 'radio frequency', 'tightening'] },
-  { num: 23, id: 'trt-co2', code: 'CO2', categoryId: 'cat-skin-care', name: 'CO2 Laser', nameEn: 'CO2 Laser', nameSi: 'CO2 Laser (CO2 ලේසර් ප්‍රතිකාරය)', nameTa: 'CO2 Laser (CO2 லேசர்)', keywords: ['co2 laser', 'fractional laser', 'co2'] },
-  { num: 24, id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameEn: 'LED Light Therapy', nameSi: 'LED Light Therapy (LED ආලෝක ප්‍රතිකාරය)', nameTa: 'LED Light Therapy (LED ஒளி சிகிச்சை)', keywords: ['led', 'led light', 'light therapy', 'ආලෝක'] }
+  {
+    num: 1,
+    id: 'trt-hair-scalp',
+    code: 'HST',
+    categoryId: 'cat-hair-care',
+    name: 'Hair & Scalp Treatments',
+    nameEn: 'Hair & Scalp Treatments',
+    nameSi: 'හිසකෙස් සහ හිස්කබල ප්‍රතිකාර (Hair & Scalp Treatments)',
+    nameTa: 'முடி மற்றும் உச்சந்தலை சிகிச்சைகள் (Hair & Scalp Treatments)',
+    keywords: [
+      'hair', 'scalp', 'hair transplantation', 'transplant', 'prp', 'gfc', 'smp', 'scalp pigmentation',
+      'හිසකෙස්', 'බද්ධ', 'ප්ලේට්ලට්', 'முடி', 'முடி மாற்று', 'உச்சந்தலை'
+    ]
+  },
+  {
+    num: 2,
+    id: 'trt-skin-facial',
+    code: 'SFT',
+    categoryId: 'cat-skin-care',
+    name: 'Skin & Facial Treatments',
+    nameEn: 'Skin & Facial Treatments',
+    nameSi: 'සම සහ මුහුණේ ප්‍රතිකාර (Skin & Facial Treatments)',
+    nameTa: 'தோல் மற்றும் முக சிகிச்சைகள் (Skin & Facial Treatments)',
+    keywords: [
+      'skin', 'facial', 'hydra facial', 'hydrafacial', 'carbon laser', 'chemical peel', 'microneedling',
+      'skin boosters', 'hifu', 'rf skin tightening', 'co2 laser', 'led light therapy', 'eyebrow blading',
+      'සම', 'මුහුණ', 'හයිඩ්‍රා', 'කාබන්', 'පීල්', 'තද කිරීම', 'தோல்', 'முகம்', 'ஃபேஷியல்', 'கார்பன்'
+    ]
+  },
+  {
+    num: 3,
+    id: 'trt-injectables',
+    code: 'IAT',
+    categoryId: 'cat-skin-care',
+    name: 'Injectables & Aesthetic Treatments',
+    nameEn: 'Injectables & Aesthetic Treatments',
+    nameSi: 'එන්නත් සහ සෞන්දර්ය ප්‍රතිකාර (Injectables & Aesthetic Treatments)',
+    nameTa: 'ஊசி மற்றும் அழகியல் சிகிச்சைகள் (Injectables & Aesthetic Treatments)',
+    keywords: [
+      'injectables', 'botox', 'filler', 'iv glutathione', 'cheek filler', 'tear trough', 'underarm botox',
+      'hyperhidrosis', 'glutathione', 'dermal filler', 'එන්නත්', 'බොටොක්ස්', 'ෆිලර්', 'ග්ලූටතයෝන්',
+      'ஊசி', 'போடாக்ஸ்', 'ஃபில்லர்', 'குளுதாதயோன்'
+    ]
+  },
+  {
+    num: 4,
+    id: 'trt-pain-mgmt',
+    code: 'PMT',
+    categoryId: 'cat-iv-wellness',
+    name: 'Pain Management & Other Therapies',
+    nameEn: 'Pain Management & Other Therapies',
+    nameSi: 'වේදනා කළමනාකරණය සහ වෙනත් ප්‍රතිකාර (Pain Management & Other Therapies)',
+    nameTa: 'வலி மேலாண்மை மற்றும் பிற சிகிச்சைகள் (Pain Management & Other Therapies)',
+    keywords: [
+      'pain', 'pain management', 'hijama', 'cupping', 'leech treatment', 'leech', 'co2 hair removal',
+      'physiotherapy', 'therapy', 'වේදනා', 'හිජාමා', 'කූඩැල්ලන්', 'රෝම', 'வலி', 'ஹிஜாமா', 'அட்டை'
+    ]
+  },
+  {
+    num: 5,
+    id: 'trt-others',
+    code: 'OTH',
+    categoryId: 'cat-skin-care',
+    name: 'Others',
+    nameEn: 'Others',
+    nameSi: 'වෙනත් (Others)',
+    nameTa: 'மற்றவை (Others)',
+    keywords: [
+      'other', 'others', 'general', 'consultation', 'inquiry', 'appointment', 'price', 'cost',
+      'වෙනත්', 'විමසීම්', 'மற்றவை', 'ஆலோசனை'
+    ]
+  }
 ];
 
 // Step 1: Welcome & Language Prompt
@@ -62,96 +115,39 @@ _Reply with 1, 2, or 3_`;
 // Step 2: Treatment Menu per Language
 export const getTreatmentMenuMessage = (lang = 'en') => {
   if (lang === 'si') {
-    return `✨ *ස්තූතියි!* ඔබ විමසීමට බලාපොරොත්තු වන ප්‍රතිකාරය තෝරන්න:
+    return `✨ *ස්තූතියි!* ඔබ විමසීමට බලාපොරොත්තු වන සායනික ප්‍රතිකාරය කුමක්ද?
 
-1. Hair Transplantation (හිසකෙස් බද්ධ කිරීම)
-2. PRP (ප්ලේට්ලට් ප්‍රතිකාරය)
-3. GFC
-4. Hydra Facial (හයිඩ්‍රා ෆේෂල්)
-5. Hijama (හිජාමා ප්‍රතිකාරය)
-6. Pain Management (වේදනා කළමනාකරණය)
-7. Leech Treatment (කූඩැල්ලන් ප්‍රතිකාරය)
-8. Chemical Peel (කෙමිකල් පීල්)
-9. Carbon Laser (කාබන් ලේසර්)
-10. Microneedling (මයික්‍රොනීඩ්ලින්)
-11. Skin Boosters (සම දීප්තිමත් කිරීමේ බූස්ටර්)
-12. CO2 Hair Removal (රෝම ඉවත් කිරීම)
-13. Botox (Per Unit) (බොටොක්ස්)
-14. Filler (1ml) (ෆිලර්)
-15. IV Glutathione (Per Session) (IV ග්ලූටතයෝන්)
-16. Cheek Filler (new) (කම්මුල් ෆිලර්)
-17. Tear Trough Filler (new) (ඇස් යට ෆිලර්)
-18. Hyperhidrosis Botox (new) (කිහිලි අධික දහඩියට)
-19. HIFU (සම තද කිරීමේ ප්‍රතිකාරය)
-20. Eyebrow Blading (ඇහිබැම බ්ලේඩින්)
-21. Scalp Pigmentation (හිස්කබල පිග්මන්ටේෂන්)
-22. RF Skin Tightening (RF සම තද කිරීම)
-23. CO2 Laser (CO2 ලේසර්)
-24. LED Light Therapy (LED ආලෝක ප්‍රතිකාරය)
+1. 💇 හිසකෙස් සහ හිස්කබල ප්‍රතිකාර (Hair & Scalp Treatments)
+2. ✨ සම සහ මුහුණේ ප්‍රතිකාර (Skin & Facial Treatments)
+3. 💉 එන්නත් සහ සෞන්දර්ය ප්‍රතිකාර (Injectables & Aesthetic Treatments)
+4. 🩺 වේදනා කළමනාකරණය සහ වෙනත් ප්‍රතිකාර (Pain Management & Other Therapies)
+5. 📋 වෙනත් (Others)
 
-_කරුණාකර අංකය (1 - 24) හෝ ප්‍රතිකාරයේ නම එවන්න_`;
+_කරුණාකර අංකය (1–5) එවන්න._`;
   }
 
   if (lang === 'ta') {
-    return `✨ *நன்றி!* நீங்கள் விசாரிக்க விரும்பும் சிகிச்சையைத் தேர்ந்தெடுக்கவும்:
+    return `✨ *நன்றி!* நீங்கள் விசாரிக்க விரும்பும் மருத்துவ சிகிச்சை எது?
 
-1. Hair Transplantation (முடி மாற்று அறுவை சிகிச்சை)
-2. PRP (PRP சிகிச்சை)
-3. GFC
-4. Hydra Facial (ஹைட்ரா ஃபேஷியல்)
-5. Hijama (ஹிஜாமா சிகிச்சை)
-6. Pain Management (வலி மேலாண்மை)
-7. Leech Treatment (அட்டை சிகிச்சை)
-8. Chemical Peel (கெமிக்கல் பீல்)
-9. Carbon Laser (கார்பன் லேசர்)
-10. Microneedling (மைக்ரோநீட்லிங்)
-11. Skin Boosters (ஸ்கின் பூஸ்டர்ஸ்)
-12. CO2 Hair Removal (முடி அகற்றுதல்)
-13. Botox (Per Unit) (போடாக்ஸ்)
-14. Filler (1ml) (ஃபில்லர்)
-15. IV Glutathione (Per Session) (IV குளுதாதயோன்)
-16. Cheek Filler (new) (கன்ன ஃபில்லர்)
-17. Tear Trough Filler (new) (கண்களுக்கு அடியில் ஃபில்லர்)
-18. Hyperhidrosis Botox (new) (அக்குள் வியர்வைக்கு)
-19. HIFU (தோல் இறுக்க சிகிச்சை)
-20. Eyebrow Blading (புருவ பிளேடிங்)
-21. Scalp Pigmentation (ஸ்கால்ப் பிக்மென்டேஷன்)
-22. RF Skin Tightening (RF தோல் இறுக்கம்)
-23. CO2 Laser (CO2 லேசர்)
-24. LED Light Therapy (LED ஒளி சிகிச்சை)
+1. 💇 முடி மற்றும் உச்சந்தலை சிகிச்சைகள் (Hair & Scalp Treatments)
+2. ✨ தோல் மற்றும் முக சிகிச்சைகள் (Skin & Facial Treatments)
+3. 💉 ஊசி மற்றும் அழகியல் சிகிச்சைகள் (Injectables & Aesthetic Treatments)
+4. 🩺 வலி மேலாண்மை மற்றும் பிற சிகிச்சைகள் (Pain Management & Other Therapies)
+5. 📋 மற்றவை (Others)
 
-_தயவுசெய்து சிகிச்சை எண்ணை (1 - 24) அல்லது பெயரை அனுப்பவும்_`;
+_தயவுசெய்து தெரிவு எண்ணை (1–5) அனுப்பவும்._`;
   }
 
   // Default: English
   return `✨ *Thank you!* Which clinical treatment would you like to inquire about?
 
-1. Hair Transplantation
-2. PRP
-3. GFC
-4. Hydra Facial
-5. Hijama
-6. Pain Management
-7. Leech Treatment
-8. Chemical Peel
-9. Carbon Laser
-10. Microneedling
-11. Skin Boosters
-12. CO2 Hair Removal
-13. Botox (Per Unit)
-14. Filler (1ml)
-15. IV Glutathione (Per Session)
-16. Cheek Filler (new)
-17. Tear Trough (Under-Eye) Filler (new)
-18. Hyperhidrosis Botox (Underarm) (new)
-19. HIFU
-20. Eyebrow Blading
-21. Scalp Pigmentation
-22. RF Skin Tightening
-23. CO2 Laser
-24. LED Light Therapy
+1. 💇 Hair & Scalp Treatments
+2. ✨ Skin & Facial Treatments
+3. 💉 Injectables & Aesthetic Treatments
+4. 🩺 Pain Management & Other Therapies
+5. 📋 Others
 
-_Reply with the treatment number (1 - 24) or name_`;
+_Reply with the option number (1–5)._`;
 };
 
 // Step 3: Final Confirmation & Clinical Handoff Message
@@ -190,14 +186,20 @@ function parseLanguageChoice(text = '') {
 }
 
 /**
- * Parses user message for treatment selection (1-24 or keywords)
+ * Parses user message for treatment selection (1-5 or keywords)
  */
 function parseTreatmentChoice(text = '') {
   const clean = text.trim().toLowerCase();
   
-  // 1. Direct number matching (1 to 24)
+  // 1. Direct number matching (1 to 5) or unicode emojis
+  if (clean === '1' || clean === '1️⃣' || clean.startsWith('1.')) return CLINICAL_TREATMENTS[0];
+  if (clean === '2' || clean === '2️⃣' || clean.startsWith('2.')) return CLINICAL_TREATMENTS[1];
+  if (clean === '3' || clean === '3️⃣' || clean.startsWith('3.')) return CLINICAL_TREATMENTS[2];
+  if (clean === '4' || clean === '4️⃣' || clean.startsWith('4.')) return CLINICAL_TREATMENTS[3];
+  if (clean === '5' || clean === '5️⃣' || clean.startsWith('5.')) return CLINICAL_TREATMENTS[4];
+
   const parsedNum = parseInt(clean, 10);
-  if (!isNaN(parsedNum) && parsedNum >= 1 && parsedNum <= 24) {
+  if (!isNaN(parsedNum) && parsedNum >= 1 && parsedNum <= 5) {
     return CLINICAL_TREATMENTS.find(t => t.num === parsedNum) || null;
   }
 
@@ -215,7 +217,7 @@ function parseTreatmentChoice(text = '') {
 }
 
 /**
- * Generates unique sequential serial number e.g. HTP-001, PRP-002
+ * Generates unique sequential serial number e.g. HST-001, SFT-002, IAT-003, PMT-004, OTH-005
  */
 async function generateNextSerialNumber(prisma, treatmentCode) {
   const prefix = `${treatmentCode || 'TRT'}-`;
@@ -282,7 +284,6 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
   }
 
   const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
-  const cleanText = messageText.trim().toLowerCase();
   
   let session = autoReplySessions.get(cleanPhone);
 
@@ -291,7 +292,7 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
     return { shouldReply: false };
   }
 
-  // 2. Check DB state: If lead already finished intake (has a serial number assigned e.g. HTP-001) or is closed/converted
+  // 2. Check DB state: If lead already finished intake (has a serial number assigned e.g. HST-001) or is closed/converted
   if (lead) {
     if (lead.serialNumber && lead.serialNumber.trim().length > 0 && lead.serialNumber !== '---') {
       autoReplySessions.set(cleanPhone, { stage: 'COMPLETED', lastUpdated: new Date() });
@@ -320,7 +321,7 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
   }
 
   // ----------------------------------------------------
-  // STEP 2: AWAITING LANGUAGE -> Parse Language & Send 24 Treatments Menu
+  // STEP 2: AWAITING LANGUAGE -> Parse Language & Send 5 Treatment Categories Menu
   // ----------------------------------------------------
   if (session.stage === 'AWAITING_LANGUAGE') {
     const selectedLang = parseLanguageChoice(messageText);
@@ -357,7 +358,7 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
     }
 
     const treatmentMenu = getTreatmentMenuMessage(selectedLang);
-    console.log(`🤖 [AUTO-REPLY STEP 2] Language selected: [${selectedLang}]. Sending 24 Treatments Menu to ${cleanPhone}`);
+    console.log(`🤖 [AUTO-REPLY STEP 2] Language selected: [${selectedLang}]. Sending 5 Clinical Treatments Menu to ${cleanPhone}`);
     
     return {
       shouldReply: true,
@@ -374,12 +375,12 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
     const userLang = session.selectedLang || 'en';
 
     if (!chosenTreatment) {
-      // Prompt user politely to choose 1 - 24
+      // Prompt user politely to choose 1–5
       const retryText = userLang === 'si'
-        ? `කරුණාකර ඉහත ලැයිස්තුවෙන් ප්‍රතිකාර අංකය (1 - 24) හෝ ප්‍රතිකාරයේ නම එවන්න.`
+        ? `කරුණාකර අංකය (1–5) එවන්න.`
         : userLang === 'ta'
-        ? `தயவுசெய்து மேலே உள்ள பட்டியலில் இருந்து சிகிச்சை எண்ணை (1 - 24) அல்லது பெயரை அனுப்பவும்.`
-        : `Please reply with a valid treatment number (1 - 24) or treatment name from the list above.`;
+        ? `தயவுசெய்து தெரிவு எண்ணை (1–5) அனுப்பவும்.`
+        : `Please reply with the option number (1–5).`;
 
       return {
         shouldReply: true,
@@ -387,7 +388,7 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
       };
     }
 
-    // Generate unique serial number (e.g. HTP-001, PRP-002)
+    // Generate unique serial number (e.g. HST-001, SFT-002, IAT-003, PMT-004, OTH-005)
     const generatedSerial = await generateNextSerialNumber(prisma, chosenTreatment.code);
 
     // Mark intake session as COMPLETED (Bot turns off permanently for this customer)

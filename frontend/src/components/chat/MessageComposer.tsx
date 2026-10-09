@@ -14,7 +14,9 @@ import {
   Sparkles,
   QrCode,
   AlertCircle,
-  RefreshCw
+  RefreshCw,
+  Trash2,
+  Check
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -45,6 +47,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
+
+  // Audio Recording Refs
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioStreamRef = useRef<MediaStream | null>(null);
 
   // Media Attachment State & Preview
   const [mediaPreview, setMediaPreview] = useState<{
@@ -98,6 +105,116 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     }
     return () => clearInterval(interval);
   }, [isRecording]);
+
+  // Start real Audio Recording via MediaRecorder
+  const handleStartRecording = async () => {
+    const isConnected = whatsappStatus === 'connected' || hasMetaConfig || Boolean(localStorage.getItem('meta_access_token'));
+    if (!isConnected) {
+      setQrModalOpen(true);
+      return;
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Audio recording is not supported in this browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStreamRef.current = stream;
+      audioChunksRef.current = [];
+
+      let mimeType = '';
+      if (typeof MediaRecorder.isTypeSupported === 'function') {
+        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
+          mimeType = 'audio/webm;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
+          mimeType = 'audio/ogg;codecs=opus';
+        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
+          mimeType = 'audio/mp4';
+        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
+          mimeType = 'audio/webm';
+        }
+      }
+
+      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      recorder.start(100);
+      setIsRecording(true);
+      setRecordingSeconds(0);
+    } catch (err: any) {
+      console.error('Microphone error:', err);
+      alert('Microphone access was denied or is unavailable. Please check your browser permissions.');
+      setIsRecording(false);
+    }
+  };
+
+  // Stop & Send Voice Note
+  const handleStopAndSendRecording = () => {
+    const recorder = mediaRecorderRef.current;
+    if (!recorder || recorder.state === 'inactive') {
+      setIsRecording(false);
+      return;
+    }
+
+    recorder.onstop = () => {
+      const mimeType = recorder.mimeType || 'audio/ogg;codecs=opus';
+      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
+
+      if (audioStreamRef.current) {
+        audioStreamRef.current.getTracks().forEach(t => t.stop());
+        audioStreamRef.current = null;
+      }
+
+      if (audioBlob.size > 200) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const base64Audio = reader.result as string;
+          const ext = mimeType.includes('mp4') ? 'm4a' : 'ogg';
+          sendMessage(
+            lead.id,
+            '',
+            'coordinator',
+            {
+              type: 'audio',
+              url: base64Audio,
+              dataUrl: base64Audio,
+              fileName: `voice_note_${Date.now()}.${ext}`,
+              caption: ''
+            }
+          );
+        };
+        reader.readAsDataURL(audioBlob);
+      }
+      audioChunksRef.current = [];
+      setIsRecording(false);
+      setRecordingSeconds(0);
+    };
+
+    recorder.stop();
+  };
+
+  // Cancel / Discard Voice Note
+  const handleCancelRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.onstop = null;
+      mediaRecorderRef.current.stop();
+    }
+    if (audioStreamRef.current) {
+      audioStreamRef.current.getTracks().forEach(t => t.stop());
+      audioStreamRef.current = null;
+    }
+    audioChunksRef.current = [];
+    setIsRecording(false);
+    setRecordingSeconds(0);
+  };
 
   // Handle File Selection
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>, fallbackType?: 'image' | 'video' | 'document') => {
@@ -433,16 +550,30 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
         {/* Input Field / Voice Recording View */}
         {isRecording ? (
-          <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2 flex items-center justify-between text-xs text-rose-400 font-mono animate-pulse">
-            <div className="flex items-center gap-2">
-              <span className="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping" />
-              <span>Recording Voice Note... {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}</span>
+          <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono animate-in fade-in duration-150">
+            <div className="flex items-center gap-3">
+              <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
+              <span className="text-rose-400 font-semibold tracking-wider">
+                {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}
+              </span>
+              <div className="hidden sm:flex items-center gap-1">
+                <div className="w-1 h-3 bg-rose-500/80 rounded animate-pulse" />
+                <div className="w-1 h-5 bg-rose-500/80 rounded animate-pulse delay-75" />
+                <div className="w-1 h-2 bg-rose-500/80 rounded animate-pulse delay-150" />
+                <div className="w-1 h-6 bg-rose-500/80 rounded animate-pulse delay-100" />
+                <div className="w-1 h-4 bg-rose-500/80 rounded animate-pulse delay-200" />
+              </div>
+              <span className="text-[11px] text-[#8696a0] font-sans">Recording WhatsApp Voice Note...</span>
             </div>
+            
             <button 
-              onClick={() => setIsRecording(false)} 
-              className="text-xs text-[#8696a0] hover:text-white font-sans"
+              type="button"
+              onClick={handleCancelRecording} 
+              className="p-1.5 hover:bg-[#374248] rounded-full text-[#8696a0] hover:text-rose-400 transition-colors flex items-center gap-1 font-sans"
+              title="Discard Voice Note"
             >
-              Cancel
+              <Trash2 className="w-4 h-4" />
+              <span className="text-xs">Cancel</span>
             </button>
           </div>
         ) : (
@@ -458,8 +589,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           </form>
         )}
 
-        {/* Right Button: Mic (when empty) OR Send Button (when typing text) */}
-        {inputVal.trim() ? (
+        {/* Right Button: Send Text OR Send Voice Note OR Start Voice Note */}
+        {isRecording ? (
+          <button
+            type="button"
+            onClick={handleStopAndSendRecording}
+            className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-lg active:scale-95 transition-all shrink-0 animate-in zoom-in-95"
+            title="Send Voice Note"
+          >
+            <Send className="w-5 h-5 fill-current ml-0.5" />
+          </button>
+        ) : inputVal.trim() ? (
           <button
             type="button"
             onClick={handleSendText}
@@ -471,19 +611,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         ) : (
           <button
             type="button"
-            onClick={() => {
-              if (whatsappStatus !== 'connected') {
-                setQrModalOpen(true);
-                return;
-              }
-              setIsRecording(!isRecording);
-            }}
-            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 ${
-              isRecording 
-                ? 'bg-rose-500 text-white' 
-                : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
-            }`}
-            title={isRecording ? 'Stop recording' : 'Voice note'}
+            onClick={handleStartRecording}
+            className="w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50"
+            title="Record Voice Note"
           >
             <Mic className="w-5 h-5" />
           </button>

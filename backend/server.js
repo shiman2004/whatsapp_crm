@@ -195,16 +195,39 @@ async function downloadMetaMedia(mediaId, metaToken, mimeType = '', customFilena
  */
 async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
   try {
+    let effectiveMime = mimeType || 'application/octet-stream';
+    let effectiveFilename = filename || 'file.bin';
+
+    // Normalize audio mime types for Meta Cloud API requirements
+    if (effectiveMime.includes('audio/') || effectiveFilename.endsWith('.ogg') || effectiveFilename.endsWith('.webm') || effectiveFilename.endsWith('.mp3')) {
+      if (effectiveMime.includes('webm') || effectiveMime.includes('opus') || effectiveMime.includes('ogg')) {
+        effectiveMime = 'audio/ogg; codecs=opus';
+        if (!effectiveFilename.endsWith('.ogg')) {
+          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.ogg';
+        }
+      } else if (effectiveMime.includes('mp4') || effectiveMime.includes('m4a') || effectiveMime.includes('aac')) {
+        effectiveMime = 'audio/mp4';
+        if (!effectiveFilename.endsWith('.m4a') && !effectiveFilename.endsWith('.mp4')) {
+          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp4';
+        }
+      } else if (effectiveMime.includes('mpeg') || effectiveMime.includes('mp3')) {
+        effectiveMime = 'audio/mpeg';
+        if (!effectiveFilename.endsWith('.mp3')) {
+          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp3';
+        }
+      }
+    }
+
     const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
     const header = Buffer.from(
       `--${boundary}\r\n` +
-      `Content-Disposition: form-data; name="file"; filename="${filename || 'file.bin'}"\r\n` +
-      `Content-Type: ${mimeType || 'application/octet-stream'}\r\n\r\n`
+      `Content-Disposition: form-data; name="file"; filename="${effectiveFilename}"\r\n` +
+      `Content-Type: ${effectiveMime}\r\n\r\n`
     );
     const middle = Buffer.from(
       `\r\n--${boundary}\r\n` +
       `Content-Disposition: form-data; name="type"\r\n\r\n` +
-      `${mimeType || 'application/octet-stream'}\r\n` +
+      `${effectiveMime}\r\n` +
       `--${boundary}\r\n` +
       `Content-Disposition: form-data; name="messaging_product"\r\n\r\n` +
       `whatsapp\r\n` +

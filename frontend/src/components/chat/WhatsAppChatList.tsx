@@ -14,10 +14,13 @@ import {
   Trash2, 
   Slash, 
   ChevronDown,
+  ChevronRight,
   Camera,
   Mic,
   User,
-  UserPlus
+  UserPlus,
+  Check,
+  Tag
 } from 'lucide-react';
 import { Lead } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
@@ -26,6 +29,14 @@ import { AddContactModal } from './AddContactModal';
 interface WhatsAppChatListProps {
   onSelectLead: (leadId: string) => void;
 }
+
+export const PRESET_LABELS = [
+  { id: 'vip', name: 'VIP Patient', color: 'bg-amber-500/20 text-amber-300 border-amber-500/30', dot: 'bg-amber-400' },
+  { id: 'hot', name: 'Hot Lead', color: 'bg-rose-500/20 text-rose-300 border-rose-500/30', dot: 'bg-rose-400' },
+  { id: 'booked', name: 'Consultation Booked', color: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', dot: 'bg-emerald-400' },
+  { id: 'followup', name: 'Follow-up Needed', color: 'bg-sky-500/20 text-sky-300 border-sky-500/30', dot: 'bg-sky-400' },
+  { id: 'prescription', name: 'Prescription Sent', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', dot: 'bg-purple-400' }
+];
 
 export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead }) => {
   const { 
@@ -38,6 +49,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     selectedLeadId, 
     categories,
     markChatAsRead,
+    markChatAsUnread,
     deleteChat,
     clearChat
   } = useCrm();
@@ -49,10 +61,86 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   // Context Menu State
   const [contextMenuLeadId, setContextMenuLeadId] = useState<string | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
-  const [pinnedLeadIds, setPinnedLeadIds] = useState<Set<string>>(new Set());
-  const [favouriteLeadIds, setFavouriteLeadIds] = useState<Set<string>>(new Set());
+  const [isLabelSubmenuOpen, setIsLabelSubmenuOpen] = useState(false);
+
+  // Persistent States
+  const [pinnedLeadIds, setPinnedLeadIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_pinned_leads');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const [favouriteLeadIds, setFavouriteLeadIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_favourite_leads');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const [archivedLeadIds, setArchivedLeadIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_archived_leads');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const [lockedLeadIds, setLockedLeadIds] = useState<Set<string>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_locked_leads');
+      return saved ? new Set(JSON.parse(saved)) : new Set();
+    } catch {
+      return new Set();
+    }
+  });
+
+  const [leadLabels, setLeadLabels] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_lead_labels');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
   
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Save changes to localStorage
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_pinned_leads', JSON.stringify(Array.from(pinnedLeadIds)));
+    } catch (e) { console.warn(e); }
+  }, [pinnedLeadIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_favourite_leads', JSON.stringify(Array.from(favouriteLeadIds)));
+    } catch (e) { console.warn(e); }
+  }, [favouriteLeadIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_archived_leads', JSON.stringify(Array.from(archivedLeadIds)));
+    } catch (e) { console.warn(e); }
+  }, [archivedLeadIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_locked_leads', JSON.stringify(Array.from(lockedLeadIds)));
+    } catch (e) { console.warn(e); }
+  }, [lockedLeadIds]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_lead_labels', JSON.stringify(leadLabels));
+    } catch (e) { console.warn(e); }
+  }, [leadLabels]);
 
   // Close context menu on outside click
   useEffect(() => {
@@ -60,6 +148,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenuLeadId(null);
         setContextMenuPos(null);
+        setIsLabelSubmenuOpen(false);
       }
     };
     window.addEventListener('click', handleClickOutside);
@@ -109,9 +198,20 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const discussionCount = accessibleLeads.filter(l => l.stage === 'under_discussion' || (l.stage as any) === 'follow_up').length;
   const convertedCount = accessibleLeads.filter(l => l.stage === 'converted').length;
   const lostCount = accessibleLeads.filter(l => l.stage === 'lost').length;
+  const archivedCount = accessibleLeads.filter(l => archivedLeadIds.has(l.id)).length;
 
-  // Filter leads based on role & search & category/stage filters
+  // Filter leads based on role & search & category/stage/archive filters
   const filteredLeads = accessibleLeads.filter((lead) => {
+    const isArchived = archivedLeadIds.has(lead.id);
+
+    // If viewing archived filter
+    if (activeFilter === 'archived') {
+      if (!isArchived) return false;
+    } else {
+      // Normal views exclude archived chats
+      if (isArchived) return false;
+    }
+
     // Filter pills
     if (activeFilter === 'unread' && (!lead.unreadCount || lead.unreadCount === 0)) return false;
     if (activeFilter === 'favourites' && !favouriteLeadIds.has(lead.id)) return false;
@@ -129,7 +229,12 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       const matchName = lead.customer?.displayName?.toLowerCase().includes(q);
       const matchPhone = lead.customer?.whatsappNumber?.includes(q);
       const matchCategory = categories.find(c => c.id === lead.categoryId)?.name.toLowerCase().includes(q);
-      if (!matchName && !matchPhone && !matchCategory) return false;
+      const activeTags = leadLabels[lead.id] || [];
+      const matchTag = activeTags.some(t => {
+        const found = PRESET_LABELS.find(p => p.id === t);
+        return found?.name.toLowerCase().includes(q);
+      });
+      if (!matchName && !matchPhone && !matchCategory && !matchTag) return false;
     }
 
     return true;
@@ -156,7 +261,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const handleContextMenu = (e: React.MouseEvent, leadId: string) => {
     e.preventDefault();
     setContextMenuLeadId(leadId);
-    setContextMenuPos({ x: Math.min(e.clientX, 280), y: Math.min(e.clientY, window.innerHeight - 320) });
+    setIsLabelSubmenuOpen(false);
+    const clientX = e.clientX || 150;
+    const clientY = e.clientY || 200;
+    setContextMenuPos({ 
+      x: Math.min(clientX, window.innerWidth - 240), 
+      y: Math.min(clientY, window.innerHeight - 340) 
+    });
   };
 
   const togglePin = (leadId: string) => {
@@ -178,6 +289,38 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     });
     setContextMenuLeadId(null);
   };
+
+  const toggleArchive = (leadId: string) => {
+    setArchivedLeadIds(prev => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+    setContextMenuLeadId(null);
+  };
+
+  const toggleLock = (leadId: string) => {
+    setLockedLeadIds(prev => {
+      const next = new Set(prev);
+      if (next.has(leadId)) next.delete(leadId);
+      else next.add(leadId);
+      return next;
+    });
+    setContextMenuLeadId(null);
+  };
+
+  const toggleLeadLabel = (leadId: string, labelId: string) => {
+    setLeadLabels(prev => {
+      const current = prev[leadId] || [];
+      const updated = current.includes(labelId)
+        ? current.filter(id => id !== labelId)
+        : [...current, labelId];
+      return { ...prev, [leadId]: updated };
+    });
+  };
+
+  const activeContextMenuLead = leads.find(l => l.id === contextMenuLeadId);
 
   return (
     <div className="w-80 sm:w-96 md:w-[380px] bg-[#111b21] border-r border-[#222e35] flex flex-col h-full select-none shrink-0">
@@ -337,30 +480,43 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
           <button
             onClick={() => setActiveFilter('favourites')}
-            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 ${
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1 ${
               activeFilter === 'favourites'
                 ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
                 : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
             }`}
           >
-            Favourites
+            <Heart className="w-3 h-3 text-rose-400 fill-current" />
+            <span>Favourites</span>
           </button>
         </div>
       </div>
 
-      {/* 3. Archived Row */}
-      <div className="px-4 py-2 hover:bg-[#202c33] cursor-pointer flex items-center justify-between border-b border-[#222e35]/60 transition-colors shrink-0">
+      {/* 3. Archived Row Banner */}
+      <div 
+        onClick={() => setActiveFilter(prev => prev === 'archived' ? 'all' : 'archived')}
+        className={`px-4 py-2 cursor-pointer flex items-center justify-between border-b border-[#222e35]/60 transition-colors shrink-0 ${
+          activeFilter === 'archived' ? 'bg-[#00a884]/15 border-[#00a884]/40' : 'hover:bg-[#202c33]'
+        }`}
+      >
         <div className="flex items-center gap-3 text-[#8696a0]">
-          <Archive className="w-3.5 h-3.5 text-[#00a884]" />
-          <span className="text-xs font-medium text-[#d1d7db]">Archived</span>
+          <Archive className={`w-3.5 h-3.5 ${activeFilter === 'archived' ? 'text-[#00a884]' : 'text-[#8696a0]'}`} />
+          <span className={`text-xs font-medium ${activeFilter === 'archived' ? 'text-[#00a884] font-bold' : 'text-[#d1d7db]'}`}>
+            Archived Chats
+          </span>
         </div>
+        {archivedCount > 0 && (
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#202c33] text-[#8696a0]">
+            {archivedCount}
+          </span>
+        )}
       </div>
 
       {/* 4. Chat Items Stream with Aesthetic & Compact Tags */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#222e35]/40">
         {visibleLeads.length === 0 ? (
           <div className="p-8 text-center text-[#8696a0] text-xs">
-            <p>No chats found</p>
+            <p>{activeFilter === 'archived' ? 'No archived chats' : 'No chats found'}</p>
           </div>
         ) : (
           visibleLeads.map((lead) => {
@@ -369,6 +525,9 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             leadMsgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             const lastMsg = leadMsgs[leadMsgs.length - 1];
             const isPinned = pinnedLeadIds.has(lead.id);
+            const isFav = favouriteLeadIds.has(lead.id);
+            const isLocked = lockedLeadIds.has(lead.id);
+            const appliedLabels = (leadLabels[lead.id] || []).map(id => PRESET_LABELS.find(p => p.id === id)).filter(Boolean);
 
             // Format timestamp matching WhatsApp Web: "12:27", "Sunday", "Yesterday"
             const latestTimeMs = getLeadLatestTime(lead);
@@ -401,7 +560,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   isSelected ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'
                 }`}
               >
-                {/* Contact Avatar on the far-left (Clean & Aligned) */}
+                {/* Contact Avatar on the far-left */}
                 <WhatsAppAvatar
                   name={displayName}
                   avatarUrl={lead.customer?.avatarUrl}
@@ -414,10 +573,25 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   
                   {/* Top Line: Contact Name + Micro Stage Badge + Time */}
                   <div className="flex items-center justify-between gap-1.5">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <span className="text-xs font-semibold text-[#e9edef] truncate">
+                    <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                      <span className="text-xs font-semibold text-[#e9edef] truncate max-w-[140px]">
                         {displayName}
                       </span>
+
+                      {/* Locked Chat Indicator */}
+                      {isLocked && (
+                        <span title="Chat is locked" className="text-amber-400">
+                          <Lock className="w-3 h-3" />
+                        </span>
+                      )}
+
+                      {/* Favourite Chat Indicator */}
+                      {isFav && (
+                        <span title="Favourite chat" className="text-rose-400">
+                          <Heart className="w-3 h-3 fill-current" />
+                        </span>
+                      )}
+
                       {/* Aesthetic Micro Stage Badge */}
                       <span className={`inline-block px-1.5 py-0.2 rounded text-[8.5px] font-extrabold tracking-wider border uppercase shrink-0 shadow-sm ${stageCfg.pillBg} ${stageCfg.pillText} ${stageCfg.pillBorder}`}>
                         {stageCfg.shortLabel}
@@ -434,6 +608,18 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                       {timeDisplay}
                     </span>
                   </div>
+
+                  {/* Micro Tag Badges (VIP, Hot Lead, etc.) */}
+                  {appliedLabels.length > 0 && (
+                    <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+                      {appliedLabels.map((lbl: any) => (
+                        <span key={lbl.id} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border ${lbl.color}`}>
+                          <span className={`w-1.5 h-1.5 rounded-full ${lbl.dot}`} />
+                          <span>{lbl.name}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
 
                   {/* Middle Line: Last Message Snippet + Unread Indicator */}
                   <div className="flex items-center justify-between gap-2 mt-0.5">
@@ -492,45 +678,113 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         )}
       </div>
 
-      {/* 5. WhatsApp Web Context Menu */}
+      {/* 5. WhatsApp Web Context Menu & Submenus */}
       {contextMenuLeadId && contextMenuPos && (
         <div
           ref={menuRef}
           style={{ top: `${contextMenuPos.y}px`, left: `${contextMenuPos.x}px` }}
-          className="fixed wa-context-menu rounded-xl py-1.5 w-48 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 select-none"
+          className="fixed wa-context-menu rounded-xl py-1.5 w-52 shadow-2xl z-50 animate-in fade-in zoom-in-95 duration-100 select-none text-xs"
+          onClick={(e) => e.stopPropagation()}
         >
-          <div className="wa-context-item" onClick={() => setContextMenuLeadId(null)}>
+          {/* 1. Archive / Unarchive */}
+          <div 
+            className="wa-context-item" 
+            onClick={() => toggleArchive(contextMenuLeadId)}
+          >
             <Archive className="w-4 h-4 text-[#8696a0]" />
-            <span>Archive chat</span>
+            <span>{archivedLeadIds.has(contextMenuLeadId) ? 'Unarchive chat' : 'Archive chat'}</span>
           </div>
 
-          <div className="wa-context-item" onClick={() => setContextMenuLeadId(null)}>
-            <Lock className="w-4 h-4 text-[#8696a0]" />
-            <span>Lock chat</span>
+          {/* 2. Lock / Unlock */}
+          <div 
+            className="wa-context-item" 
+            onClick={() => toggleLock(contextMenuLeadId)}
+          >
+            <Lock className={`w-4 h-4 ${lockedLeadIds.has(contextMenuLeadId) ? 'text-amber-400' : 'text-[#8696a0]'}`} />
+            <span>{lockedLeadIds.has(contextMenuLeadId) ? 'Unlock chat' : 'Lock chat'}</span>
           </div>
 
-          <div className="wa-context-item" onClick={() => togglePin(contextMenuLeadId)}>
-            <Pin className="w-4 h-4 text-[#8696a0]" />
+          {/* 3. Pin / Unpin */}
+          <div 
+            className="wa-context-item" 
+            onClick={() => togglePin(contextMenuLeadId)}
+          >
+            <Pin className={`w-4 h-4 ${pinnedLeadIds.has(contextMenuLeadId) ? 'text-[#00a884]' : 'text-[#8696a0]'}`} />
             <span>{pinnedLeadIds.has(contextMenuLeadId) ? 'Unpin chat' : 'Pin chat'}</span>
           </div>
 
-          <div className="wa-context-item" onClick={() => setContextMenuLeadId(null)}>
+          {/* 4. Mark as read / Mark as unread */}
+          <div 
+            className="wa-context-item" 
+            onClick={() => {
+              if (activeContextMenuLead && (activeContextMenuLead.unreadCount || 0) > 0) {
+                markChatAsRead(contextMenuLeadId);
+              } else {
+                markChatAsUnread(contextMenuLeadId);
+              }
+              setContextMenuLeadId(null);
+            }}
+          >
             <Mail className="w-4 h-4 text-[#8696a0]" />
-            <span>Mark as unread</span>
+            <span>{(activeContextMenuLead?.unreadCount || 0) > 0 ? 'Mark as read' : 'Mark as unread'}</span>
           </div>
 
-          <div className="wa-context-item" onClick={() => toggleFavourite(contextMenuLeadId)}>
+          {/* 5. Add to favourites / Remove from favourites */}
+          <div 
+            className="wa-context-item" 
+            onClick={() => toggleFavourite(contextMenuLeadId)}
+          >
             <Heart className={`w-4 h-4 ${favouriteLeadIds.has(contextMenuLeadId) ? 'text-rose-400 fill-current' : 'text-[#8696a0]'}`} />
             <span>{favouriteLeadIds.has(contextMenuLeadId) ? 'Remove from favourites' : 'Add to favourites'}</span>
           </div>
 
-          <div className="wa-context-item" onClick={() => setContextMenuLeadId(null)}>
-            <ListPlus className="w-4 h-4 text-[#8696a0]" />
-            <span>Add to list ›</span>
+          {/* 6. Add to list > (Custom Labels Submenu) */}
+          <div 
+            className="wa-context-item relative justify-between group/list"
+            onMouseEnter={() => setIsLabelSubmenuOpen(true)}
+            onClick={() => setIsLabelSubmenuOpen(!isLabelSubmenuOpen)}
+          >
+            <div className="flex items-center gap-3">
+              <ListPlus className="w-4 h-4 text-[#8696a0]" />
+              <span>Add to list</span>
+            </div>
+            <ChevronRight className="w-3.5 h-3.5 text-[#8696a0]" />
+
+            {/* Nested Submenu */}
+            {isLabelSubmenuOpen && (
+              <div 
+                className="absolute left-full top-0 ml-1.5 w-56 wa-context-menu rounded-xl py-1.5 shadow-2xl z-50 text-xs animate-in fade-in zoom-in-95 duration-75"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#222e35]/60 flex items-center gap-1">
+                  <Tag className="w-3 h-3" />
+                  <span>Assign Labels</span>
+                </div>
+                {PRESET_LABELS.map(lbl => {
+                  const isActive = (leadLabels[contextMenuLeadId] || []).includes(lbl.id);
+                  return (
+                    <div
+                      key={lbl.id}
+                      onClick={() => toggleLeadLabel(contextMenuLeadId, lbl.id)}
+                      className="wa-context-item justify-between py-2"
+                    >
+                      <div className="flex items-center gap-2">
+                        <span className={`w-2 h-2 rounded-full ${lbl.dot}`} />
+                        <span className={isActive ? 'text-white font-semibold' : 'text-[#d1d7db]'}>
+                          {lbl.name}
+                        </span>
+                      </div>
+                      {isActive && <Check className="w-3.5 h-3.5 text-[#00a884] stroke-[2.5]" />}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="h-px bg-slate-700/60 my-1" />
 
+          {/* 7. Clear chat */}
           <div 
             className="wa-context-item" 
             onClick={() => {
@@ -542,6 +796,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             <span>Clear chat</span>
           </div>
 
+          {/* 8. Delete chat */}
           <div 
             className="wa-context-item danger" 
             onClick={() => {
@@ -550,7 +805,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             }}
           >
             <Trash2 className="w-4 h-4 text-rose-400" />
-            <span className="text-rose-400">Delete chat</span>
+            <span className="text-rose-400 font-medium">Delete chat</span>
           </div>
         </div>
       )}

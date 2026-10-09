@@ -1624,6 +1624,80 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b5. REST: Clear Chat Messages (Supabase PostgreSQL)
+  if (req.method === 'POST' && (pathname === '/api/chats/clear' || pathname === '/api/messages/clear')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const { leadId, customerId } = payload;
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const whereClause = [];
+          if (leadId) whereClause.push({ leadId });
+          if (customerId) whereClause.push({ customerId });
+
+          if (whereClause.length > 0) {
+            await prisma.message.deleteMany({
+              where: { OR: whereClause }
+            }).catch(e => console.warn('Could not clear messages in DB:', e.message));
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Chat messages cleared successfully.' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 10b6. REST: Delete Chat / Lead (Supabase PostgreSQL)
+  if ((req.method === 'POST' || req.method === 'DELETE') && (pathname === '/api/chats/delete' || pathname === '/api/leads/delete' || pathname.startsWith('/api/leads/delete/'))) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const urlLeadId = pathname.startsWith('/api/leads/delete/') ? pathname.split('/')[4] : null;
+        const leadId = payload.leadId || payload.id || urlLeadId;
+        const customerId = payload.customerId;
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          if (leadId) {
+            await prisma.message.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.leadNote.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.leadStageHistory.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.followup.deleteMany({ where: { leadId } }).catch(() => {});
+            await prisma.lead.deleteMany({ where: { id: leadId } }).catch(() => {});
+          } else if (customerId) {
+            await prisma.message.deleteMany({ where: { customerId } }).catch(() => {});
+            await prisma.lead.deleteMany({ where: { customerId } }).catch(() => {});
+          }
+        }
+
+        // Broadcast lead deleted SSE
+        broadcastScopedSSE(null, {
+          type: 'LEAD_DELETED',
+          leadId,
+          customerId
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Chat deleted successfully.' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
     const defaultCoordinators = [

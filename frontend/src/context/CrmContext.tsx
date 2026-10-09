@@ -96,6 +96,7 @@ interface CrmContextType {
   sendMessage: (leadId: string, content: string, senderType?: 'coordinator' | 'system' | 'ai', media?: any, replyTo?: { id: string; content: string; senderName: string }) => void;
   sendWhatsAppTemplate: (leadId: string, templateId: string, params: string[]) => void;
   markChatAsRead: (leadId: string) => void;
+  markChatAsUnread: (leadId: string) => void;
   reactToMessage: (messageId: string, emoji: string) => void;
   starMessage: (messageId: string) => void;
   pinMessage: (messageId: string) => void;
@@ -963,6 +964,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const markChatAsRead = (leadId: string) => {
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: 0 } : l));
     setMessages(prev => prev.map(m => m.leadId === leadId ? { ...m, status: 'read' } : m));
+  };
+
+  // Mark chat as unread (sets unread indicator)
+  const markChatAsUnread = (leadId: string) => {
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: (l.unreadCount && l.unreadCount > 0) ? l.unreadCount : 1 } : l));
   };
 
   // Auto-mark active chat as read on load or change
@@ -2228,6 +2234,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clearChat,
     sendWhatsAppTemplate,
     markChatAsRead,
+    markChatAsUnread,
     cancelFollowup,
     pauseFollowup,
     resumeFollowup,

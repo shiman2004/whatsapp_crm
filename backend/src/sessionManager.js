@@ -382,9 +382,41 @@ class WhatsAppSessionManager {
     else if (m?.audioMessage) mediaType = 'audio';
     else if (m?.documentMessage) mediaType = 'document';
 
+    if (mediaType && sessionCtx?.sock) {
+      try {
+        const buffer = await downloadMediaMessage(
+          msg,
+          'buffer',
+          {},
+          {
+            logger: pino({ level: 'silent' }),
+            reuploadRequest: sessionCtx.sock.updateMediaMessage
+          }
+        );
+        if (buffer) {
+          let ext = 'bin';
+          if (mediaType === 'image') ext = m?.imageMessage?.mimetype?.includes('png') ? 'png' : 'jpg';
+          else if (mediaType === 'audio') ext = m?.audioMessage?.mimetype?.includes('ogg') ? 'ogg' : 'mp3';
+          else if (mediaType === 'video') ext = 'mp4';
+          else if (mediaType === 'document') ext = m?.documentMessage?.fileName ? path.extname(m.documentMessage.fileName).replace('.', '') || 'pdf' : 'pdf';
+
+          const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+          if (!fs.existsSync(uploadDir)) {
+            fs.mkdirSync(uploadDir, { recursive: true });
+          }
+          const savedFileName = `wa_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+          fs.writeFileSync(path.join(uploadDir, savedFileName), buffer);
+          mediaUrl = `/uploads/${savedFileName}`;
+          console.log(`📥 [Baileys Media Downloaded] Type: ${mediaType}, Saved to: ${mediaUrl} (${(buffer.length / 1024).toFixed(1)} KB)`);
+        }
+      } catch (mediaErr) {
+        console.warn(`⚠️ [SessionManager] Could not download inbound media message:`, mediaErr.message);
+      }
+    }
+
     if (!messageText && !mediaType) return;
 
-    console.log(`📩 [WhatsApp Message] [${isFromMe ? 'OUTBOUND' : 'INBOUND'}] From: ${remoteJid} | Content: "${messageText.slice(0, 40)}"`);
+    console.log(`📩 [WhatsApp Message] [${isFromMe ? 'OUTBOUND' : 'INBOUND'}] From: ${remoteJid} | Content: "${(messageText || `[${mediaType?.toUpperCase()}]`).slice(0, 40)}"`);
 
     const contactName = msg.pushName || null;
     const timestampDate = new Date((msg.messageTimestamp ? Number(msg.messageTimestamp) : Math.floor(Date.now() / 1000)) * 1000);
@@ -693,6 +725,7 @@ class WhatsAppSessionManager {
     let payload = {};
     if (message) payload.text = message;
 
+    let storedMediaUrl = media?.url || null;
     if (media && media.dataUrl) {
       const base64Data = media.dataUrl.split(';base64,').pop();
       const buffer = Buffer.from(base64Data, 'base64');
@@ -700,6 +733,25 @@ class WhatsAppSessionManager {
       else if (media.type === 'video') payload = { video: buffer, caption: message || media.caption || '' };
       else if (media.type === 'audio') payload = { audio: buffer, mimetype: 'audio/mp4', ptt: true };
       else payload = { document: buffer, mimetype: 'application/pdf', fileName: media.fileName || 'document.pdf', caption: message || '' };
+
+      try {
+        let ext = 'bin';
+        if (media.type === 'image') ext = 'jpg';
+        else if (media.type === 'audio') ext = 'mp3';
+        else if (media.type === 'video') ext = 'mp4';
+        else if (media.type === 'document') ext = media.fileName ? path.extname(media.fileName).replace('.', '') || 'pdf' : 'pdf';
+
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+        const outFileName = `out_baileys_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+        fs.writeFileSync(path.join(uploadDir, outFileName), buffer);
+        storedMediaUrl = `/uploads/${outFileName}`;
+      } catch (err) {
+        console.warn('⚠️ Could not save outbound media to disk:', err.message);
+        storedMediaUrl = media.url || media.dataUrl;
+      }
     }
 
     let sent = null;
@@ -751,6 +803,7 @@ class WhatsAppSessionManager {
             status: 'sent',
             timestamp: new Date(),
             mediaType: media ? media.type : null,
+            mediaUrl: storedMediaUrl || media?.url || null,
           }
         });
       } catch (e) {
@@ -770,7 +823,7 @@ class WhatsAppSessionManager {
       realPhone: to || null,
       whatsappId: cleanWaId,
       text: message,
-      media: media ? { type: media.type, url: media.dataUrl } : null,
+      media: media ? { type: media.type, url: storedMediaUrl || media.url || media.dataUrl, fileName: media.fileName } : null,
       direction: 'outbound',
       senderType: 'coordinator',
       timestamp: new Date().toISOString(),

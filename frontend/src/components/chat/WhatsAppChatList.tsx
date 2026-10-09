@@ -16,10 +16,12 @@ import {
   ChevronDown,
   Camera,
   Mic,
-  User
+  User,
+  UserPlus
 } from 'lucide-react';
 import { Lead } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
+import { AddContactModal } from './AddContactModal';
 
 interface WhatsAppChatListProps {
   onSelectLead: (leadId: string) => void;
@@ -42,6 +44,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [isAddContactOpen, setIsAddContactOpen] = useState(false);
   
   // Context Menu State
   const [contextMenuLeadId, setContextMenuLeadId] = useState<string | null>(null);
@@ -184,6 +187,14 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         <h1 className="text-xl font-bold text-[#e9edef] tracking-tight flex items-center gap-2">
           <span>WhatsApp</span>
         </h1>
+        <button
+          onClick={() => setIsAddContactOpen(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+          title="Add New Contact"
+        >
+          <UserPlus className="w-4 h-4 stroke-[2.5]" />
+          <span>Add Contact</span>
+        </button>
       </div>
 
       {/* 2. Search Bar & Filter Chips */}
@@ -543,6 +554,12 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           </div>
         </div>
       )}
+
+      {/* Add Contact Modal */}
+      <AddContactModal
+        isOpen={isAddContactOpen}
+        onClose={() => setIsAddContactOpen(false)}
+      />
     </div>
   );
 };

@@ -101,16 +101,6 @@ export const Header: React.FC = () => {
             <span>Meta API</span>
           </button>
 
-          {/* Clear CRM Data Button */}
-          <button
-            onClick={handleClearData}
-            title="Clear all demo/test leads and conversations"
-            className="px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-rose-950/40 border border-rose-800/50 text-rose-300 hover:bg-rose-900/60 hover:text-rose-200 shadow-sm"
-          >
-            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
-            <span className="hidden sm:inline">Clear Data</span>
-          </button>
-
           {/* Authenticated User Profile Badge & Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button

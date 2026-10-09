@@ -43,28 +43,6 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
           )}
         </button>
       </div>
-
-      {/* Bottom Profile & Settings */}
-      <div className="flex flex-col items-center gap-4 w-full">
-        {/* Settings Gear */}
-        <button
-          onClick={onOpenSettings}
-          className="p-2.5 rounded-full text-[#aebac1] hover:bg-[#374248]/60 hover:text-white transition-all"
-          title="Settings & CRM Details"
-        >
-          <Settings className="w-5 h-5" />
-        </button>
-
-        {/* User Profile Avatar */}
-        <div>
-          <img
-            src={currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
-            alt={currentUser.fullName}
-            className="w-8 h-8 rounded-full object-cover ring-2 ring-emerald-500/60 cursor-pointer hover:scale-105 transition-transform"
-            title={`${currentUser.fullName} (${currentUser.role})`}
-          />
-        </div>
-      </div>
     </aside>
   );
 };

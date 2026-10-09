@@ -14,8 +14,9 @@ const STAGES: LeadStage[] = [
   'new',
   'assigned',
   'contacted',
-  'interested',
-  'follow_up',
+  'potential',
+  'under_discussion',
+  'not_relevant',
   'converted',
   'lost'
 ];

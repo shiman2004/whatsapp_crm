@@ -1,6 +1,16 @@
 export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator';
 
-export type LeadStage = 'new' | 'assigned' | 'contacted' | 'interested' | 'follow_up' | 'converted' | 'lost';
+export type LeadStage = 
+  | 'new' 
+  | 'assigned' 
+  | 'contacted' 
+  | 'potential' 
+  | 'under_discussion' 
+  | 'not_relevant' 
+  | 'converted' 
+  | 'lost'
+  | 'interested'
+  | 'follow_up';
 
 export type LanguageCode = 'en' | 'si' | 'ta';
 

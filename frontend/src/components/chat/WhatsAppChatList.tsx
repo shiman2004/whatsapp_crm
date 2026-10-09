@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { WhatsAppAvatar } from './WhatsAppAvatar';
+import { STAGE_CONFIG } from '../leads/StageBadge';
 import { 
   Search, 
   CheckCheck, 
-  Plus, 
-  MoreVertical, 
   Archive, 
   Pin, 
   Lock, 
@@ -16,12 +15,10 @@ import {
   Slash, 
   ChevronDown,
   Camera,
-  PhoneCall,
-  VolumeX,
-  Sparkles,
-  Mic
+  Mic,
+  User
 } from 'lucide-react';
-import { Lead } from '../../types';
+import { Lead, LeadStage } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 
 interface WhatsAppChatListProps {
@@ -32,27 +29,25 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const { 
     leads, 
     messages, 
+    users,
     currentUser, 
     isSuperAdmin, 
     isLeadsOfficer,
     selectedLeadId, 
     categories,
     markChatAsRead,
-    updateLeadStage,
-    deleteMessage,
     deleteChat,
     clearChat
   } = useCrm();
 
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | 'favourites' | 'groups'>('all');
+  const [activeFilter, setActiveFilter] = useState<string>('all');
   
   // Context Menu State
   const [contextMenuLeadId, setContextMenuLeadId] = useState<string | null>(null);
   const [contextMenuPos, setContextMenuPos] = useState<{ x: number; y: number } | null>(null);
   const [pinnedLeadIds, setPinnedLeadIds] = useState<Set<string>>(new Set());
   const [favouriteLeadIds, setFavouriteLeadIds] = useState<Set<string>>(new Set());
-  const [headerMenuOpen, setHeaderMenuOpen] = useState(false);
   
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -62,7 +57,6 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setContextMenuLeadId(null);
         setContextMenuPos(null);
-        setHeaderMenuOpen(false);
       }
     };
     window.addEventListener('click', handleClickOutside);
@@ -102,16 +96,29 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     return latest;
   };
 
-  // Filter leads based on role & search & category filters
-  const filteredLeads = leads.filter((lead) => {
-    // Role filter: Super Admin and Leads Officers can view ALL chats and messages
-    if (!isSuperAdmin && !isLeadsOfficer && lead.assignedTo !== currentUser.id) {
-      return false;
-    }
+  // Stage counts for quick badges
+  const accessibleLeads = leads.filter(l => isSuperAdmin || isLeadsOfficer || l.assignedTo === currentUser.id);
+  const totalUnreadCount = accessibleLeads.filter(l => (l.unreadCount || 0) > 0).length;
+  const newCount = accessibleLeads.filter(l => (l.stage || 'new') === 'new').length;
+  const assignedCount = accessibleLeads.filter(l => l.stage === 'assigned').length;
+  const contactedCount = accessibleLeads.filter(l => l.stage === 'contacted').length;
+  const potentialCount = accessibleLeads.filter(l => l.stage === 'potential' || (l.stage as any) === 'interested').length;
+  const discussionCount = accessibleLeads.filter(l => l.stage === 'under_discussion' || (l.stage as any) === 'follow_up').length;
+  const convertedCount = accessibleLeads.filter(l => l.stage === 'converted').length;
+  const lostCount = accessibleLeads.filter(l => l.stage === 'lost').length;
 
+  // Filter leads based on role & search & category/stage filters
+  const filteredLeads = accessibleLeads.filter((lead) => {
     // Filter pills
     if (activeFilter === 'unread' && (!lead.unreadCount || lead.unreadCount === 0)) return false;
     if (activeFilter === 'favourites' && !favouriteLeadIds.has(lead.id)) return false;
+    if (activeFilter === 'new' && (lead.stage || 'new') !== 'new') return false;
+    if (activeFilter === 'assigned' && lead.stage !== 'assigned') return false;
+    if (activeFilter === 'contacted' && lead.stage !== 'contacted') return false;
+    if (activeFilter === 'potential' && lead.stage !== 'potential' && (lead.stage as any) !== 'interested') return false;
+    if (activeFilter === 'under_discussion' && lead.stage !== 'under_discussion' && (lead.stage as any) !== 'follow_up') return false;
+    if (activeFilter === 'converted' && lead.stage !== 'converted') return false;
+    if (activeFilter === 'lost' && lead.stage !== 'lost') return false;
 
     // Search query
     if (search.trim()) {
@@ -143,8 +150,6 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     return true;
   });
 
-  const totalUnreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length;
-
   const handleContextMenu = (e: React.MouseEvent, leadId: string) => {
     e.preventDefault();
     setContextMenuLeadId(leadId);
@@ -172,63 +177,16 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   };
 
   return (
-    <div className="w-[380px] shrink-0 border-r border-[#222e35] bg-[#111b21] flex flex-col h-full select-none relative">
-      {/* 1. WhatsApp Top Header */}
-      <div className="h-14 px-4 bg-[#111b21] flex items-center justify-between shrink-0">
-        <h2 className="text-xl font-bold text-[#00a884] font-sans tracking-tight">
-          WhatsApp
-        </h2>
-
-        <div className="flex items-center gap-1">
-          {/* New Chat Button (Green + circle from screenshot) */}
-          <button
-            onClick={() => {}}
-            className="w-8 h-8 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-md active:scale-95 transition-all"
-            title="New Chat"
-          >
-            <Plus className="w-5 h-5 stroke-[2.5]" />
-          </button>
-
-          {/* 3 Dots Menu Button */}
-          <div className="relative">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setHeaderMenuOpen(!headerMenuOpen);
-              }}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#aebac1] hover:bg-[#202c33] transition-colors"
-              title="Menu"
-            >
-              <MoreVertical className="w-5 h-5" />
-            </button>
-
-            {headerMenuOpen && (
-              <div 
-                ref={menuRef}
-                className="absolute right-0 top-10 w-48 bg-[#233138] border border-slate-700/60 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db]"
-              >
-                <button className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-2.5">
-                  <span>New group</span>
-                </button>
-                <button className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-2.5">
-                  <span>New community</span>
-                </button>
-                <button className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-2.5">
-                  <span>Starred messages</span>
-                </button>
-                <button className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-2.5">
-                  <span>Select chats</span>
-                </button>
-                <button className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-2.5">
-                  <span>Settings</span>
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
+    <div className="w-80 sm:w-96 md:w-[380px] bg-[#111b21] border-r border-[#222e35] flex flex-col h-full select-none shrink-0">
+      
+      {/* 1. Header (Exact WhatsApp Web Title Bar) */}
+      <div className="h-14 px-4 bg-[#202c33] flex items-center justify-between shrink-0">
+        <h1 className="text-xl font-bold text-[#e9edef] tracking-tight flex items-center gap-2">
+          <span>WhatsApp</span>
+        </h1>
       </div>
 
-      {/* 2. Pill Search Bar & Filter Chips (Exact WhatsApp Web style) */}
+      {/* 2. Search Bar & Filter Chips */}
       <div className="px-3 pb-2 bg-[#111b21] space-y-2.5 shrink-0">
         <div className="relative">
           <Search className="w-4 h-4 text-[#8696a0] absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -241,22 +199,120 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           />
         </div>
 
-        {/* Filter Chips row: All, Unread, Favourites, Groups */}
-        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs">
+        {/* Filter Chips row with Stages & Counts */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs pb-0.5">
           <button
             onClick={() => setActiveFilter('all')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 ${
+            className={`px-3 py-1 rounded-full text-xs font-semibold transition-all shrink-0 ${
               activeFilter === 'all'
-                ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
+                ? 'bg-[#00a884]/20 text-[#00a884] font-bold'
                 : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
             }`}
           >
             All
           </button>
 
+          {newCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('new')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'new'
+                  ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>New</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-rose-500/20 text-rose-300">{newCount}</span>
+            </button>
+          )}
+
+          {assignedCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('assigned')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'assigned'
+                  ? 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Assigned</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-amber-500/20 text-amber-300">{assignedCount}</span>
+            </button>
+          )}
+
+          {contactedCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('contacted')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'contacted'
+                  ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Contacted</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-300">{contactedCount}</span>
+            </button>
+          )}
+
+          {potentialCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('potential')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'potential'
+                  ? 'bg-purple-500/25 text-purple-300 font-bold border border-purple-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Potential</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-purple-500/20 text-purple-300">{potentialCount}</span>
+            </button>
+          )}
+
+          {discussionCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('under_discussion')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'under_discussion'
+                  ? 'bg-sky-500/25 text-sky-300 font-bold border border-sky-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Discussion</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-sky-500/20 text-sky-300">{discussionCount}</span>
+            </button>
+          )}
+
+          {convertedCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('converted')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'converted'
+                  ? 'bg-teal-500/25 text-teal-300 font-bold border border-teal-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Converted</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-teal-500/20 text-teal-300">{convertedCount}</span>
+            </button>
+          )}
+
+          {lostCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('lost')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'lost'
+                  ? 'bg-red-500/25 text-red-300 font-bold border border-red-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Lost</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-red-500/20 text-red-300">{lostCount}</span>
+            </button>
+          )}
+
           <button
             onClick={() => setActiveFilter('unread')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
               activeFilter === 'unread'
                 ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
                 : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
@@ -270,7 +326,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
           <button
             onClick={() => setActiveFilter('favourites')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 ${
+            className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 ${
               activeFilter === 'favourites'
                 ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
                 : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
@@ -278,29 +334,18 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           >
             Favourites
           </button>
-
-          <button
-            onClick={() => setActiveFilter('groups')}
-            className={`px-3 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
-              activeFilter === 'groups'
-                ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
-                : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
-            }`}
-          >
-            <span>Groups</span>
-          </button>
         </div>
       </div>
 
       {/* 3. Archived Row */}
-      <div className="px-4 py-2.5 hover:bg-[#202c33] cursor-pointer flex items-center justify-between border-b border-[#222e35]/60 transition-colors shrink-0">
-        <div className="flex items-center gap-4 text-[#8696a0]">
-          <Archive className="w-4 h-4 text-[#00a884]" />
+      <div className="px-4 py-2 hover:bg-[#202c33] cursor-pointer flex items-center justify-between border-b border-[#222e35]/60 transition-colors shrink-0">
+        <div className="flex items-center gap-3 text-[#8696a0]">
+          <Archive className="w-3.5 h-3.5 text-[#00a884]" />
           <span className="text-xs font-medium text-[#d1d7db]">Archived</span>
         </div>
       </div>
 
-      {/* 4. Chat Items Stream */}
+      {/* 4. Chat Items Stream with Stage Tag and Coordinator Tag */}
       <div className="flex-1 overflow-y-auto divide-y divide-[#222e35]/40">
         {visibleLeads.length === 0 ? (
           <div className="p-8 text-center text-[#8696a0] text-xs">
@@ -313,7 +358,6 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             leadMsgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             const lastMsg = leadMsgs[leadMsgs.length - 1];
             const isPinned = pinnedLeadIds.has(lead.id);
-            const isFav = favouriteLeadIds.has(lead.id);
 
             // Format timestamp matching WhatsApp Web: "12:27", "Sunday", "Yesterday"
             const latestTimeMs = getLeadLatestTime(lead);
@@ -326,6 +370,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   : msgDate.toLocaleDateString([], { weekday: 'short' }));
 
             const displayName = lead.customer?.displayName || formatWhatsAppDisplay(lead.customer?.whatsappNumber || '');
+            
+            // Stage configuration
+            const stageCfg = STAGE_CONFIG[lead.stage || 'new'] || STAGE_CONFIG.new;
+
+            // Coordinator configuration
+            const coordinator = users.find(u => u.id === lead.assignedTo);
+            const coordinatorName = coordinator ? coordinator.fullName : (lead.assignedTo || 'Unassigned');
 
             return (
               <div
@@ -335,17 +386,26 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   markChatAsRead(lead.id);
                 }}
                 onContextMenu={(e) => handleContextMenu(e, lead.id)}
-                className={`group px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors relative ${
+                className={`group px-3 py-2.5 flex items-start gap-2.5 cursor-pointer transition-colors relative border-b border-[#222e35]/30 ${
                   isSelected ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'
                 }`}
               >
+                {/* 1. TAG 1: Lead Stage Pill Badge (Matching User Sample Image) */}
+                <div className="pt-1 shrink-0">
+                  <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-black tracking-wider border uppercase text-center min-w-[56px] shadow-sm ${stageCfg.pillBg} ${stageCfg.pillText} ${stageCfg.pillBorder}`}>
+                    {stageCfg.shortLabel}
+                  </span>
+                </div>
+
                 {/* Contact Avatar */}
-                <WhatsAppAvatar
-                  name={displayName}
-                  avatarUrl={lead.customer?.avatarUrl}
-                  size="md"
-                  isOnline={true}
-                />
+                <div className="shrink-0 pt-0.5">
+                  <WhatsAppAvatar
+                    name={displayName}
+                    avatarUrl={lead.customer?.avatarUrl}
+                    size="md"
+                    isOnline={true}
+                  />
+                </div>
 
                 {/* Chat Middle Content */}
                 <div className="flex-1 min-w-0 pr-1">
@@ -361,7 +421,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     </span>
                   </div>
 
-                  {/* Bottom Line: Last Message Snippet + Status Indicators */}
+                  {/* Middle Line: Last Message Snippet + Indicators */}
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <div className="flex items-center gap-1 min-w-0 text-[#8696a0] text-[11px] truncate">
                       {lastMsg?.direction === 'outbound' && (
@@ -372,7 +432,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                           <Camera className="w-3 h-3" /> Photo
                         </span>
                       ) : lastMsg?.media?.type === 'audio' || lastMsg?.content === 'Voice note' || lastMsg?.media?.url?.match(/\.(ogg|mp3|wav|m4a)($|\?)/i) ? (
-                        <span className="flex items-center gap-1 text-[#8696a0]">
+                        <span className="flex items-center gap-1 text-[#00a884]">
                           <Mic className="w-3 h-3 text-[#00a884]" /> Voice message
                         </span>
                       ) : (
@@ -380,7 +440,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                       )}
                     </div>
 
-                    {/* Right Indicators: Pin / Mute / Unread Badge */}
+                    {/* Right Indicators: Pin / Unread Badge */}
                     <div className="flex items-center gap-1 shrink-0">
                       {isPinned && <Pin className="w-3 h-3 text-[#8696a0] fill-current" />}
                       {(lead.unreadCount || 0) > 0 && (
@@ -402,6 +462,15 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                       </button>
                     </div>
                   </div>
+
+                  {/* 2. TAG 2: Assigned Coordinator Name (Matching User Sample Image) */}
+                  <div className="flex items-center gap-1 mt-1 text-[10px] font-medium">
+                    <User className="w-2.5 h-2.5 text-teal-400 shrink-0" />
+                    <span className={coordinator ? 'text-teal-300/90 font-semibold' : 'text-slate-500 italic'}>
+                      Assigned to: {coordinatorName}
+                    </span>
+                  </div>
+
                 </div>
               </div>
             );
@@ -409,7 +478,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         )}
       </div>
 
-      {/* 5. WhatsApp Web Context Menu (Exact 1:1 Match of Screenshot 1) */}
+      {/* 5. WhatsApp Web Context Menu */}
       {contextMenuLeadId && contextMenuPos && (
         <div
           ref={menuRef}

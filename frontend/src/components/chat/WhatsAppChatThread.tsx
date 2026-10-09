@@ -92,24 +92,8 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           </div>
         </div>
 
-        {/* Right Action Icons: Video, Call, Search, Menu, CRM Toggle */}
+        {/* Right Action Icons: Search, Menu, CRM Toggle */}
         <div className="flex items-center gap-1.5 shrink-0 text-[#aebac1]">
-          {/* Video Call */}
-          <button 
-            className="w-9 h-9 rounded-full hover:bg-[#374248] flex items-center justify-center transition-colors"
-            title="Video call"
-          >
-            <Video className="w-5 h-5" />
-          </button>
-
-          {/* Voice Call */}
-          <button 
-            className="w-9 h-9 rounded-full hover:bg-[#374248] flex items-center justify-center transition-colors"
-            title="Voice call"
-          >
-            <Phone className="w-4 h-4" />
-          </button>
-
           {/* Search in chat */}
           <button 
             onClick={() => setSearchInChat(!searchInChat)}

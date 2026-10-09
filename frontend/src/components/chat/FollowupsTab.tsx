@@ -40,17 +40,6 @@ export const FollowupsTab: React.FC<FollowupsTabProps> = ({ lead }) => {
 
   return (
     <div className="space-y-4">
-      {/* Auto-stop Explanation Banner */}
-      <div className="bg-slate-900 border border-teal-500/30 rounded-xl p-3 text-xs space-y-1 shadow-sm">
-        <div className="flex items-center gap-1.5 font-bold text-teal-300">
-          <Zap className="w-3.5 h-3.5 text-gold-400" />
-          <span>BullMQ Automated Nurture Engine</span>
-        </div>
-        <p className="text-slate-400 text-[11px] leading-relaxed">
-          Pending follow-ups are automatically cancelled the instant an inbound WhatsApp reply is received from the patient (PRD §FR-6.3).
-        </p>
-      </div>
-
       {/* Follow-up sequence list */}
       <div className="space-y-2.5">
         {leadFollowups.length === 0 ? (

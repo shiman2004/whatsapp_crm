@@ -101,19 +101,6 @@ export const Header: React.FC = () => {
             <span>Meta API</span>
           </button>
 
-          {/* Customer Simulator Toggle */}
-          <button
-            onClick={() => setSimulatorOpen(!simulatorOpen)}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-              simulatorOpen 
-                ? 'bg-whatsapp text-slate-950 border-whatsapp' 
-                : 'bg-slate-800 text-slate-200 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            <Smartphone className="w-3.5 h-3.5" />
-            <span>{simulatorOpen ? 'Close Phone' : 'Test WhatsApp'}</span>
-          </button>
-
           {/* Clear CRM Data Button */}
           <button
             onClick={handleClearData}

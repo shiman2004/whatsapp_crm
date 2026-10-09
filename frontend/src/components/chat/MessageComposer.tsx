@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
+import { WhatsAppVoiceRecorder } from '../../utils/audioRecorder';
 
 interface MessageComposerProps {
   lead: Lead;
@@ -48,10 +49,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
-  // Audio Recording Refs
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const audioChunksRef = useRef<Blob[]>([]);
-  const audioStreamRef = useRef<MediaStream | null>(null);
+  // Audio Recorder Ref
+  const voiceRecorderRef = useRef<WhatsAppVoiceRecorder | null>(null);
 
   // Media Attachment State & Preview
   const [mediaPreview, setMediaPreview] = useState<{
@@ -106,7 +105,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     return () => clearInterval(interval);
   }, [isRecording]);
 
-  // Start real Audio Recording via MediaRecorder
+  // Start real Audio Recording via AudioContext MP3 encoder
   const handleStartRecording = async () => {
     const isConnected = whatsappStatus === 'connected' || hasMetaConfig || Boolean(localStorage.getItem('meta_access_token'));
     if (!isConnected) {
@@ -114,104 +113,58 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       return;
     }
 
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Audio recording is not supported in this browser.');
-      return;
-    }
-
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      audioStreamRef.current = stream;
-      audioChunksRef.current = [];
-
-      let mimeType = '';
-      if (typeof MediaRecorder.isTypeSupported === 'function') {
-        if (MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) {
-          mimeType = 'audio/webm;codecs=opus';
-        } else if (MediaRecorder.isTypeSupported('audio/ogg;codecs=opus')) {
-          mimeType = 'audio/ogg;codecs=opus';
-        } else if (MediaRecorder.isTypeSupported('audio/mp4')) {
-          mimeType = 'audio/mp4';
-        } else if (MediaRecorder.isTypeSupported('audio/webm')) {
-          mimeType = 'audio/webm';
-        }
-      }
-
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-
-      recorder.ondataavailable = (e) => {
-        if (e.data && e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-
-      recorder.start(100);
+      const recorder = new WhatsAppVoiceRecorder();
+      await recorder.start();
+      voiceRecorderRef.current = recorder;
       setIsRecording(true);
       setRecordingSeconds(0);
     } catch (err: any) {
       console.error('Microphone error:', err);
-      alert('Microphone access was denied or is unavailable. Please check your browser permissions.');
+      alert('Microphone access was denied or is unavailable. Please allow microphone permissions in your browser.');
       setIsRecording(false);
     }
   };
 
-  // Stop & Send Voice Note
-  const handleStopAndSendRecording = () => {
-    const recorder = mediaRecorderRef.current;
-    if (!recorder || recorder.state === 'inactive') {
+  // Stop & Send Voice Note as clean standard MP3
+  const handleStopAndSendRecording = async () => {
+    const recorder = voiceRecorderRef.current;
+    if (!recorder) {
       setIsRecording(false);
       return;
     }
 
-    recorder.onstop = () => {
-      const mimeType = recorder.mimeType || 'audio/ogg;codecs=opus';
-      const audioBlob = new Blob(audioChunksRef.current, { type: mimeType });
-
-      if (audioStreamRef.current) {
-        audioStreamRef.current.getTracks().forEach(t => t.stop());
-        audioStreamRef.current = null;
+    try {
+      const result = await recorder.stop();
+      if (result && result.dataUrl) {
+        sendMessage(
+          lead.id,
+          '',
+          'coordinator',
+          {
+            type: 'audio',
+            url: result.dataUrl,
+            dataUrl: result.dataUrl,
+            fileName: `voice_note_${Date.now()}.mp3`,
+            caption: ''
+          }
+        );
       }
-
-      if (audioBlob.size > 200) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const base64Audio = reader.result as string;
-          const ext = mimeType.includes('mp4') ? 'm4a' : 'ogg';
-          sendMessage(
-            lead.id,
-            '',
-            'coordinator',
-            {
-              type: 'audio',
-              url: base64Audio,
-              dataUrl: base64Audio,
-              fileName: `voice_note_${Date.now()}.${ext}`,
-              caption: ''
-            }
-          );
-        };
-        reader.readAsDataURL(audioBlob);
-      }
-      audioChunksRef.current = [];
+    } catch (err) {
+      console.error('Error stopping recorder:', err);
+    } finally {
+      voiceRecorderRef.current = null;
       setIsRecording(false);
       setRecordingSeconds(0);
-    };
-
-    recorder.stop();
+    }
   };
 
   // Cancel / Discard Voice Note
   const handleCancelRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.onstop = null;
-      mediaRecorderRef.current.stop();
+    if (voiceRecorderRef.current) {
+      voiceRecorderRef.current.cancel();
+      voiceRecorderRef.current = null;
     }
-    if (audioStreamRef.current) {
-      audioStreamRef.current.getTracks().forEach(t => t.stop());
-      audioStreamRef.current = null;
-    }
-    audioChunksRef.current = [];
     setIsRecording(false);
     setRecordingSeconds(0);
   };

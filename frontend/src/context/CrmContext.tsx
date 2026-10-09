@@ -585,9 +585,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 if (l.id === incomingLeadId || (incomingLead && l.id === incomingLead.id)) {
                   return {
                     ...l,
-                    treatmentId: incomingLead?.treatmentId !== undefined ? incomingLead.treatmentId : l.treatmentId,
-                    categoryId: incomingLead?.categoryId !== undefined ? incomingLead.categoryId : l.categoryId,
-                    serialNumber: incomingLead?.serialNumber !== undefined ? incomingLead.serialNumber : l.serialNumber,
+                    treatmentId: incomingLead?.treatmentId !== undefined ? (incomingLead.treatmentId || undefined) : l.treatmentId,
+                    categoryId: incomingLead?.categoryId !== undefined ? (incomingLead.categoryId || undefined) : l.categoryId,
+                    serialNumber: incomingLead?.serialNumber !== undefined ? (incomingLead.serialNumber || undefined) : l.serialNumber,
                     stage: incomingLead?.stage !== undefined ? incomingLead.stage : l.stage,
                     assignedTo: incomingLead?.assignedTo !== undefined ? (incomingLead.assignedTo || undefined) : l.assignedTo,
                     updatedAt: new Date().toISOString()

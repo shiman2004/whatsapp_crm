@@ -1289,6 +1289,8 @@ const server = http.createServer(async (req, res) => {
 
                       let savedLeadId = null;
                       let savedCustomerId = null;
+                      let cust = null;
+                      let lead = null;
 
                       // Persist to Supabase / PostgreSQL database
                       const prisma = getPrisma();
@@ -1298,7 +1300,7 @@ const server = http.createServer(async (req, res) => {
                           const canonicalPhone = cleanDigits.startsWith('+') ? cleanDigits : `+${cleanDigits}`;
 
                           // 1. Find or create Customer
-                          let cust = await prisma.customer.findFirst({
+                          cust = await prisma.customer.findFirst({
                             where: {
                               OR: [
                                 { whatsappNumber: canonicalPhone },
@@ -1325,10 +1327,10 @@ const server = http.createServer(async (req, res) => {
                             }).catch(() => cust);
                           }
 
-                          savedCustomerId = cust.id;
+                          savedCustomerId = cust?.id || null;
 
                           // 2. Find or create Lead
-                          let lead = await prisma.lead.findFirst({
+                          lead = await prisma.lead.findFirst({
                             where: { customerId: cust.id },
                             orderBy: { updatedAt: 'desc' }
                           });
@@ -1368,7 +1370,7 @@ const server = http.createServer(async (req, res) => {
                             }).catch(() => {});
                           }
 
-                          savedLeadId = lead.id;
+                          savedLeadId = lead?.id || null;
 
                           // 3. Save Message to DB
                           await prisma.message.upsert({
@@ -1411,35 +1413,69 @@ const server = http.createServer(async (req, res) => {
 
                       // 5. Evaluate Auto-Reply Engine (Welcome -> Language -> 24 Treatments -> Handoff)
                       try {
+                        const cleanToDigits = String(phone || '').replace(/[^0-9]/g, '');
+                        let metaCleanTo = cleanToDigits;
+                        if (metaCleanTo.startsWith('0') && metaCleanTo.length === 10) {
+                          metaCleanTo = '94' + metaCleanTo.slice(1);
+                        } else if (metaCleanTo.length === 9 && (metaCleanTo.startsWith('7') || metaCleanTo.startsWith('1'))) {
+                          metaCleanTo = '94' + metaCleanTo;
+                        }
+
                         const autoReplyResult = await evaluateAutoReply({
-                          senderPhone: phone,
+                          senderPhone: metaCleanTo || phone,
                           messageText: text,
                           customer: cust,
                           lead
                         });
 
                         if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
+                          console.log(`🤖 [Meta Auto-Reply] Generating automated response for ${metaCleanTo}: "${autoReplyResult.replyText.slice(0, 40)}..."`);
                           const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;
                           const autoTime = new Date();
 
-                          // If Meta Cloud API token is configured, send via Meta API
+                          // Dispatch via Meta Cloud API
                           const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
                           const phoneId = (metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
 
                           if (metaToken) {
-                            fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-                              method: 'POST',
-                              headers: { 'Authorization': `Bearer ${metaToken}`, 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                messaging_product: 'whatsapp',
-                                recipient_type: 'individual',
-                                to: String(phone).replace(/[^0-9]/g, ''),
-                                type: 'text',
-                                text: { preview_url: false, body: autoReplyResult.replyText }
-                              })
-                            }).catch(err => console.warn('Meta API auto-reply dispatch error:', err.message));
+                            try {
+                              console.log(`🚀 [Meta Auto-Reply Dispatch] Sending to ${metaCleanTo} via Phone ID ${phoneId}...`);
+                              const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                                method: 'POST',
+                                headers: {
+                                  'Authorization': `Bearer ${metaToken}`,
+                                  'Content-Type': 'application/json'
+                                },
+                                body: JSON.stringify({
+                                  messaging_product: 'whatsapp',
+                                  recipient_type: 'individual',
+                                  to: metaCleanTo,
+                                  type: 'text',
+                                  text: { body: autoReplyResult.replyText }
+                                })
+                              });
+                              const metaData = await metaRes.json().catch(() => ({}));
+                              if (metaRes.ok) {
+                                console.log(`✅ [Meta Auto-Reply Sent!] Message ID: ${metaData.messages?.[0]?.id || 'delivered'}`);
+                              } else {
+                                console.error(`❌ [Meta Auto-Reply API Error]:`, JSON.stringify(metaData));
+                              }
+                            } catch (metaErr) {
+                              console.error('❌ [Meta Auto-Reply Network Error]:', metaErr.message);
+                            }
                           }
 
+                          // Also dispatch via Baileys socket if connected
+                          try {
+                            const masterSession = sessionManager.getRuntimeSession('user-admin-1');
+                            const activeSock = masterSession?.sock && masterSession.status === 'connected' ? masterSession.sock : null;
+                            if (activeSock) {
+                              await activeSock.sendMessage(`${metaCleanTo}@s.whatsapp.net`, { text: autoReplyResult.replyText });
+                              console.log(`✅ [Baileys Auto-Reply Sent!]`);
+                            }
+                          } catch (bErr) {}
+
+                          // Save auto-reply message in database
                           if (prisma && getDbStatus() && lead?.id) {
                             await prisma.message.create({
                               data: {
@@ -1487,7 +1523,7 @@ const server = http.createServer(async (req, res) => {
                           }
                         }
                       } catch (autoErr) {
-                        console.warn('Auto-reply webhook error:', autoErr.message);
+                        console.error('❌ Auto-reply webhook error:', autoErr.message);
                       }
                     }
                 }
@@ -1503,6 +1539,48 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
+  }
+
+  // 12b. Auto-Reply Test / Simulation Endpoint
+  if (req.method === 'POST' && pathname === '/api/auto-reply/test') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const phone = payload.phone || payload.senderPhone || '94770049469';
+        const messageText = payload.message || payload.messageText || payload.text || 'Hi';
+
+        const prisma = getPrisma();
+        let customer = null;
+        let lead = null;
+        if (prisma && getDbStatus()) {
+          customer = await prisma.customer.findFirst({
+            where: { OR: [{ whatsappNumber: phone }, { whatsappId: phone }] }
+          });
+          if (customer) {
+            lead = await prisma.lead.findFirst({
+              where: { customerId: customer.id },
+              orderBy: { updatedAt: 'desc' }
+            });
+          }
+        }
+
+        const result = await evaluateAutoReply({
+          senderPhone: phone,
+          messageText,
+          customer,
+          lead
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, result }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
   }
 
   res.writeHead(404, { 'Content-Type': 'application/json' });

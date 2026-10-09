@@ -286,22 +286,18 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
   
   let session = autoReplySessions.get(cleanPhone);
 
-  // 1. ONE-TIME RULE: Check if intake has already been completed for this customer
+  // 1. ONE-TIME RULE: If session is already completed, do not re-trigger
   if (session && session.stage === 'COMPLETED') {
     return { shouldReply: false };
   }
 
-  // 2. Check DB state: If lead already has a serial number OR assigned coordinator OR stage is moved past 'new'
+  // 2. Check DB state: If lead already finished intake (has a serial number assigned e.g. HTP-001) or is closed/converted
   if (lead) {
-    if (lead.assignedTo && lead.assignedTo !== 'user-admin-1') {
+    if (lead.serialNumber && lead.serialNumber.trim().length > 0 && lead.serialNumber !== '---') {
       autoReplySessions.set(cleanPhone, { stage: 'COMPLETED', lastUpdated: new Date() });
       return { shouldReply: false };
     }
-    if (lead.serialNumber && lead.treatmentId) {
-      autoReplySessions.set(cleanPhone, { stage: 'COMPLETED', lastUpdated: new Date() });
-      return { shouldReply: false };
-    }
-    if (lead.stage && !['new', 'assigned'].includes(lead.stage)) {
+    if (lead.stage && ['converted', 'lost', 'not_relevant'].includes(lead.stage)) {
       autoReplySessions.set(cleanPhone, { stage: 'COMPLETED', lastUpdated: new Date() });
       return { shouldReply: false };
     }
@@ -316,7 +312,7 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
       lastUpdated: new Date()
     });
 
-    console.log(`🤖 [AUTO-REPLY STEP 1] Sending Welcome & Language Selection to ${cleanPhone}`);
+    console.log(`🤖 [AUTO-REPLY STEP 1] Sending Welcome & Language Selection to ${cleanPhone} (Inbound: "${messageText}")`);
     return {
       shouldReply: true,
       replyText: WELCOME_LANGUAGE_MESSAGE

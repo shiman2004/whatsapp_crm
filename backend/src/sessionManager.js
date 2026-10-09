@@ -539,13 +539,41 @@ class WhatsAppSessionManager {
         });
 
         if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
-          console.log(`🤖 [Auto-Reply] Dispatched to ${remoteJid}: "${autoReplyResult.replyText.slice(0, 50)}..."`);
-          
-          // Dispatch reply via Baileys socket if available
-          if (sessionCtx?.sock) {
-            await sessionCtx.sock.sendMessage(remoteJid, { text: autoReplyResult.replyText }).catch(err => {
-              console.warn('⚠️ Could not send socket message for auto-reply:', err.message);
-            });
+          // Find active connected Baileys socket
+          let activeSock = (sessionCtx?.sock && sessionCtx.status === 'connected') ? sessionCtx.sock : null;
+          let activeSessionId = sessionCtx?.sessionId || null;
+
+          if (!activeSock) {
+            const masterSession = this.sessions.get('user-admin-1');
+            if (masterSession?.sock && masterSession.status === 'connected') {
+              activeSock = masterSession.sock;
+              activeSessionId = masterSession.sessionId;
+            } else {
+              for (const s of this.sessions.values()) {
+                if (s.sock && s.status === 'connected') {
+                  activeSock = s.sock;
+                  activeSessionId = s.sessionId;
+                  break;
+                }
+              }
+            }
+          }
+
+          // Dispatch message via active socket
+          if (activeSock) {
+            try {
+              await activeSock.sendMessage(remoteJid, { text: autoReplyResult.replyText });
+            } catch (sockErr) {
+              console.warn('⚠️ Primary socket send failed, trying phone JID:', sockErr.message);
+              if (canonicalPhone) {
+                const standardJid = `${canonicalPhone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
+                if (standardJid !== remoteJid) {
+                  await activeSock.sendMessage(standardJid, { text: autoReplyResult.replyText }).catch(err2 => {
+                    console.warn('⚠️ Fallback phone JID send failed:', err2.message);
+                  });
+                }
+              }
+            }
           }
 
           const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;

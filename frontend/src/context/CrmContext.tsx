@@ -1116,7 +1116,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notify('Stage Updated', `Lead moved to ${newStage.toUpperCase().replace('_', ' ')}`, 'info');
     }
 
-    setLeads(prev => prev.map(l => {
+    const updatedLeads = leads.map(l => {
       if (l.id === leadId) {
         return {
           ...l,
@@ -1125,7 +1125,28 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       }
       return l;
-    }));
+    });
+
+    setLeads(updatedLeads);
+    localStorage.setItem('rw_crm_leads', JSON.stringify(updatedLeads));
+
+    // Sync to Supabase PostgreSQL backend in real-time
+    fetch(`${API_BASE_URL}/api/leads/update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({
+        leadId,
+        customerId: lead.customerId,
+        phone: lead.customer?.whatsappNumber,
+        whatsappId: lead.customer?.whatsappId,
+        stage: newStage,
+        reason: reason || `Stage changed from ${prevStage} to ${newStage}`
+      })
+    }).catch(err => console.warn('Could not sync lead stage update to backend:', err));
 
     // Record stage history
     const hist: LeadStageHistory = {

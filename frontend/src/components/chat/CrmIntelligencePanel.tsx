@@ -514,11 +514,12 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             >
               <option value="new">🟡 New Inquiry</option>
               <option value="assigned">🔵 Assigned</option>
-              <option value="contacted">🟣 Contacted</option>
-              <option value="interested">🟢 Interested</option>
-              <option value="follow_up">🟣 Follow-Up Sequence</option>
+              <option value="contacted">🟢 Contacted</option>
+              <option value="potential">🟣 Potential</option>
+              <option value="under_discussion">💬 Under Discussion</option>
+              <option value="not_relevant">⚪ Not Relevant Inquiry</option>
               <option value="converted">🎉 Converted (Closed Won)</option>
-              <option value="lost">🔴 Lost / Closed</option>
+              <option value="lost">🔴 Lost</option>
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>

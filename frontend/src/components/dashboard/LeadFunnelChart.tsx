@@ -15,12 +15,12 @@ import { LeadStage } from '../../types';
 export const LeadFunnelChart: React.FC = () => {
   const { leads } = useCrm();
 
-  const stages: LeadStage[] = ['new', 'assigned', 'contacted', 'interested', 'follow_up', 'converted', 'lost'];
+  const stages: LeadStage[] = ['new', 'assigned', 'contacted', 'potential', 'under_discussion', 'not_relevant', 'converted', 'lost'];
 
   const data = stages.map((st) => ({
-    stage: STAGE_CONFIG[st].label,
+    stage: STAGE_CONFIG[st]?.label || st,
     count: leads.filter(l => l.stage === st).length,
-    color: st === 'converted' ? '#10b981' : st === 'new' ? '#f59e0b' : st === 'interested' ? '#14b8a6' : '#6366f1'
+    color: st === 'converted' ? '#10b981' : st === 'new' ? '#f59e0b' : st === 'potential' ? '#a855f7' : '#6366f1'
   }));
 
   return (
@@ -31,7 +31,7 @@ export const LeadFunnelChart: React.FC = () => {
           <p className="text-xs text-slate-400">Progression from initial WhatsApp greeting to booked procedure</p>
         </div>
         <span className="text-[11px] font-mono font-bold text-teal-400 bg-teal-500/10 px-2.5 py-1 rounded-full border border-teal-500/20">
-          7 Stages Monitored
+          8 Stages Monitored
         </span>
       </div>
 

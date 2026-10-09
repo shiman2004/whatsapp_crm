@@ -991,6 +991,56 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b3. REST: Update Customer Details (Name, Phone, WhatsApp ID)
+  if ((req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/customer/update' || pathname === '/api/customers/update' || pathname.startsWith('/api/customers/'))) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const urlCustId = pathname.startsWith('/api/customers/') && pathname !== '/api/customers/update' ? pathname.split('/')[3] : null;
+        const customerId = payload.customerId || payload.id || urlCustId;
+        const { displayName, whatsappNumber, phoneNumber, whatsappId } = payload;
+
+        if (!customerId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing customerId' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const updateData = {};
+          if (displayName !== undefined) updateData.displayName = displayName;
+          if (whatsappNumber !== undefined) updateData.whatsappNumber = whatsappNumber;
+          if (phoneNumber !== undefined) updateData.phoneNumber = phoneNumber;
+          if (whatsappId !== undefined) updateData.whatsappId = whatsappId;
+          updateData.updatedAt = new Date();
+
+          const updatedCust = await prisma.customer.update({
+            where: { id: customerId },
+            data: updateData
+          }).catch(err => {
+            console.warn('Prisma customer update error:', err.message);
+            return null;
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, customer: updatedCust }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Updated locally' }));
+      } catch (err) {
+        console.error('❌ [Customer Update Error]:', err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
     const defaultCoordinators = [

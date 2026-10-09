@@ -36,8 +36,8 @@ export interface Lead {
   id: string;
   customerId: string;
   customer?: Customer;
-  categoryId: string;
-  treatmentId: string;
+  categoryId?: string;
+  treatmentId?: string;
   serialNumber?: string;
   assignedTo?: string; // User ID
   assignedCoordinator?: User;

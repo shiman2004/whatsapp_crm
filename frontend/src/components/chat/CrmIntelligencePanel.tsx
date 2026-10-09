@@ -47,8 +47,23 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
   const [activeTab, setActiveTab] = useState<'notes' | 'followups' | 'history'>('notes');
   const [isEditingPhone, setIsEditingPhone] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
   const [copied, setCopied] = useState(false);
   const [phoneInput, setPhoneInput] = useState(lead.customer?.whatsappNumber || '');
+  const [nameInput, setNameInput] = useState(lead.customer?.displayName || '');
+
+  // Keep local inputs in sync with lead changes when not actively editing
+  useEffect(() => {
+    if (!isEditingPhone) {
+      setPhoneInput(lead.customer?.whatsappNumber || '');
+    }
+  }, [lead.customer?.whatsappNumber, isEditingPhone]);
+
+  useEffect(() => {
+    if (!isEditingName) {
+      setNameInput(lead.customer?.displayName || '');
+    }
+  }, [lead.customer?.displayName, isEditingName]);
 
   // Treatment & Serial state
   const [treatmentDropdownOpen, setTreatmentDropdownOpen] = useState(false);
@@ -63,8 +78,10 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
   const waId = lead.customer?.whatsappId || getCleanWhatsAppDigits(rawPhone);
+  const displayName = lead.customer?.displayName || 'WhatsApp Contact';
 
-  const currentTreatment = treatments.find(t => t.id === lead.treatmentId) || treatments[0];
+  // Current selected treatment (null if unassigned / default)
+  const currentTreatment = treatments.find(t => t.id === lead.treatmentId) || null;
   const currentSerial = lead.serialNumber || (currentTreatment?.code ? `${currentTreatment.code}-001` : '---');
 
   // Close dropdown on outside click
@@ -76,7 +93,6 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     };
     if (treatmentDropdownOpen) {
       document.addEventListener('mousedown', handleClickOutside);
-      // Auto-focus search input
       setTimeout(() => searchInputRef.current?.focus(), 50);
     }
     return () => {
@@ -103,7 +119,24 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     setIsEditingPhone(false);
   };
 
-  const handleSelectTreatment = (trt: Treatment) => {
+  const handleSaveName = () => {
+    if (lead.customer?.id && nameInput.trim()) {
+      updateCustomer(lead.customer.id, { 
+        displayName: nameInput.trim()
+      });
+    }
+    setIsEditingName(false);
+  };
+
+  const handleSelectTreatment = (trt: Treatment | null) => {
+    if (!trt) {
+      // Unset treatment and clear serial
+      updateLeadTreatment(lead.id, '', '');
+      setTreatmentDropdownOpen(false);
+      setTreatmentSearchQuery('');
+      return;
+    }
+
     const prefix = `${trt.code || 'TRT'}-`;
     let maxNum = 0;
     leads.forEach(l => {
@@ -122,9 +155,9 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   };
 
   const handleRegenerateSerial = () => {
+    if (!currentTreatment) return;
     setIsRegeneratingSerial(true);
-    const trt = currentTreatment || treatments[0];
-    const prefix = `${trt?.code || 'TRT'}-`;
+    const prefix = `${currentTreatment.code || 'TRT'}-`;
     let maxNum = 0;
     leads.forEach(l => {
       if (l.id !== lead.id && l.serialNumber && l.serialNumber.startsWith(prefix)) {
@@ -135,8 +168,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       }
     });
     const nextNum = String(maxNum + 1).padStart(3, '0');
-    const nextSerial = `${trt?.code || 'TRT'}-${nextNum}`;
-    updateLeadTreatment(lead.id, trt?.id || lead.treatmentId, nextSerial);
+    const nextSerial = `${currentTreatment.code || 'TRT'}-${nextNum}`;
+    updateLeadTreatment(lead.id, currentTreatment.id, nextSerial);
     setTimeout(() => setIsRegeneratingSerial(false), 500);
   };
 
@@ -167,87 +200,147 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       {/* Top Routing & Stage Controls */}
       <div className="p-3 bg-[#202c33]/40 border-b border-slate-800 space-y-2.5">
         
-        {/* Contact WhatsApp Number & WhatsApp ID Card */}
-        <div className="bg-[#111b21] p-3 rounded-xl border border-slate-800 space-y-2 shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Phone className="w-3 h-3 text-whatsapp" /> WhatsApp Number
-            </span>
-            <div className="flex items-center gap-1">
-              {rawPhone && (
+        {/* Contact WhatsApp Card with Phone and Editable Name */}
+        <div className="bg-[#111b21] p-3 rounded-xl border border-slate-800 space-y-2.5 shadow-sm">
+          
+          {/* WhatsApp Number Row */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <Phone className="w-3 h-3 text-whatsapp" /> WhatsApp Number
+              </span>
+              <div className="flex items-center gap-1">
+                {rawPhone && (
+                  <button
+                    onClick={handleCopy}
+                    className="text-[10px] text-slate-400 hover:text-teal-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#202c33] border border-slate-700"
+                    title="Copy Phone Number"
+                  >
+                    {copied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+                    <span>{copied ? 'Copied' : 'Copy'}</span>
+                  </button>
+                )}
+                {!isEditingPhone ? (
+                  <button
+                    onClick={() => {
+                      setPhoneInput(rawPhone);
+                      setIsEditingPhone(true);
+                    }}
+                    className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-0.5 font-semibold px-1.5 py-0.5 rounded bg-[#202c33] border border-slate-700"
+                  >
+                    <Edit2 className="w-2.5 h-2.5" />
+                    <span>{rawPhone ? 'Edit' : 'Add'}</span>
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSavePhone}
+                    className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded bg-[#202c33] border border-emerald-500/40"
+                  >
+                    <Check className="w-2.5 h-2.5" />
+                    <span>Save</span>
+                  </button>
+                )}
+                {rawPhone && (
+                  <a
+                    href={`https://wa.me/${rawPhone.replace(/[^0-9]/g, '')}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] text-slate-400 hover:text-emerald-300 flex items-center p-1 rounded bg-[#202c33] border border-slate-700"
+                    title="Open WhatsApp Web"
+                  >
+                    <ExternalLink className="w-2.5 h-2.5" />
+                  </a>
+                )}
+              </div>
+            </div>
+
+            {isEditingPhone ? (
+              <div className="flex items-center gap-1 mt-1">
+                <input
+                  type="text"
+                  value={phoneInput}
+                  onChange={(e) => setPhoneInput(e.target.value)}
+                  placeholder="e.g. +94771234567"
+                  className="flex-1 bg-[#202c33] border border-teal-500 rounded-lg px-2.5 py-1 text-xs text-slate-100 outline-none font-mono"
+                  autoFocus
+                />
                 <button
-                  onClick={handleCopy}
-                  className="text-[10px] text-slate-400 hover:text-teal-300 flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-[#202c33] border border-slate-700"
-                  title="Copy Phone Number"
+                  onClick={handleSavePhone}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
                 >
-                  {copied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
-                  <span>{copied ? 'Copied' : 'Copy'}</span>
+                  Save
                 </button>
-              )}
-              {!isEditingPhone ? (
+              </div>
+            ) : (
+              <div className="space-y-0.5">
+                <p className="text-xs font-mono font-bold text-white tracking-wide">
+                  {displayPhone || (rawPhone && !isHardwareLid(rawPhone) ? (rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`) : 'WhatsApp Direct (Linked Device)')}
+                </p>
+                {waId && waId !== getCleanWhatsAppDigits(rawPhone) && (
+                  <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5 border-t border-slate-800/80">
+                    <span className="text-slate-500">Linked Device ID:</span>
+                    <span className="font-mono text-slate-300 text-[10px]">{waId}</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Divider between Phone and Name */}
+          <div className="border-t border-slate-800/80" />
+
+          {/* Patient Name Row with Edit Name Option */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                <User className="w-3 h-3 text-teal-400" /> Patient Name
+              </span>
+              {!isEditingName ? (
                 <button
                   onClick={() => {
-                    setPhoneInput(rawPhone);
-                    setIsEditingPhone(true);
+                    setNameInput(displayName);
+                    setIsEditingName(true);
                   }}
                   className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-0.5 font-semibold px-1.5 py-0.5 rounded bg-[#202c33] border border-slate-700"
                 >
                   <Edit2 className="w-2.5 h-2.5" />
-                  <span>{rawPhone ? 'Edit' : 'Add'}</span>
+                  <span>Edit Name</span>
                 </button>
               ) : (
                 <button
-                  onClick={handleSavePhone}
+                  onClick={handleSaveName}
                   className="text-[10px] text-emerald-400 hover:text-emerald-300 flex items-center gap-0.5 font-bold px-1.5 py-0.5 rounded bg-[#202c33] border border-emerald-500/40"
                 >
                   <Check className="w-2.5 h-2.5" />
                   <span>Save</span>
                 </button>
               )}
-              {rawPhone && (
-                <a
-                  href={`https://wa.me/${rawPhone.replace(/[^0-9]/g, '')}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[10px] text-slate-400 hover:text-emerald-300 flex items-center p-1 rounded bg-[#202c33] border border-slate-700"
-                  title="Open WhatsApp Web"
-                >
-                  <ExternalLink className="w-2.5 h-2.5" />
-                </a>
-              )}
             </div>
+
+            {isEditingName ? (
+              <div className="flex items-center gap-1 mt-1">
+                <input
+                  type="text"
+                  value={nameInput}
+                  onChange={(e) => setNameInput(e.target.value)}
+                  placeholder="Enter patient full name..."
+                  className="flex-1 bg-[#202c33] border border-teal-500 rounded-lg px-2.5 py-1 text-xs text-slate-100 outline-none font-semibold"
+                  autoFocus
+                />
+                <button
+                  onClick={handleSaveName}
+                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
+                >
+                  Save
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs font-semibold text-teal-100 tracking-wide truncate">
+                {displayName}
+              </p>
+            )}
           </div>
 
-          {isEditingPhone ? (
-            <div className="flex items-center gap-1 mt-1">
-              <input
-                type="text"
-                value={phoneInput}
-                onChange={(e) => setPhoneInput(e.target.value)}
-                placeholder="e.g. +94771234567"
-                className="flex-1 bg-[#202c33] border border-teal-500 rounded-lg px-2.5 py-1 text-xs text-slate-100 outline-none font-mono"
-                autoFocus
-              />
-              <button
-                onClick={handleSavePhone}
-                className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
-              >
-                Save
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-1">
-              <p className="text-xs font-mono font-bold text-white tracking-wide">
-                {displayPhone || (rawPhone && !isHardwareLid(rawPhone) ? (rawPhone.startsWith('+') ? rawPhone : `+${rawPhone}`) : 'WhatsApp Direct (Linked Device)')}
-              </p>
-              {waId && waId !== getCleanWhatsAppDigits(rawPhone) && (
-                <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1 border-t border-slate-800/80">
-                  <span className="text-slate-500">Linked Device ID:</span>
-                  <span className="font-mono text-slate-300 text-[10px]">{waId}</span>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* Coordinator Assignment */}
@@ -300,7 +393,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               className="w-full bg-[#202c33] border border-teal-500/50 hover:border-teal-400 rounded-lg px-2 py-1.5 text-[11px] font-bold text-teal-200 text-left flex items-center justify-between gap-1 transition-colors shadow-inner"
             >
               <span className="truncate">
-                {currentTreatment ? `${currentTreatment.code || 'TRT'} - ${currentTreatment.name}` : '-- Select Treatment --'}
+                {currentTreatment ? `${currentTreatment.code || 'TRT'} - ${currentTreatment.name}` : 'Select Treatment'}
               </span>
               <ChevronDown className={`w-3.5 h-3.5 text-teal-400 shrink-0 transition-transform ${treatmentDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
@@ -328,8 +421,22 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
                 {/* Treatments List */}
                 <div className="overflow-y-auto flex-1 p-1 space-y-0.5 custom-scrollbar">
+                  {/* Default Unselect Option */}
+                  <button
+                    type="button"
+                    onClick={() => handleSelectTreatment(null)}
+                    className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
+                      !lead.treatmentId 
+                        ? 'bg-teal-600/30 text-teal-300 font-bold border border-teal-500/40' 
+                        : 'text-slate-400 hover:bg-[#202c33] hover:text-slate-200'
+                    }`}
+                  >
+                    <span>-- Select Treatment --</span>
+                    {!lead.treatmentId && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0 ml-1" />}
+                  </button>
+
                   {filteredTreatments.length === 0 ? (
-                    <div className="px-3 py-4 text-center text-xs text-slate-400">
+                    <div className="px-3 py-3 text-center text-xs text-slate-400">
                       No treatments match "{treatmentSearchQuery}"
                     </div>
                   ) : (
@@ -369,17 +476,23 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             </label>
             <div className="flex items-center gap-1">
               <div 
-                className="flex-1 bg-[#202c33] border border-slate-700 rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-teal-300 tracking-wider text-center select-all truncate shadow-inner"
-                title="Auto-generated unique serial number"
+                className={`flex-1 bg-[#202c33] border border-slate-700 rounded-lg px-2 py-1.5 text-xs font-mono font-bold tracking-wider text-center select-all truncate shadow-inner ${
+                  currentTreatment ? 'text-teal-300' : 'text-slate-500'
+                }`}
+                title={currentTreatment ? "Auto-generated unique serial number" : "Please select a treatment first"}
               >
-                {currentSerial}
+                {currentTreatment ? currentSerial : '---'}
               </div>
               <button
                 type="button"
                 onClick={handleRegenerateSerial}
-                disabled={isRegeneratingSerial}
-                className="p-1.5 bg-teal-600/20 hover:bg-teal-600/40 active:bg-teal-600/60 border border-teal-500/40 text-teal-300 rounded-lg transition-all"
-                title="Regenerate next serial number"
+                disabled={!currentTreatment || isRegeneratingSerial}
+                className={`p-1.5 rounded-lg transition-all border ${
+                  currentTreatment 
+                    ? 'bg-teal-600/20 hover:bg-teal-600/40 active:bg-teal-600/60 border-teal-500/40 text-teal-300' 
+                    : 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed'
+                }`}
+                title={currentTreatment ? "Regenerate next serial number" : "Select a treatment first"}
               >
                 <RotateCw className={`w-3.5 h-3.5 ${isRegeneratingSerial ? 'animate-spin text-teal-200' : ''}`} />
               </button>

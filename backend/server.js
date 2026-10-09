@@ -1375,6 +1375,255 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b4. REST: Add New Contact & Lead directly into Supabase PostgreSQL
+  if (req.method === 'POST' && (pathname === '/api/contacts' || pathname === '/api/contacts/create' || pathname === '/api/leads/create')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage } = payload;
+
+        const rawPhone = (phone || whatsappNumber || '').trim();
+        if (!rawPhone) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Phone number is required.' }));
+          return;
+        }
+
+        let cleanDigits = rawPhone.replace(/[^0-9]/g, '');
+        if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
+          cleanDigits = '94' + cleanDigits.slice(1);
+        } else if (cleanDigits.length === 9 && (cleanDigits.startsWith('7') || cleanDigits.startsWith('1'))) {
+          cleanDigits = '94' + cleanDigits;
+        }
+
+        const canonicalPhone = `+${cleanDigits}`;
+        const contactName = (name || '').trim() || canonicalPhone;
+
+        const prisma = getPrisma();
+        let savedCustomer = null;
+        let savedLead = null;
+        let savedMessage = null;
+
+        if (prisma && getDbStatus()) {
+          // 1. Find or create Customer in Supabase PostgreSQL
+          savedCustomer = await prisma.customer.findFirst({
+            where: {
+              OR: [
+                { whatsappNumber: canonicalPhone },
+                { whatsappNumber: cleanDigits },
+                { whatsappId: cleanDigits }
+              ]
+            }
+          });
+
+          if (!savedCustomer) {
+            savedCustomer = await prisma.customer.create({
+              data: {
+                whatsappNumber: canonicalPhone,
+                whatsappId: cleanDigits,
+                displayName: contactName,
+                preferredLanguage: language || 'en'
+              }
+            });
+          } else {
+            savedCustomer = await prisma.customer.update({
+              where: { id: savedCustomer.id },
+              data: {
+                displayName: contactName,
+                preferredLanguage: language || savedCustomer.preferredLanguage || 'en'
+              }
+            });
+          }
+
+          // 2. Resolve or create Category & Treatment
+          let firstCat = null;
+          let firstTrt = null;
+          if (categoryId) {
+            firstCat = await prisma.treatmentCategory.findUnique({ where: { id: categoryId } }).catch(() => null);
+          }
+          if (!firstCat) {
+            firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
+          }
+
+          if (treatmentId) {
+            firstTrt = await prisma.treatment.findUnique({ where: { id: treatmentId } }).catch(() => null);
+          }
+          if (!firstTrt && firstCat) {
+            firstTrt = await prisma.treatment.findFirst({ where: { categoryId: firstCat.id } }).catch(() => null);
+          }
+
+          // 3. Resolve assigned coordinator (if coordinator role, assign to self; otherwise payload assignedTo or null)
+          let targetCoordinatorId = null;
+          if (authUser?.role === 'coordinator') {
+            targetCoordinatorId = authUser.id;
+          } else if (assignedTo) {
+            const coord = await prisma.user.findUnique({ where: { id: assignedTo } }).catch(() => null);
+            if (coord) targetCoordinatorId = coord.id;
+          }
+
+          // 4. Find existing or create new Lead
+          savedLead = await prisma.lead.findFirst({
+            where: { customerId: savedCustomer.id },
+            orderBy: { updatedAt: 'desc' }
+          });
+
+          const leadStage = initialMessage ? 'contacted' : (targetCoordinatorId ? 'assigned' : 'new');
+
+          if (!savedLead) {
+            savedLead = await prisma.lead.create({
+              data: {
+                customerId: savedCustomer.id,
+                categoryId: firstCat?.id || 'cat-hair-care',
+                treatmentId: firstTrt?.id || 'trt-hair-prp',
+                stage: leadStage,
+                assignedTo: targetCoordinatorId,
+                source: 'whatsapp',
+                language: language || 'en',
+                lastCustomerMessageAt: new Date()
+              },
+              include: {
+                customer: true,
+                category: true,
+                treatment: true,
+                assignedCoordinator: true,
+                messages: true
+              }
+            });
+          } else {
+            savedLead = await prisma.lead.update({
+              where: { id: savedLead.id },
+              data: {
+                categoryId: firstCat?.id || savedLead.categoryId,
+                treatmentId: firstTrt?.id || savedLead.treatmentId,
+                assignedTo: targetCoordinatorId || savedLead.assignedTo,
+                stage: initialMessage ? 'contacted' : savedLead.stage,
+                language: language || savedLead.language,
+                updatedAt: new Date()
+              },
+              include: {
+                customer: true,
+                category: true,
+                treatment: true,
+                assignedCoordinator: true,
+                messages: true
+              }
+            });
+          }
+
+          // 5. Send initial message if provided
+          if (initialMessage && initialMessage.trim()) {
+            const msgContent = initialMessage.trim();
+            const messageId = `msg-${Date.now()}`;
+            
+            // Dispatch via Meta Cloud API or Baileys
+            const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+            const phoneId = (metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
+
+            if (metaToken) {
+              try {
+                await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                  method: 'POST',
+                  headers: {
+                    'Authorization': `Bearer ${metaToken}`,
+                    'Content-Type': 'application/json'
+                  },
+                  body: JSON.stringify({
+                    messaging_product: 'whatsapp',
+                    recipient_type: 'individual',
+                    to: cleanDigits,
+                    type: 'text',
+                    text: { body: msgContent }
+                  })
+                });
+              } catch (e) {
+                console.warn('[Initial message Meta API dispatch warning]:', e.message);
+              }
+            }
+
+            savedMessage = await prisma.message.create({
+              data: {
+                id: messageId,
+                leadId: savedLead.id,
+                customerId: savedCustomer.id,
+                direction: 'outbound',
+                senderType: 'coordinator',
+                coordinatorId: targetCoordinatorId || authUser?.id || null,
+                content: msgContent,
+                status: 'sent',
+                timestamp: new Date()
+              }
+            }).catch(() => null);
+
+            // Broadcast real-time outbound SSE
+            broadcastScopedSSE(targetCoordinatorId || null, {
+              type: 'OUTBOUND_WHATSAPP_MESSAGE',
+              messageId,
+              leadId: savedLead.id,
+              customerId: savedCustomer.id,
+              phone: canonicalPhone,
+              realPhone: canonicalPhone,
+              whatsappId: cleanDigits,
+              name: contactName,
+              text: msgContent,
+              direction: 'outbound',
+              senderType: 'coordinator',
+              timestamp: new Date().toISOString(),
+              source: 'live'
+            });
+          }
+
+          // Broadcast Lead Created/Assigned SSE
+          broadcastScopedSSE(targetCoordinatorId || null, {
+            type: 'LEAD_ASSIGNED',
+            leadId: savedLead.id,
+            clientLeadId: savedLead.id,
+            coordinatorId: targetCoordinatorId,
+            lead: savedLead
+          });
+
+          console.log(`✅ [Contact Created] ${contactName} (${canonicalPhone}) saved to Supabase PostgreSQL. Lead ID: ${savedLead.id}`);
+        } else {
+          // In-memory fallback
+          savedCustomer = {
+            id: 'cust-' + Date.now(),
+            whatsappNumber: canonicalPhone,
+            whatsappId: cleanDigits,
+            displayName: contactName,
+            preferredLanguage: language || 'en'
+          };
+          savedLead = {
+            id: 'lead-' + Date.now(),
+            customerId: savedCustomer.id,
+            customer: savedCustomer,
+            categoryId: categoryId || 'cat-hair-care',
+            treatmentId: treatmentId || 'trt-hair-prp',
+            stage: initialMessage ? 'contacted' : 'new',
+            source: 'whatsapp',
+            language: language || 'en',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          customer: savedCustomer,
+          lead: savedLead,
+          message: savedMessage,
+          leadId: savedLead?.id
+        }));
+      } catch (err) {
+        console.error('❌ [Add Contact Error]:', err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
     const defaultCoordinators = [

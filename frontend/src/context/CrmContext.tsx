@@ -141,6 +141,17 @@ interface CrmContextType {
   hasMetaConfig: boolean;
   setHasMetaConfig: (val: boolean) => void;
 
+  // Add Contact
+  addNewContact: (data: {
+    name: string;
+    phone: string;
+    categoryId?: string;
+    treatmentId?: string;
+    language?: 'en' | 'si' | 'ta';
+    assignedTo?: string;
+    initialMessage?: string;
+  }) => Promise<{ success: boolean; leadId?: string; error?: string }>;
+
   // Toasts
   dismissNotification: (id: string) => void;
 }
@@ -2068,6 +2079,81 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Customer Replied', `Inbound message from ${currentLead.customer?.displayName}. Pending follow-ups auto-cancelled.`, 'info');
   };
 
+  const addNewContact = async (data: {
+    name: string;
+    phone: string;
+    categoryId?: string;
+    treatmentId?: string;
+    language?: 'en' | 'si' | 'ta';
+    assignedTo?: string;
+    initialMessage?: string;
+  }): Promise<{ success: boolean; leadId?: string; error?: string }> => {
+    try {
+      const authHeaders = {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      };
+
+      const res = await fetch(`${API_BASE_URL}/api/contacts`, {
+        method: 'POST',
+        headers: authHeaders,
+        body: JSON.stringify({
+          name: data.name,
+          phone: data.phone,
+          categoryId: data.categoryId,
+          treatmentId: data.treatmentId,
+          language: data.language || 'en',
+          assignedTo: data.assignedTo || (isCoordinator ? currentUser.id : undefined),
+          initialMessage: data.initialMessage
+        })
+      });
+
+      const resData = await res.json();
+      if (!res.ok || !resData.success) {
+        notify('Contact Error', resData.error || 'Failed to create contact', 'warning');
+        return { success: false, error: resData.error };
+      }
+
+      const { customer: dbCust, lead: dbLead, message: dbMsg, leadId } = resData;
+
+      if (dbCust) {
+        setCustomers(prev => {
+          const exists = prev.some(c => c.id === dbCust.id);
+          if (!exists) return [dbCust, ...prev];
+          return prev.map(c => c.id === dbCust.id ? { ...c, ...dbCust } : c);
+        });
+      }
+
+      if (dbLead) {
+        setLeads(prev => {
+          const exists = prev.some(l => l.id === dbLead.id);
+          if (!exists) return [dbLead, ...prev];
+          return prev.map(l => l.id === dbLead.id ? { ...l, ...dbLead } : l);
+        });
+      }
+
+      if (dbMsg) {
+        setMessages(prev => {
+          const exists = prev.some(m => m.id === dbMsg.id);
+          if (!exists) return [...prev, dbMsg];
+          return prev;
+        });
+      }
+
+      const targetLeadId = leadId || dbLead?.id;
+      if (targetLeadId) {
+        setSelectedLeadId(targetLeadId);
+      }
+
+      notify('Contact Added', `${data.name || data.phone} saved to Supabase!`, 'success');
+      return { success: true, leadId: targetLeadId };
+    } catch (err: any) {
+      notify('Contact Error', err.message || 'Failed to add contact', 'warning');
+      return { success: false, error: err.message };
+    }
+  };
+
   // Join leads with customer & coordinator objects
   const hydratedLeads: Lead[] = leads.map(lead => {
     const cust = customers.find(c => c.id === lead.customerId);
@@ -2157,6 +2243,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addCoordinator,
     deleteCoordinator,
     clearAllData,
+    addNewContact,
     simulatorOpen,
     setSimulatorOpen,
     simulatorSession,

@@ -8,9 +8,7 @@ import {
   CornerUpLeft,
   Image,
   FileText,
-  Camera,
   User,
-  BarChart2,
   Sparkles,
   QrCode,
   AlertCircle,
@@ -21,6 +19,7 @@ import {
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { WhatsAppVoiceRecorder } from '../../utils/audioRecorder';
+import { AddContactModal } from './AddContactModal';
 
 interface MessageComposerProps {
   lead: Lead;
@@ -46,6 +45,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
@@ -61,11 +61,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     caption: string;
   } | null>(null);
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
   const category = categories.find(c => c.id === lead.categoryId);
@@ -73,10 +72,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
   // Focus input when replying to a message
   useEffect(() => {
-    if (replyingMessage && inputRef.current) {
-      inputRef.current.focus();
+    if (replyingMessage && textareaRef.current) {
+      textareaRef.current.focus();
     }
   }, [replyingMessage]);
+
+  // Auto-resize textarea based on content
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      const scrollHeight = textareaRef.current.scrollHeight;
+      textareaRef.current.style.height = `${Math.min(Math.max(scrollHeight, 38), 130)}px`;
+    }
+  }, [inputVal]);
 
   // Close menus on outside click
   useEffect(() => {
@@ -227,6 +235,21 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     sendMessage(lead.id, inputVal.trim(), 'coordinator');
     setInputVal('');
     setShowEmojiPicker(false);
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '38px';
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      if (e.shiftKey) {
+        // Shift + Enter: inserts a new line in the text box
+        return;
+      }
+      // Enter alone: sends the message immediately
+      e.preventDefault();
+      handleSendText();
+    }
   };
 
   const handleSendTemplate = (tpl: WhatsAppTemplate) => {
@@ -243,8 +266,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       setMediaPreview(prev => prev ? { ...prev, caption: prev.caption + emoji } : null);
     } else {
       setInputVal(prev => prev + emoji);
-      if (inputRef.current) {
-        inputRef.current.focus();
+      if (textareaRef.current) {
+        textareaRef.current.focus();
       }
     }
   };
@@ -260,14 +283,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         accept="image/*,video/*" 
         className="hidden" 
         onChange={(e) => handleFileSelect(e)}
-      />
-      <input 
-        ref={cameraInputRef}
-        type="file" 
-        accept="image/*" 
-        capture="environment"
-        className="hidden" 
-        onChange={(e) => handleFileSelect(e, 'image')}
       />
       <input 
         ref={docInputRef}
@@ -343,7 +358,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               setShowAttachMenu(false);
               fileInputRef.current?.click();
             }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
           >
             <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
               <Image className="w-4 h-4" />
@@ -354,22 +369,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           <button 
             onClick={() => {
               setShowAttachMenu(false);
-              cameraInputRef.current?.click();
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
-          >
-            <div className="w-7 h-7 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center">
-              <Camera className="w-4 h-4" />
-            </div>
-            <span>Camera</span>
-          </button>
-
-          <button 
-            onClick={() => {
-              setShowAttachMenu(false);
               docInputRef.current?.click();
             }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
           >
             <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
               <FileText className="w-4 h-4" />
@@ -378,38 +380,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           </button>
 
           <button 
-            onClick={() => setShowAttachMenu(false)}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
+            onClick={() => {
+              setShowAttachMenu(false);
+              setShowAddContactModal(true);
+            }}
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
           >
             <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
               <User className="w-4 h-4" />
             </div>
             <span>Contact</span>
-          </button>
-
-          <button 
-            onClick={() => setShowAttachMenu(false)}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors"
-          >
-            <div className="w-7 h-7 rounded-full bg-teal-500/20 text-teal-400 flex items-center justify-center">
-              <BarChart2 className="w-4 h-4" />
-            </div>
-            <span>Poll</span>
-          </button>
-
-          <div className="h-px bg-slate-700/60 my-1" />
-
-          <button 
-            onClick={() => {
-              setShowAttachMenu(false);
-              setShowTemplates(true);
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors font-medium text-[#00a884]"
-          >
-            <div className="w-7 h-7 rounded-full bg-[#00a884]/20 text-[#00a884] flex items-center justify-center">
-              <Sparkles className="w-4 h-4" />
-            </div>
-            <span>WhatsApp Templates</span>
           </button>
         </div>
       )}
@@ -463,8 +443,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
-      {/* 5. Main Composer Row (Exact 1:1 Match of Screenshot 2) */}
-      <div className="flex items-center gap-3">
+      {/* 5. Main Composer Row */}
+      <div className="flex items-end gap-3">
         {/* Plus / Attach Button */}
         <button
           type="button"
@@ -477,7 +457,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setShowAttachMenu(!showAttachMenu);
             setShowEmojiPicker(false);
           }}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
             showAttachMenu ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
           }`}
           title="Attach"
@@ -493,7 +473,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setShowEmojiPicker(!showEmojiPicker);
             setShowAttachMenu(false);
           }}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 ${
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
             showEmojiPicker ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
           }`}
           title="Emojis"
@@ -503,7 +483,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
         {/* Input Field / Voice Recording View */}
         {isRecording ? (
-          <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono animate-in fade-in duration-150">
+          <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono animate-in fade-in duration-150 mb-0.5">
             <div className="flex items-center gap-3">
               <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
               <span className="text-rose-400 font-semibold tracking-wider">
@@ -530,16 +510,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             </button>
           </div>
         ) : (
-          <form onSubmit={handleSendText} className="flex-1">
-            <input
-              ref={inputRef}
-              type="text"
+          <div className="flex-1 flex items-center bg-[#2a3942] rounded-xl px-3.5 py-1.5 focus-within:ring-1 focus-within:ring-[#00a884] transition-all min-h-[40px]">
+            <textarea
+              ref={textareaRef}
+              rows={1}
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
+              onKeyDown={handleKeyDown}
               placeholder={whatsappStatus === 'connected' || localStorage.getItem('meta_access_token') ? 'Type a message' : 'Please link your WhatsApp or configure Meta API to send messages...'}
-              className="w-full bg-[#2a3942] text-[#d1d7db] placeholder-[#8696a0] text-sm rounded-lg px-4 py-2 outline-none border-none focus:ring-1 focus:ring-[#00a884] transition-all"
+              className="w-full bg-transparent text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
             />
-          </form>
+          </div>
         )}
 
         {/* Right Button: Send Text OR Send Voice Note OR Start Voice Note */}
@@ -547,7 +528,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           <button
             type="button"
             onClick={handleStopAndSendRecording}
-            className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-lg active:scale-95 transition-all shrink-0 animate-in zoom-in-95"
+            className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-lg active:scale-95 transition-all shrink-0 animate-in zoom-in-95 mb-0.5"
             title="Send Voice Note"
           >
             <Send className="w-5 h-5 fill-current ml-0.5" />
@@ -555,9 +536,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         ) : inputVal.trim() ? (
           <button
             type="button"
-            onClick={handleSendText}
-            className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-lg active:scale-95 transition-all shrink-0"
-            title="Send"
+            onClick={() => handleSendText()}
+            className="w-10 h-10 rounded-full bg-[#00a884] hover:bg-[#00c298] text-black flex items-center justify-center shadow-lg active:scale-95 transition-all shrink-0 mb-0.5 cursor-pointer"
+            title="Send (Enter to send, Shift+Enter for new line)"
           >
             <Send className="w-5 h-5 fill-current ml-0.5" />
           </button>
@@ -565,7 +546,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           <button
             type="button"
             onClick={handleStartRecording}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50"
+            className="w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50 mb-0.5"
             title="Record Voice Note"
           >
             <Mic className="w-5 h-5" />
@@ -660,6 +641,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           </div>
         </div>
       )}
+
+      {/* Add Contact Modal */}
+      <AddContactModal
+        isOpen={showAddContactModal}
+        onClose={() => setShowAddContactModal(false)}
+      />
     </div>
   );
 };

@@ -38,6 +38,7 @@ export interface Lead {
   customer?: Customer;
   categoryId: string;
   treatmentId: string;
+  serialNumber?: string;
   assignedTo?: string; // User ID
   assignedCoordinator?: User;
   stage: LeadStage;
@@ -101,6 +102,7 @@ export interface TreatmentCategory {
 
 export interface Treatment {
   id: string;
+  code?: string;
   categoryId: string;
   name: string;
   nameI18n: {

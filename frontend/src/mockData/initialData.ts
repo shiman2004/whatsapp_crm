@@ -116,173 +116,30 @@ export const INITIAL_CATEGORIES: TreatmentCategory[] = [
 ];
 
 export const INITIAL_TREATMENTS: Treatment[] = [
-  // Hair Care
-  {
-    id: 'trt-prp-hair',
-    categoryId: 'cat-hair-care',
-    name: 'PRP Hair Follicle Therapy',
-    nameI18n: {
-      en: 'PRP Hair Follicle Therapy',
-      si: 'PRP හිසකෙස් වර්ධන ප්‍රතිකාරය',
-      ta: 'PRP முடி வளர்ச்சி சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 18,000 - 25,000 / session',
-    duration: '45 mins',
-  },
-  {
-    id: 'trt-fue-transplant',
-    categoryId: 'cat-hair-care',
-    name: 'FUE Sapphire Hair Transplant',
-    nameI18n: {
-      en: 'FUE Sapphire Hair Transplant',
-      si: 'FUE සෆයර් හිසකෙස් බද්ධ කිරීම',
-      ta: 'FUE சஃபையர் முடி மாற்று அறுவை சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 250,000 - 450,000',
-    duration: '4 - 6 hours',
-  },
-  {
-    id: 'trt-gfc-hair',
-    categoryId: 'cat-hair-care',
-    name: 'GFC (Growth Factor Concentrate) Therapy',
-    nameI18n: {
-      en: 'GFC Therapy for Thinning Hair',
-      si: 'GFC හිසකෙස් ප්‍රතිකාරය',
-      ta: 'GFC முடி தடிமன் சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 24,000 / session',
-    duration: '45 mins',
-  },
-
-  // Skin Care
-  {
-    id: 'trt-hydrafacial',
-    categoryId: 'cat-skin-care',
-    name: 'Signature Medical HydraFacial MD',
-    nameI18n: {
-      en: 'Signature Medical HydraFacial MD',
-      si: 'සිග්නේචර් මෙඩිකල් හයිඩ්‍රාෆේෂල්',
-      ta: 'சிக்னேச்சர் ஹைட்ராஃபேஷியல் சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 15,000 - 22,000',
-    duration: '60 mins',
-  },
-  {
-    id: 'trt-chemical-peel',
-    categoryId: 'cat-skin-care',
-    name: 'Dermatological Chemical Peel',
-    nameI18n: {
-      en: 'Dermatological Chemical Peel',
-      si: 'චර්ම රෝග විශේෂඥ කෙමිකල් පීල් ප්‍රතිකාරය',
-      ta: 'தோல் ரசாயன சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 12,000 - 18,000',
-    duration: '30 mins',
-  },
-  {
-    id: 'trt-acne-scar',
-    categoryId: 'cat-skin-care',
-    name: 'Microneedling RF for Acne Scars',
-    nameI18n: {
-      en: 'Microneedling RF for Acne Scars',
-      si: 'කුරුලෑ කැළැල් ඉවත් කිරීමේ RF ප්‍රතිකාරය',
-      ta: 'பரு தழும்புகளை நீக்கும் மைக்ரோநீட்லிங்',
-    },
-    active: true,
-    priceRange: 'LKR 28,000 / session',
-    duration: '60 mins',
-  },
-
-  // Laser
-  {
-    id: 'trt-laser-hair',
-    categoryId: 'cat-laser',
-    name: 'Full Body Triple-Diode Laser Hair Removal',
-    nameI18n: {
-      en: 'Full Body Triple-Diode Laser Hair Removal',
-      si: 'මුළු සිරුරේම අනවශ්‍ය රෝම ලේසර් මඟින් ඉවත් කිරීම',
-      ta: 'முழு உடல் லேசர் முடி அகற்றுதல்',
-    },
-    active: true,
-    priceRange: 'LKR 10,000 - 65,000 (Package available)',
-    duration: '30 - 90 mins',
-  },
-  {
-    id: 'trt-carbon-laser',
-    categoryId: 'cat-laser',
-    name: 'Hollywood Carbon Peel Laser Toning',
-    nameI18n: {
-      en: 'Hollywood Carbon Peel Laser Toning',
-      si: 'කාබන් පීල් ලේසර් ප්‍රතිකාරය',
-      ta: 'ஹாலிவுட் கார்பன் லேசர் சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 16,000',
-    duration: '45 mins',
-  },
-
-  // Injectable
-  {
-    id: 'trt-botox',
-    categoryId: 'cat-injectable',
-    name: 'Anti-Wrinkle Botox Injections (Allergan USA)',
-    nameI18n: {
-      en: 'Anti-Wrinkle Botox Injections (Allergan USA)',
-      si: 'රැලි වැටීම් වැළැක්වීමේ බොටොක්ස් ප්‍රතිකාරය',
-      ta: 'சுருக்கங்களை போக்கும் போடாக்ස් சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 35,000 - 75,000',
-    duration: '30 mins',
-  },
-  {
-    id: 'trt-dermal-fillers',
-    categoryId: 'cat-injectable',
-    name: 'Juvederm Lip & Cheek Fillers',
-    nameI18n: {
-      en: 'Juvederm Lip & Cheek Fillers',
-      si: 'තොල් සහ කම්මුල් හැඩගැන්වීමේ ෆිලර්ස්',
-      ta: 'உதடு மற்றும் கன்ன அழகு ஃபில்லர்ஸ்',
-    },
-    active: true,
-    priceRange: 'LKR 65,000 - 110,000 / ml',
-    duration: '45 mins',
-  },
-
-  // Plastic Surgery
-  {
-    id: 'trt-rhinoplasty',
-    categoryId: 'cat-plastic-surgery',
-    name: 'Open Structural Rhinoplasty (Nose Reshaping)',
-    nameI18n: {
-      en: 'Open Structural Rhinoplasty (Nose Reshaping)',
-      si: 'නාසය හැඩගැන්වීමේ ප්ලාස්ටික් සැත්කම',
-      ta: 'மூக்கு வடிவமைப்பு அறுவை சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 380,000 - 650,000',
-    duration: '2 - 3 hours',
-  },
-
-  // Physio
-  {
-    id: 'trt-postop-physio',
-    categoryId: 'cat-physio',
-    name: 'Post-Operative Lymphatic Drainage & Physio',
-    nameI18n: {
-      en: 'Post-Operative Lymphatic Drainage & Physio',
-      si: 'සැත්කම් පසු සුවතා හා භෞතචිකිත්සාව',
-      ta: 'அறுவை சிகிச்சைக்குப் பிந்தைய உடற்பயிற்சி சிகிச்சை',
-    },
-    active: true,
-    priceRange: 'LKR 8,500 / session',
-    duration: '60 mins',
-  }
+  { id: 'trt-htp', code: 'HTP', categoryId: 'cat-hair-care', name: 'Hair Transplantation', nameI18n: { en: 'Hair Transplantation', si: 'හිසකෙස් බද්ධ කිරීම', ta: 'முடி மாற்று அறுவை சிகிச்சை' }, active: true },
+  { id: 'trt-prp', code: 'PRP', categoryId: 'cat-hair-care', name: 'PRP', nameI18n: { en: 'PRP (Platelet Rich Plasma)', si: 'PRP ප්‍රතිකාරය', ta: 'PRP சிகிச்சை' }, active: true },
+  { id: 'trt-gfc', code: 'GFC', categoryId: 'cat-hair-care', name: 'GFC', nameI18n: { en: 'GFC (Growth Factor Concentrate)', si: 'GFC ප්‍රතිකාරය', ta: 'GFC சிகிச்சை' }, active: true },
+  { id: 'trt-hdf', code: 'HDF', categoryId: 'cat-skin-care', name: 'Hydra Facial', nameI18n: { en: 'Hydra Facial', si: 'හයිඩ්‍රා ෆේෂල්', ta: 'ஹைட்ரா ஃபேஷியல்' }, active: true },
+  { id: 'trt-hij', code: 'HIJ', categoryId: 'cat-ayurveda', name: 'Hijama', nameI18n: { en: 'Hijama / Cupping Therapy', si: 'හිජාමා ප්‍රතිකාරය', ta: 'ஹிஜாமா சிகிச்சை' }, active: true },
+  { id: 'trt-pmt', code: 'PMT', categoryId: 'cat-iv-wellness', name: 'Pain Management', nameI18n: { en: 'Pain Management', si: 'වේදනා කළමනාකරණය', ta: 'வலி மேலாண்மை சிகிச்சை' }, active: true },
+  { id: 'trt-let', code: 'LET', categoryId: 'cat-ayurveda', name: 'Leech Treatment', nameI18n: { en: 'Leech Treatment', si: 'කූඩැල්ලන් ප්‍රතිකාරය', ta: 'அட்டை சிகிச்சை' }, active: true },
+  { id: 'trt-chp', code: 'CHP', categoryId: 'cat-skin-care', name: 'Chemical Peel', nameI18n: { en: 'Chemical Peel', si: 'කෙමිකල් පීල්', ta: 'கெமிக்கல் பீல்' }, active: true },
+  { id: 'trt-cbl', code: 'CBL', categoryId: 'cat-skin-care', name: 'Carbon Laser', nameI18n: { en: 'Carbon Laser', si: 'කාබන් ලේසර්', ta: 'கார்பன் லேசர்' }, active: true },
+  { id: 'trt-mcn', code: 'MCN', categoryId: 'cat-skin-care', name: 'Microneedling', nameI18n: { en: 'Microneedling', si: 'මයික්‍රොනීඩ්ලින්', ta: 'மைக்ரோநீட்லிங்' }, active: true },
+  { id: 'trt-skb', code: 'SKB', categoryId: 'cat-skin-care', name: 'Skin Boosters', nameI18n: { en: 'Skin Boosters', si: 'සම දීප්තිමත් කිරීමේ බූස්ටර්', ta: 'ஸ்கின் பூஸ்டர்ஸ்' }, active: true },
+  { id: 'trt-chr', code: 'CHR', categoryId: 'cat-skin-care', name: 'CO2 Hair Removal', nameI18n: { en: 'CO2 Hair Removal', si: 'CO2 අනවශ්‍ය රෝම ඉවත් කිරීම', ta: 'CO2 முடி அகற்றுதல்' }, active: true },
+  { id: 'trt-btx', code: 'BTX', categoryId: 'cat-skin-care', name: 'Botox (Per Unit)', nameI18n: { en: 'Botox (Per Unit)', si: 'බොටොක්ස් (ඒකකයකට)', ta: 'போடாக்ஸ் (ஒரு யூனிட்)' }, active: true },
+  { id: 'trt-flr', code: 'FLR', categoryId: 'cat-skin-care', name: 'Filler (1ml)', nameI18n: { en: 'Filler (1ml)', si: 'ෆිලර් (1ml)', ta: 'ஃபில்லர் (1ml)' }, active: true },
+  { id: 'trt-ivg', code: 'IVG', categoryId: 'cat-iv-wellness', name: 'IV Glutathione (Per Session)', nameI18n: { en: 'IV Glutathione (Per Session)', si: 'IV ග්ලූටතයෝන්', ta: 'IV குளுதாதயோன்' }, active: true },
+  { id: 'trt-ckf', code: 'CKF', categoryId: 'cat-skin-care', name: 'Cheek Filler (new)', nameI18n: { en: 'Cheek Filler (new)', si: 'කම්මුල් ෆිලර්', ta: 'கன்ன ஃபில்லர்' }, active: true },
+  { id: 'trt-ttf', code: 'TTF', categoryId: 'cat-skin-care', name: 'Tear Trough (Under-Eye) Filler (new)', nameI18n: { en: 'Tear Trough (Under-Eye) Filler (new)', si: 'ඇස් යට ෆිලර් ප්‍රතිකාරය', ta: 'கண்களுக்கு அடியில் ஃபில்லர்' }, active: true },
+  { id: 'trt-hhb', code: 'HHB', categoryId: 'cat-skin-care', name: 'Hyperhidrosis Botox (Underarm) (new)', nameI18n: { en: 'Hyperhidrosis Botox (Underarm) (new)', si: 'කිහිලි අධික දහඩිය දැමීමට බොටොක්ස්', ta: 'அக்குள் வியர்வைக்கு போடாக்ஸ்' }, active: true },
+  { id: 'trt-hif', code: 'HIF', categoryId: 'cat-skin-care', name: 'HIFU', nameI18n: { en: 'HIFU (High-Intensity Focused Ultrasound)', si: 'HIFU සම තද කිරීමේ ප්‍රතිකාරය', ta: 'HIFU தோல் இறுக்க சிகிச்சை' }, active: true },
+  { id: 'trt-ebb', code: 'EBB', categoryId: 'cat-skin-care', name: 'Eyebrow Blading', nameI18n: { en: 'Eyebrow Blading / Microblading', si: 'ඇහිබැම බ්ලේඩින්', ta: 'புருவ பிளேடிங்' }, active: true },
+  { id: 'trt-smp', code: 'SMP', categoryId: 'cat-hair-care', name: 'Scalp Pigmentation', nameI18n: { en: 'Scalp Pigmentation (SMP)', si: 'හිස්කබල පිග්මන්ටේෂන්', ta: 'ஸ்கால்ப் பிக்மென்டேஷன்' }, active: true },
+  { id: 'trt-rfs', code: 'RFS', categoryId: 'cat-skin-care', name: 'RF Skin Tightening', nameI18n: { en: 'RF Skin Tightening', si: 'RF සම තද කිරීමේ ප්‍රතිකාරය', ta: 'RF தோல் இறுக்கம்' }, active: true },
+  { id: 'trt-co2', code: 'CO2', categoryId: 'cat-skin-care', name: 'CO2 Laser', nameI18n: { en: 'CO2 Fractional Laser', si: 'CO2 ලේසර් ප්‍රතිකාරය', ta: 'CO2 லேசர் சிகிச்சை' }, active: true },
+  { id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameI18n: { en: 'LED Light Therapy', si: 'LED ආලෝක ප්‍රතිකාරය', ta: 'LED ஒளி சிகிச்சை' }, active: true }
 ];
 
 export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [

@@ -86,6 +86,7 @@ interface CrmContextType {
   // Lead actions
   assignLead: (leadId: string, coordinatorId: string) => void;
   updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string) => void;
+  updateLeadTreatment: (leadId: string, treatmentId: string, customSerial?: string) => void;
   addLeadNote: (leadId: string, note: string) => void;
   
   // Messaging actions
@@ -379,6 +380,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             hydratedLeads.push({
               ...l,
+              serialNumber: l.serialNumber || undefined,
               assignedTo: l.assignedTo || undefined,
               stage: l.stage || 'new',
               customer: finalCust
@@ -572,6 +574,27 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return [incomingLead, ...prevLeads];
               }
               return prevLeads;
+            });
+            return;
+          }
+
+          if (data.type === 'LEAD_UPDATED') {
+            const { leadId: incomingLeadId, lead: incomingLead } = data;
+            setLeads(prevLeads => {
+              return prevLeads.map(l => {
+                if (l.id === incomingLeadId || (incomingLead && l.id === incomingLead.id)) {
+                  return {
+                    ...l,
+                    treatmentId: incomingLead?.treatmentId !== undefined ? incomingLead.treatmentId : l.treatmentId,
+                    categoryId: incomingLead?.categoryId !== undefined ? incomingLead.categoryId : l.categoryId,
+                    serialNumber: incomingLead?.serialNumber !== undefined ? incomingLead.serialNumber : l.serialNumber,
+                    stage: incomingLead?.stage !== undefined ? incomingLead.stage : l.stage,
+                    assignedTo: incomingLead?.assignedTo !== undefined ? (incomingLead.assignedTo || undefined) : l.assignedTo,
+                    updatedAt: new Date().toISOString()
+                  };
+                }
+                return l;
+              });
             });
             return;
           }
@@ -1117,6 +1140,66 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Audit log
     logAudit('STAGE_CHANGED', 'Lead', leadId, { stage: prevStage }, { stage: newStage, reason });
+  };
+
+  // Update lead treatment & generate/save serial number
+  const updateLeadTreatment = (leadId: string, treatmentId: string, customSerial?: string) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    const targetTreatment = treatments.find(t => t.id === treatmentId);
+    const categoryId = targetTreatment?.categoryId || targetLead.categoryId;
+
+    let finalSerialNumber = customSerial;
+    if (finalSerialNumber === undefined) {
+      if (targetTreatment?.code) {
+        const prefix = `${targetTreatment.code}-`;
+        let maxNum = 0;
+        leads.forEach(l => {
+          if (l.serialNumber && l.serialNumber.startsWith(prefix)) {
+            const numPart = parseInt(l.serialNumber.substring(prefix.length), 10);
+            if (!isNaN(numPart) && numPart > maxNum) {
+              maxNum = numPart;
+            }
+          }
+        });
+        const nextNum = String(maxNum + 1).padStart(3, '0');
+        finalSerialNumber = `${targetTreatment.code}-${nextNum}`;
+      } else {
+        finalSerialNumber = targetLead.serialNumber;
+      }
+    }
+
+    setLeads(prev => prev.map(l => {
+      if (l.id === leadId) {
+        return {
+          ...l,
+          treatmentId,
+          categoryId,
+          serialNumber: finalSerialNumber,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return l;
+    }));
+
+    // Sync to Supabase PostgreSQL backend in real-time
+    fetch(`${API_BASE_URL}/api/leads/update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({
+        leadId,
+        treatmentId,
+        categoryId,
+        serialNumber: finalSerialNumber
+      })
+    }).catch(err => console.warn('Could not sync lead treatment update to backend:', err));
+
+    notify('Treatment Updated', `Lead treatment set to ${targetTreatment?.name || 'Selected'} (${finalSerialNumber || 'No Serial'})`, 'success');
   };
 
   // Add internal note
@@ -1935,6 +2018,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedLead: resolvedSelectedLead,
     assignLead,
     updateLeadStage,
+    updateLeadTreatment,
     addLeadNote,
     sendMessage,
     replyingMessage,

@@ -527,6 +527,94 @@ class WhatsAppSessionManager {
       timestamp: timestampDate.toISOString(),
       source: eventSource,
     });
+
+    // Auto-Reply Concierge Engine evaluation
+    if (!isFromMe && messageText) {
+      try {
+        const autoReplyResult = await evaluateAutoReply({
+          senderPhone: canonicalPhone || rawSenderDigits,
+          messageText,
+          customer,
+          lead
+        });
+
+        if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
+          console.log(`🤖 [Auto-Reply] Dispatched to ${remoteJid}: "${autoReplyResult.replyText.slice(0, 50)}..."`);
+          
+          // Dispatch reply via Baileys socket if available
+          if (sessionCtx?.sock) {
+            await sessionCtx.sock.sendMessage(remoteJid, { text: autoReplyResult.replyText }).catch(err => {
+              console.warn('⚠️ Could not send socket message for auto-reply:', err.message);
+            });
+          }
+
+          const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;
+          const autoTimestamp = new Date();
+
+          // Save auto-reply message in database
+          if (prisma && getDbStatus() && lead?.id) {
+            await prisma.message.create({
+              data: {
+                id: autoMsgId,
+                leadId: lead.id,
+                customerId: customer?.id || lead.customerId,
+                whatsappSessionId: sessionCtx.sessionId || null,
+                coordinatorId: null,
+                direction: 'outbound',
+                senderType: 'ai',
+                content: autoReplyResult.replyText,
+                status: 'delivered',
+                timestamp: autoTimestamp
+              }
+            }).catch(e => console.warn('Could not save auto-reply message:', e.message));
+          }
+
+          // Emit SSE for outbound bot message
+          this.emitToCoordinator(targetCoordinator, {
+            type: 'OUTBOUND_WHATSAPP_MESSAGE',
+            messageId: autoMsgId,
+            leadId: lead?.id,
+            customerId: customer?.id,
+            whatsappSessionId: sessionCtx.sessionId,
+            coordinatorId: null,
+            phone: canonicalPhone || rawSenderDigits,
+            realPhone: canonicalPhone || null,
+            whatsappId: rawSenderDigits,
+            name: 'Royal Wellness Concierge',
+            text: autoReplyResult.replyText,
+            direction: 'outbound',
+            senderType: 'ai',
+            timestamp: autoTimestamp.toISOString(),
+            source: 'auto_reply'
+          });
+
+          // If lead attributes were updated (language, treatment, serialNumber), broadcast updated lead state
+          if (autoReplyResult.selectedLang || autoReplyResult.treatmentId || autoReplyResult.serialNumber) {
+            this.emitToCoordinator(null, {
+              type: 'LEAD_UPDATED',
+              leadId: lead?.id,
+              lead: {
+                id: lead?.id,
+                language: autoReplyResult.selectedLang || lead?.language,
+                treatmentId: autoReplyResult.treatmentId || lead?.treatmentId,
+                categoryId: autoReplyResult.categoryId || lead?.categoryId,
+                serialNumber: autoReplyResult.serialNumber || lead?.serialNumber,
+                stage: 'new'
+              },
+              customer: {
+                id: customer?.id,
+                preferredLanguage: autoReplyResult.selectedLang || customer?.preferredLanguage
+              }
+            });
+          }
+        }
+      } catch (autoErr) {
+        console.error('⚠️ [Auto-Reply Engine Error]:', autoErr);
+      }
+    } else if (isFromMe) {
+      // Coordinator is actively talking to customer -> pause auto-reply for this phone
+      pauseAutoReply(canonicalPhone || rawSenderDigits);
+    }
   }
 
   /**

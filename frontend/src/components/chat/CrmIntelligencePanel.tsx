@@ -18,7 +18,8 @@ import {
   Check,
   Copy,
   Search,
-  RotateCw
+  RotateCw,
+  Globe
 } from 'lucide-react';
 
 import { 
@@ -42,6 +43,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     assignLead, 
     updateLeadStage,
     updateLeadTreatment,
+    updateLeadLanguage,
     updateCustomer
   } = useCrm();
 
@@ -51,6 +53,9 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   const [copied, setCopied] = useState(false);
   const [phoneInput, setPhoneInput] = useState(lead.customer?.whatsappNumber || '');
   const [nameInput, setNameInput] = useState(lead.customer?.displayName || '');
+
+  // Current lead language
+  const currentLang = lead.language || lead.customer?.preferredLanguage || 'en';
 
   // Keep local inputs in sync with lead changes when not actively editing
   useEffect(() => {
@@ -341,6 +346,41 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             )}
           </div>
 
+        </div>
+
+        {/* Patient Preferred Language (Showcases customer language selection right above Assigned Coordinator) */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <Globe className="w-3 h-3 text-sky-400" /> Patient Preferred Language
+            </label>
+            <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 uppercase tracking-wider">
+              {currentLang.toUpperCase()}
+            </span>
+          </div>
+          <div className="grid grid-cols-3 gap-1.5">
+            {[
+              { code: 'en', label: 'English', short: 'EN' },
+              { code: 'si', label: 'සිංහල', short: 'SI' },
+              { code: 'ta', label: 'தமிழ்', short: 'TA' }
+            ].map((l) => {
+              const isSelected = currentLang === l.code;
+              return (
+                <button
+                  key={l.code}
+                  type="button"
+                  onClick={() => updateLeadLanguage(lead.id, l.code as 'en' | 'si' | 'ta')}
+                  className={`py-1.5 px-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1 border ${
+                    isSelected
+                      ? 'bg-sky-500/25 border-sky-400 text-sky-200 shadow-sm ring-1 ring-sky-500/40'
+                      : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                  }`}
+                >
+                  <span>{l.label}</span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         {/* Coordinator Assignment */}

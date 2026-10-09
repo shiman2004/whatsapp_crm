@@ -842,6 +842,28 @@ const server = http.createServer(async (req, res) => {
                   }
                 });
                 console.log(`✅ [Meta Send] Outbound message ${messageId} saved to database for Lead ${lead.id}`);
+
+                // Real-time Screen Sync across all Super Admins & Assigned Coordinators
+                broadcastScopedSSE(targetCoordinatorId || null, {
+                  type: 'OUTBOUND_WHATSAPP_MESSAGE',
+                  messageId,
+                  leadId: lead.id,
+                  customerId: cust.id,
+                  phone: formattedTo,
+                  realPhone: formattedTo,
+                  whatsappId: cleanTo,
+                  name: cust.displayName || 'Client',
+                  text: msgContent,
+                  media: media ? {
+                    type: media.type,
+                    url: savedMediaUrl || media.url,
+                    fileName: media.fileName || (media.type === 'audio' ? 'voice_note.mp3' : 'attachment')
+                  } : null,
+                  direction: 'outbound',
+                  senderType: 'coordinator',
+                  timestamp: new Date().toISOString(),
+                  source: 'live'
+                });
               }
             } catch (dbErr) {
               console.warn('[DB Error saving Meta message]:', dbErr.message);

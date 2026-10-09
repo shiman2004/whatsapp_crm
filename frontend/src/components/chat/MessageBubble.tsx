@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
+import { API_BASE_URL } from '../../config/api';
 import { MessageInfoModal } from './MessageInfoModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { MessageMetaAiModal } from './MessageMetaAiModal';
@@ -234,16 +235,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           )}
 
           {/* Rich Media Attachment (Image, Video, Audio, Document) */}
-          {/* Rich Media Attachment (Image, Video, Audio, Document) */}
-          {message.media && (
+          {message.media && message.media.url && (() => {
+            const rawUrl = message.media.url;
+            const mediaUrl = rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl;
+            return (
             <div className="mb-1 rounded-lg overflow-hidden">
-              {message.media.type === 'image' || message.media.url.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) ? (
+              {message.media.type === 'image' || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) ? (
                 <div 
                   className="relative group/media cursor-pointer rounded-lg overflow-hidden bg-black/20"
-                  onClick={() => setLightboxUrl(message.media?.url || null)}
+                  onClick={() => setLightboxUrl(mediaUrl)}
                 >
                   <img 
-                    src={message.media.url} 
+                    src={mediaUrl} 
                     alt={message.media.fileName || 'Photo'} 
                     className="w-full max-h-80 object-cover rounded-lg hover:brightness-95 transition-all"
                   />
@@ -251,25 +254,25 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                     <Maximize2 className="w-6 h-6 text-white drop-shadow-lg" />
                   </div>
                 </div>
-              ) : message.media.type === 'video' || message.media.url.match(/\.(mp4|webm|mov)($|\?)/i) ? (
+              ) : message.media.type === 'video' || mediaUrl.match(/\.(mp4|webm|mov)($|\?)/i) ? (
                 <div className="relative rounded-lg overflow-hidden bg-black/40">
                   <video 
-                    src={message.media.url} 
+                    src={mediaUrl} 
                     controls 
                     playsInline 
                     className="w-full max-h-80 rounded-lg"
                   />
                 </div>
-              ) : (message.media.type === 'audio' || message.media.url.match(/\.(ogg|mp3|wav|m4a|aac)($|\?)/i)) ? (
+              ) : (message.media.type === 'audio' || mediaUrl.match(/\.(ogg|mp3|wav|m4a|aac)($|\?)/i)) ? (
                 <WhatsAppVoiceNotePlayer 
-                  message={message}
+                  message={{ ...message, media: { ...message.media, url: mediaUrl } }}
                   senderName={isOutbound ? currentUser.fullName : (lead?.customer?.displayName || 'Customer')}
                   senderAvatar={isOutbound ? currentUser.avatar : lead?.customer?.avatarUrl}
                   isOutbound={isOutbound}
                 />
               ) : (
                 <a 
-                  href={message.media.url} 
+                  href={mediaUrl} 
                   target="_blank" 
                   rel="noopener noreferrer" 
                   download={message.media.fileName || 'document'}
@@ -286,7 +289,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 </a>
               )}
             </div>
-          )}
+            );
+          })()}
 
           {/* Message Content & Inline Timestamp (WhatsApp Web 1:1 format) - Suppress if standalone voice note */}
           {(!message.media || message.media.type !== 'audio' || (message.content && message.content !== 'Voice note' && message.content.trim().length > 0)) && (

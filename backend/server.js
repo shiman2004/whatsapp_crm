@@ -84,6 +84,158 @@ function logWaSessionDebug(endpoint, authUser, targetCoordinatorId, sessionCtx, 
 }
 
 /**
+ * Save Base64 or DataURL media to local storage (/uploads/)
+ */
+function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) {
+  if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl ? { mediaUrl: dataUrl, buffer: null, mimeType: '', fileName: customFilename } : null;
+  try {
+    const [mimePart, base64Part] = dataUrl.split(';base64,');
+    const mimeType = mimePart.replace('data:', '');
+    const buffer = Buffer.from(base64Part, 'base64');
+    let ext = 'bin';
+    if (customFilename && customFilename.includes('.')) {
+      ext = customFilename.split('.').pop();
+    } else if (type === 'image' || mimeType.includes('image/')) {
+      ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
+    } else if (type === 'audio' || mimeType.includes('audio/')) {
+      ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : 'ogg';
+    } else if (type === 'video' || mimeType.includes('video/')) {
+      ext = 'mp4';
+    } else if (mimeType.includes('pdf')) {
+      ext = 'pdf';
+    }
+
+    const fileName = `out_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const filePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    console.log(`💾 [Media Stored] Saved to: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB)`);
+    return {
+      mediaUrl: `/uploads/${fileName}`,
+      buffer,
+      mimeType,
+      fileName: customFilename || fileName
+    };
+  } catch (err) {
+    console.warn('⚠️ Error saving base64 media locally:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Download Media from Meta Cloud API Graph endpoint to /uploads/
+ */
+async function downloadMetaMedia(mediaId, metaToken, mimeType = '', customFilename = null) {
+  if (!mediaId || !metaToken) return null;
+  try {
+    const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+      headers: { 'Authorization': `Bearer ${metaToken}` }
+    });
+    if (!metaRes.ok) {
+      console.warn(`⚠️ Meta Media fetch failed for ID ${mediaId}:`, await metaRes.text().catch(() => ''));
+      return null;
+    }
+    const metaData = await metaRes.json().catch(() => ({}));
+    const downloadUrl = metaData.url;
+    const mediaMime = metaData.mime_type || mimeType || '';
+
+    if (!downloadUrl) return null;
+
+    const binRes = await fetch(downloadUrl, {
+      headers: { 'Authorization': `Bearer ${metaToken}` }
+    });
+    if (!binRes.ok) return null;
+
+    const arrayBuffer = await binRes.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+
+    let ext = 'bin';
+    if (customFilename && customFilename.includes('.')) {
+      ext = customFilename.split('.').pop();
+    } else if (mediaMime.includes('image/jpeg') || mediaMime.includes('image/jpg')) {
+      ext = 'jpg';
+    } else if (mediaMime.includes('image/png')) {
+      ext = 'png';
+    } else if (mediaMime.includes('image/webp')) {
+      ext = 'webp';
+    } else if (mediaMime.includes('audio/ogg') || mediaMime.includes('opus')) {
+      ext = 'ogg';
+    } else if (mediaMime.includes('audio/mp4') || mediaMime.includes('audio/m4a') || mediaMime.includes('audio/aac')) {
+      ext = 'm4a';
+    } else if (mediaMime.includes('audio/mpeg') || mediaMime.includes('audio/mp3')) {
+      ext = 'mp3';
+    } else if (mediaMime.includes('video/mp4')) {
+      ext = 'mp4';
+    } else if (mediaMime.includes('pdf')) {
+      ext = 'pdf';
+    } else if (mediaMime.includes('word') || mediaMime.includes('document')) {
+      ext = 'docx';
+    }
+
+    const fileName = `meta_${mediaId}_${Date.now()}.${ext}`;
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    const filePath = path.join(uploadDir, fileName);
+    fs.writeFileSync(filePath, buffer);
+    console.log(`📥 [Meta Media Downloaded] File saved to: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB)`);
+    return `/uploads/${fileName}`;
+  } catch (err) {
+    console.error('❌ Error downloading Meta media:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Upload Media Buffer to Meta Cloud API to obtain media ID for dispatching
+ */
+async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
+  try {
+    const boundary = '----WebKitFormBoundary' + crypto.randomBytes(16).toString('hex');
+    const header = Buffer.from(
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="file"; filename="${filename || 'file.bin'}"\r\n` +
+      `Content-Type: ${mimeType || 'application/octet-stream'}\r\n\r\n`
+    );
+    const middle = Buffer.from(
+      `\r\n--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="type"\r\n\r\n` +
+      `${mimeType || 'application/octet-stream'}\r\n` +
+      `--${boundary}\r\n` +
+      `Content-Disposition: form-data; name="messaging_product"\r\n\r\n` +
+      `whatsapp\r\n` +
+      `--${boundary}--\r\n`
+    );
+
+    const payload = Buffer.concat([header, buffer, middle]);
+
+    const res = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/media`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${metaToken}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`
+      },
+      body: payload
+    });
+    const data = await res.json().catch(() => ({}));
+    if (res.ok && data.id) {
+      console.log(`📤 [Meta Media Uploaded] Media ID: ${data.id}`);
+      return data.id;
+    } else {
+      console.warn('⚠️ Meta Media Upload response:', JSON.stringify(data));
+      return null;
+    }
+  } catch (e) {
+    console.error('❌ Error uploading to Meta Media API:', e.message);
+    return null;
+  }
+}
+
+/**
  * Helper: Resolve and Authenticate CRM User from request
  */
 async function authenticateRequest(req, parsedUrl) {
@@ -208,6 +360,39 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ error: 'File not found' }));
       return;
     }
+  }
+
+  // 0a. File Upload Endpoint (Base64 or DataURL upload for Images, Audio, Voice Notes, PDFs)
+  if (req.method === 'POST' && pathname === '/api/upload') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const dataUrl = payload.dataUrl || payload.url || payload.base64 || '';
+        const type = payload.type || 'document';
+        const fileName = payload.fileName || payload.filename || null;
+
+        if (!dataUrl) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing dataUrl payload' }));
+          return;
+        }
+
+        const saved = saveBase64MediaLocally(dataUrl, type, fileName);
+        if (saved && saved.mediaUrl) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, url: saved.mediaUrl, mediaUrl: saved.mediaUrl, type, fileName: saved.fileName }));
+        } else {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Could not process media upload' }));
+        }
+      } catch (e) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: e.message }));
+      }
+    });
+    return;
   }
 
   // 0b. User Login & Token Issuer Endpoint
@@ -465,21 +650,81 @@ const server = http.createServer(async (req, res) => {
           cleanTo = '94' + cleanTo;
         }
 
+        let savedMediaUrl = null;
+        let localMediaInfo = null;
+
+        if (media && (media.dataUrl || media.url)) {
+          const rawUrl = media.dataUrl || media.url;
+          if (rawUrl.startsWith('data:')) {
+            localMediaInfo = saveBase64MediaLocally(rawUrl, media.type, media.fileName);
+            if (localMediaInfo) {
+              savedMediaUrl = localMediaInfo.mediaUrl;
+            }
+          } else if (rawUrl.startsWith('/uploads/')) {
+            savedMediaUrl = rawUrl;
+          }
+        }
+
         if (metaToken) {
           console.log(`🚀 [Meta Graph API] Dispatching message to ${cleanTo} via Phone ID ${phoneId}...`);
+          let metaPayload = null;
+
+          if (media && localMediaInfo) {
+            const metaMediaId = await uploadMetaMedia(phoneId, metaToken, localMediaInfo.buffer, localMediaInfo.mimeType, localMediaInfo.fileName);
+            if (metaMediaId) {
+              if (media.type === 'image') {
+                metaPayload = {
+                  messaging_product: 'whatsapp',
+                  recipient_type: 'individual',
+                  to: cleanTo,
+                  type: 'image',
+                  image: { id: metaMediaId, caption: msgContent || undefined }
+                };
+              } else if (media.type === 'audio') {
+                metaPayload = {
+                  messaging_product: 'whatsapp',
+                  recipient_type: 'individual',
+                  to: cleanTo,
+                  type: 'audio',
+                  audio: { id: metaMediaId }
+                };
+              } else if (media.type === 'video') {
+                metaPayload = {
+                  messaging_product: 'whatsapp',
+                  recipient_type: 'individual',
+                  to: cleanTo,
+                  type: 'video',
+                  video: { id: metaMediaId, caption: msgContent || undefined }
+                };
+              } else {
+                metaPayload = {
+                  messaging_product: 'whatsapp',
+                  recipient_type: 'individual',
+                  to: cleanTo,
+                  type: 'document',
+                  document: { id: metaMediaId, filename: media.fileName || 'document.pdf', caption: msgContent || undefined }
+                };
+              }
+            }
+          }
+
+          if (!metaPayload) {
+            metaPayload = {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: cleanTo,
+              type: 'text',
+              text: { body: msgContent || (media ? `[${media.type?.toUpperCase()} Attachment]` : '') }
+            };
+          }
+
           const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
             method: 'POST',
             headers: {
               'Authorization': `Bearer ${metaToken}`,
               'Content-Type': 'application/json'
             },
-            body: JSON.stringify({
-              messaging_product: 'whatsapp',
-              recipient_type: 'individual',
-              to: cleanTo,
-              type: 'text',
-              text: { body: msgContent }
-            })
+            body: JSON.stringify(metaPayload)
           });
           const metaData = await metaRes.json().catch(() => ({}));
           if (!metaRes.ok) {
@@ -562,7 +807,9 @@ const server = http.createServer(async (req, res) => {
                   where: { id: messageId },
                   update: {
                     status: 'sent',
-                    content: msgContent || (media ? `[${media.type.toUpperCase()}]` : '')
+                    content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
+                    mediaType: media ? media.type : null,
+                    mediaUrl: savedMediaUrl || null,
                   },
                   create: {
                     id: messageId,
@@ -572,10 +819,11 @@ const server = http.createServer(async (req, res) => {
                     coordinatorId: validCoordinatorId,
                     direction: 'outbound',
                     senderType: 'coordinator',
-                    content: msgContent || (media ? `[${media.type.toUpperCase()}]` : ''),
+                    content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
                     status: 'sent',
                     timestamp: new Date(),
                     mediaType: media ? media.type : null,
+                    mediaUrl: savedMediaUrl || null,
                   }
                 });
                 console.log(`✅ [Meta Send] Outbound message ${messageId} saved to database for Lead ${lead.id}`);
@@ -583,6 +831,7 @@ const server = http.createServer(async (req, res) => {
             } catch (dbErr) {
               console.warn('[DB Error saving Meta message]:', dbErr.message);
             }
+          }
           }
         } else if (isBaileysConnected) {
           logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
@@ -1284,8 +1533,37 @@ const server = http.createServer(async (req, res) => {
                     if (message) {
                       const phone = contact?.wa_id || message.from;
                       const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
-                      const text = message.text?.body || message.button?.text || (message.type ? `[${message.type.toUpperCase()} Message]` : '[Media Message]');
+                      const msgType = message.type || 'text';
                       const messageId = message.id;
+
+                      let mediaType = null;
+                      let mediaUrl = null;
+                      let mediaFileName = null;
+                      let text = message.text?.body || message.button?.text || '';
+
+                      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+
+                      if (['image', 'audio', 'voice', 'video', 'document'].includes(msgType)) {
+                        mediaType = msgType === 'voice' ? 'audio' : msgType;
+                        const mediaObj = message.image || message.audio || message.voice || message.video || message.document;
+                        const mediaId = mediaObj?.id;
+                        const mimeType = mediaObj?.mime_type || '';
+                        mediaFileName = mediaObj?.filename || null;
+
+                        if (mediaObj?.caption) {
+                          text = mediaObj.caption;
+                        } else if (!text) {
+                          text = mediaFileName || (mediaType === 'audio' ? 'Voice note' : `[${mediaType.toUpperCase()}]`);
+                        }
+
+                        if (mediaId && metaToken) {
+                          mediaUrl = await downloadMetaMedia(mediaId, metaToken, mimeType, mediaFileName);
+                        }
+                      }
+
+                      if (!text && !mediaType) {
+                        text = '[Message]';
+                      }
 
                       let savedLeadId = null;
                       let savedCustomerId = null;
@@ -1372,11 +1650,13 @@ const server = http.createServer(async (req, res) => {
 
                           savedLeadId = lead?.id || null;
 
-                          // 3. Save Message to DB
+                          // 3. Save Message to DB with Media Details
                           await prisma.message.upsert({
                             where: { id: messageId },
                             update: {
                               content: text,
+                              mediaType: mediaType || undefined,
+                              mediaUrl: mediaUrl || undefined,
                               status: 'delivered'
                             },
                             create: {
@@ -1387,17 +1667,19 @@ const server = http.createServer(async (req, res) => {
                               senderType: 'customer',
                               content: text,
                               status: 'delivered',
+                              mediaType: mediaType || null,
+                              mediaUrl: mediaUrl || null,
                               whatsappSessionId: null,
                               timestamp: new Date()
                             }
                           });
-                          console.log(`✅ [Meta Webhook] Inbound message saved to DB: ID ${messageId}, Lead ${lead.id}`);
+                          console.log(`✅ [Meta Webhook] Inbound message saved to DB: ID ${messageId}, Lead ${lead.id}, Media: ${mediaType || 'none'}`);
                         } catch (e) {
                           console.warn('[DB Error saving inbound Meta message]:', e.message);
                         }
                       }
 
-                      // 4. Broadcast SSE with DB Lead and Customer IDs
+                      // 4. Broadcast SSE with DB Lead, Customer IDs and Media
                       broadcastScopedSSE(null, {
                         type: 'INBOUND_WHATSAPP_MESSAGE',
                         phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
@@ -1405,6 +1687,11 @@ const server = http.createServer(async (req, res) => {
                         realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
                         name,
                         text,
+                        media: mediaType ? {
+                          type: mediaType,
+                          url: mediaUrl,
+                          fileName: mediaFileName || (mediaType === 'audio' ? 'Voice Note' : 'Attachment')
+                        } : null,
                         messageId,
                         leadId: savedLeadId,
                         customerId: savedCustomerId,

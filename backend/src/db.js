@@ -41,6 +41,7 @@ export const checkDbConnection = async () => {
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ALTER COLUMN "categoryId" DROP NOT NULL;`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ALTER COLUMN "treatmentId" DROP NOT NULL;`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "source" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
 
     // Ensure LeadStage enum has all required values in Postgres
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'new';`).catch(() => null);

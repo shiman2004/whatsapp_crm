@@ -28,6 +28,7 @@ import { AddContactModal } from './AddContactModal';
 
 interface WhatsAppChatListProps {
   onSelectLead: (leadId: string) => void;
+  className?: string;
 }
 
 export const PRESET_LABELS = [
@@ -38,7 +39,7 @@ export const PRESET_LABELS = [
   { id: 'prescription', name: 'Prescription Sent', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', dot: 'bg-purple-400' }
 ];
 
-export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead }) => {
+export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead, className = '' }) => {
   const { 
     leads, 
     messages, 
@@ -323,7 +324,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const activeContextMenuLead = leads.find(l => l.id === contextMenuLeadId);
 
   return (
-    <div className="w-80 sm:w-96 md:w-[380px] bg-[#111b21] border-r border-[#222e35] flex flex-col h-full select-none shrink-0">
+    <div className={`w-full md:w-80 lg:w-[380px] bg-[#111b21] border-r border-[#222e35] flex flex-col h-full select-none shrink-0 ${className}`}>
       
       {/* 1. Header (Exact WhatsApp Web Title Bar) */}
       <div className="h-14 px-4 bg-[#202c33] flex items-center justify-between shrink-0">

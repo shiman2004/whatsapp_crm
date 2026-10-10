@@ -2,6 +2,7 @@ import React from 'react';
 import { Lead } from '../../types';
 import { StageBadge } from './StageBadge';
 import { useCrm } from '../../context/CrmContext';
+import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { 
   ChevronRight, 
   Sparkles, 
@@ -67,7 +68,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
                           className="w-8 h-8 rounded-full object-cover border border-slate-700"
                         />
                         <div>
-                          <p className="font-bold text-slate-100">{lead.customer?.displayName}</p>
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-bold text-slate-100">{lead.customer?.displayName}</p>
+                            <CompanyTagBadge lead={lead} size="xs" />
+                          </div>
                           <p className="text-[10px] text-slate-400 font-mono">{lead.customer?.whatsappNumber}</p>
                         </div>
                       </div>

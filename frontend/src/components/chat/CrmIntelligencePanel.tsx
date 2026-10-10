@@ -136,6 +136,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     setIsEditingName(false);
   };
 
+  const isCras = lead.company === 'CRAS';
+
   const handleSelectTreatment = (trt: Treatment | null) => {
     if (!trt) {
       // Unset treatment and clear serial
@@ -145,7 +147,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       return;
     }
 
-    const prefix = `${trt.code || 'TRT'}-`;
+    const defaultPrefix = isCras ? 'CRS' : 'TRT';
+    const prefix = `${trt.code || defaultPrefix}-`;
     let maxNum = 0;
     leads.forEach(l => {
       if (l.id !== lead.id && l.serialNumber && l.serialNumber.startsWith(prefix)) {
@@ -156,7 +159,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       }
     });
     const nextNum = String(maxNum + 1).padStart(3, '0');
-    const nextSerial = `${trt.code || 'TRT'}-${nextNum}`;
+    const nextSerial = `${trt.code || defaultPrefix}-${nextNum}`;
     updateLeadTreatment(lead.id, trt.id, nextSerial);
     setTreatmentDropdownOpen(false);
     setTreatmentSearchQuery('');
@@ -165,7 +168,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   const handleRegenerateSerial = () => {
     if (!currentTreatment) return;
     setIsRegeneratingSerial(true);
-    const prefix = `${currentTreatment.code || 'TRT'}-`;
+    const defaultPrefix = isCras ? 'CRS' : 'TRT';
+    const prefix = `${currentTreatment.code || defaultPrefix}-`;
     let maxNum = 0;
     leads.forEach(l => {
       if (l.id !== lead.id && l.serialNumber && l.serialNumber.startsWith(prefix)) {
@@ -176,12 +180,14 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       }
     });
     const nextNum = String(maxNum + 1).padStart(3, '0');
-    const nextSerial = `${currentTreatment.code || 'TRT'}-${nextNum}`;
+    const nextSerial = `${currentTreatment.code || defaultPrefix}-${nextNum}`;
     updateLeadTreatment(lead.id, currentTreatment.id, nextSerial);
     setTimeout(() => setIsRegeneratingSerial(false), 500);
   };
 
-  const filteredTreatments = treatments.filter(t => {
+  const availableItems = treatments.filter(t => isCras ? t.company === 'CRAS' : t.company !== 'CRAS');
+
+  const filteredTreatments = availableItems.filter(t => {
     const q = treatmentSearchQuery.toLowerCase().trim();
     if (!q) return true;
     return (
@@ -456,39 +462,51 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           )}
         </div>
 
-        {/* Treatment Type & Serial Number Widget (Placed between Assigned Coordinator & Lead Stage) */}
-        <div className="grid grid-cols-12 gap-2 bg-[#111b21] p-2.5 rounded-xl border border-teal-500/30 shadow-sm relative">
+        {/* Treatment / Course Type & Serial Number Widget (Placed between Assigned Coordinator & Lead Stage) */}
+        <div className={`grid grid-cols-12 gap-2 bg-[#111b21] p-2.5 rounded-xl border shadow-sm relative ${
+          isCras ? 'border-rose-500/30' : 'border-teal-500/30'
+        }`}>
           
-          {/* Treatment Type Column (7 cols) */}
+          {/* Treatment / Course Type Column (7 cols) */}
           <div className="col-span-7 space-y-1 relative" ref={dropdownRef}>
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Treatment Type <span className="text-amber-400">*</span>
+              {isCras ? 'Course Type' : 'Treatment Type'} <span className="text-amber-400">*</span>
             </label>
             
             {/* Treatment Selector Dropdown Button */}
             <button
               type="button"
               onClick={() => setTreatmentDropdownOpen(!treatmentDropdownOpen)}
-              className="w-full bg-[#202c33] border border-teal-500/50 hover:border-teal-400 rounded-lg px-2 py-1.5 text-[11px] font-bold text-teal-200 text-left flex items-center justify-between gap-1 transition-colors shadow-inner"
+              className={`w-full bg-[#202c33] border rounded-lg px-2 py-1.5 text-[11px] font-bold text-left flex items-center justify-between gap-1 transition-colors shadow-inner ${
+                isCras 
+                  ? 'border-rose-500/50 hover:border-rose-400 text-rose-200' 
+                  : 'border-teal-500/50 hover:border-teal-400 text-teal-200'
+              }`}
             >
               <span className="truncate">
-                {currentTreatment ? `${currentTreatment.code || 'TRT'} - ${currentTreatment.name}` : 'Select Treatment'}
+                {currentTreatment 
+                  ? `${currentTreatment.code || (isCras ? 'CRS' : 'TRT')} - ${currentTreatment.name}` 
+                  : (isCras ? 'Select Course' : 'Select Treatment')}
               </span>
-              <ChevronDown className={`w-3.5 h-3.5 text-teal-400 shrink-0 transition-transform ${treatmentDropdownOpen ? 'rotate-180' : ''}`} />
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform ${
+                isCras ? 'text-rose-400' : 'text-teal-400'
+              } ${treatmentDropdownOpen ? 'rotate-180' : ''}`} />
             </button>
 
             {/* Searchable Dropdown Popup */}
             {treatmentDropdownOpen && (
-              <div className="absolute left-0 top-full mt-1 w-72 bg-[#182229] border border-teal-500/50 rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-64 animate-in fade-in zoom-in-95 duration-100">
+              <div className={`absolute left-0 top-full mt-1 w-72 bg-[#182229] border rounded-xl shadow-2xl z-50 overflow-hidden flex flex-col max-h-64 animate-in fade-in zoom-in-95 duration-100 ${
+                isCras ? 'border-rose-500/50' : 'border-teal-500/50'
+              }`}>
                 {/* Search Input Bar */}
                 <div className="p-2 border-b border-slate-700/80 bg-[#111b21] flex items-center gap-1.5 shrink-0">
-                  <Search className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                  <Search className={`w-3.5 h-3.5 shrink-0 ${isCras ? 'text-rose-400' : 'text-teal-400'}`} />
                   <input
                     ref={searchInputRef}
                     type="text"
                     value={treatmentSearchQuery}
                     onChange={(e) => setTreatmentSearchQuery(e.target.value)}
-                    placeholder="Search 24 treatments..."
+                    placeholder={isCras ? "Search 15 courses..." : "Search 24 treatments..."}
                     className="w-full bg-transparent text-xs text-white placeholder-slate-400 outline-none font-medium"
                   />
                   {treatmentSearchQuery && (
@@ -498,7 +516,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   )}
                 </div>
 
-                {/* Treatments List */}
+                {/* Treatments / Courses List */}
                 <div className="overflow-y-auto flex-1 p-1 space-y-0.5 custom-scrollbar">
                   {/* Default Unselect Option */}
                   <button
@@ -506,17 +524,17 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                     onClick={() => handleSelectTreatment(null)}
                     className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
                       !lead.treatmentId 
-                        ? 'bg-teal-600/30 text-teal-300 font-bold border border-teal-500/40' 
+                        ? (isCras ? 'bg-rose-600/30 text-rose-300 font-bold border border-rose-500/40' : 'bg-teal-600/30 text-teal-300 font-bold border border-teal-500/40') 
                         : 'text-slate-400 hover:bg-[#202c33] hover:text-slate-200'
                     }`}
                   >
-                    <span>-- Select Treatment --</span>
-                    {!lead.treatmentId && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0 ml-1" />}
+                    <span>{isCras ? '-- Select Course --' : '-- Select Treatment --'}</span>
+                    {!lead.treatmentId && <Check className={`w-3.5 h-3.5 shrink-0 ml-1 ${isCras ? 'text-rose-400' : 'text-teal-400'}`} />}
                   </button>
 
                   {filteredTreatments.length === 0 ? (
                     <div className="px-3 py-3 text-center text-xs text-slate-400">
-                      No treatments match "{treatmentSearchQuery}"
+                      {isCras ? `No courses match "${treatmentSearchQuery}"` : `No treatments match "${treatmentSearchQuery}"`}
                     </div>
                   ) : (
                     filteredTreatments.map((t) => {
@@ -528,17 +546,19 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                           onClick={() => handleSelectTreatment(t)}
                           className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between transition-colors ${
                             isSelected 
-                              ? 'bg-teal-600/30 text-teal-300 font-bold border border-teal-500/40' 
+                              ? (isCras ? 'bg-rose-600/30 text-rose-300 font-bold border border-rose-500/40' : 'bg-teal-600/30 text-teal-300 font-bold border border-teal-500/40') 
                               : 'text-slate-200 hover:bg-[#202c33] hover:text-white'
                           }`}
                         >
                           <div className="flex items-center gap-1.5 truncate">
-                            <span className="font-mono text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-teal-300 border border-slate-700 shrink-0">
-                              {t.code || 'TRT'}
+                            <span className={`font-mono text-[10px] px-1.5 py-0.5 rounded border shrink-0 ${
+                              isCras ? 'bg-rose-950/60 text-rose-300 border-rose-800/60' : 'bg-slate-800 text-teal-300 border-slate-700'
+                            }`}>
+                              {t.code || (isCras ? 'CRS' : 'TRT')}
                             </span>
                             <span className="truncate">{t.name}</span>
                           </div>
-                          {isSelected && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0 ml-1" />}
+                          {isSelected && <Check className={`w-3.5 h-3.5 shrink-0 ml-1 ${isCras ? 'text-rose-400' : 'text-teal-400'}`} />}
                         </button>
                       );
                     })
@@ -556,9 +576,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             <div className="flex items-center gap-1">
               <div 
                 className={`flex-1 bg-[#202c33] border border-slate-700 rounded-lg px-2 py-1.5 text-xs font-mono font-bold tracking-wider text-center select-all truncate shadow-inner ${
-                  currentTreatment ? 'text-teal-300' : 'text-slate-500'
+                  currentTreatment 
+                    ? (isCras ? 'text-rose-300' : 'text-teal-300')
+                    : 'text-slate-500'
                 }`}
-                title={currentTreatment ? "Auto-generated unique serial number" : "Please select a treatment first"}
+                title={currentTreatment ? `Auto-generated unique ${isCras ? 'course ' : ''}serial number` : `Please select a ${isCras ? 'course' : 'treatment'} first`}
               >
                 {currentTreatment ? currentSerial : '---'}
               </div>
@@ -568,12 +590,14 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 disabled={!currentTreatment || isRegeneratingSerial}
                 className={`p-1.5 rounded-lg transition-all border ${
                   currentTreatment 
-                    ? 'bg-teal-600/20 hover:bg-teal-600/40 active:bg-teal-600/60 border-teal-500/40 text-teal-300' 
+                    ? (isCras 
+                        ? 'bg-rose-600/20 hover:bg-rose-600/40 active:bg-rose-600/60 border-rose-500/40 text-rose-300' 
+                        : 'bg-teal-600/20 hover:bg-teal-600/40 active:bg-teal-600/60 border-teal-500/40 text-teal-300') 
                     : 'bg-slate-800/50 border-slate-800 text-slate-600 cursor-not-allowed'
                 }`}
-                title={currentTreatment ? "Regenerate next serial number" : "Select a treatment first"}
+                title={currentTreatment ? "Regenerate next serial number" : `Select a ${isCras ? 'course' : 'treatment'} first`}
               >
-                <RotateCw className={`w-3.5 h-3.5 ${isRegeneratingSerial ? 'animate-spin text-teal-200' : ''}`} />
+                <RotateCw className={`w-3.5 h-3.5 ${isRegeneratingSerial ? (isCras ? 'animate-spin text-rose-200' : 'animate-spin text-teal-200') : ''}`} />
               </button>
             </div>
           </div>

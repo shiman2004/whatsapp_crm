@@ -30,7 +30,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
             <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
               <th className="py-3 px-4">Patient / Contact</th>
               <th className="py-3 px-4">Language</th>
-              <th className="py-3 px-4">Treatment Required</th>
+              <th className="py-3 px-4">Treatment / Course</th>
               <th className="py-3 px-4">Stage</th>
               <th className="py-3 px-4">Assigned Coordinator</th>
               <th className="py-3 px-4">Inquiry Time</th>
@@ -50,6 +50,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
                 const treatment = treatments.find(t => t.id === lead.treatmentId);
                 const coordinator = users.find(u => u.id === lead.assignedTo);
                 const isSelected = selectedLeadId === lead.id;
+                const isCras = lead.company === 'CRAS';
 
                 return (
                   <tr
@@ -84,10 +85,23 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
                       </span>
                     </td>
 
-                    {/* Treatment */}
+                    {/* Treatment / Course */}
                     <td className="py-3 px-4">
                       <div>
-                        <p className="font-semibold text-teal-400">{treatment?.name || category?.name}</p>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <p className={`font-semibold ${isCras ? 'text-rose-400' : 'text-teal-400'}`}>
+                            {treatment?.name || category?.name || (isCras ? 'Course Not Selected' : 'Treatment Not Selected')}
+                          </p>
+                          {lead.serialNumber && (
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                              isCras 
+                                ? 'bg-rose-950/60 text-rose-300 border-rose-500/40' 
+                                : 'bg-teal-950/60 text-teal-300 border-teal-500/40'
+                            }`}>
+                              #{lead.serialNumber}
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[10px] text-slate-400">{category?.name}</p>
                       </div>
                     </td>

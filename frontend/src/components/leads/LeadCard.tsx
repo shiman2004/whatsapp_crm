@@ -109,14 +109,27 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         </div>
       </div>
 
-      {/* Middle row: Treatment Category & Specific Service */}
+      {/* Middle row: Treatment Category & Specific Service / Course */}
       <div className="mt-2.5 pt-2 border-t border-slate-800/70">
-        <div className="flex items-center gap-1 text-[11px] font-medium text-teal-400">
-          <Sparkles className="w-3 h-3 shrink-0 text-teal-500" />
-          <span className="truncate">{treatment?.name || category?.name || 'General Inquiry'}</span>
+        <div className="flex items-center justify-between gap-1 text-[11px] font-medium">
+          <div className="flex items-center gap-1 min-w-0">
+            <Sparkles className={`w-3 h-3 shrink-0 ${lead.company === 'CRAS' ? 'text-rose-400' : 'text-teal-500'}`} />
+            <span className={`truncate ${lead.company === 'CRAS' ? 'text-rose-300' : 'text-teal-400'}`}>
+              {treatment?.name || category?.name || (lead.company === 'CRAS' ? 'General Course Inquiry' : 'General Inquiry')}
+            </span>
+          </div>
+          {lead.serialNumber && (
+            <span className={`font-mono text-[9px] px-1.5 py-0.5 rounded border shrink-0 font-bold ${
+              lead.company === 'CRAS' 
+                ? 'bg-rose-950/60 text-rose-300 border-rose-800/60' 
+                : 'bg-slate-800 text-teal-300 border-slate-700'
+            }`}>
+              {lead.serialNumber}
+            </span>
+          )}
         </div>
         <p className="text-[10px] text-slate-400 truncate mt-0.5">
-          {category?.name}
+          {category?.name || (lead.company === 'CRAS' ? 'CRAS Academic Programs' : '')}
         </p>
       </div>
 

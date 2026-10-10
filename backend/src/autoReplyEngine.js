@@ -37,29 +37,16 @@ Royal Wellness Center තෝරාගැනීම පිළිබඳව ඔබ�
 
 Royal Wellness Center-ஐத் தேர்ந்தெடுத்ததற்கு நன்றி! 💙`;
 
-// The Single Trilingual Greeting Message for College of Royal Aesthetic of Sri Lanka (CRAS)
-export const CRAS_TRILINGUAL_GREETING_MESSAGE = 
+// The Single English Greeting Message for College of Royal Aesthetic of Sri Lanka (CRAS)
+export const CRAS_GREETING_MESSAGE = 
 `✨ *Welcome to College of Royal Aesthetic of Sri Lanka (CRAS)!*
 
 We are delighted to assist you with our clinical aesthetic medicine and dermatology training programs. Our academic coordinator will contact you shortly to assist you further.
 
-Thank you for choosing College of Royal Aesthetic of Sri Lanka! 🎓
+Thank you for choosing College of Royal Aesthetic of Sri Lanka! 🎓`;
 
-━━━━━━━━━━━━━━
-
-✨ *College of Royal Aesthetic of Sri Lanka (CRAS) වෙත සාදරයෙන් පිළිගනිමු!*
-
-අපගේ සායනික සෞන්දර්ය වෛද්‍ය සහ චර්ම රෝග පුහුණු පාඨමාලා පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වෙමු. අපගේ සම්බන්ධීකාරකවරයා ඉක්මනින් ඔබව සම්බන්ධ කරගනු ඇත.
-
-College of Royal Aesthetic of Sri Lanka තෝරාගැනීම පිළිබඳව ඔබට ස්තුතියි! 🎓
-
-━━━━━━━━━━━━━━
-
-✨ *College of Royal Aesthetic of Sri Lanka (CRAS)-க்கு உங்களை அன்புடன் வரவேற்கிறோம்!*
-
-எங்களின் மருத்துவ அழகியல் மற்றும் தோல் சிகிச்சை பயிற்சிகள் தொடர்பாக உங்களுக்கு உதவுவதில் மகிழ்ச்சியடைகிறோம். எங்கள் கல்வி ஒருங்கிணைப்பாளர் விரைவில் உங்களைத் தொடர்புகொள்வார்.
-
-College of Royal Aesthetic of Sri Lanka-ஐத் தேர்ந்தெடுத்ததற்கு நன்றி! 🎓`;
+// Compatibility export
+export const CRAS_TRILINGUAL_GREETING_MESSAGE = CRAS_GREETING_MESSAGE;
 
 // Compatibility exports
 export const WELCOME_LANGUAGE_MESSAGE = TRILINGUAL_GREETING_MESSAGE;
@@ -130,7 +117,7 @@ export async function evaluateAutoReply({ senderPhone, messageText, customer, le
   const isCras = company === 'CRAS' || lead?.source === 'CRAS' || lead?.whatsappSessionId === 'CRAS';
   const greeting = isCras ? CRAS_TRILINGUAL_GREETING_MESSAGE : TRILINGUAL_GREETING_MESSAGE;
 
-  console.log(`🤖 [AUTO-REPLY] Sending Single Trilingual Greeting for ${isCras ? 'CRAS' : 'RWC'} to ${cleanPhone} (Inbound: "${messageText}")`);
+  console.log(`🤖 [AUTO-REPLY] Sending Single ${isCras ? 'English' : 'Trilingual'} Greeting for ${isCras ? 'CRAS' : 'RWC'} to ${cleanPhone} (Inbound: "${messageText}")`);
 
   return {
     shouldReply: true,

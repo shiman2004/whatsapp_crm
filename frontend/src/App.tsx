@@ -18,7 +18,14 @@ import { LoginScreen } from './components/auth/LoginScreen';
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const { setSelectedLeadId } = useCrm();
+  const { currentUser, setSelectedLeadId } = useCrm();
+
+  // Protect Super Admin only tabs against direct navigation by other roles
+  React.useEffect(() => {
+    if (currentUser?.role !== 'super_admin' && (activeTab === 'coordinators' || activeTab === 'audit')) {
+      setActiveTab('dashboard');
+    }
+  }, [currentUser?.role, activeTab]);
 
   const handleSelectLead = (leadId: string) => {
     setSelectedLeadId(leadId);
@@ -50,7 +57,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
           {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
           {activeTab === 'treatments' && <TreatmentsManager />}
-          {activeTab === 'coordinators' && <CoordinatorsManager />}
+          {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
           {activeTab === 'templates' && <TemplatesManager />}
           {activeTab === 'reports' && <DashboardOverview />}
           {activeTab === 'audit' && <AuditLogsViewer />}

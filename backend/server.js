@@ -1773,6 +1773,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST') {
+      if (authUser.role !== 'super_admin') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can register staff.' }));
+        return;
+      }
+
       let body = '';
       req.on('data', chunk => { body += chunk; });
       req.on('end', async () => {
@@ -1815,12 +1821,12 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
-  // 10d. REST: Delete Coordinator
+  // 10d. REST: Delete Coordinator (Super Admin Only)
   if (req.method === 'DELETE' && (pathname.startsWith('/api/coordinators') || pathname.startsWith('/api/users/'))) {
     try {
-      if (authUser.role === 'coordinator') {
+      if (authUser.role !== 'super_admin') {
         res.writeHead(403, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Forbidden: Coordinators cannot delete staff.' }));
+        res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can delete staff.' }));
         return;
       }
 

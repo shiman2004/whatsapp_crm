@@ -6,20 +6,25 @@ import {
   UserCheck, 
   QrCode, 
   Radio, 
-  Trash2,
-  LogOut,
-  ChevronDown
+  Trash2, 
+  LogOut, 
+  ChevronDown,
+  Menu
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { MetaApiModal } from './MetaApiModal';
 import { WhatsAppQrModal } from './WhatsAppQrModal';
 
-export const Header: React.FC = () => {
+interface HeaderProps {
+  onToggleMobileSidebar?: () => void;
+}
+
+export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
   const { 
     currentUser, 
     users, 
     setCurrentUser, 
-    logout,
+    logout, 
     isSuperAdmin, 
     simulatorOpen, 
     setSimulatorOpen, 
@@ -51,21 +56,31 @@ export const Header: React.FC = () => {
 
   return (
     <>
-      <header className="h-14 border-b border-slate-800 bg-[#111b21] px-5 flex items-center justify-between sticky top-0 z-30">
-        {/* Brand Title */}
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-emerald-500/30">
+      <header className="h-14 border-b border-slate-800 bg-[#111b21] px-3 sm:px-5 flex items-center justify-between sticky top-0 z-30 shrink-0">
+        {/* Brand Title & Mobile Menu Toggle */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {onToggleMobileSidebar && (
+            <button
+              onClick={onToggleMobileSidebar}
+              className="md:hidden p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#202c33] transition-colors"
+              title="Open Navigation Menu"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+
+          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-emerald-500/30 shrink-0">
             <img src="/logo.png" alt="Royal Wellness Logo" className="w-full h-full object-contain" />
           </div>
-          <div>
-            <h1 className="text-sm font-bold text-white font-serif tracking-wide">
+          <div className="min-w-0 truncate">
+            <h1 className="text-xs sm:text-sm font-bold text-white font-serif tracking-wide truncate">
               Royal Wellness Center
             </h1>
           </div>
         </div>
 
-        {/* Right Controls: Link Device (QR) + Meta API + Simulator + Clear Data + User Profile Dropdown */}
-        <div className="flex items-center gap-2.5">
+        {/* Right Controls: Link Device (QR) + Meta API + User Profile Dropdown */}
+        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           
           {/* WhatsApp Web QR Code Link Device Button with Real-time Status */}
           <button

@@ -188,7 +188,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   });
 
   return (
-    <div className="w-80 shrink-0 border-l border-slate-800 bg-[#111b21] flex flex-col h-full overflow-hidden select-none">
+    <div className="w-full sm:w-85 md:w-80 shrink-0 border-l border-slate-800 bg-[#111b21] flex flex-col h-full overflow-hidden select-none fixed md:static inset-y-0 right-0 z-40 md:z-auto shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="h-14 px-4 bg-[#202c33] border-b border-slate-800 flex items-center justify-between shrink-0">
         <h3 className="font-bold text-xs text-slate-100 flex items-center gap-1.5">

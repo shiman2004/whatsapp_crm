@@ -275,7 +275,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const approvedTemplates = templates.filter(t => t.approved && (t.language === lead.language || t.language === 'en'));
 
   return (
-    <div className="bg-[#202c33] px-4 py-2 border-t border-[#222e35] select-none shrink-0 relative">
+    <div className="bg-[#202c33] px-2 sm:px-4 py-2 border-t border-[#222e35] select-none shrink-0 relative">
       {/* Hidden File Inputs */}
       <input 
         ref={fileInputRef}
@@ -444,7 +444,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       )}
 
       {/* 5. Main Composer Row */}
-      <div className="flex items-end gap-3">
+      <div className="flex items-end gap-1.5 sm:gap-3">
         {/* Plus / Attach Button */}
         <button
           type="button"

@@ -12,7 +12,8 @@ import {
   MoreVertical, 
   SlidersHorizontal,
   Lock,
-  ChevronDown
+  ChevronDown,
+  ArrowLeft
 } from 'lucide-react';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 
@@ -20,12 +21,14 @@ interface WhatsAppChatThreadProps {
   lead: Lead;
   crmPanelOpen: boolean;
   setCrmPanelOpen: (open: boolean) => void;
+  onBack?: () => void;
 }
 
 export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({ 
   lead, 
   crmPanelOpen, 
-  setCrmPanelOpen 
+  setCrmPanelOpen,
+  onBack
 }) => {
   const { messages, deleteChat, clearChat } = useCrm();
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -65,30 +68,49 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     <div className="flex-1 flex flex-col bg-[#0b141a] relative min-w-0 h-full overflow-hidden">
       {/* 1. WhatsApp Top Chat Header (Exact 1:1 Match of Screenshot 1 & 2) */}
       <div className="h-14 px-4 bg-[#202c33] border-b border-[#222e35] flex items-center justify-between gap-3 shrink-0 select-none z-10">
-        {/* Left: Contact Info */}
-        <div className="flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-90 transition-opacity">
-          <WhatsAppAvatar
-            name={displayName}
-            avatarUrl={lead.customer?.avatarUrl}
-            size="md"
-            isOnline={true}
-          />
+        {/* Left: Mobile Back Button + Contact Info */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+          {onBack && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onBack();
+              }}
+              className="md:hidden p-1.5 -ml-1 text-[#aebac1] hover:text-white hover:bg-[#374248] rounded-full transition-colors shrink-0"
+              title="Back to chat list"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+          )}
 
-          <div className="min-w-0">
-            <h3 className="font-semibold text-sm text-[#e9edef] truncate leading-tight">
-              {displayName}
-            </h3>
-            <p className="text-[11px] text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
-              {displayPhone ? (
-                <>
-                  <span className="font-mono text-[#00a884] font-medium">{displayPhone}</span>
-                  <span className="text-slate-600">•</span>
-                  <span>WhatsApp Direct Contact</span>
-                </>
-              ) : (
-                <span>online</span>
-              )}
-            </p>
+          <div 
+            onClick={() => setCrmPanelOpen(!crmPanelOpen)}
+            className="flex items-center gap-2 sm:gap-3 min-w-0 cursor-pointer hover:opacity-90 transition-opacity"
+            title="View Patient Details"
+          >
+            <WhatsAppAvatar
+              name={displayName}
+              avatarUrl={lead.customer?.avatarUrl}
+              size="md"
+              isOnline={true}
+            />
+
+            <div className="min-w-0">
+              <h3 className="font-semibold text-sm text-[#e9edef] truncate leading-tight">
+                {displayName}
+              </h3>
+              <p className="text-[11px] text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
+                {displayPhone ? (
+                  <>
+                    <span className="font-mono text-[#00a884] font-medium">{displayPhone}</span>
+                    <span className="text-slate-600 hidden sm:inline">•</span>
+                    <span className="hidden sm:inline">WhatsApp Direct</span>
+                  </>
+                ) : (
+                  <span>online</span>
+                )}
+              </p>
+            </div>
           </div>
         </div>
 
@@ -156,7 +178,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           {/* CRM Panel Toggle */}
           <button
             onClick={() => setCrmPanelOpen(!crmPanelOpen)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 ${
               crmPanelOpen
                 ? 'bg-[#00a884]/20 text-[#00a884] border-[#00a884]/40 shadow-sm'
                 : 'bg-[#202c33] text-[#d1d7db] border-slate-700 hover:bg-[#2a3942]'
@@ -164,7 +186,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             title="Toggle Clinical Lead CRM Profile"
           >
             <SlidersHorizontal className="w-3.5 h-3.5" />
-            <span>{crmPanelOpen ? 'Hide CRM' : 'CRM Details'}</span>
+            <span className="hidden sm:inline">{crmPanelOpen ? 'Hide CRM' : 'CRM Details'}</span>
           </button>
         </div>
       </div>

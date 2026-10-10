@@ -19,8 +19,10 @@ import {
   Copy,
   Search,
   RotateCw,
-  Globe
+  Globe,
+  Building2
 } from 'lucide-react';
+import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
 import { 
   formatWhatsAppDisplay, 
@@ -44,6 +46,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     updateLeadStage,
     updateLeadTreatment,
     updateLeadLanguage,
+    updateLeadCompany,
     updateCustomer
   } = useCrm();
 
@@ -380,6 +383,42 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 </button>
               );
             })}
+          </div>
+        </div>
+
+        {/* Company / Institution Affiliation */}
+        <div className="space-y-1">
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+              <Building2 className="w-3 h-3 text-emerald-400" /> Center / Company
+            </label>
+            <CompanyTagBadge lead={lead} size="sm" showFullName={false} />
+          </div>
+          <div className="grid grid-cols-2 gap-1.5">
+            <button
+              type="button"
+              onClick={() => updateLeadCompany(lead.id, 'RWC')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                (lead.company || 'RWC') === 'RWC'
+                  ? 'bg-[#008000]/25 border-[#008000] text-emerald-300 shadow-sm ring-1 ring-[#008000]/40'
+                  : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#008000]" />
+              <span>(RWC) Royal Wellness</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => updateLeadCompany(lead.id, 'CRAS')}
+              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
+                lead.company === 'CRAS'
+                  ? 'bg-[#800000]/30 border-[#800000] text-rose-300 shadow-sm ring-1 ring-[#800000]/40'
+                  : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#800000]" />
+              <span>(CRAS) Royal Aesthetic</span>
+            </button>
           </div>
         </div>
 

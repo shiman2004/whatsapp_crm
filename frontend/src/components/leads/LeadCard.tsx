@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
+import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
 interface LeadCardProps {
   lead: Lead;
@@ -97,6 +98,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
+          <CompanyTagBadge lead={lead} size="xs" />
           <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${langBadge.bg} ${langBadge.text}`}>
             {langBadge.label}
           </span>

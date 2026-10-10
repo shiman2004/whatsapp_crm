@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
 import { evaluateAutoReply, pauseAutoReply, clearAutoReplySessions } from './src/autoReplyEngine.js';
+import { resolveCompany, COMPANIES } from './src/companyConfig.js';
 
 dotenv.config();
 
@@ -41,6 +42,8 @@ let sseClients = [];
 let metaConfig = {
   accessToken: process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || 'EAAPKSYZBDcu8BSv6YCceNu36eSytOR06TXco721oZAWjnpOaFQkeZA5lOhln4a980PlEfSo1AQKa6bRZAH9kjdtOe2RAPEqJGJgCEbWZAxoMdHMHvlrHDDvaKqY3XVu30vHPZBLdBgdHoDeJDB7qRYJl9r0R2cFcNlhqj3At5zp6QTZAWzwohz7JR3c6QuQf2VRMAZDZD',
   phoneNumberId: process.env.META_PHONE_NUMBER_ID || '1358157244046701',
+  phoneNumberIdRwc: process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701',
+  phoneNumberIdCras: process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705',
   wabaId: process.env.META_WABA_ID || '2332922997481634'
 };
 
@@ -656,7 +659,11 @@ const server = http.createServer(async (req, res) => {
 
         // If Meta Cloud API token is supplied or configured on server, dispatch directly to Meta Graph API; otherwise use Baileys socket
         const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-        const phoneId = (payload.phoneNumberId || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
+        let targetPhoneId = payload.phoneNumberId;
+        if (!targetPhoneId) {
+          targetPhoneId = payload.company === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId);
+        }
+        const phoneId = (targetPhoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
 
         let cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
         if (cleanTo.startsWith('0') && cleanTo.length === 10) {
@@ -1012,8 +1019,21 @@ const server = http.createServer(async (req, res) => {
           orderBy: { updatedAt: 'desc' },
         });
 
+        const enrichedLeads = leads.map(l => {
+          const isCras = l.whatsappSessionId === 'CRAS' || l.source === 'CRAS';
+          const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
+          return {
+            ...l,
+            company: comp.code,
+            companyTag: comp.tag,
+            companyColor: comp.colorHex,
+            companyPhoneNumberId: comp.phoneId,
+            companyPhoneNumber: comp.phoneNumber
+          };
+        });
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(leads));
+        res.end(JSON.stringify(enrichedLeads));
         return;
       } catch (e) {
         console.error('Error fetching leads from DB:', e);
@@ -1268,6 +1288,11 @@ const server = http.createServer(async (req, res) => {
           if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
           if (stage !== undefined) updateData.stage = stage;
           if (language !== undefined) updateData.language = language;
+          if (payload.company !== undefined || payload.source !== undefined) {
+            const companyCode = (payload.company || payload.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+            updateData.source = companyCode;
+            updateData.whatsappSessionId = companyCode;
+          }
           updateData.updatedAt = new Date();
 
           const updated = await prisma.lead.update({
@@ -1302,16 +1327,27 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => {});
           }
 
-          console.log(`✅ [Lead Updated] ID: ${actualLeadId}, Stage: ${stage || 'unchanged'}, Treatment: ${treatmentId || 'unchanged'}`);
+          const compCode = (updated.source || updated.whatsappSessionId || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          const compConfig = COMPANIES[compCode];
+          const enrichedLead = {
+            ...updated,
+            company: compCode,
+            companyTag: compConfig.tag,
+            companyColor: compConfig.color,
+            companyPhoneNumberId: compConfig.phoneId,
+            companyPhoneNumber: compConfig.phone
+          };
+
+          console.log(`✅ [Lead Updated] ID: ${actualLeadId}, Stage: ${stage || 'unchanged'}, Treatment: ${treatmentId || 'unchanged'}, Company: ${compCode}`);
 
           broadcastScopedSSE(null, {
             type: 'LEAD_UPDATED',
             leadId: actualLeadId,
-            lead: updated
+            lead: enrichedLead
           });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, lead: updated }));
+          res.end(JSON.stringify({ success: true, lead: enrichedLead }));
           return;
         }
 
@@ -1969,6 +2005,11 @@ const server = http.createServer(async (req, res) => {
               for (const change of entry.changes || []) {
                 if (change.field === 'messages' && change.value) {
                   const val = change.value;
+                  const metadata = val.metadata;
+                  const incomingPhoneId = metadata?.phone_number_id;
+                  const incomingDisplayPhone = metadata?.display_phone_number;
+                  const companyInfo = resolveCompany(incomingPhoneId, incomingDisplayPhone);
+
                   const contact = val.contacts?.[0];
                   const message = val.messages?.[0];
 
@@ -2049,7 +2090,7 @@ const server = http.createServer(async (req, res) => {
 
                           savedCustomerId = cust?.id || null;
 
-                          // 2. Find or create Lead
+                          // 2. Find or create Lead (tagged with company: RWC or CRAS)
                           lead = await prisma.lead.findFirst({
                             where: { customerId: cust.id },
                             orderBy: { updatedAt: 'desc' }
@@ -2075,7 +2116,8 @@ const server = http.createServer(async (req, res) => {
                                 categoryId: firstCat?.id || 'cat-hair-care',
                                 treatmentId: firstTrt?.id || 'trt-hair-prp',
                                 stage: 'new',
-                                source: 'whatsapp',
+                                source: companyInfo.code,
+                                whatsappSessionId: companyInfo.code,
                                 language: 'en',
                                 lastCustomerMessageAt: new Date()
                               }
@@ -2084,6 +2126,8 @@ const server = http.createServer(async (req, res) => {
                             await prisma.lead.update({
                               where: { id: lead.id },
                               data: {
+                                source: companyInfo.code,
+                                whatsappSessionId: companyInfo.code,
                                 lastCustomerMessageAt: new Date(),
                                 updatedAt: new Date()
                               }
@@ -2092,13 +2136,14 @@ const server = http.createServer(async (req, res) => {
 
                           savedLeadId = lead?.id || null;
 
-                          // 3. Save Message to DB with Media Details
+                          // 3. Save Message to DB with Media Details & Company
                           await prisma.message.upsert({
                             where: { id: messageId },
                             update: {
                               content: text,
                               mediaType: mediaType || undefined,
                               mediaUrl: mediaUrl || undefined,
+                              whatsappSessionId: companyInfo.code,
                               status: 'delivered'
                             },
                             create: {
@@ -2111,17 +2156,17 @@ const server = http.createServer(async (req, res) => {
                               status: 'delivered',
                               mediaType: mediaType || null,
                               mediaUrl: mediaUrl || null,
-                              whatsappSessionId: null,
+                              whatsappSessionId: companyInfo.code,
                               timestamp: new Date()
                             }
                           });
-                          console.log(`✅ [Meta Webhook] Inbound message saved to DB: ID ${messageId}, Lead ${lead.id}, Media: ${mediaType || 'none'}`);
+                          console.log(`✅ [Meta Webhook] Inbound message saved [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Media: ${mediaType || 'none'}`);
                         } catch (e) {
                           console.warn('[DB Error saving inbound Meta message]:', e.message);
                         }
                       }
 
-                      // 4. Broadcast SSE with DB Lead, Customer IDs and Media
+                      // 4. Broadcast SSE with Company Tags (RWC / CRAS)
                       broadcastScopedSSE(null, {
                         type: 'INBOUND_WHATSAPP_MESSAGE',
                         phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
@@ -2137,10 +2182,15 @@ const server = http.createServer(async (req, res) => {
                         messageId,
                         leadId: savedLeadId,
                         customerId: savedCustomerId,
+                        company: companyInfo.code,
+                        companyTag: companyInfo.tag,
+                        companyColor: companyInfo.colorHex,
+                        companyPhoneNumberId: companyInfo.phoneId,
+                        companyPhoneNumber: companyInfo.phoneNumber,
                         timestamp: new Date().toISOString()
                       });
 
-                      // 5. Evaluate Auto-Reply Engine (Welcome -> Language -> 24 Treatments -> Handoff)
+                      // 5. Evaluate Auto-Reply Engine for Specific Company (RWC vs CRAS)
                       try {
                         const cleanToDigits = String(phone || '').replace(/[^0-9]/g, '');
                         let metaCleanTo = cleanToDigits;
@@ -2154,22 +2204,22 @@ const server = http.createServer(async (req, res) => {
                           senderPhone: metaCleanTo || phone,
                           messageText: text,
                           customer: cust,
-                          lead
+                          lead,
+                          company: companyInfo.code
                         });
 
                         if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
-                          console.log(`🤖 [Meta Auto-Reply] Generating automated response for ${metaCleanTo}: "${autoReplyResult.replyText.slice(0, 40)}..."`);
+                          console.log(`🤖 [Meta Auto-Reply] Generating response for [${companyInfo.code}] ${metaCleanTo}: "${autoReplyResult.replyText.slice(0, 40)}..."`);
                           const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-                          const autoTime = new Date();
 
-                          // Dispatch via Meta Cloud API
+                          // Dispatch via Meta Cloud API using the corresponding company's phone ID
                           const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-                          const phoneId = (metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
+                          const dispatchPhoneId = (companyInfo.phoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
 
                           if (metaToken) {
                             try {
-                              console.log(`🚀 [Meta Auto-Reply Dispatch] Sending to ${metaCleanTo} via Phone ID ${phoneId}...`);
-                              const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                              console.log(`🚀 [Meta Auto-Reply Dispatch] Sending [${companyInfo.code}] to ${metaCleanTo} via Phone ID ${dispatchPhoneId}...`);
+                              const metaRes = await fetch(`https://graph.facebook.com/v20.0/${dispatchPhoneId}/messages`, {
                                 method: 'POST',
                                 headers: {
                                   'Authorization': `Bearer ${metaToken}`,

@@ -16,6 +16,7 @@ import {
   ArrowLeft
 } from 'lucide-react';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
+import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
 interface WhatsAppChatThreadProps {
   lead: Lead;
@@ -96,9 +97,12 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             />
 
             <div className="min-w-0">
-              <h3 className="font-semibold text-sm text-[#e9edef] truncate leading-tight">
-                {displayName}
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="font-semibold text-sm text-[#e9edef] truncate leading-tight">
+                  {displayName}
+                </h3>
+                <CompanyTagBadge lead={lead} size="sm" showFullName={true} />
+              </div>
               <p className="text-[11px] text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
                 {displayPhone ? (
                   <>

@@ -101,6 +101,8 @@ interface CrmContextType {
   starMessage: (messageId: string) => void;
   pinMessage: (messageId: string) => void;
   deleteMessage: (messageId: string) => void;
+  editMessage: (messageId: string, newContent: string) => Promise<void>;
+  reportMessage: (messageId: string) => void;
   forwardMessage: (messageId: string, targetLeadId: string) => void;
   deleteChat: (leadId: string) => Promise<void>;
   clearChat: (leadId: string) => Promise<void>;
@@ -631,6 +633,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 return l;
               }));
+            }
+            return;
+          }
+
+          if (data.type === 'MESSAGE_EDITED') {
+            const { messageId, content } = data;
+            if (messageId && content) {
+              setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content, edited: true } : m));
             }
             return;
           }
@@ -1482,6 +1492,29 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Message Deleted 🗑️', 'Message removed from chat', 'warning');
   };
 
+  // Edit message
+  const editMessage = async (messageId: string, newContent: string) => {
+    if (!newContent.trim()) return;
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content: newContent.trim(), edited: true } : m));
+    notify('Message Edited ✏️', 'Message updated successfully', 'success');
+
+    try {
+      await fetch(`${API_BASE_URL}/api/messages/edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageId, content: newContent.trim() })
+      });
+    } catch (e) {
+      console.warn('Error syncing message edit to backend:', e);
+    }
+  };
+
+  // Report message
+  const reportMessage = (messageId: string) => {
+    setMessages(prev => prev.map(m => m.id === messageId ? { ...m, reported: true } : m));
+    notify('Message Reported 🚩', 'Message flagged for review', 'info');
+  };
+
   // Delete entire chat from CRM & physical WhatsApp phone
   const deleteChat = async (leadId: string) => {
     const targetLead = leads.find(l => l.id === leadId);
@@ -2229,6 +2262,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     starMessage,
     pinMessage,
     deleteMessage,
+    editMessage,
+    reportMessage,
     forwardMessage,
     deleteChat,
     clearChat,

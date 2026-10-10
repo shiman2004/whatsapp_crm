@@ -89,6 +89,8 @@ export interface Message {
   suggestedByAi?: boolean;
   starred?: boolean;
   pinned?: boolean;
+  edited?: boolean;
+  reported?: boolean;
   reactions?: string[];
   replyTo?: {
     id: string;

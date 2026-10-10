@@ -1656,6 +1656,44 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b5b. REST: Edit Message (Supabase PostgreSQL)
+  if (req.method === 'POST' && pathname === '/api/messages/edit') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const { messageId, content } = payload;
+        if (!messageId || !content) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'messageId and content are required' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          await prisma.message.update({
+            where: { id: messageId },
+            data: { content: content.trim() }
+          }).catch(e => console.warn('Could not update message in DB:', e.message));
+        }
+
+        broadcastScopedSSE(null, {
+          type: 'MESSAGE_EDITED',
+          messageId,
+          content: content.trim()
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Message edited successfully.' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10b6. REST: Delete Chat / Lead (Supabase PostgreSQL)
   if ((req.method === 'POST' || req.method === 'DELETE') && (pathname === '/api/chats/delete' || pathname === '/api/leads/delete' || pathname.startsWith('/api/leads/delete/'))) {
     let body = '';

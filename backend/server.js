@@ -2201,6 +2201,9 @@ const server = http.createServer(async (req, res) => {
                           const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
                           const dispatchPhoneId = (companyInfo.phoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
 
+                          const autoTime = new Date();
+                          let actualAutoMsgId = autoMsgId;
+
                           if (metaToken) {
                             try {
                               console.log(`🚀 [Meta Auto-Reply Dispatch] Sending [${companyInfo.code}] to ${metaCleanTo} via Phone ID ${dispatchPhoneId}...`);
@@ -2220,7 +2223,8 @@ const server = http.createServer(async (req, res) => {
                               });
                               const metaData = await metaRes.json().catch(() => ({}));
                               if (metaRes.ok) {
-                                console.log(`✅ [Meta Auto-Reply Sent!] Message ID: ${metaData.messages?.[0]?.id || 'delivered'}`);
+                                actualAutoMsgId = metaData.messages?.[0]?.id || autoMsgId;
+                                console.log(`✅ [Meta Auto-Reply Sent!] Message ID: ${actualAutoMsgId}`);
                               } else {
                                 console.error(`❌ [Meta Auto-Reply API Error]:`, JSON.stringify(metaData));
                               }
@@ -2243,7 +2247,7 @@ const server = http.createServer(async (req, res) => {
                           if (prisma && getDbStatus() && lead?.id) {
                             await prisma.message.create({
                               data: {
-                                id: autoMsgId,
+                                id: actualAutoMsgId,
                                 leadId: lead.id,
                                 customerId: cust?.id || lead.customerId,
                                 direction: 'outbound',
@@ -2252,21 +2256,25 @@ const server = http.createServer(async (req, res) => {
                                 status: 'delivered',
                                 timestamp: autoTime
                               }
-                            }).catch(() => {});
+                            }).catch((err) => console.error('❌ [Error saving auto-reply to DB]:', err));
+                            console.log(`✅ [DB] Successfully saved auto-reply ${actualAutoMsgId} to lead ${lead.id}`);
                           }
 
                           broadcastScopedSSE(null, {
                             type: 'OUTBOUND_WHATSAPP_MESSAGE',
-                            messageId: autoMsgId,
+                            messageId: actualAutoMsgId,
                             leadId: lead?.id,
-                            customerId: cust?.id,
+                            customerId: cust?.id || lead?.customerId,
                             phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
                             realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
                             whatsappId: phone,
-                            name: 'Royal Wellness Concierge',
+                            name: companyInfo.name || 'Royal Wellness Concierge',
                             text: autoReplyResult.replyText,
                             direction: 'outbound',
                             senderType: 'ai',
+                            company: companyInfo.code,
+                            companyTag: companyInfo.tag,
+                            companyColor: companyInfo.colorHex,
                             timestamp: autoTime.toISOString(),
                             source: 'auto_reply'
                           });

@@ -11,7 +11,9 @@ import {
   UserCheck,
   ShieldCheck,
   Sparkles,
-  MapPin
+  MapPin,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { UserRole } from '../../types';
 
@@ -28,6 +30,7 @@ export const CoordinatorsManager: React.FC = () => {
   const { users, leads, addCoordinator, deleteCoordinator } = useCrm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<'all' | 'coordinator' | 'leads_officer'>('all');
+  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
 
   // Form State
   const [role, setRole] = useState<'coordinator' | 'leads_officer'>('leads_officer');
@@ -246,9 +249,17 @@ export const CoordinatorsManager: React.FC = () => {
                       <span className="text-slate-400 flex items-center gap-1">
                         <KeyRound className="w-3 h-3 text-amber-400" /> Quick PIN:
                       </span>
-                      <span className="font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-md tracking-wider">
-                        {staff.pin || (isOfficer ? '4321' : '2026')}
-                      </span>
+                      <div className="flex items-center gap-1.5 font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-md tracking-wider">
+                        <span>{revealedPins[staff.id] ? (staff.pin || (isOfficer ? '4321' : '2026')) : '••••'}</span>
+                        <button
+                          type="button"
+                          onClick={() => setRevealedPins(prev => ({ ...prev, [staff.id]: !prev[staff.id] }))}
+                          className="text-amber-400/80 hover:text-amber-200 transition-colors ml-0.5"
+                          title={revealedPins[staff.id] ? "Hide PIN" : "Show PIN"}
+                        >
+                          {revealedPins[staff.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

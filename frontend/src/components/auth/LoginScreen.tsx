@@ -322,9 +322,6 @@ export const LoginScreen: React.FC = () => {
                   );
                 })}
               </div>
-              <p className="text-[10px] text-[#8696a0] font-mono">
-                PIN: <span className="text-[#00a884]">{activeUser?.pin || (roleTab === 'super_admin' ? '1234' : (roleTab === 'leads_officer' ? '4321' : '2026'))}</span>
-              </p>
             </div>
 
             {/* Keypad */}

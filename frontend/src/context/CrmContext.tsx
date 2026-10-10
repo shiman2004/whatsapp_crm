@@ -1768,7 +1768,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
     const roleLabel = role === 'leads_officer' ? 'Leads Officer' : 'Clinical Coordinator';
-    notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered with PIN ${newCoord.pin}`, 'success');
+    notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered successfully`, 'success');
   };
 
   const deleteCoordinator = (id: string) => {

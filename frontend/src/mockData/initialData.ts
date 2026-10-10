@@ -112,6 +112,18 @@ export const INITIAL_CATEGORIES: TreatmentCategory[] = [
     active: true,
     iconName: 'HeartPulse',
     description: 'Consultations with senior board-certified dermatologists & plastic surgeons.',
+  },
+  {
+    id: 'cat-cras-courses',
+    name: 'CRAS Academic Programs',
+    nameI18n: {
+      en: 'CRAS Academic Programs',
+      si: 'CRAS අධ්‍යයන පාඨමාලා',
+      ta: 'CRAS கல்வித் திட்டங்கள்',
+    },
+    active: true,
+    iconName: 'GraduationCap',
+    description: 'Clinical aesthetic medicine, cosmetology, and dermatology training programs.',
   }
 ];
 
@@ -139,7 +151,24 @@ export const INITIAL_TREATMENTS: Treatment[] = [
   { id: 'trt-smp', code: 'SMP', categoryId: 'cat-hair-care', name: 'Scalp Pigmentation', nameI18n: { en: 'Scalp Pigmentation (SMP)', si: 'හිස්කබල පිග්මන්ටේෂන්', ta: 'ஸ்கால்ப் பிக்மென்டேஷன்' }, active: true },
   { id: 'trt-rfs', code: 'RFS', categoryId: 'cat-skin-care', name: 'RF Skin Tightening', nameI18n: { en: 'RF Skin Tightening', si: 'RF සම තද කිරීමේ ප්‍රතිකාරය', ta: 'RF தோல் இறுக்கம்' }, active: true },
   { id: 'trt-co2', code: 'CO2', categoryId: 'cat-skin-care', name: 'CO2 Laser', nameI18n: { en: 'CO2 Fractional Laser', si: 'CO2 ලේසර් ප්‍රතිකාරය', ta: 'CO2 லேசர் சிகிச்சை' }, active: true },
-  { id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameI18n: { en: 'LED Light Therapy', si: 'LED ආලෝක ප්‍රතිකාරය', ta: 'LED ஒளி சிகிச்சை' }, active: true }
+  { id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameI18n: { en: 'LED Light Therapy', si: 'LED ආලෝක ප්‍රතිකාරය', ta: 'LED ஒளி சிகிச்சை' }, active: true },
+
+  // --- CRAS ACADEMIC COURSES ---
+  { id: 'crs-adi', code: 'ADI', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Advanced Injectables', nameI18n: { en: 'Advanced Injectables', si: 'Advanced Injectables', ta: 'Advanced Injectables' }, active: true },
+  { id: 'crs-fac', code: 'FAC', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Facial Injectables', nameI18n: { en: 'Facial Injectables', si: 'Facial Injectables', ta: 'Facial Injectables' }, active: true },
+  { id: 'crs-lac', code: 'LAC', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Laser & Aesthetic Cosmetology', nameI18n: { en: 'Laser & Aesthetic Cosmetology', si: 'Laser & Aesthetic Cosmetology', ta: 'Laser & Aesthetic Cosmetology' }, active: true },
+  { id: 'crs-aco', code: 'ACO', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Aesthetic Cosmetology', nameI18n: { en: 'Aesthetic Cosmetology', si: 'Aesthetic Cosmetology', ta: 'Aesthetic Cosmetology' }, active: true },
+  { id: 'crs-htr', code: 'HTR', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Hair Transplantation & Restoration', nameI18n: { en: 'Hair Transplantation & Restoration', si: 'Hair Transplantation & Restoration', ta: 'Hair Transplantation & Restoration' }, active: true },
+  { id: 'crs-htt', code: 'HTT', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Hair Transplant Technician', nameI18n: { en: 'Hair Transplant Technician', si: 'Hair Transplant Technician', ta: 'Hair Transplant Technician' }, active: true },
+  { id: 'crs-lbc', code: 'LBC', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Liposuction & Body Contouring', nameI18n: { en: 'Liposuction & Body Contouring', si: 'Liposuction & Body Contouring', ta: 'Liposuction & Body Contouring' }, active: true },
+  { id: 'crs-mpm', code: 'MPM', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Micropigmentation & Permanent Makeup', nameI18n: { en: 'Micropigmentation & Permanent Makeup', si: 'Micropigmentation & Permanent Makeup', ta: 'Micropigmentation & Permanent Makeup' }, active: true },
+  { id: 'crs-lhr', code: 'LHR', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Laser & Light-Based Hair Removal', nameI18n: { en: 'Laser & Light-Based Hair Removal', si: 'Laser & Light-Based Hair Removal', ta: 'Laser & Light-Based Hair Removal' }, active: true },
+  { id: 'crs-alp', code: 'ALP', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Aesthetic Laser and Light-Based Procedures', nameI18n: { en: 'Aesthetic Laser and Light-Based Procedures', si: 'Aesthetic Laser and Light-Based Procedures', ta: 'Aesthetic Laser and Light-Based Procedures' }, active: true },
+  { id: 'crs-cfg', code: 'CFG', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Cosmetic & Functional Gynecology', nameI18n: { en: 'Cosmetic & Functional Gynecology', si: 'Cosmetic & Functional Gynecology', ta: 'Cosmetic & Functional Gynecology' }, active: true },
+  { id: 'crs-rgm', code: 'RGM', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Regenerative Medicine', nameI18n: { en: 'Regenerative Medicine', si: 'Regenerative Medicine', ta: 'Regenerative Medicine' }, active: true },
+  { id: 'crs-hjt', code: 'HJT', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Hijama Therapy', nameI18n: { en: 'Hijama Therapy', si: 'Hijama Therapy', ta: 'Hijama Therapy' }, active: true },
+  { id: 'crs-cit', code: 'CIT', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Certificate in Trichology', nameI18n: { en: 'Certificate in Trichology', si: 'Certificate in Trichology', ta: 'Certificate in Trichology' }, active: true },
+  { id: 'crs-cot', code: 'COT', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Certificate of Clinical Observership in HT', nameI18n: { en: 'Certificate of Clinical Observership in HT', si: 'Certificate of Clinical Observership in HT', ta: 'Certificate of Clinical Observership in HT' }, active: true }
 ];
 
 export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [

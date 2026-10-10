@@ -1311,7 +1311,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     }).catch(err => console.warn('Could not sync lead treatment update to backend:', err));
 
-    notify('Treatment Updated', `Lead treatment set to ${targetTreatment?.name || 'Selected'} (${finalSerialNumber || 'No Serial'})`, 'success');
+    const isCras = targetTreatment?.company === 'CRAS' || targetLead.company === 'CRAS';
+    notify(
+      isCras ? 'Course Enrolled' : 'Treatment Updated',
+      `${isCras ? 'Course' : 'Treatment'} set to ${targetTreatment?.name || 'Selected'} (${finalSerialNumber || 'No Serial'})`,
+      'success'
+    );
   };
 
   // Update lead language & customer preferred language
@@ -1359,6 +1364,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!targetLead) return;
 
     const compConfig = COMPANIES[company] || COMPANIES.RWC;
+    const isChangingCompany = targetLead.company !== company;
+
+    // When switching company, if lead currently has a treatment/course assigned, reset so coordinator picks from the new catalog
+    const shouldResetTreatment = isChangingCompany && Boolean(targetLead.treatmentId);
 
     setLeads(prev => prev.map(l => {
       if (l.id === leadId) {
@@ -1370,6 +1379,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           companyPhoneNumberId: compConfig.phoneId,
           companyPhoneNumber: compConfig.phone,
           source: company,
+          ...(shouldResetTreatment ? {
+            treatmentId: undefined,
+            categoryId: undefined,
+            serialNumber: undefined
+          } : {}),
           updatedAt: new Date().toISOString()
         };
       }
@@ -1386,7 +1400,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       body: JSON.stringify({
         leadId,
         company,
-        source: company
+        source: company,
+        ...(shouldResetTreatment ? {
+          treatmentId: null,
+          categoryId: null,
+          serialNumber: null
+        } : {})
       })
     }).catch(err => console.error('Failed to sync company update:', err));
 

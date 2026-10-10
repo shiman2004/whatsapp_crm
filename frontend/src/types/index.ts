@@ -123,6 +123,7 @@ export interface Treatment {
   id: string;
   code?: string;
   categoryId: string;
+  company?: CompanyCode;
   name: string;
   nameI18n: {
     en: string;

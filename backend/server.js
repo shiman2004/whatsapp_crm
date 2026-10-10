@@ -2386,6 +2386,24 @@ const CLINIC_TREATMENTS = [
   { id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameEn: 'LED Light Therapy', nameSi: 'LED ආලෝක ප්‍රතිකාරය', nameTa: 'LED ஒளி சிகிச்சை' }
 ];
 
+const CRAS_COURSES = [
+  { id: 'crs-adi', code: 'ADI', categoryId: 'cat-cras-courses', name: 'Advanced Injectables', nameEn: 'Advanced Injectables', nameSi: 'Advanced Injectables', nameTa: 'Advanced Injectables' },
+  { id: 'crs-fac', code: 'FAC', categoryId: 'cat-cras-courses', name: 'Facial Injectables', nameEn: 'Facial Injectables', nameSi: 'Facial Injectables', nameTa: 'Facial Injectables' },
+  { id: 'crs-lac', code: 'LAC', categoryId: 'cat-cras-courses', name: 'Laser & Aesthetic Cosmetology', nameEn: 'Laser & Aesthetic Cosmetology', nameSi: 'Laser & Aesthetic Cosmetology', nameTa: 'Laser & Aesthetic Cosmetology' },
+  { id: 'crs-aco', code: 'ACO', categoryId: 'cat-cras-courses', name: 'Aesthetic Cosmetology', nameEn: 'Aesthetic Cosmetology', nameSi: 'Aesthetic Cosmetology', nameTa: 'Aesthetic Cosmetology' },
+  { id: 'crs-htr', code: 'HTR', categoryId: 'cat-cras-courses', name: 'Hair Transplantation & Restoration', nameEn: 'Hair Transplantation & Restoration', nameSi: 'Hair Transplantation & Restoration', nameTa: 'Hair Transplantation & Restoration' },
+  { id: 'crs-htt', code: 'HTT', categoryId: 'cat-cras-courses', name: 'Hair Transplant Technician', nameEn: 'Hair Transplant Technician', nameSi: 'Hair Transplant Technician', nameTa: 'Hair Transplant Technician' },
+  { id: 'crs-lbc', code: 'LBC', categoryId: 'cat-cras-courses', name: 'Liposuction & Body Contouring', nameEn: 'Liposuction & Body Contouring', nameSi: 'Liposuction & Body Contouring', nameTa: 'Liposuction & Body Contouring' },
+  { id: 'crs-mpm', code: 'MPM', categoryId: 'cat-cras-courses', name: 'Micropigmentation & Permanent Makeup', nameEn: 'Micropigmentation & Permanent Makeup', nameSi: 'Micropigmentation & Permanent Makeup', nameTa: 'Micropigmentation & Permanent Makeup' },
+  { id: 'crs-lhr', code: 'LHR', categoryId: 'cat-cras-courses', name: 'Laser & Light-Based Hair Removal', nameEn: 'Laser & Light-Based Hair Removal', nameSi: 'Laser & Light-Based Hair Removal', nameTa: 'Laser & Light-Based Hair Removal' },
+  { id: 'crs-alp', code: 'ALP', categoryId: 'cat-cras-courses', name: 'Aesthetic Laser and Light-Based Procedures', nameEn: 'Aesthetic Laser and Light-Based Procedures', nameSi: 'Aesthetic Laser and Light-Based Procedures', nameTa: 'Aesthetic Laser and Light-Based Procedures' },
+  { id: 'crs-cfg', code: 'CFG', categoryId: 'cat-cras-courses', name: 'Cosmetic & Functional Gynecology', nameEn: 'Cosmetic & Functional Gynecology', nameSi: 'Cosmetic & Functional Gynecology', nameTa: 'Cosmetic & Functional Gynecology' },
+  { id: 'crs-rgm', code: 'RGM', categoryId: 'cat-cras-courses', name: 'Regenerative Medicine', nameEn: 'Regenerative Medicine', nameSi: 'Regenerative Medicine', nameTa: 'Regenerative Medicine' },
+  { id: 'crs-hjt', code: 'HJT', categoryId: 'cat-cras-courses', name: 'Hijama Therapy', nameEn: 'Hijama Therapy', nameSi: 'Hijama Therapy', nameTa: 'Hijama Therapy' },
+  { id: 'crs-cit', code: 'CIT', categoryId: 'cat-cras-courses', name: 'Certificate in Trichology', nameEn: 'Certificate in Trichology', nameSi: 'Certificate in Trichology', nameTa: 'Certificate in Trichology' },
+  { id: 'crs-cot', code: 'COT', categoryId: 'cat-cras-courses', name: 'Certificate of Clinical Observership in HT', nameEn: 'Certificate of Clinical Observership in HT', nameSi: 'Certificate of Clinical Observership in HT', nameTa: 'Certificate of Clinical Observership in HT' }
+];
+
 async function autoSeedDbIfEmpty() {
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return;
@@ -2396,7 +2414,8 @@ async function autoSeedDbIfEmpty() {
       { id: 'cat-iv-wellness', name: 'IV Drip Therapy & Wellness', nameEn: 'IV Drip Therapy & Wellness', nameSi: 'IV විටමින් ප්‍රතිකාර', nameTa: 'IV டිරිப் மற்றும் ஆரோக்கிய சிகிச்சை', active: true, iconName: 'Zap', description: 'Intravenous wellness blends for rejuvenation.' },
       { id: 'cat-weight-management', name: 'Weight Management', nameEn: 'Weight Management', nameSi: 'බර පාලනය', nameTa: 'உடல் எடை மேலாண்மை', active: true, iconName: 'Activity', description: 'Non-invasive fat reduction and body contouring.' },
       { id: 'cat-dental-aesthetics', name: 'Dental Aesthetics & Smile Design', nameEn: 'Dental Aesthetics & Smile Design', nameSi: 'දන්ත සෞන්දර්ය ප්‍රතිකාර', nameTa: 'பல் அழகியல் மற்றும் புன்னகை வடிவமைப்பு', active: true, iconName: 'Sparkles', description: 'Laser teeth whitening and invisible aligners.' },
-      { id: 'cat-ayurveda', name: 'Ayurvedic Rejuvenation', nameEn: 'Ayurvedic Rejuvenation', nameSi: 'ආයුර්වේද ප්‍රතිකාර', nameTa: 'ஆயුර්වේද புத்துணர்ச்சி', active: true, iconName: 'Leaf', description: 'Authentic royal Ceylon herbal detox.' }
+      { id: 'cat-ayurveda', name: 'Ayurvedic Rejuvenation', nameEn: 'Ayurvedic Rejuvenation', nameSi: 'ආයුර්වේද ප්‍රතිකාර', nameTa: 'ஆயුර්වේද புத்துணர்ச்சி', active: true, iconName: 'Leaf', description: 'Authentic royal Ceylon herbal detox.' },
+      { id: 'cat-cras-courses', name: 'CRAS Academic Programs', nameEn: 'CRAS Academic Programs', nameSi: 'CRAS අධ්‍යයන පාඨමාලා', nameTa: 'CRAS கல்வித் திட்டங்கள்', active: true, iconName: 'GraduationCap', description: 'Clinical aesthetic medicine, cosmetology, and dermatology training programs.' }
     ];
     for (const cat of defaultCategories) {
       await prisma.treatmentCategory.upsert({
@@ -2407,9 +2426,9 @@ async function autoSeedDbIfEmpty() {
     }
 
     const trtCount = await prisma.treatment.count().catch(() => 0);
-    if (trtCount < 20) {
-      console.log('🌱 Upserting complete 24 treatment catalog into PostgreSQL...');
-      for (const trt of CLINIC_TREATMENTS) {
+    if (trtCount < 35) {
+      console.log('🌱 Upserting complete treatment & course catalogs into PostgreSQL...');
+      for (const trt of [...CLINIC_TREATMENTS, ...CRAS_COURSES]) {
         await prisma.treatment.upsert({
           where: { id: trt.id },
           update: {
@@ -2434,7 +2453,7 @@ async function autoSeedDbIfEmpty() {
           }
         }).catch(() => {});
       }
-      console.log('✅ 24 treatments seeding completed.');
+      console.log('✅ Treatments & CRAS courses seeding completed.');
     }
   } catch (e) {
     console.warn('⚠️ Auto-seed check error:', e.message);

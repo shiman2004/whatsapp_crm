@@ -1020,7 +1020,7 @@ const server = http.createServer(async (req, res) => {
         });
 
         const enrichedLeads = leads.map(l => {
-          const isCras = l.whatsappSessionId === 'CRAS' || l.source === 'CRAS';
+          const isCras = (l.source || '').toUpperCase() === 'CRAS' || (l.whatsappSessionId || '').toUpperCase() === 'CRAS';
           const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
           return {
             ...l,
@@ -1291,7 +1291,6 @@ const server = http.createServer(async (req, res) => {
           if (payload.company !== undefined || payload.source !== undefined) {
             const companyCode = (payload.company || payload.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
             updateData.source = companyCode;
-            updateData.whatsappSessionId = companyCode;
           }
           updateData.updatedAt = new Date();
 
@@ -2090,34 +2089,23 @@ const server = http.createServer(async (req, res) => {
 
                           savedCustomerId = cust?.id || null;
 
-                          // 2. Find or create Lead (tagged with company: RWC or CRAS)
+                          // 2. Find or create Lead (tagged with company in source column: RWC or CRAS)
                           lead = await prisma.lead.findFirst({
                             where: { customerId: cust.id },
                             orderBy: { updatedAt: 'desc' }
                           });
 
                           if (!lead) {
-                            let firstCat = await prisma.treatmentCategory.findFirst();
-                            if (!firstCat) {
-                              firstCat = await prisma.treatmentCategory.create({
-                                data: { id: 'cat-hair-care', name: 'Hair Care & Restoration', nameEn: 'Hair Care', nameSi: 'හිසකෙස් ප්‍රතිකාර', nameTa: 'முடி பராமரிப்பு' }
-                              }).catch(() => null);
-                            }
-                            let firstTrt = await prisma.treatment.findFirst();
-                            if (!firstTrt && firstCat) {
-                              firstTrt = await prisma.treatment.create({
-                                data: { id: 'trt-hair-prp', categoryId: firstCat.id, name: 'Advanced Hair PRP Therapy', nameEn: 'Hair PRP', nameSi: 'PRP ප්‍රතිකාරය', nameTa: 'PRP சிகிச்சை' }
-                              }).catch(() => null);
-                            }
+                            const firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
+                            const firstTrt = await prisma.treatment.findFirst().catch(() => null);
 
                             lead = await prisma.lead.create({
                               data: {
                                 customerId: cust.id,
-                                categoryId: firstCat?.id || 'cat-hair-care',
-                                treatmentId: firstTrt?.id || 'trt-hair-prp',
+                                categoryId: firstCat?.id || null,
+                                treatmentId: firstTrt?.id || null,
                                 stage: 'new',
                                 source: companyInfo.code,
-                                whatsappSessionId: companyInfo.code,
                                 language: 'en',
                                 lastCustomerMessageAt: new Date()
                               }
@@ -2127,7 +2115,6 @@ const server = http.createServer(async (req, res) => {
                               where: { id: lead.id },
                               data: {
                                 source: companyInfo.code,
-                                whatsappSessionId: companyInfo.code,
                                 lastCustomerMessageAt: new Date(),
                                 updatedAt: new Date()
                               }
@@ -2143,7 +2130,6 @@ const server = http.createServer(async (req, res) => {
                               content: text,
                               mediaType: mediaType || undefined,
                               mediaUrl: mediaUrl || undefined,
-                              whatsappSessionId: companyInfo.code,
                               status: 'delivered'
                             },
                             create: {
@@ -2156,13 +2142,12 @@ const server = http.createServer(async (req, res) => {
                               status: 'delivered',
                               mediaType: mediaType || null,
                               mediaUrl: mediaUrl || null,
-                              whatsappSessionId: companyInfo.code,
                               timestamp: new Date()
                             }
                           });
-                          console.log(`✅ [Meta Webhook] Inbound message saved [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Media: ${mediaType || 'none'}`);
+                          console.log(`✅ [Meta Webhook] Inbound message saved to DB [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Customer ${cust.id}`);
                         } catch (e) {
-                          console.warn('[DB Error saving inbound Meta message]:', e.message);
+                          console.error('❌ [DB Error saving inbound Meta message]:', e);
                         }
                       }
 

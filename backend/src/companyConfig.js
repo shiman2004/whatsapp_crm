@@ -9,8 +9,10 @@ export const COMPANIES = {
     name: 'Royal Wellness Center',
     shortName: 'Royal Wellness',
     colorHex: '#008000', // Green requested by user
+    color: '#008000',
     phoneId: process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701',
     phoneNumber: '+94 70 639 3353',
+    phone: '+94 70 639 3353',
     displayPhoneDigits: '94706393353',
   },
   CRAS: {
@@ -19,8 +21,10 @@ export const COMPANIES = {
     name: 'College of Royal Aesthetic of Sri Lanka',
     shortName: 'CRAS College',
     colorHex: '#800000', // Maroon requested by user
+    color: '#800000',
     phoneId: process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705',
     phoneNumber: '+94 70 637 3353',
+    phone: '+94 70 637 3353',
     displayPhoneDigits: '94706373353',
   }
 };

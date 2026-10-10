@@ -89,7 +89,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'coordinators' as NavTab,
       label: 'Coordinators',
       icon: Users,
-      adminOnly: false, // Accessible to Super Admin & Leads Manager
+      adminOnly: true, // Super Admin only
     },
     {
       id: 'audit' as NavTab,
@@ -112,7 +112,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   ];
 
   const visibleNav = navItems.filter(item => {
-    if (item.id === 'coordinators') return isSuperAdmin || isLeadsOfficer;
+    if (item.id === 'coordinators') return isSuperAdmin;
     if (item.adminOnly) return isSuperAdmin;
     return true;
   });

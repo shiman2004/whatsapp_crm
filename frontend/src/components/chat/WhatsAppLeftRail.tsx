@@ -22,7 +22,7 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
   const unreadCount = leads.filter(l => (l.unreadCount || 0) > 0).length;
 
   return (
-    <aside className="w-[60px] bg-[#202c33] border-r border-[#222e35] flex flex-col justify-between items-center py-4 select-none shrink-0 z-20">
+    <aside className="hidden md:flex w-[60px] bg-[#202c33] border-r border-[#222e35] flex-col justify-between items-center py-4 select-none shrink-0 z-20">
       {/* Top Navigation Icons */}
       <div className="flex flex-col items-center gap-3 w-full">
         {/* Chats Tab */}

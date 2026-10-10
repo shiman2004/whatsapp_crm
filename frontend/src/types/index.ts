@@ -42,6 +42,8 @@ export interface Customer {
   avatarUrl?: string;
 }
 
+export type CompanyCode = 'RWC' | 'CRAS';
+
 export interface Lead {
   id: string;
   customerId: string;
@@ -52,7 +54,12 @@ export interface Lead {
   assignedTo?: string; // User ID
   assignedCoordinator?: User;
   stage: LeadStage;
-  source: 'whatsapp';
+  source: string; // 'whatsapp' | 'RWC' | 'CRAS'
+  company?: CompanyCode;
+  companyTag?: string;
+  companyColor?: string;
+  companyPhoneNumberId?: string;
+  companyPhoneNumber?: string;
   language: LanguageCode;
   createdAt: string;
   updatedAt: string;

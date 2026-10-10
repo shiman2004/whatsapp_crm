@@ -25,6 +25,7 @@ import {
 import { Lead } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { AddContactModal } from './AddContactModal';
+import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
 interface WhatsAppChatListProps {
   onSelectLead: (leadId: string) => void;
@@ -52,7 +53,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     markChatAsRead,
     markChatAsUnread,
     deleteChat,
-    clearChat
+    clearChat,
+    updateLeadCompany
   } = useCrm();
 
   const [search, setSearch] = useState('');
@@ -200,6 +202,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const convertedCount = accessibleLeads.filter(l => l.stage === 'converted').length;
   const lostCount = accessibleLeads.filter(l => l.stage === 'lost').length;
   const archivedCount = accessibleLeads.filter(l => archivedLeadIds.has(l.id)).length;
+  const rwcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && ((l.company || 'RWC') === 'RWC' || l.source?.toUpperCase() === 'RWC')).length;
+  const crasCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && (l.company === 'CRAS' || l.source?.toUpperCase() === 'CRAS')).length;
 
   // Filter leads based on role & search & category/stage/archive filters
   const filteredLeads = accessibleLeads.filter((lead) => {
@@ -212,6 +216,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       // Normal views exclude archived chats
       if (isArchived) return false;
     }
+
+    // Company filter pills
+    if (activeFilter === 'rwc' && (lead.company || 'RWC') !== 'RWC' && lead.source?.toUpperCase() !== 'RWC') return false;
+    if (activeFilter === 'cras' && lead.company !== 'CRAS' && lead.source?.toUpperCase() !== 'CRAS') return false;
 
     // Filter pills
     if (activeFilter === 'unread' && (!lead.unreadCount || lead.unreadCount === 0)) return false;
@@ -230,12 +238,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       const matchName = lead.customer?.displayName?.toLowerCase().includes(q);
       const matchPhone = lead.customer?.whatsappNumber?.includes(q);
       const matchCategory = categories.find(c => c.id === lead.categoryId)?.name.toLowerCase().includes(q);
+      const matchCompany = lead.company?.toLowerCase().includes(q) || lead.companyTag?.toLowerCase().includes(q);
       const activeTags = leadLabels[lead.id] || [];
       const matchTag = activeTags.some(t => {
         const found = PRESET_LABELS.find(p => p.id === t);
         return found?.name.toLowerCase().includes(q);
       });
-      if (!matchName && !matchPhone && !matchCategory && !matchTag) return false;
+      if (!matchName && !matchPhone && !matchCategory && !matchCompany && !matchTag) return false;
     }
 
     return true;
@@ -365,6 +374,35 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             }`}
           >
             All
+          </button>
+
+          {/* Company Filter Badges: (RWC) in Green & (CRAS) in Maroon */}
+          <button
+            onClick={() => setActiveFilter('rwc')}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
+              activeFilter === 'rwc'
+                ? 'bg-[#008000]/25 text-[#22c55e] font-bold border-[#008000]'
+                : 'bg-[#202c33] text-[#8696a0] border-transparent hover:bg-[#2a3942]'
+            }`}
+            title="Filter Royal Wellness Center messages"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#008000]" />
+            <span>(RWC)</span>
+            {rwcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#008000]/20 text-[#22c55e]">{rwcCount}</span>}
+          </button>
+
+          <button
+            onClick={() => setActiveFilter('cras')}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
+              activeFilter === 'cras'
+                ? 'bg-[#800000]/30 text-[#f87171] font-bold border-[#800000]'
+                : 'bg-[#202c33] text-[#8696a0] border-transparent hover:bg-[#2a3942]'
+            }`}
+            title="Filter College of Royal Aesthetic messages"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
+            <span>(CRAS)</span>
+            {crasCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#800000]/25 text-[#f87171]">{crasCount}</span>}
           </button>
 
           {newCount > 0 && (
@@ -579,6 +617,9 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         {displayName}
                       </span>
 
+                      {/* Company Tag Badge (RWC) or (CRAS) */}
+                      <CompanyTagBadge lead={lead} size="xs" />
+
                       {/* Locked Chat Indicator */}
                       {isLocked && (
                         <span title="Chat is locked" className="text-amber-400">
@@ -781,6 +822,41 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                 })}
               </div>
             )}
+          </div>
+
+          <div className="h-px bg-slate-700/60 my-1" />
+
+          {/* Company Switcher */}
+          <div className="wa-context-item justify-between group/comp py-1.5">
+            <span className="text-[11px] text-[#8696a0]">Company:</span>
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <button
+                onClick={() => {
+                  if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'RWC');
+                  setContextMenuLeadId(null);
+                }}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                  (activeContextMenuLead?.company || 'RWC') === 'RWC'
+                    ? 'bg-[#008000] text-white border-[#008000]'
+                    : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
+                }`}
+              >
+                (RWC)
+              </button>
+              <button
+                onClick={() => {
+                  if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'CRAS');
+                  setContextMenuLeadId(null);
+                }}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                  activeContextMenuLead?.company === 'CRAS'
+                    ? 'bg-[#800000] text-white border-[#800000]'
+                    : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
+                }`}
+              >
+                (CRAS)
+              </button>
+            </div>
           </div>
 
           <div className="h-px bg-slate-700/60 my-1" />

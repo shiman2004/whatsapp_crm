@@ -17,7 +17,8 @@ import {
   LeadStage,
   LanguageCode,
   OnboardingSession,
-  WhatsAppConnectionStatus
+  WhatsAppConnectionStatus,
+  CompanyCode
 } from '../types';
 import {
   INITIAL_USERS,
@@ -39,6 +40,7 @@ import {
   isHardwareLid, 
   formatWhatsAppDisplay 
 } from '../utils/phoneUtils';
+import { COMPANIES, getLeadCompany } from '../utils/companyUtils';
 import { API_BASE_URL } from '../config/api';
 import { aiService } from '../services/aiService';
 
@@ -88,6 +90,7 @@ interface CrmContextType {
   updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string) => void;
   updateLeadTreatment: (leadId: string, treatmentId: string, customSerial?: string) => void;
   updateLeadLanguage: (leadId: string, language: 'en' | 'si' | 'ta') => void;
+  updateLeadCompany: (leadId: string, company: CompanyCode) => void;
   addLeadNote: (leadId: string, note: string) => void;
   
   // Messaging actions
@@ -393,12 +396,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               dbCustomers.push(finalCust);
             }
 
+            const comp = getLeadCompany(l);
             hydratedLeads.push({
               ...l,
               serialNumber: l.serialNumber || undefined,
               assignedTo: l.assignedTo || undefined,
               stage: l.stage || 'new',
-              customer: finalCust
+              customer: finalCust,
+              company: comp.code,
+              companyTag: comp.tag,
+              companyColor: comp.color,
+              companyPhoneNumberId: l.companyPhoneNumberId || comp.phoneId,
+              companyPhoneNumber: l.companyPhoneNumber || comp.phone
             });
           });
 
@@ -605,6 +614,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     serialNumber: incomingLead?.serialNumber !== undefined ? (incomingLead.serialNumber || undefined) : l.serialNumber,
                     stage: incomingLead?.stage !== undefined ? incomingLead.stage : l.stage,
                     assignedTo: incomingLead?.assignedTo !== undefined ? (incomingLead.assignedTo || undefined) : l.assignedTo,
+                    company: incomingLead?.company !== undefined ? incomingLead.company : l.company,
+                    companyTag: incomingLead?.companyTag !== undefined ? incomingLead.companyTag : l.companyTag,
+                    companyColor: incomingLead?.companyColor !== undefined ? incomingLead.companyColor : l.companyColor,
+                    companyPhoneNumberId: incomingLead?.companyPhoneNumberId !== undefined ? incomingLead.companyPhoneNumberId : l.companyPhoneNumberId,
+                    companyPhoneNumber: incomingLead?.companyPhoneNumber !== undefined ? incomingLead.companyPhoneNumber : l.companyPhoneNumber,
                     updatedAt: new Date().toISOString()
                   };
                 }
@@ -652,7 +666,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
 
             console.log('[CRM SSE DEBUG] event received:', data.type, 'message ID:', data.messageId, 'conversation ID:', data.leadId);
-            const { phone, whatsappId, realPhone, name, avatarUrl, text, messageId, timestamp, direction, senderType } = data;
+            const { phone, whatsappId, realPhone, name, avatarUrl, text, messageId, timestamp, direction, senderType, company, companyTag, companyColor, companyPhoneNumberId, companyPhoneNumber } = data;
             const isOutbound = direction === 'outbound' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE';
             
             // Deduplicate at client level
@@ -752,9 +766,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               const isCurrentlyActive = selectedLeadIdRef.current === resolvedLeadId;
 
               if (!exists) {
+                const leadCompCode = (company as CompanyCode) || 'RWC';
+                const compConfig = COMPANIES[leadCompCode] || COMPANIES.RWC;
                 const newLead: Lead = {
                   id: resolvedLeadId,
                   customerId: resolvedCustomerId,
+                  company: leadCompCode,
+                  companyTag: companyTag || compConfig.tag,
+                  companyColor: companyColor || compConfig.color,
+                  companyPhoneNumberId: companyPhoneNumberId || compConfig.phoneId,
+                  companyPhoneNumber: companyPhoneNumber || compConfig.phone,
                   customer: {
                     id: resolvedCustomerId,
                     whatsappNumber: canonicalPhone || rawNumber,
@@ -770,7 +791,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   serialNumber: undefined,
                   stage: isOutbound ? 'contacted' : 'new',
                   assignedTo: undefined,
-                  source: 'whatsapp',
+                  source: leadCompCode,
                   language: 'en',
                   notesCount: 0,
                   unreadCount: isOutbound ? 0 : 1,
@@ -793,9 +814,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       avatarUrl: avatarUrl || l.customer.avatarUrl
                     } : undefined;
 
+                    const currentCompCode = (company as CompanyCode) || l.company || (l.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC');
+                    const compConfig = COMPANIES[currentCompCode] || COMPANIES.RWC;
+
                     return { 
                       ...l, 
                       customer: updatedCustomer,
+                      company: currentCompCode,
+                      companyTag: companyTag || l.companyTag || compConfig.tag,
+                      companyColor: companyColor || l.companyColor || compConfig.color,
+                      companyPhoneNumberId: companyPhoneNumberId || l.companyPhoneNumberId || compConfig.phoneId,
+                      companyPhoneNumber: companyPhoneNumber || l.companyPhoneNumber || compConfig.phone,
                       unreadCount: isOutbound ? 0 : (isCurrentlyActive ? 0 : (l.unreadCount || 0) + 1),
                       lastCustomerMessageAt: timestamp || new Date().toISOString(),
                       updatedAt: new Date().toISOString() 
@@ -1324,6 +1353,46 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Language Updated', `Preferred language set to ${langName}`, 'success');
   };
 
+  // Update lead company
+  const updateLeadCompany = (leadId: string, company: CompanyCode) => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return;
+
+    const compConfig = COMPANIES[company] || COMPANIES.RWC;
+
+    setLeads(prev => prev.map(l => {
+      if (l.id === leadId) {
+        return {
+          ...l,
+          company,
+          companyTag: compConfig.tag,
+          companyColor: compConfig.color,
+          companyPhoneNumberId: compConfig.phoneId,
+          companyPhoneNumber: compConfig.phone,
+          source: company,
+          updatedAt: new Date().toISOString()
+        };
+      }
+      return l;
+    }));
+
+    fetch(`${API_BASE_URL}/api/leads/update`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+      },
+      body: JSON.stringify({
+        leadId,
+        company,
+        source: company
+      })
+    }).catch(err => console.error('Failed to sync company update:', err));
+
+    notify('Company Updated', `Contact assigned to ${compConfig.name} ${compConfig.tag}`, 'success');
+  };
+
   // Add internal note
   const addLeadNote = (leadId: string, noteText: string) => {
     if (!noteText.trim()) return;
@@ -1411,7 +1480,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           leadId: lead.id,
           customerId: lead.customerId,
           token: savedToken || undefined,
-          phoneNumberId: '1358157244046701'
+          company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
+          phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701')
         })
       }).then(async (res) => {
         if (!res.ok) {
@@ -2254,6 +2324,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateLeadStage,
     updateLeadTreatment,
     updateLeadLanguage,
+    updateLeadCompany,
     addLeadNote,
     sendMessage,
     replyingMessage,

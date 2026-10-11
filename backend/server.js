@@ -1603,7 +1603,6 @@ const server = http.createServer(async (req, res) => {
                 stage: leadStage,
                 assignedTo: targetCoordinatorId,
                 source: targetCompany,
-                whatsappSessionId: targetCompany,
                 language: language || 'en',
                 lastCustomerMessageAt: new Date()
               },
@@ -1623,7 +1622,6 @@ const server = http.createServer(async (req, res) => {
                 treatmentId: firstTrt?.id || savedLead.treatmentId,
                 assignedTo: targetCoordinatorId || savedLead.assignedTo,
                 source: company ? targetCompany : savedLead.source,
-                whatsappSessionId: company ? targetCompany : (savedLead.whatsappSessionId || savedLead.source),
                 stage: initialMessage ? 'contacted' : savedLead.stage,
                 language: language || savedLead.language,
                 updatedAt: new Date()

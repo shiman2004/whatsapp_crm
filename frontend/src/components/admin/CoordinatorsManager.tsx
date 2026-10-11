@@ -86,11 +86,11 @@ export const CoordinatorsManager: React.FC = () => {
     if (!fullName.trim()) return;
 
     let systemRole: UserRole = 'coordinator';
-    let assignedCompany: CompanyCode = 'RWC';
+    let assignedCompany: CompanyCode | undefined = undefined;
 
     if (selectedRoleChoice === 'leads_officer') {
       systemRole = 'leads_officer';
-      assignedCompany = company;
+      assignedCompany = undefined; // Common role for all leads across both companies
     } else if (selectedRoleChoice === 'coordinator_cras') {
       systemRole = 'coordinator';
       assignedCompany = 'CRAS';
@@ -248,7 +248,7 @@ export const CoordinatorsManager: React.FC = () => {
                       <div>
                         <h4 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
                           <span>{staff.fullName}</span>
-                          <CompanyTagBadge company={staff.company || 'RWC'} size="xs" />
+                          {!isOfficer && <CompanyTagBadge company={staff.company || 'RWC'} size="xs" />}
                         </h4>
                         <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
                           <MapPin className="w-3 h-3 text-slate-500" />
@@ -292,7 +292,13 @@ export const CoordinatorsManager: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-slate-400 font-medium">Company:</span>
                       <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
-                        <CompanyTagBadge company={staff.company || 'RWC'} size="xs" showFullName={true} />
+                        {isOfficer ? (
+                          <span className="text-indigo-300 text-[11px] font-semibold flex items-center gap-1">
+                            <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" /> Common (All Leads)
+                          </span>
+                        ) : (
+                          <CompanyTagBadge company={staff.company || 'RWC'} size="xs" showFullName={true} />
+                        )}
                       </span>
                     </div>
 
@@ -422,26 +428,21 @@ export const CoordinatorsManager: React.FC = () => {
                   <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
                     <Building2 className="w-3.5 h-3.5 text-slate-400" />
                     <span>Company</span>
-                    <span className="text-rose-400">*</span>
+                    {selectedRoleChoice !== 'leads_officer' && <span className="text-rose-400">*</span>}
                   </label>
-                  {selectedRoleChoice !== 'leads_officer' ? (
+                  {selectedRoleChoice === 'leads_officer' ? (
+                    <div className="w-full bg-[#202c33]/70 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-xs flex items-center justify-between text-slate-200">
+                      <span className="text-indigo-300 font-bold flex items-center gap-1.5 text-xs">
+                        <ShieldCheck className="w-4 h-4 text-indigo-400 shrink-0" />
+                        <span>All Companies (Common)</span>
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-medium">Receives all leads</span>
+                    </div>
+                  ) : (
                     <div className="w-full bg-[#202c33]/70 border border-slate-700/80 rounded-xl px-3 py-2 text-xs flex items-center justify-between text-slate-200">
                       <CompanyTagBadge company={company} size="sm" showFullName={true} />
                       <span className="text-[10px] text-slate-400 italic">Auto-assigned</span>
                     </div>
-                  ) : (
-                    <select
-                      value={company}
-                      onChange={(e) => setCompany(e.target.value as CompanyCode)}
-                      className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
-                    >
-                      <option value="RWC" className="bg-[#111b21] text-white">
-                        RWC — Royal Wellness Center
-                      </option>
-                      <option value="CRAS" className="bg-[#111b21] text-white">
-                        CRAS — College of Royal Aesthetic
-                      </option>
-                    </select>
                   )}
                 </div>
               </div>

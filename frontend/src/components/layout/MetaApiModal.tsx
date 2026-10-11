@@ -161,7 +161,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
                   Active
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">Royal Wellness Center Official Connection</p>
+              <p className="text-xs text-slate-400">Alpha Health Group Official Connection</p>
             </div>
           </div>
           <button 

@@ -117,15 +117,15 @@ export const LoginScreen: React.FC = () => {
         
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-14 h-14 rounded-2xl bg-white p-1 flex items-center justify-center mx-auto shadow-xl shadow-emerald-950/60 overflow-hidden ring-1 ring-emerald-500/30">
-            <img src="/logo.png" alt="Royal Wellness Logo" className="w-full h-full object-contain" />
+          <div className="w-16 h-16 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-xl overflow-hidden ring-1 ring-slate-700/50">
+            <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
           </div>
           <div>
             <h1 className="text-xl font-bold text-white tracking-wide">
-              Royal Wellness CRM
+              Alpha Health Group
             </h1>
             <p className="text-xs text-[#8696a0]">
-              Centralized WhatsApp Healthcare Gateway
+              Centralized WhatsApp Healthcare & Clinical Gateway
             </p>
           </div>
         </div>

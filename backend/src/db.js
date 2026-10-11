@@ -43,6 +43,19 @@ export const checkDbConnection = async () => {
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "source" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
 
+    // Ensure media_files table exists for persistent image/audio storage
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.media_files (
+        id VARCHAR(255) PRIMARY KEY,
+        file_name VARCHAR(255) UNIQUE NOT NULL,
+        mime_type VARCHAR(100) NOT NULL,
+        data BYTEA NOT NULL,
+        size INT NOT NULL,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_media_files_name ON public.media_files(file_name);`).catch(() => null);
+
     // Ensure LeadStage enum has all required values in Postgres
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'new';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'assigned';`).catch(() => null);

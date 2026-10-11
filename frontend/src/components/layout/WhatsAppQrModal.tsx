@@ -134,45 +134,47 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-4">
-      <div className="bg-[#111b21] border border-slate-700/80 rounded-3xl w-full max-w-xl overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
+    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-2.5 sm:p-4">
+      <div className="bg-[#111b21] border border-slate-700/80 rounded-2xl sm:rounded-3xl w-full max-w-xl max-h-[92vh] flex flex-col overflow-hidden shadow-2xl animate-in fade-in zoom-in-95 duration-200">
         
         {/* Header */}
-        <div className="px-6 py-4 border-b border-slate-800 flex items-center justify-between bg-[#202c33]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-whatsapp/20 text-whatsapp flex items-center justify-center shadow">
-              <QrCode className="w-5 h-5" />
+        <div className="px-4 sm:px-6 py-3 sm:py-4 border-b border-slate-800 flex items-center justify-between bg-[#202c33] shrink-0">
+          <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-whatsapp/20 text-whatsapp flex items-center justify-center shadow shrink-0">
+              <QrCode className="w-4 h-4 sm:w-5 sm:h-5" />
             </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                Alpha Health Group Official WhatsApp Line
+            <div className="min-w-0">
+              <h2 className="text-xs sm:text-sm font-bold text-slate-100 flex items-center gap-2 flex-wrap">
+                <span>Alpha Health Line</span>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
                   status === 'connected' 
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
-                    : status === 'syncing'
+                    : status === 'syncing' 
                     ? 'bg-amber-500/20 text-amber-300 border-amber-500/30 animate-pulse'
                     : 'bg-amber-500/20 text-amber-400 border-amber-500/30'
                 }`}>
                   {status === 'connected' 
-                    ? '🟢 Linked & Online' 
+                    ? '🟢 Linked' 
                     : status === 'syncing' 
-                    ? '🔄 Syncing History...' 
-                    : 'Scan to Connect'}
+                    ? '🔄 Syncing...' 
+                    : 'Scan QR'}
                 </span>
               </h2>
-              <p className="text-xs text-slate-400">Single verified clinic number shared across Super Admin, Leads Officer, and all Coordinators</p>
+              <p className="text-[11px] sm:text-xs text-slate-400 truncate hidden xs:block sm:block">Verified clinic number shared across staff</p>
             </div>
           </div>
           <button 
+            type="button"
             onClick={onClose}
-            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-all"
+            className="p-1.5 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition-all shrink-0 cursor-pointer"
+            aria-label="Close"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Content Body */}
-        <div className="p-6 space-y-6">
+        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
           
           {status === 'connected' ? (
             /* Connected State */

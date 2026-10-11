@@ -65,7 +65,7 @@ export const WhatsAppSimulator: React.FC = () => {
   const lang = simulatorSession.selectedLanguage || 'en';
 
   return (
-    <div className="fixed bottom-4 right-4 z-40 w-[380px] h-[640px] bg-slate-900 border-2 border-emerald-500/40 rounded-3xl shadow-2xl shadow-emerald-950/80 flex flex-col overflow-hidden animate-slide-up">
+    <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-4 z-40 w-[calc(100vw-16px)] sm:w-[380px] max-w-[380px] h-[85vh] max-h-[640px] bg-slate-900 border-2 border-emerald-500/40 rounded-3xl shadow-2xl shadow-emerald-950/80 flex flex-col overflow-hidden animate-slide-up">
       {/* Device Top Speaker & Camera Notch */}
       <div className="bg-slate-950 h-5 w-full flex items-center justify-center relative shrink-0">
         <div className="w-16 h-3 bg-slate-900 rounded-full flex items-center justify-center">

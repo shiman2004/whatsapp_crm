@@ -123,25 +123,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {isMobileOpen && (
         <div 
           onClick={onCloseMobile}
-          className="fixed inset-0 bg-black/60 z-40 md:hidden backdrop-blur-xs animate-in fade-in duration-200"
+          className="fixed inset-0 bg-black/75 z-40 md:hidden backdrop-blur-xs animate-in fade-in duration-200"
         />
       )}
 
       {/* Sidebar Container */}
       <aside className={`
-        w-64 md:w-56 border-r border-slate-800 bg-[#111b21] flex flex-col justify-between py-3 select-none shrink-0
+        w-72 md:w-56 border-r border-slate-800 bg-[#111b21] flex flex-col justify-between py-3 select-none shrink-0
         fixed md:static inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out
-        ${isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'}
+        ${isMobileOpen ? 'translate-x-0 shadow-2xl ring-1 ring-slate-800' : '-translate-x-full md:translate-x-0'}
       `}>
-        <div className="space-y-2">
-          {/* Mobile Header with Close button */}
-          <div className="md:hidden px-4 pb-2 border-b border-slate-800/80 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-300 uppercase tracking-wider">Navigation</span>
+        <div className="space-y-2 overflow-y-auto">
+          {/* Mobile Header with Brand & Close button */}
+          <div className="md:hidden px-4 py-2 border-b border-slate-800/80 flex items-center justify-between">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-slate-700/50">
+                <img src="/logo.png" alt="Alpha Health" className="w-full h-full object-contain" />
+              </div>
+              <span className="text-xs font-bold text-white tracking-wide">Alpha Health CRM</span>
+            </div>
             <button 
+              type="button"
               onClick={onCloseMobile}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-[#202c33]"
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-[#202c33] active:bg-slate-800 transition-colors cursor-pointer"
+              aria-label="Close menu"
             >
-              <X className="w-4 h-4" />
+              <X className="w-5 h-5" />
             </button>
           </div>
 
@@ -154,22 +161,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 return (
                   <button
                     key={item.id}
+                    type="button"
                     onClick={() => {
                       setActiveTab(item.id);
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+                    className={`w-full flex items-center justify-between px-3 py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                       isActive 
-                        ? 'bg-[#202c33] text-whatsapp font-bold' 
-                        : 'text-slate-400 hover:text-slate-200 hover:bg-[#202c33]/50'
+                        ? 'bg-[#202c33] text-whatsapp font-bold shadow-xs' 
+                        : 'text-slate-300 hover:text-white hover:bg-[#202c33]/60 active:bg-[#202c33]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5">
-                      <Icon className={`w-4 h-4 ${isActive ? 'text-whatsapp' : 'text-slate-400'}`} />
-                      <span>{item.label}</span>
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-whatsapp' : 'text-slate-400'}`} />
+                      <span className="truncate">{item.label}</span>
                     </div>
                     {item.badge !== undefined && (
-                      <span className={`px-1.5 py-0.2 text-[10px] font-black rounded-full ${item.badgeColor}`}>
+                      <span className={`px-2 py-0.5 text-[10px] font-black rounded-full shrink-0 ${item.badgeColor}`}>
                         {item.badge}
                       </span>
                     )}
@@ -177,6 +185,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 );
               })}
             </nav>
+          </div>
+        </div>
+
+        {/* Mobile Sidebar Footer: Logged in status */}
+        <div className="md:hidden px-3 pt-3 border-t border-slate-800/80 mt-auto">
+          <div className="flex items-center gap-2.5 px-2 py-1.5 rounded-xl bg-[#202c33]/50">
+            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-bold text-xs shrink-0">
+              {currentUser?.fullName?.charAt(0) || 'U'}
+            </div>
+            <div className="min-w-0 flex-1 truncate">
+              <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
+              <p className="text-[10px] text-emerald-400 truncate">
+                {currentUser?.role === 'super_admin' ? 'Super Admin' : (currentUser?.role === 'leads_officer' ? 'Leads Officer' : 'Coordinator')}
+              </p>
+            </div>
           </div>
         </div>
       </aside>

@@ -221,7 +221,7 @@ model Lead {
   stage                 LeadStage          @default(new)
   source                String             @default("whatsapp") @db.VarChar(50)
   language              LanguageCode       @default(en)
-  lastCustomerMessageAt DateTime           @default(now())
+  lastCustomerMessageAt DateTime?
   createdAt             DateTime           @default(now())
   updatedAt             DateTime           @updatedAt
 

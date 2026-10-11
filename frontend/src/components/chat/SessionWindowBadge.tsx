@@ -8,9 +8,12 @@ interface SessionWindowBadgeProps {
 export const SessionWindowBadge: React.FC<SessionWindowBadgeProps> = ({ lastCustomerMessageAt }) => {
   if (!lastCustomerMessageAt) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-semibold shrink-0 whitespace-nowrap">
-        <AlertCircle className="w-2.5 h-2.5 text-amber-400 shrink-0" />
-        <span>Template Req.</span>
+      <span 
+        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-semibold shrink-0 whitespace-nowrap shadow-sm"
+        title="New contact or no customer reply received yet. Approved WhatsApp template required."
+      >
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+        <span>Window Closed (Template Req.)</span>
       </span>
     );
   }
@@ -26,12 +29,12 @@ export const SessionWindowBadge: React.FC<SessionWindowBadgeProps> = ({ lastCust
       className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0 border whitespace-nowrap ${
         isOpen
           ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-          : 'bg-rose-500/10 border-rose-500/30 text-rose-300'
+          : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
       }`}
-      title={isOpen ? 'Meta 24h Session Window open' : 'Session window closed (>24h)'}
+      title={isOpen ? 'Meta 24h Session Window open' : 'Session window closed (>24h since customer reply)'}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
-      <span>{isOpen ? `24h Active (${remainingHours.toFixed(0)}h)` : 'Window Closed'}</span>
+      <span>{isOpen ? `24h Active (${remainingHours.toFixed(0)}h)` : 'Window Closed (Template Req.)'}</span>
     </span>
   );
 };

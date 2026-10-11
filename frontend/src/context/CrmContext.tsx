@@ -1757,11 +1757,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   // Send approved WhatsApp template via Meta Cloud API
   const sendWhatsAppTemplate = async (leadId: string, templateId: string, params: string[]) => {
-    const template = templates.find(t => t.id === templateId || t.name === templateId);
+    const template = templates.find(t => t.id === templateId || t.name === templateId || t.waTemplateName === templateId);
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    const templateName = template?.name || templateId;
+    const templateName = template?.waTemplateName || template?.name || templateId;
     let body = template?.body || `[WhatsApp Template: ${templateName}]`;
     params.forEach((param, idx) => {
       body = body.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), param);

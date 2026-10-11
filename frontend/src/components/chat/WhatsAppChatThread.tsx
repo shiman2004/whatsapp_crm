@@ -59,7 +59,16 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
 
-  const lastCustomerMessageTime = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
+  const inboundMessages = leadMessages.filter(m => m.direction === 'inbound');
+  const latestInboundMsg = inboundMessages.length > 0
+    ? inboundMessages.reduce((latest, m) => new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest)
+    : null;
+
+  // The 24h customer window strictly opens ONLY when an inbound message from the customer exists
+  const lastCustomerMessageTime = latestInboundMsg
+    ? new Date(latestInboundMsg.createdAt).getTime()
+    : (inboundMessages.length > 0 && lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0);
+
   const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
 
   const filteredMessages = searchQuery.trim()
@@ -107,7 +116,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                   {displayName}
                 </h3>
                 <CompanyTagBadge lead={lead} size="sm" showFullName={true} />
-                <SessionWindowBadge lastCustomerMessageAt={lead.lastCustomerMessageAt} />
+                <SessionWindowBadge lastCustomerMessageAt={lastCustomerMessageTime > 0 ? new Date(lastCustomerMessageTime).toISOString() : undefined} />
               </div>
               <p className="text-[11px] text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
                 {displayPhone ? (

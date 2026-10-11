@@ -1463,8 +1463,13 @@ const server = http.createServer(async (req, res) => {
         const enrichedLeads = leads.map(l => {
           const isCras = (l.source || '').toUpperCase() === 'CRAS' || (l.whatsappSessionId || '').toUpperCase() === 'CRAS';
           const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
+          const inboundMsgs = (l.messages || []).filter(m => m.direction === 'inbound');
+          const lastInbound = inboundMsgs.length > 0
+            ? inboundMsgs[inboundMsgs.length - 1].timestamp
+            : null;
           return {
             ...l,
+            lastCustomerMessageAt: lastInbound ? new Date(lastInbound).toISOString() : null,
             company: comp.code,
             companyTag: comp.tag,
             companyColor: comp.colorHex,
@@ -2015,7 +2020,7 @@ const server = http.createServer(async (req, res) => {
                 assignedAt: targetCoordinatorId ? new Date() : null,
                 source: targetCompany,
                 language: language || 'en',
-                lastCustomerMessageAt: new Date()
+                lastCustomerMessageAt: null
               },
               include: {
                 customer: true,

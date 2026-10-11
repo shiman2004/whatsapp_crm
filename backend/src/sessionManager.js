@@ -12,6 +12,7 @@ import fs from 'fs';
 import { getPrisma, getDbStatus } from './db.js';
 import { useSupabaseAuthState } from './supabaseAuthState.js';
 import { evaluateAutoReply, pauseAutoReply } from './autoReplyEngine.js';
+import { saveMediaToSupabase } from './supabaseMedia.js';
 
 const makeWASocket = makeWASocketDefault.default || makeWASocketDefault;
 
@@ -407,6 +408,8 @@ class WhatsAppSessionManager {
           const savedFileName = `wa_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
           fs.writeFileSync(path.join(uploadDir, savedFileName), buffer);
           mediaUrl = `/uploads/${savedFileName}`;
+          const mimeType = m?.imageMessage?.mimetype || m?.audioMessage?.mimetype || m?.videoMessage?.mimetype || m?.documentMessage?.mimetype || 'application/octet-stream';
+          saveMediaToSupabase(savedFileName, mimeType, buffer).catch(() => null);
           console.log(`📥 [Baileys Media Downloaded] Type: ${mediaType}, Saved to: ${mediaUrl} (${(buffer.length / 1024).toFixed(1)} KB)`);
         }
       } catch (mediaErr) {
@@ -748,6 +751,7 @@ class WhatsAppSessionManager {
         const outFileName = `out_baileys_${Date.now()}_${Math.random().toString(36).substring(7)}.${ext}`;
         fs.writeFileSync(path.join(uploadDir, outFileName), buffer);
         storedMediaUrl = `/uploads/${outFileName}`;
+        saveMediaToSupabase(outFileName, payload.mimetype || 'application/octet-stream', buffer).catch(() => null);
       } catch (err) {
         console.warn('⚠️ Could not save outbound media to disk:', err.message);
         storedMediaUrl = media.url || media.dataUrl;

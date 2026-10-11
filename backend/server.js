@@ -8,6 +8,7 @@ import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
 import { evaluateAutoReply, pauseAutoReply, clearAutoReplySessions } from './src/autoReplyEngine.js';
 import { resolveCompany, COMPANIES } from './src/companyConfig.js';
+import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
 
 dotenv.config();
 
@@ -115,6 +116,7 @@ function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) 
     }
     const filePath = path.join(uploadDir, fileName);
     fs.writeFileSync(filePath, buffer);
+    saveMediaToSupabase(fileName, mimeType, buffer).catch(() => null);
     console.log(`💾 [Media Stored] Saved to: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB)`);
     return {
       mediaUrl: `/uploads/${fileName}`,
@@ -185,6 +187,7 @@ async function downloadMetaMedia(mediaId, metaToken, mimeType = '', customFilena
     }
     const filePath = path.join(uploadDir, fileName);
     fs.writeFileSync(filePath, buffer);
+    saveMediaToSupabase(fileName, mediaMime || mimeType || 'image/jpeg', buffer).catch(() => null);
     console.log(`📥 [Meta Media Downloaded] File saved to: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB)`);
     return `/uploads/${fileName}`;
   } catch (err) {
@@ -350,34 +353,118 @@ const server = http.createServer(async (req, res) => {
   const parsedUrl = url.parse(req.url, true);
   const pathname = parsedUrl.pathname;
 
-  // 0. Static Uploads File Serving
+  // 0. Static Uploads File Serving with Supabase Persistent Recovery & Disk Cache
   if (pathname.startsWith('/uploads/')) {
     const filename = path.basename(pathname);
-    const filePath = path.join(process.cwd(), 'public', 'uploads', filename);
+    const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+    const filePath = path.join(uploadDir, filename);
+
+    const ext = path.extname(filename).toLowerCase();
+    const mimeTypes = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.mp4': 'video/mp4',
+      '.webm': 'video/webm',
+      '.ogg': 'audio/ogg',
+      '.opus': 'audio/ogg',
+      '.mp3': 'audio/mpeg',
+      '.m4a': 'audio/mp4',
+      '.wav': 'audio/wav',
+      '.pdf': 'application/pdf',
+      '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    };
+    let contentType = mimeTypes[ext] || 'application/octet-stream';
+
+    // 1. Check local disk cache first
     if (fs.existsSync(filePath)) {
-      const ext = path.extname(filePath).toLowerCase();
-      const mimeTypes = {
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.png': 'image/png',
-        '.gif': 'image/gif',
-        '.webp': 'image/webp',
-        '.mp4': 'video/mp4',
-        '.webm': 'video/webm',
-        '.ogg': 'audio/ogg',
-        '.mp3': 'audio/mpeg',
-        '.wav': 'audio/wav',
-        '.pdf': 'application/pdf',
-      };
-      const contentType = mimeTypes[ext] || 'application/octet-stream';
-      res.writeHead(200, { 'Content-Type': contentType });
-      fs.createReadStream(filePath).pipe(res);
-      return;
-    } else {
-      res.writeHead(404, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ error: 'File not found' }));
-      return;
+      try {
+        const stat = fs.statSync(filePath);
+        if (stat.size > 0) {
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': stat.size,
+            'Cache-Control': 'public, max-age=31536000, immutable'
+          });
+          fs.createReadStream(filePath).pipe(res);
+          return;
+        }
+      } catch (e) {}
     }
+
+    // 2. Fallback to Supabase Database (Persistent cloud storage)
+    try {
+      const mediaRecord = await getMediaFromSupabase(filename);
+      if (mediaRecord && mediaRecord.buffer && mediaRecord.buffer.length > 0) {
+        // Asynchronously write to local disk cache for fast future requests
+        try {
+          if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+          fs.writeFile(filePath, mediaRecord.buffer, () => {});
+        } catch (cacheErr) {}
+
+        const finalMime = mediaRecord.mimeType || contentType;
+        res.writeHead(200, {
+          'Content-Type': finalMime,
+          'Content-Length': mediaRecord.buffer.length,
+          'Cache-Control': 'public, max-age=31536000, immutable'
+        });
+        res.end(mediaRecord.buffer);
+        return;
+      }
+    } catch (dbErr) {
+      console.warn(`⚠️ [Uploads] Supabase lookup error for ${filename}:`, dbErr.message);
+    }
+
+    // 3. Ultimate Fallback: Re-download on-demand from Meta Graph API if it's an inbound Meta media ID
+    if (filename.startsWith('meta_') && metaConfig.accessToken) {
+      try {
+        const parts = filename.split('_');
+        const mediaId = parts[1];
+        if (mediaId) {
+          console.log(`⏳ [Uploads] Re-fetching Meta media ${mediaId} on-demand...`);
+          const metaRes = await fetch(`https://graph.facebook.com/v20.0/${mediaId}`, {
+            headers: { 'Authorization': `Bearer ${metaConfig.accessToken}` }
+          });
+          if (metaRes.ok) {
+            const metaData = await metaRes.json().catch(() => ({}));
+            if (metaData.url) {
+              const binRes = await fetch(metaData.url, {
+                headers: { 'Authorization': `Bearer ${metaConfig.accessToken}` }
+              });
+              if (binRes.ok) {
+                const arrayBuffer = await binRes.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                const fetchedMime = metaData.mime_type || contentType;
+
+                // Save to local disk cache & Supabase
+                try {
+                  if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
+                  fs.writeFileSync(filePath, buffer);
+                } catch (e) {}
+                saveMediaToSupabase(filename, fetchedMime, buffer).catch(() => null);
+
+                res.writeHead(200, {
+                  'Content-Type': fetchedMime,
+                  'Content-Length': buffer.length,
+                  'Cache-Control': 'public, max-age=31536000, immutable'
+                });
+                res.end(buffer);
+                return;
+              }
+            }
+          }
+        }
+      } catch (metaErr) {
+        console.warn(`⚠️ [Uploads] Meta fallback error for ${filename}:`, metaErr.message);
+      }
+    }
+
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'File not found' }));
+    return;
   }
 
   // 0a. File Upload Endpoint (Base64 or DataURL upload for Images, Audio, Voice Notes, PDFs)
@@ -1743,12 +1830,31 @@ const server = http.createServer(async (req, res) => {
         const prisma = getPrisma();
         if (prisma && getDbStatus()) {
           if (leadId) {
+            // Remove associated media files from Supabase
+            const msgs = await prisma.message.findMany({
+              where: { leadId, mediaUrl: { not: null } },
+              select: { mediaUrl: true }
+            }).catch(() => []);
+            const fileNames = msgs.map(m => m.mediaUrl?.replace('/uploads/', '')).filter(Boolean);
+            if (fileNames.length > 0) {
+              deleteMediaBatchFromSupabase(fileNames).catch(() => null);
+            }
+
             await prisma.message.deleteMany({ where: { leadId } }).catch(() => {});
             await prisma.leadNote.deleteMany({ where: { leadId } }).catch(() => {});
             await prisma.leadStageHistory.deleteMany({ where: { leadId } }).catch(() => {});
             await prisma.followup.deleteMany({ where: { leadId } }).catch(() => {});
             await prisma.lead.deleteMany({ where: { id: leadId } }).catch(() => {});
           } else if (customerId) {
+            const msgs = await prisma.message.findMany({
+              where: { customerId, mediaUrl: { not: null } },
+              select: { mediaUrl: true }
+            }).catch(() => []);
+            const fileNames = msgs.map(m => m.mediaUrl?.replace('/uploads/', '')).filter(Boolean);
+            if (fileNames.length > 0) {
+              deleteMediaBatchFromSupabase(fileNames).catch(() => null);
+            }
+
             await prisma.message.deleteMany({ where: { customerId } }).catch(() => {});
             await prisma.lead.deleteMany({ where: { customerId } }).catch(() => {});
           }

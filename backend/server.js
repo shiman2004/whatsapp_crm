@@ -774,7 +774,28 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        if (metaToken) {
+        // 1. Prioritize Baileys Linked Device for direct message delivery to customer device
+        if (isBaileysConnected) {
+          try {
+            console.log(`📱 [WhatsApp Dispatch] Sending via Linked WhatsApp (Baileys) to ${cleanTo}...`);
+            logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
+            sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
+              to: `+${cleanTo}`,
+              whatsappId: cleanTo,
+              message: msgContent,
+              media,
+              leadId,
+              customerId,
+            });
+            console.log(`✅ [Baileys Dispatch Success] Message delivered directly via WhatsApp! Message ID: ${sendResult?.messageId}`);
+          } catch (baileysErr) {
+            console.warn(`⚠️ [Baileys Dispatch Error]: ${baileysErr.message}. Attempting Meta Cloud API fallback...`);
+            if (!metaToken) throw baileysErr;
+          }
+        }
+
+        // 2. If Baileys was not connected or failed, dispatch via Meta Cloud API
+        if (!sendResult && metaToken) {
           console.log(`🚀 [Meta Graph API] Dispatching message to ${cleanTo} via Phone ID ${phoneId}...`);
           let metaPayload = null;
 
@@ -963,17 +984,9 @@ const server = http.createServer(async (req, res) => {
               console.warn('[DB Error saving Meta message]:', dbErr.message);
             }
           }
-        } else if (isBaileysConnected) {
-          logWaSessionDebug('/api/send', authUser, targetCoordinatorId, coordSession, null);
-          sendResult = await sessionManager.sendMessage(targetCoordinatorId, {
-            to,
-            whatsappId,
-            message: msgContent,
-            media,
-            leadId,
-            customerId,
-          });
-        } else {
+        }
+
+        if (!sendResult) {
           throw new Error('No active WhatsApp line or Meta API token configured.');
         }
 
@@ -1545,6 +1558,7 @@ const server = http.createServer(async (req, res) => {
             savedCustomer = await prisma.customer.create({
               data: {
                 whatsappNumber: canonicalPhone,
+                phoneNumber: canonicalPhone,
                 whatsappId: cleanDigits,
                 displayName: contactName,
                 preferredLanguage: language || 'en'
@@ -1554,6 +1568,9 @@ const server = http.createServer(async (req, res) => {
             savedCustomer = await prisma.customer.update({
               where: { id: savedCustomer.id },
               data: {
+                whatsappNumber: canonicalPhone,
+                phoneNumber: canonicalPhone,
+                whatsappId: cleanDigits,
                 displayName: contactName,
                 preferredLanguage: language || savedCustomer.preferredLanguage || 'en'
               }
@@ -1641,63 +1658,94 @@ const server = http.createServer(async (req, res) => {
             const msgContent = initialMessage.trim();
             const messageId = `msg-${Date.now()}`;
             
-            // Dispatch via Meta Cloud API or Baileys
-            const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-            const phoneId = targetCompany === 'CRAS'
-              ? (metaConfig.phoneNumberIdCras || process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim()
-              : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
+            const masterSession = sessionManager.getRuntimeSession(masterLineId);
+            const isBaileysActive = (masterSession && masterSession.status === 'connected' && masterSession.sock);
+            let initialSent = false;
 
-            if (metaToken) {
+            if (isBaileysActive) {
               try {
-                await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
-                  method: 'POST',
-                  headers: {
-                    'Authorization': `Bearer ${metaToken}`,
-                    'Content-Type': 'application/json'
-                  },
-                  body: JSON.stringify({
-                    messaging_product: 'whatsapp',
-                    recipient_type: 'individual',
-                    to: cleanDigits,
-                    type: 'text',
-                    text: { body: msgContent }
-                  })
+                const bRes = await sessionManager.sendMessage(targetCoordinatorId || masterLineId, {
+                  to: canonicalPhone,
+                  whatsappId: cleanDigits,
+                  message: msgContent,
+                  leadId: savedLead.id,
+                  customerId: savedCustomer.id
                 });
-              } catch (e) {
-                console.warn('[Initial message Meta API dispatch warning]:', e.message);
+                initialSent = true;
+                savedMessage = {
+                  id: bRes?.messageId || messageId,
+                  leadId: savedLead.id,
+                  customerId: savedCustomer.id,
+                  direction: 'outbound',
+                  senderType: 'coordinator',
+                  content: msgContent,
+                  status: 'sent',
+                  timestamp: new Date()
+                };
+                console.log(`✅ [Initial Message] Delivered via Linked Baileys to ${canonicalPhone}`);
+              } catch (bErr) {
+                console.warn(`⚠️ [Initial Message] Baileys dispatch failed, attempting Meta API:`, bErr.message);
               }
             }
 
-            savedMessage = await prisma.message.create({
-              data: {
-                id: messageId,
+            if (!initialSent) {
+              const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+              const phoneId = targetCompany === 'CRAS'
+                ? (metaConfig.phoneNumberIdCras || process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim()
+                : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
+
+              if (metaToken) {
+                try {
+                  await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${metaToken}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      messaging_product: 'whatsapp',
+                      recipient_type: 'individual',
+                      to: cleanDigits,
+                      type: 'text',
+                      text: { body: msgContent }
+                    })
+                  });
+                } catch (e) {
+                  console.warn('[Initial message Meta API dispatch warning]:', e.message);
+                }
+              }
+
+              savedMessage = await prisma.message.create({
+                data: {
+                  id: messageId,
+                  leadId: savedLead.id,
+                  customerId: savedCustomer.id,
+                  direction: 'outbound',
+                  senderType: 'coordinator',
+                  coordinatorId: targetCoordinatorId || authUser?.id || null,
+                  content: msgContent,
+                  status: 'sent',
+                  timestamp: new Date()
+                }
+              }).catch(() => null);
+
+              // Broadcast real-time outbound SSE
+              broadcastScopedSSE(targetCoordinatorId || null, {
+                type: 'OUTBOUND_WHATSAPP_MESSAGE',
+                messageId,
                 leadId: savedLead.id,
                 customerId: savedCustomer.id,
+                phone: canonicalPhone,
+                realPhone: canonicalPhone,
+                whatsappId: cleanDigits,
+                name: contactName,
+                text: msgContent,
                 direction: 'outbound',
                 senderType: 'coordinator',
-                coordinatorId: targetCoordinatorId || authUser?.id || null,
-                content: msgContent,
-                status: 'sent',
-                timestamp: new Date()
-              }
-            }).catch(() => null);
-
-            // Broadcast real-time outbound SSE
-            broadcastScopedSSE(targetCoordinatorId || null, {
-              type: 'OUTBOUND_WHATSAPP_MESSAGE',
-              messageId,
-              leadId: savedLead.id,
-              customerId: savedCustomer.id,
-              phone: canonicalPhone,
-              realPhone: canonicalPhone,
-              whatsappId: cleanDigits,
-              name: contactName,
-              text: msgContent,
-              direction: 'outbound',
-              senderType: 'coordinator',
-              timestamp: new Date().toISOString(),
-              source: 'live'
-            });
+                timestamp: new Date().toISOString(),
+                source: 'live'
+              });
+            }
           }
 
           // Broadcast Lead Created/Assigned SSE with company metadata

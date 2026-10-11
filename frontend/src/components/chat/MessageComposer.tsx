@@ -244,19 +244,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     if (e) e.preventDefault();
     if (!inputVal.trim()) return;
 
-    if (!is24hWindowOpen) {
-      const proceed = confirm(
-        '⚠️ WhatsApp 24-Hour Customer Care Window is Closed.\n\n' +
-        'More than 24 hours have passed since the customer last messaged (or this is a new contact).\n' +
-        'Meta WhatsApp API will reject free-form messages with error 131047.\n\n' +
-        'Click CANCEL to open Templates, or OK to attempt sending anyway.'
-      );
-      if (!proceed) {
-        setShowTemplates(true);
-        return;
-      }
-    }
-
     sendMessage(lead.id, inputVal.trim(), 'coordinator');
     setInputVal('');
     setShowEmojiPicker(false);
@@ -334,41 +321,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           >
             <X className="w-4 h-4" />
           </button>
-        </div>
-      )}
-
-      {/* 2. WhatsApp Template Selector Drawer */}
-      {showTemplates && (
-        <div className="mb-3 bg-[#111b21] border border-slate-700 rounded-xl p-3 space-y-2 shadow-2xl animate-fade-in">
-          <div className="flex items-center justify-between border-b border-slate-800 pb-1.5">
-            <h4 className="text-xs font-bold text-[#d1d7db] flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-[#00a884]" />
-              <span>Pre-Approved WhatsApp Templates</span>
-            </h4>
-            <button onClick={() => setShowTemplates(false)} className="text-[#8696a0] hover:text-white">
-              <X className="w-3.5 h-3.5" />
-            </button>
-          </div>
-
-          <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
-            {approvedTemplates.map((tpl) => (
-              <div
-                key={tpl.id}
-                className="p-2.5 rounded-lg bg-[#202c33] border border-slate-800 hover:border-slate-700 flex items-start justify-between gap-3 text-xs transition-colors"
-              >
-                <div className="min-w-0 flex-1">
-                  <span className="font-bold text-[#d1d7db] block">{tpl.name}</span>
-                  <p className="text-[11px] text-[#8696a0] line-clamp-1 italic">{tpl.body}</p>
-                </div>
-                <button
-                  onClick={() => handleSendTemplate(tpl)}
-                  className="px-3 py-1 bg-[#00a884] hover:bg-[#00c298] text-black text-xs font-bold rounded-lg shrink-0 transition-colors shadow"
-                >
-                  Send
-                </button>
-              </div>
-            ))}
-          </div>
         </div>
       )}
 
@@ -505,24 +457,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           title="Emojis"
         >
           <Smile className="w-5 h-5" />
-        </button>
-
-        {/* Pre-Approved WhatsApp Templates Button */}
-        <button
-          id="btn-composer-templates"
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowTemplates(!showTemplates);
-            setShowAttachMenu(false);
-            setShowEmojiPicker(false);
-          }}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
-            showTemplates ? 'bg-[#00a884]/20 text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
-          }`}
-          title="Pre-Approved WhatsApp Templates"
-        >
-          <Sparkles className="w-5 h-5" />
         </button>
 
         {/* Input Field / Voice Recording View */}

@@ -11,9 +11,7 @@ import {
   Check, 
   Loader2,
   Users,
-  Building2,
-  ShieldCheck,
-  AlertCircle
+  Building2
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyCode } from '../../types';
@@ -31,8 +29,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     users, 
     isSuperAdmin, 
     isLeadsOfficer,
-    currentUser,
-    templates
+    currentUser
   } = useCrm();
 
   const [name, setName] = useState('');
@@ -44,8 +41,6 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
   const [assignedTo, setAssignedTo] = useState<string>(isSuperAdmin || isLeadsOfficer ? '' : currentUser.id);
   const [initialMessage, setInitialMessage] = useState('');
   const [sendInitial, setSendInitial] = useState(false);
-  const [messageType, setMessageType] = useState<'template' | 'custom'>('template');
-  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,23 +98,6 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
 
     setLoading(true);
     try {
-      let tplName: string | undefined = undefined;
-      let tplParams: string[] | undefined = undefined;
-      let customMsg: string | undefined = undefined;
-
-      if (sendInitial) {
-        if (messageType === 'template') {
-          const tpl = templates.find(t => t.id === selectedTemplateId) || templates[0];
-          tplName = tpl?.waTemplateName || tpl?.name || 'royal_wellness_inquiry_reply';
-          const selectedTrt = filteredTreatments.find(t => t.id === treatmentId) || treatments.find(t => t.id === treatmentId);
-          const treatmentName = selectedTrt?.name || (company === 'CRAS' ? 'Course Inquiry' : 'Consultation');
-          const clientName = name.trim() || 'Valued Customer';
-          tplParams = [clientName, treatmentName];
-        } else if (initialMessage.trim()) {
-          customMsg = initialMessage.trim();
-        }
-      }
-
       const res = await addNewContact({
         name: name.trim(),
         phone: phone.trim(),
@@ -128,9 +106,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
         treatmentId,
         language,
         assignedTo: assignedTo || undefined,
-        initialMessage: customMsg,
-        templateName: tplName,
-        templateParams: tplParams
+        initialMessage: sendInitial && initialMessage.trim() ? initialMessage.trim() : undefined
       });
 
       if (res.success) {
@@ -351,16 +327,19 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
           </div>
 
           {/* Optional Initial Message & 24h Window Compliance */}
-          <div className="pt-2 border-t border-[#31424d]/60 space-y-3">
-            <div className="flex items-center justify-between">
+          {/* Optional Initial Message */}
+          <div className="pt-1 border-t border-[#31424d]/60">
+            <div className="flex items-center justify-between mb-2">
               <label className="text-xs font-semibold text-[#aebac1] flex items-center gap-1.5 cursor-pointer select-none">
                 <input
                   type="checkbox"
                   checked={sendInitial}
                   onChange={(e) => {
                     setSendInitial(e.target.checked);
-                    if (e.target.checked && !selectedTemplateId && templates.length > 0) {
-                      setSelectedTemplateId(templates[0].id);
+                    if (e.target.checked && !initialMessage) {
+                      setInitialMessage(company === 'CRAS' 
+                        ? 'Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka (CRAS)! How can we assist you today?'
+                        : 'Hi, thank you for reaching out to Royal Wellness Center! How can we assist you today?');
                     }
                   }}
                   className="rounded border-[#31424d] text-[#00a884] focus:ring-[#00a884] w-3.5 h-3.5 accent-[#00a884]"
@@ -371,91 +350,13 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
             </div>
 
             {sendInitial && (
-              <div className="space-y-3 bg-[#111b21] p-3 rounded-xl border border-[#31424d]">
-                {/* Method selector: Template vs Custom */}
-                <div className="grid grid-cols-2 gap-2 p-1 bg-[#1f2c34] rounded-lg">
-                  <button
-                    type="button"
-                    onClick={() => setMessageType('template')}
-                    className={`py-1.5 px-2.5 text-xs font-bold rounded-md flex items-center justify-center gap-1.5 transition-all ${
-                      messageType === 'template'
-                        ? 'bg-[#00a884] text-black shadow'
-                        : 'text-[#8696a0] hover:text-[#e9edef]'
-                    }`}
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Approved Template</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setMessageType('custom')}
-                    className={`py-1.5 px-2.5 text-xs font-bold rounded-md flex items-center justify-center gap-1.5 transition-all ${
-                      messageType === 'custom'
-                        ? 'bg-[#00a884] text-black shadow'
-                        : 'text-[#8696a0] hover:text-[#e9edef]'
-                    }`}
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>Free-form Text</span>
-                  </button>
-                </div>
-
-                {messageType === 'template' ? (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[11px] font-semibold text-[#8696a0]">Select Template:</label>
-                      <span className="text-[10px] text-[#00a884] flex items-center gap-1 font-semibold">
-                        <ShieldCheck className="w-3 h-3" />
-                        Bypasses 24h Window
-                      </span>
-                    </div>
-                    <select
-                      value={selectedTemplateId || (templates[0]?.id || '')}
-                      onChange={(e) => setSelectedTemplateId(e.target.value)}
-                      className="w-full bg-[#1f2c34] border border-[#31424d] rounded-lg px-2.5 py-2 text-xs text-[#d1d7db] outline-none focus:border-[#00a884] cursor-pointer"
-                    >
-                      {templates.map(t => (
-                        <option key={t.id} value={t.id} className="bg-[#1f2c34] text-[#d1d7db]">
-                          {t.name} ({t.category || 'UTILITY'})
-                        </option>
-                      ))}
-                    </select>
-
-                    {/* Template preview */}
-                    {(() => {
-                      const curTpl = templates.find(t => t.id === selectedTemplateId) || templates[0];
-                      const selectedTrt = filteredTreatments.find(t => t.id === treatmentId) || treatments.find(t => t.id === treatmentId);
-                      const trtName = selectedTrt?.name || (company === 'CRAS' ? 'Course Inquiry' : 'Clinical Treatment');
-                      const custName = name.trim() || 'Client';
-                      let previewBody = curTpl?.body || 'Hi {{1}}, thank you for inquiring about {{2}}. Our coordinator is ready to assist you.';
-                      previewBody = previewBody.replace(/\{\{1\}\}/g, custName).replace(/\{\{2\}\}/g, trtName);
-
-                      return (
-                        <div className="p-2.5 rounded-lg bg-[#1f2c34]/80 border border-[#31424d] text-xs text-[#d1d7db] font-sans leading-relaxed">
-                          <p className="text-[10px] uppercase font-bold text-[#8696a0] mb-1">Preview Message:</p>
-                          <p className="italic text-[#e9edef] whitespace-pre-wrap">{previewBody}</p>
-                        </div>
-                      );
-                    })()}
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    <textarea
-                      rows={2}
-                      value={initialMessage}
-                      onChange={(e) => setInitialMessage(e.target.value)}
-                      placeholder="Type your message to send immediately..."
-                      className="w-full bg-[#1f2c34] border border-[#31424d] rounded-lg p-2.5 text-xs text-[#d1d7db] placeholder-[#667781] outline-none focus:border-[#00a884] transition-all resize-none"
-                    />
-                    <div className="p-2 rounded-lg bg-amber-950/40 border border-amber-800/40 flex items-start gap-2 text-amber-300 text-[11px] leading-snug">
-                      <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-400" />
-                      <span>
-                        <strong>WhatsApp 24h Window Rule:</strong> If this customer hasn't messaged within the last 24 hours, Meta Cloud API will reject free-form messages with <strong>Code 131047</strong>. Use an Approved Template above to guarantee delivery.
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
+              <textarea
+                rows={2}
+                value={initialMessage}
+                onChange={(e) => setInitialMessage(e.target.value)}
+                placeholder="Type your message to send immediately..."
+                className="w-full bg-[#111b21] border border-[#31424d] rounded-xl p-3 text-xs text-[#d1d7db] placeholder-[#667781] outline-none focus:border-[#00a884] transition-all resize-none"
+              />
             )}
           </div>
 

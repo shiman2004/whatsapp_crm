@@ -700,8 +700,22 @@ class WhatsAppSessionManager {
       throw new Error(`Clinic WhatsApp line is not connected. Please connect WhatsApp from the Admin Dashboard first.`);
     }
 
-    const cleanPhone = (to || '').replace(/[^0-9]/g, '');
-    const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+    let cleanPhone = (to || '').replace(/[^0-9]/g, '');
+    let cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+
+    // Normalize leading 0 to Sri Lanka country code (94)
+    if (cleanPhone.startsWith('0') && cleanPhone.length === 10) {
+      cleanPhone = '94' + cleanPhone.slice(1);
+    } else if (cleanPhone.length === 9 && (cleanPhone.startsWith('7') || cleanPhone.startsWith('1'))) {
+      cleanPhone = '94' + cleanPhone;
+    }
+
+    if (cleanWaId.startsWith('0') && cleanWaId.length === 10) {
+      cleanWaId = '94' + cleanWaId.slice(1);
+    } else if (cleanWaId.length === 9 && (cleanWaId.startsWith('7') || cleanWaId.startsWith('1'))) {
+      cleanWaId = '94' + cleanWaId;
+    }
+
     let targetJid = null;
 
     // Smart JID resolution

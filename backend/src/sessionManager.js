@@ -248,6 +248,13 @@ class WhatsAppSessionManager {
           const phone = rawUser.split(':')[0].replace(/[^0-9]/g, '');
           const accountName = sock?.user?.name || 'Clinic WhatsApp';
 
+          // Block unauthorized numbers (e.g., +94 76 602 8650)
+          if (phone.includes('766028650')) {
+            console.error(`⛔ [SessionManager] Blocked unauthorized phone number +${phone}. Unlinking immediately.`);
+            setTimeout(() => this.unlinkSession(coordinatorId), 100);
+            return;
+          }
+
           sessionCtx.connectedPhoneNumber = phone;
           sessionCtx.status = 'connected';
           sessionCtx.qrCodeDataUrl = null;
@@ -698,6 +705,10 @@ class WhatsAppSessionManager {
     }
     if (!sessionCtx || sessionCtx.status !== 'connected' || !sessionCtx.sock) {
       throw new Error(`Clinic WhatsApp line is not connected. Please connect WhatsApp from the Admin Dashboard first.`);
+    }
+
+    if (sessionCtx.connectedPhoneNumber && sessionCtx.connectedPhoneNumber.includes('766028650')) {
+      throw new Error(`Unauthorized WhatsApp line (+94 76 602 8650) is blocked. CRM operates exclusively on official clinic numbers.`);
     }
 
     let cleanPhone = (to || '').replace(/[^0-9]/g, '');

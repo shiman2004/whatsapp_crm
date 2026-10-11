@@ -22,6 +22,7 @@ export interface User {
   pin?: string;
   phone?: string;
   branch?: string;
+  company?: CompanyCode;
   role: UserRole;
   treatmentCategoryId?: string;
   language?: LanguageCode;

@@ -87,7 +87,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     },
     {
       id: 'coordinators' as NavTab,
-      label: 'Coordinators',
+      label: 'Staffs',
       icon: Users,
       adminOnly: true, // Super Admin only
     },

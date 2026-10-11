@@ -188,7 +188,7 @@ export const LoginScreen: React.FC = () => {
             >
               {coordinatorsList.map((c: any) => (
                 <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                  {c.fullName} ({c.email})
+                  {c.fullName} ({c.company || 'RWC'}) — {c.email}
                 </option>
               ))}
             </select>
@@ -204,7 +204,7 @@ export const LoginScreen: React.FC = () => {
             >
               {leadsOfficersList.map((o: any) => (
                 <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
-                  {o.fullName} ({o.email})
+                  {o.fullName} ({o.company || 'RWC'}) — {o.email}
                 </option>
               ))}
             </select>

@@ -126,7 +126,7 @@ interface CrmContextType {
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
-  addCoordinator: (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => void;
   deleteCoordinator: (id: string) => void;
 
   // Simulator State & Actions
@@ -196,7 +196,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       }
     }
-    return merged;
+    return merged.map(u => ({
+      ...u,
+      branch: u.branch || 'Colombo',
+      company: u.company || (u.role === 'coordinator' ? 'RWC' : (u.role === 'super_admin' ? 'RWC' : 'RWC')),
+    }));
   });
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -357,6 +361,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           dbCoords.forEach(u => {
             userMap.set(u.id, {
               ...u,
+              branch: u.branch || 'Colombo',
+              company: u.company || (u.role === 'coordinator' ? 'RWC' : (u.role === 'super_admin' ? 'RWC' : 'RWC')),
               password: u.password || 'staff',
               pin: u.pin || '2026',
               active: u.active ?? true,
@@ -1801,8 +1807,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(err => console.warn('Could not sync customer update to backend:', err));
   };
 
-  const addCoordinator = (data: { fullName: string; branch?: string; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
+  const addCoordinator = (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
     const role: UserRole = data.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
+    const cleanCompany: CompanyCode = data.company || (role === 'coordinator' ? 'RWC' : 'RWC');
     const newCoordId = (role === 'leads_officer' ? 'officer-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
     const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || (role === 'leads_officer' ? 'officer' : 'coord') + Date.now()}@royalwellness.lk`;
@@ -1811,6 +1818,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       id: newCoordId,
       fullName: data.fullName,
       branch: cleanBranch,
+      company: cleanCompany,
       email: autoEmail,
       password: data.password || 'staff',
       pin: data.pin || '2026',
@@ -1848,6 +1856,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: newCoordId,
         fullName: data.fullName,
         branch: cleanBranch,
+        company: cleanCompany,
         email: autoEmail,
         pin: data.pin || '2026',
         phone: data.phone,
@@ -1856,7 +1865,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(err => console.warn('Could not sync new staff member to backend:', err));
 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
-    const roleLabel = role === 'leads_officer' ? 'Leads Officer' : 'Clinical Coordinator';
+    const roleLabel = role === 'leads_officer' 
+      ? `Leads Officer (${cleanCompany})` 
+      : `Coordinator (${cleanCompany})`;
     notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered successfully`, 'success');
   };
 

@@ -78,6 +78,8 @@ model User {
   pin                 String?            @db.VarChar(10)
   phone               String?            @db.VarChar(50)
   role                UserRole           @default(coordinator)
+  branch              String?            @default("Colombo") @db.VarChar(100)
+  company             String?            @default("RWC") @db.VarChar(50)
   treatmentCategoryId String?            @db.VarChar(50)
   language            LanguageCode       @default(en)
   avatar              String?            @db.VarChar(500)

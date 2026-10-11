@@ -1799,7 +1799,7 @@ const server = http.createServer(async (req, res) => {
             const mappedUsers = users.map(u => ({
               ...u,
               branch: u.branch || 'Colombo',
-              company: u.company || 'RWC',
+              company: u.role === 'leads_officer' ? null : (u.company || 'RWC'),
             }));
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(mappedUsers));
@@ -1830,7 +1830,7 @@ const server = http.createServer(async (req, res) => {
           const phone = payload.phone || null;
           const role = payload.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
           const branch = (payload.branch || 'Colombo').trim();
-          const company = (payload.company || (role === 'coordinator' ? 'RWC' : 'RWC')).trim();
+          const company = role === 'leads_officer' ? null : (payload.company || 'RWC').trim();
 
           if (!fullName) {
             res.writeHead(400, { 'Content-Type': 'application/json' });

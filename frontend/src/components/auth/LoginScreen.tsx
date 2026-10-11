@@ -204,7 +204,7 @@ export const LoginScreen: React.FC = () => {
             >
               {leadsOfficersList.map((o: any) => (
                 <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
-                  {o.fullName} ({o.company || 'RWC'}) — {o.email}
+                  {o.fullName} — {o.email}
                 </option>
               ))}
             </select>

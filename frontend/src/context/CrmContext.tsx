@@ -199,7 +199,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return merged.map(u => ({
       ...u,
       branch: u.branch || 'Colombo',
-      company: u.company || (u.role === 'coordinator' ? 'RWC' : (u.role === 'super_admin' ? 'RWC' : 'RWC')),
+      company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
     }));
   });
 
@@ -362,7 +362,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             userMap.set(u.id, {
               ...u,
               branch: u.branch || 'Colombo',
-              company: u.company || (u.role === 'coordinator' ? 'RWC' : (u.role === 'super_admin' ? 'RWC' : 'RWC')),
+              company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
               password: u.password || 'staff',
               pin: u.pin || '2026',
               active: u.active ?? true,
@@ -1809,7 +1809,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const addCoordinator = (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
     const role: UserRole = data.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
-    const cleanCompany: CompanyCode = data.company || (role === 'coordinator' ? 'RWC' : 'RWC');
+    const cleanCompany: CompanyCode | undefined = role === 'leads_officer' ? undefined : (data.company || 'RWC');
     const newCoordId = (role === 'leads_officer' ? 'officer-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
     const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || (role === 'leads_officer' ? 'officer' : 'coord') + Date.now()}@royalwellness.lk`;
@@ -1856,7 +1856,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         id: newCoordId,
         fullName: data.fullName,
         branch: cleanBranch,
-        company: cleanCompany,
+        company: cleanCompany || null,
         email: autoEmail,
         pin: data.pin || '2026',
         phone: data.phone,
@@ -1866,7 +1866,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
     const roleLabel = role === 'leads_officer' 
-      ? `Leads Officer (${cleanCompany})` 
+      ? 'Leads Officer' 
       : `Coordinator (${cleanCompany})`;
     notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered successfully`, 'success');
   };

@@ -7,20 +7,26 @@ import {
   Trash2, 
   X, 
   KeyRound, 
-  RefreshCw,
-  UserCheck,
-  ShieldCheck,
-  Sparkles,
-  MapPin,
-  Eye,
-  EyeOff
+  RefreshCw, 
+  ShieldCheck, 
+  Sparkles, 
+  MapPin, 
+  Eye, 
+  EyeOff,
+  User as UserIcon,
+  Briefcase,
+  Lock
 } from 'lucide-react';
-import { UserRole } from '../../types';
+import { CompanyCode, UserRole } from '../../types';
+import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
 const BRANCH_OPTIONS = [
-  'Colombo',
   'Maruthamunai',
+  'Colombo'
 ];
+
+type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc';
+type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras';
 
 const generateRandomPin = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -29,28 +35,41 @@ const generateRandomPin = () => {
 export const CoordinatorsManager: React.FC = () => {
   const { users, leads, addCoordinator, deleteCoordinator } = useCrm();
   const [showAddModal, setShowAddModal] = useState(false);
-  const [activeFilter, setActiveFilter] = useState<'all' | 'coordinator' | 'leads_officer'>('all');
+  const [activeFilter, setActiveFilter] = useState<StaffFilter>('all');
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
 
   // Form State
-  const [role, setRole] = useState<'coordinator' | 'leads_officer'>('leads_officer');
+  const [selectedRoleChoice, setSelectedRoleChoice] = useState<StaffRoleChoice>('coordinator_rwc');
+  const [company, setCompany] = useState<CompanyCode>('RWC');
   const [fullName, setFullName] = useState('');
   const [branch, setBranch] = useState('Colombo');
   const [pin, setPin] = useState(generateRandomPin());
   const [password, setPassword] = useState('staff');
 
   const staffMembers = users.filter(u => u.role === 'coordinator' || u.role === 'leads_officer');
-  const coordinators = users.filter(u => u.role === 'coordinator');
   const leadsOfficers = users.filter(u => u.role === 'leads_officer');
+  const rwcCoordinators = users.filter(u => u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
+  const crasCoordinators = users.filter(u => u.role === 'coordinator' && u.company === 'CRAS');
 
   const filteredStaff = staffMembers.filter(u => {
-    if (activeFilter === 'coordinator') return u.role === 'coordinator';
     if (activeFilter === 'leads_officer') return u.role === 'leads_officer';
+    if (activeFilter === 'coordinator_rwc') return u.role === 'coordinator' && (u.company === 'RWC' || !u.company);
+    if (activeFilter === 'coordinator_cras') return u.role === 'coordinator' && u.company === 'CRAS';
     return true;
   });
 
-  const handleOpenModal = (defaultRole: 'coordinator' | 'leads_officer' = 'leads_officer') => {
-    setRole(defaultRole);
+  const handleRoleChange = (choice: StaffRoleChoice) => {
+    setSelectedRoleChoice(choice);
+    if (choice === 'coordinator_rwc') {
+      setCompany('RWC');
+    } else if (choice === 'coordinator_cras') {
+      setCompany('CRAS');
+    }
+  };
+
+  const handleOpenModal = () => {
+    setSelectedRoleChoice('coordinator_rwc');
+    setCompany('RWC');
     setFullName('');
     setBranch('Colombo');
     setPin(generateRandomPin());
@@ -66,12 +85,27 @@ export const CoordinatorsManager: React.FC = () => {
     e.preventDefault();
     if (!fullName.trim()) return;
 
+    let systemRole: UserRole = 'coordinator';
+    let assignedCompany: CompanyCode = 'RWC';
+
+    if (selectedRoleChoice === 'leads_officer') {
+      systemRole = 'leads_officer';
+      assignedCompany = company;
+    } else if (selectedRoleChoice === 'coordinator_cras') {
+      systemRole = 'coordinator';
+      assignedCompany = 'CRAS';
+    } else {
+      systemRole = 'coordinator';
+      assignedCompany = 'RWC';
+    }
+
     addCoordinator({
       fullName: fullName.trim(),
       branch: branch || 'Colombo',
+      company: assignedCompany,
       pin: pin.trim() || generateRandomPin(),
       password: password.trim() || 'staff',
-      role: role as UserRole
+      role: systemRole
     });
 
     // Reset Form & Close
@@ -89,34 +123,27 @@ export const CoordinatorsManager: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-100 font-serif">Staff & Team Management</h2>
           <p className="text-xs text-slate-400">
-            Add Leads Officers and Clinical Coordinators, assign branch locations, and generate access PINs.
+            Manage Leads Officers and Coordinators (RWC & CRAS), assign branch locations, and generate access PINs.
           </p>
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => handleOpenModal('leads_officer')}
-            className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md"
-          >
-            <ShieldCheck className="w-4 h-4" />
-            <span>Add Leads Officer</span>
-          </button>
-          <button
-            onClick={() => handleOpenModal('coordinator')}
-            className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md"
+            onClick={handleOpenModal}
+            className="px-4 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 transition-all shadow-lg hover:shadow-emerald-900/30 cursor-pointer"
           >
             <UserPlus className="w-4 h-4" />
-            <span>Add Coordinator</span>
+            <span>Add Staffs</span>
           </button>
         </div>
       </div>
 
       {/* Filter Tabs & Counts */}
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3 overflow-x-auto">
+        <div className="flex items-center gap-2 shrink-0">
           <button
             type="button"
             onClick={() => setActiveFilter('all')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
               activeFilter === 'all'
                 ? 'bg-slate-800 text-white shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -124,10 +151,11 @@ export const CoordinatorsManager: React.FC = () => {
           >
             All Staff ({staffMembers.length})
           </button>
+
           <button
             type="button"
             onClick={() => setActiveFilter('leads_officer')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
               activeFilter === 'leads_officer'
                 ? 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
@@ -136,17 +164,31 @@ export const CoordinatorsManager: React.FC = () => {
             <ShieldCheck className="w-3.5 h-3.5 text-indigo-400" />
             <span>Leads Officers ({leadsOfficers.length})</span>
           </button>
+
           <button
             type="button"
-            onClick={() => setActiveFilter('coordinator')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-              activeFilter === 'coordinator'
+            onClick={() => setActiveFilter('coordinator_rwc')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'coordinator_rwc'
                 ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
                 : 'text-slate-400 hover:text-slate-200'
             }`}
           >
-            <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Coordinators ({coordinators.length})</span>
+            <span className="w-2 h-2 rounded-full bg-[#008000]" />
+            <span>Coordinators (RWC) ({rwcCoordinators.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('coordinator_cras')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'coordinator_cras'
+                ? 'bg-rose-500/20 text-rose-300 border border-rose-500/40 shadow-sm'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#800000]" />
+            <span>Coordinators (CRAS) ({crasCoordinators.length})</span>
           </button>
         </div>
       </div>
@@ -158,22 +200,15 @@ export const CoordinatorsManager: React.FC = () => {
           </div>
           <h3 className="text-sm font-bold text-slate-200">No Staff Members Found</h3>
           <p className="text-xs text-slate-400 max-w-sm mx-auto">
-            Click the buttons above to register your Leads Officers and Clinical Coordinators with auto-generated PINs.
+            Click the button below to register Leads Officers and Coordinators for RWC or CRAS with auto-generated PINs.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <button
-              onClick={() => handleOpenModal('leads_officer')}
-              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shadow"
-            >
-              <ShieldCheck className="w-4 h-4" />
-              <span>Add Leads Officer</span>
-            </button>
-            <button
-              onClick={() => handleOpenModal('coordinator')}
-              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shadow"
+              onClick={handleOpenModal}
+              className="px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white rounded-xl text-xs font-semibold inline-flex items-center gap-1.5 transition-colors shadow cursor-pointer"
             >
               <UserPlus className="w-4 h-4" />
-              <span>Add Coordinator</span>
+              <span>Add Staffs</span>
             </button>
           </div>
         </div>
@@ -182,8 +217,15 @@ export const CoordinatorsManager: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredStaff.map((staff) => {
             const isOfficer = staff.role === 'leads_officer';
+            const isCras = staff.company === 'CRAS';
             const activeLeads = leads.filter(l => l.assignedTo === staff.id && l.stage !== 'converted' && l.stage !== 'lost');
             const convertedLeads = leads.filter(l => l.assignedTo === staff.id && l.stage === 'converted');
+
+            const roleDisplay = isOfficer 
+              ? 'Leads Officer' 
+              : isCras 
+              ? 'Coordinator (CRAS)' 
+              : 'Coordinator (RWC)';
 
             return (
               <div
@@ -197,12 +239,17 @@ export const CoordinatorsManager: React.FC = () => {
                       <div className={`w-11 h-11 rounded-xl font-bold text-base flex items-center justify-center border ${
                         isOfficer
                           ? 'bg-indigo-700/30 text-indigo-300 border-indigo-500/30'
+                          : isCras
+                          ? 'bg-rose-900/40 text-rose-300 border-rose-700/40'
                           : 'bg-emerald-700/30 text-emerald-300 border-emerald-500/30'
                       }`}>
                         {staff.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <h4 className="font-bold text-sm text-slate-100">{staff.fullName}</h4>
+                        <h4 className="font-bold text-sm text-slate-100 flex items-center gap-1.5">
+                          <span>{staff.fullName}</span>
+                          <CompanyTagBadge company={staff.company || 'RWC'} size="xs" />
+                        </h4>
                         <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-0.5">
                           <MapPin className="w-3 h-3 text-slate-500" />
                           <span>{staff.branch || 'Colombo Branch'}</span>
@@ -211,12 +258,11 @@ export const CoordinatorsManager: React.FC = () => {
                     </div>
                     <button
                       onClick={() => {
-                        const roleName = isOfficer ? 'Leads Officer' : 'Clinical Coordinator';
-                        if (window.confirm(`Are you sure you want to delete ${roleName} "${staff.fullName}"?\n\nAll leads assigned will be safely unassigned.`)) {
+                        if (window.confirm(`Are you sure you want to delete ${roleDisplay} "${staff.fullName}"?\n\nAll leads assigned will be safely unassigned.`)) {
                           deleteCoordinator(staff.id);
                         }
                       }}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                      className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
                       title="Remove Staff Member"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -226,21 +272,34 @@ export const CoordinatorsManager: React.FC = () => {
                   {/* Role & Branch & Login PIN */}
                   <div className="bg-[#202c33]/60 p-2.5 rounded-xl border border-slate-800 text-xs space-y-2">
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400 font-medium">System Role:</span>
+                      <span className="text-[10px] text-slate-400 font-medium">Role:</span>
                       <span className={`font-bold px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1 border ${
                         isOfficer
                           ? 'bg-indigo-950/60 text-indigo-300 border-indigo-500/40'
+                          : isCras
+                          ? 'bg-[#800000]/30 text-rose-300 border-[#800000]/60'
                           : 'bg-emerald-950/60 text-emerald-300 border-emerald-500/40'
                       }`}>
-                        {isOfficer ? <ShieldCheck className="w-3 h-3 text-indigo-400" /> : <Building2 className="w-3 h-3 text-emerald-400" />}
-                        {isOfficer ? 'Leads Officer' : 'Clinical Coordinator'}
+                        {isOfficer ? (
+                          <ShieldCheck className="w-3 h-3 text-indigo-400" />
+                        ) : (
+                          <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-400' : 'text-emerald-400'}`} />
+                        )}
+                        {roleDisplay}
                       </span>
                     </div>
 
                     <div className="flex items-center justify-between">
-                      <span className="text-[10px] text-slate-400 font-medium">Branch:</span>
+                      <span className="text-[10px] text-slate-400 font-medium">Company:</span>
+                      <span className="font-semibold text-slate-200 flex items-center gap-1.5 text-xs">
+                        <CompanyTagBadge company={staff.company || 'RWC'} size="xs" showFullName={true} />
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] text-slate-400 font-medium">Branch Location:</span>
                       <span className="font-semibold text-slate-200 flex items-center gap-1 text-xs">
-                        <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
                         {staff.branch || 'Colombo'}
                       </span>
                     </div>
@@ -254,7 +313,7 @@ export const CoordinatorsManager: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => setRevealedPins(prev => ({ ...prev, [staff.id]: !prev[staff.id] }))}
-                          className="text-amber-400/80 hover:text-amber-200 transition-colors ml-0.5"
+                          className="text-amber-400/80 hover:text-amber-200 transition-colors ml-0.5 cursor-pointer"
                           title={revealedPins[staff.id] ? "Hide PIN" : "Show PIN"}
                         >
                           {revealedPins[staff.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
@@ -285,77 +344,114 @@ export const CoordinatorsManager: React.FC = () => {
         </div>
       )}
 
-      {/* Add Staff Modal (Coordinators + Leads Officers) */}
+      {/* Add Staff Member Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-[#111b21] border border-slate-700 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl animate-fade-in">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
-                {role === 'leads_officer' ? (
-                  <ShieldCheck className="w-5 h-5 text-indigo-400" />
-                ) : (
-                  <UserPlus className="w-5 h-5 text-emerald-400" />
-                )}
-                <span>Add {role === 'leads_officer' ? 'Leads Officer' : 'Clinical Coordinator'}</span>
-              </h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-white">
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111b21] border border-slate-700/80 rounded-2xl max-w-lg w-full p-6 space-y-5 shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-800/80 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span>Add Team Member</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Create a new team member to manage leads
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setShowAddModal(false)} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Role Selector Tabs */}
+              {/* Full Name */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300 block">
-                  Select Role <span className="text-rose-400">*</span>
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setRole('leads_officer')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
-                      role === 'leads_officer'
-                        ? 'bg-indigo-600/20 text-indigo-300 border-indigo-500 shadow-sm'
-                        : 'bg-[#202c33] text-slate-400 border-slate-700 hover:border-slate-600'
-                    }`}
-                  >
-                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                    <span>Leads Officer</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRole('coordinator')}
-                    className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
-                      role === 'coordinator'
-                        ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500 shadow-sm'
-                        : 'bg-[#202c33] text-slate-400 border-slate-700 hover:border-slate-600'
-                    }`}
-                  >
-                    <UserCheck className="w-4 h-4 text-emerald-400" />
-                    <span>Coordinator</span>
-                  </button>
-                </div>
-              </div>
-
-              {/* Staff Full Name */}
-              <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-300 block">
-                  Full Name <span className="text-rose-400">*</span>
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Full Name</span>
+                  <span className="text-rose-400">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder={role === 'leads_officer' ? 'e.g. Sarah Perera / Mohamed Rizwan' : 'e.g. Dr. Dilshan / Nurse Kavindi'}
+                  autoFocus
+                  placeholder="e.g. Sarah Perera / Mohamed Rizwan"
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 placeholder:text-slate-500"
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 placeholder:text-slate-500 transition-colors shadow-inner"
                 />
               </div>
 
-              {/* Branch */}
+              {/* Two Column Grid: Role & Company */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Role Level */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Role</span>
+                    <span className="text-rose-400">*</span>
+                  </label>
+                  <select
+                    value={selectedRoleChoice}
+                    onChange={(e) => handleRoleChange(e.target.value as StaffRoleChoice)}
+                    className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
+                  >
+                    <option value="coordinator_rwc" className="bg-[#111b21] text-white">
+                      Coordinator (RWC)
+                    </option>
+                    <option value="coordinator_cras" className="bg-[#111b21] text-white">
+                      Coordinator (CRAS)
+                    </option>
+                    <option value="leads_officer" className="bg-[#111b21] text-white">
+                      Leads Officers
+                    </option>
+                  </select>
+                </div>
+
+                {/* Company */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Company</span>
+                    <span className="text-rose-400">*</span>
+                  </label>
+                  {selectedRoleChoice !== 'leads_officer' ? (
+                    <div className="w-full bg-[#202c33]/70 border border-slate-700/80 rounded-xl px-3 py-2 text-xs flex items-center justify-between text-slate-200">
+                      <CompanyTagBadge company={company} size="sm" showFullName={true} />
+                      <span className="text-[10px] text-slate-400 italic">Auto-assigned</span>
+                    </div>
+                  ) : (
+                    <select
+                      value={company}
+                      onChange={(e) => setCompany(e.target.value as CompanyCode)}
+                      className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
+                    >
+                      <option value="RWC" className="bg-[#111b21] text-white">
+                        RWC — Royal Wellness Center
+                      </option>
+                      <option value="CRAS" className="bg-[#111b21] text-white">
+                        CRAS — College of Royal Aesthetic
+                      </option>
+                    </select>
+                  )}
+                </div>
+              </div>
+
+              {/* Branch Location */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold text-slate-300 block">
-                  Branch Location <span className="text-rose-400">*</span>
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Branch Location</span>
+                  <span className="text-rose-400">*</span>
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {BRANCH_OPTIONS.map((b) => (
@@ -363,7 +459,7 @@ export const CoordinatorsManager: React.FC = () => {
                       key={b}
                       type="button"
                       onClick={() => setBranch(b)}
-                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
+                      className={`py-2 px-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all cursor-pointer ${
                         branch === b
                           ? 'bg-emerald-600/20 text-emerald-300 border-emerald-500 shadow-sm'
                           : 'bg-[#202c33] text-slate-400 border-slate-700 hover:border-slate-600'
@@ -376,17 +472,19 @@ export const CoordinatorsManager: React.FC = () => {
                 </div>
               </div>
 
-              {/* Security PIN & Password */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
+              {/* PIN Number & Web Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <label className="text-xs font-bold text-slate-300 block">
-                      PIN Number <span className="text-rose-400">*</span>
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                      <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                      <span>PIN Number</span>
+                      <span className="text-rose-400">*</span>
                     </label>
                     <button
                       type="button"
                       onClick={handleRegeneratePin}
-                      className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold transition-colors"
+                      className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
                       title="Generate new random 4-digit PIN"
                     >
                       <RefreshCw className="w-2.5 h-2.5" />
@@ -398,15 +496,15 @@ export const CoordinatorsManager: React.FC = () => {
                       type="text"
                       maxLength={4}
                       required
-                      placeholder="4-digit PIN"
+                      placeholder="7341"
                       value={pin}
                       onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
-                      className="w-full bg-[#202c33] border border-amber-500/40 rounded-xl px-3 py-2 text-xs font-mono font-bold text-amber-300 tracking-wider outline-none focus:border-amber-400"
+                      className="w-full bg-[#202c33] border border-amber-500/40 rounded-xl px-3 py-2 text-xs font-mono font-bold text-amber-300 tracking-widest outline-none focus:border-amber-400"
                     />
                     <button
                       type="button"
                       onClick={handleRegeneratePin}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-amber-400 transition-colors"
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 p-1 text-slate-400 hover:text-amber-400 transition-colors cursor-pointer"
                       title="Regenerate PIN"
                     >
                       <Sparkles className="w-3.5 h-3.5 text-amber-400" />
@@ -414,38 +512,37 @@ export const CoordinatorsManager: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-xs font-bold text-slate-300 block">
-                    Web Password
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Web Password</span>
                   </label>
                   <input
                     type="text"
                     placeholder="staff"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-[#202c33] border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500"
+                    className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-slate-800">
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold"
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={!fullName.trim()}
-                  className={`px-5 py-2 disabled:bg-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-colors shadow-md ${
-                    role === 'leads_officer'
-                      ? 'bg-indigo-600 hover:bg-indigo-500'
-                      : 'bg-emerald-600 hover:bg-emerald-500'
-                  }`}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
                 >
-                  Create {role === 'leads_officer' ? 'Leads Officer' : 'Coordinator'}
+                  <UserPlus className="w-4 h-4" />
+                  <span>Create Team Member</span>
                 </button>
               </div>
             </form>

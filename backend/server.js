@@ -1796,8 +1796,13 @@ const server = http.createServer(async (req, res) => {
             orderBy: { createdAt: 'asc' }
           });
           if (users && users.length > 0) {
+            const mappedUsers = users.map(u => ({
+              ...u,
+              branch: u.branch || 'Colombo',
+              company: u.company || 'RWC',
+            }));
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify(users));
+            res.end(JSON.stringify(mappedUsers));
             return;
           }
         } catch (e) {}
@@ -1824,6 +1829,8 @@ const server = http.createServer(async (req, res) => {
           const pin = payload.pin || '2026';
           const phone = payload.phone || null;
           const role = payload.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
+          const branch = (payload.branch || 'Colombo').trim();
+          const company = (payload.company || (role === 'coordinator' ? 'RWC' : 'RWC')).trim();
 
           if (!fullName) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1840,13 +1847,28 @@ const server = http.createServer(async (req, res) => {
                 pin,
                 phone,
                 role: role,
-                password: 'staff'
+                branch: branch,
+                company: company,
+                password: payload.password || 'staff'
               }
             });
           }
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, user: newUser }));
+          res.end(JSON.stringify({ 
+            success: true, 
+            user: newUser ? { ...newUser, branch, company } : {
+              id: payload.id || `staff-${Date.now()}`,
+              fullName,
+              email,
+              pin,
+              phone,
+              role,
+              branch,
+              company,
+              active: true
+            } 
+          }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: err.message }));

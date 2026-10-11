@@ -173,103 +173,51 @@ export const INITIAL_TREATMENTS: Treatment[] = [
 
 export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [
   {
-    id: 'tpl-welcome-rwc-en',
-    name: 'RWC Welcome Greeting (English)',
-    language: 'en',
-    waTemplateName: 'rwc_welcome_greeting',
-    category: 'UTILITY',
-    body: 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?',
-    variables: ['Customer Name'],
-    approved: true,
-  },
-  {
-    id: 'tpl-welcome-rwc-si',
-    name: 'RWC Welcome Greeting (Sinhala)',
+    id: 'tpl-rwc-si',
+    name: '🌸 Royal Wellness Center (Sinhala)',
     language: 'si',
     waTemplateName: 'rwc_welcome_greeting_si',
     category: 'UTILITY',
-    body: 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?',
-    variables: ['Customer Name'],
+    body: `🌸 Royal Wellness Center – ඔබ සාදරයෙන් පිළිගනිමු!
+
+💙 මේ මොහොතේ මම වෙනත් සේවාදායකයෙකුට සහාය වෙමින් සිටිමි. ඔබගේ පණිවිඩය මට ඉතා වැදගත් වේ.
+
+කරුණාකර මඳ වේලාවක් රැඳී සිටින්න. හැකි ඉක්මනින් මම ඔබව සම්බන්ධ කරගන්නෙමි.
+
+ඔබගේ ඉවසීම සහ අවබෝධය වෙනුවෙන් හෘදයාංගම ස්තූතියි! 🌷`,
+    variables: [],
     approved: true,
   },
   {
-    id: 'tpl-welcome-rwc-ta',
-    name: 'RWC Welcome Greeting (Tamil)',
+    id: 'tpl-rwc-ta',
+    name: '🌸 Royal Wellness Center (Tamil)',
     language: 'ta',
     waTemplateName: 'rwc_welcome_greeting_ta',
     category: 'UTILITY',
-    body: 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?',
-    variables: ['Customer Name'],
+    body: `🌸 Royal Wellness Center – உங்களை அன்புடன் வரவேற்கிறோம்!
+
+💙 தற்போது நான் மற்றொரு வாடிக்கையாளருக்கு உதவி செய்து கொண்டிருக்கிறேன். உங்கள் செய்தி எனக்கு மிகவும் முக்கியமானது.
+
+தயவுசெய்து சிறிது நேரம் காத்திருக்கவும். கூடிய விரைவில் உங்களைத் தொடர்புகொள்வேன்.
+
+உங்கள் பொறுமைக்கும் புரிந்துணர்விற்கும் மனமார்ந்த நன்றி! 🌷`,
+    variables: [],
     approved: true,
   },
   {
-    id: 'tpl-welcome-cras-en',
-    name: 'CRAS Welcome Greeting (English)',
+    id: 'tpl-rwc-en',
+    name: '🌸 Royal Wellness Center (English)',
     language: 'en',
-    waTemplateName: 'cras_welcome_greeting',
+    waTemplateName: 'rwc_welcome_greeting',
     category: 'UTILITY',
-    body: 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?',
-    variables: ['Customer Name'],
-    approved: true,
-  },
-  {
-    id: 'tpl-followup-day1-en',
-    name: 'Enquiry Follow-Up — Day 1 (English)',
-    language: 'en',
-    waTemplateName: 'royal_wellness_day1_enquiry_v2',
-    category: 'UTILITY',
-    body: 'Hi {{1}}, thank you for inquiring about {{2}} at Royal Wellness Center. Our clinical coordinator is ready to answer your questions or reserve your slot. Would you like to check doctor availability this week?',
-    variables: ['Customer Name', 'Treatment Name'],
-    approved: true,
-  },
-  {
-    id: 'tpl-followup-day1-si',
-    name: 'Enquiry Follow-Up — Day 1 (Sinhala)',
-    language: 'si',
-    waTemplateName: 'royal_wellness_day1_enquiry_si_v2',
-    category: 'UTILITY',
-    body: 'ආයුබෝවන් {{1}}, රෝයල් වෙල්නස් සෙන්ටර් වෙත ඔබගේ {{2}} විමසීමට ස්තූතියි. අපගේ වෛද්‍ය සම්බන්ධීකාරකවරයා ඔබගේ ප්‍රශ්නවලට පිළිතුරු දීමට හෝ වේලාවක් වෙන්කරවා ගැනීමට සූදානම්. මෙම සතියේ දිනයක් වෙන්කර ගැනීමට කැමතිද?',
-    variables: ['පාරිභෝගික නම', 'ප්‍රතිකාර නාමය'],
-    approved: true,
-  },
-  {
-    id: 'tpl-followup-day1-ta',
-    name: 'Enquiry Follow-Up — Day 1 (Tamil)',
-    language: 'ta',
-    waTemplateName: 'royal_wellness_day1_enquiry_ta_v2',
-    category: 'UTILITY',
-    body: 'வணக்கம் {{1}}, ராயல் வெல்னஸ் சென்டரில் {{2}} பற்றிய உங்களின் விசாரணைக்கு நன்றி. எங்கள் ஒருங்கிணைப்பாளர் உங்கள் கேள்விகளுக்கு பதிலளிக்க தயாராக உள்ளார். இந்த வாரம் மருத்துவரை சந்திக்க விரும்புகிறீர்களா?',
-    variables: ['வாடிக்கையாளர் பெயர்', 'சிகிச்சை பெயர்'],
-    approved: true,
-  },
-  {
-    id: 'tpl-followup-day3-en',
-    name: 'Doctor Slot Availability — Day 3 (English)',
-    language: 'en',
-    waTemplateName: 'royal_wellness_day3_slot_v1',
-    category: 'UTILITY',
-    body: 'Hello {{1}}, we noticed you were interested in {{2}}. Our senior specialists have limited consultation slots this Saturday and Sunday. Reply YES to hold a complimentary pre-consultation slot.',
-    variables: ['Customer Name', 'Treatment Name'],
-    approved: true,
-  },
-  {
-    id: 'tpl-followup-day5-en',
-    name: 'Exclusive Wellness Privilege — Day 5 (English)',
-    language: 'en',
-    waTemplateName: 'royal_wellness_day5_promo_v1',
-    category: 'MARKETING',
-    body: 'Dear {{1}}, we are currently offering an exclusive 15% welcome privilege for first-time clients seeking {{2}} at Royal Wellness Center. Would you like us to share our treatment brochure?',
-    variables: ['Customer Name', 'Treatment Name'],
-    approved: true,
-  },
-  {
-    id: 'tpl-followup-day7-en',
-    name: 'Final Follow-up & Feedback — Day 7 (English)',
-    language: 'en',
-    waTemplateName: 'royal_wellness_day7_checkin_v1',
-    category: 'UTILITY',
-    body: 'Hi {{1}}, we want to make sure you have all the information you need regarding {{2}}. If you would prefer a phone call or want to resume later, please let us know. Wishing you great health!',
-    variables: ['Customer Name', 'Treatment Name'],
+    body: `🌸 Royal Wellness Center – A Warm Welcome to You!
+
+💙 I'm currently assisting another client, but your message is very important to me.
+
+Kindly allow me a little time, and I'll get back to you as soon as possible.
+
+Thank you sincerely for your patience and understanding! 🌷`,
+    variables: [],
     approved: true,
   }
 ];

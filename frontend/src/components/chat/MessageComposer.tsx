@@ -14,7 +14,8 @@ import {
   AlertCircle,
   RefreshCw,
   Trash2,
-  Check
+  Check,
+  Copy
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -46,6 +47,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
+  const [copiedTplId, setCopiedTplId] = useState<string | null>(null);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
@@ -65,6 +67,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachRef = useRef<HTMLDivElement>(null);
   const emojiRef = useRef<HTMLDivElement>(null);
+  const templateRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const docInputRef = useRef<HTMLInputElement>(null);
 
@@ -95,6 +98,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       }
       if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
         setShowEmojiPicker(false);
+      }
+      if (templateRef.current && !templateRef.current.contains(e.target as Node)) {
+        setShowTemplates(false);
       }
     };
     window.addEventListener('click', handleClickOutside);
@@ -393,6 +399,72 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
+      {/* 4a. Quick Templates Popover */}
+      {showTemplates && (
+        <div 
+          ref={templateRef}
+          onClick={(e) => e.stopPropagation()}
+          className="mb-2 bg-[#202c33] border border-slate-700/80 rounded-2xl p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-80 overflow-y-auto space-y-2.5 z-30"
+        >
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/80">
+            <span className="text-xs font-bold text-[#e9edef] flex items-center gap-1.5">
+              <span>🌸 Royal Wellness Center Templates</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setShowTemplates(false)}
+              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 cursor-pointer"
+              aria-label="Close"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {templates.map((tpl) => {
+              const isCopied = copiedTplId === tpl.id;
+              return (
+                <div key={tpl.id} className="bg-[#111b21] p-3 rounded-xl border border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-white">{tpl.name}</span>
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText(tpl.body);
+                          setCopiedTplId(tpl.id);
+                          setTimeout(() => setCopiedTplId(null), 2000);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
+                          isCopied ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-[#00a884]'
+                        }`}
+                      >
+                        {isCopied ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Copy className="w-3.5 h-3.5" />}
+                        <span>{isCopied ? 'Copied' : 'Copy'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setInputVal(tpl.body);
+                          setShowTemplates(false);
+                          textareaRef.current?.focus();
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-[11px] transition-all cursor-pointer"
+                      >
+                        Insert in Chat
+                      </button>
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-300 whitespace-pre-wrap max-h-24 overflow-y-auto font-sans leading-relaxed bg-slate-950/60 p-2 rounded-lg select-all">
+                    {tpl.body}
+                  </p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* 4b. WhatsApp Connection State Status Banner */}
       {whatsappStatus === 'syncing' && (
         <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between shadow-sm animate-pulse">
@@ -412,7 +484,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           <button
             type="button"
             onClick={() => setQrModalOpen(true)}
-            className="ml-3 px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 shadow transition-all active:scale-95"
+            className="ml-3 px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 shadow transition-all active:scale-95 cursor-pointer"
           >
             <QrCode className="w-3.5 h-3.5" />
             <span>Link Device</span>
@@ -433,8 +505,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             }
             setShowAttachMenu(!showAttachMenu);
             setShowEmojiPicker(false);
+            setShowTemplates(false);
           }}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
             showAttachMenu ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
           }`}
           title="Attach"
@@ -451,12 +524,29 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setShowAttachMenu(false);
             setShowTemplates(false);
           }}
-          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
             showEmojiPicker ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
           }`}
           title="Emojis"
         >
           <Smile className="w-5 h-5" />
+        </button>
+
+        {/* Quick Templates / Replies Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowTemplates(!showTemplates);
+            setShowEmojiPicker(false);
+            setShowAttachMenu(false);
+          }}
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
+            showTemplates ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
+          }`}
+          title="Quick Templates & Greetings"
+        >
+          <FileText className="w-5 h-5" />
         </button>
 
         {/* Input Field / Voice Recording View */}

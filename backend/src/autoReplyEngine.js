@@ -74,53 +74,11 @@ export const clearAutoReplySessions = () => {
 
 /**
  * Main Auto-Reply Decision Engine
- * Evaluates inbound message and sends strictly ONE trilingual greeting message per customer.
- * 
- * @param {Object} params
- * @param {string} params.senderPhone - Clean phone digits (e.g. "94771234567")
- * @param {string} params.messageText - Inbound text
- * @param {Object} params.customer - Database Customer object
- * @param {Object} params.lead - Database Lead object
- * @returns {Promise<{ shouldReply: boolean, replyText?: string }>}
+ * Automation replies are STOPPED per user request.
+ * Returns shouldReply: false so no automated bot responses are dispatched.
  */
 export async function evaluateAutoReply({ senderPhone, messageText, customer, lead, company }) {
-  if (!senderPhone || !messageText) {
-    return { shouldReply: false };
-  }
-
-  const cleanPhone = senderPhone.replace(/[^0-9]/g, '');
-  let session = autoReplySessions.get(cleanPhone);
-
-  // 1. ONE-TIME RULE: If customer has already received the greeting, do not re-send
-  if (session && session.stage === 'COMPLETED') {
-    return { shouldReply: false };
-  }
-
-  // 2. Check DB state: If lead already has an assigned coordinator or has been processed, do not auto-reply
-  if (lead) {
-    if (lead.assignedTo && lead.assignedTo.trim().length > 0) {
-      autoReplySessions.set(cleanPhone, { stage: 'COMPLETED', lastUpdated: new Date() });
-      return { shouldReply: false };
-    }
-    if (lead.stage && ['contacted', 'potential', 'under_discussion', 'converted', 'lost'].includes(lead.stage)) {
-      autoReplySessions.set(cleanPhone, { stage: 'COMPLETED', lastUpdated: new Date() });
-      return { shouldReply: false };
-    }
-  }
-
-  // 3. Mark session as COMPLETED immediately so subsequent customer messages are not auto-replied
-  autoReplySessions.set(cleanPhone, {
-    stage: 'COMPLETED',
-    lastUpdated: new Date()
-  });
-
-  const isCras = company === 'CRAS' || lead?.source === 'CRAS' || lead?.whatsappSessionId === 'CRAS';
-  const greeting = isCras ? CRAS_TRILINGUAL_GREETING_MESSAGE : TRILINGUAL_GREETING_MESSAGE;
-
-  console.log(`🤖 [AUTO-REPLY] Sending Single ${isCras ? 'English' : 'Trilingual'} Greeting for ${isCras ? 'CRAS' : 'RWC'} to ${cleanPhone} (Inbound: "${messageText}")`);
-
-  return {
-    shouldReply: true,
-    replyText: greeting
-  };
+  // Automation reply stopped per user request
+  return { shouldReply: false };
 }
+

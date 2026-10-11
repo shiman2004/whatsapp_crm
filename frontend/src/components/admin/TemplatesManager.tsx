@@ -12,7 +12,9 @@ import {
   ShieldCheck, 
   Zap,
   Layers,
-  X
+  X,
+  Copy,
+  Check
 } from 'lucide-react';
 
 export const TemplatesManager: React.FC = () => {
@@ -20,6 +22,13 @@ export const TemplatesManager: React.FC = () => {
 
   const [activeSubTab, setActiveSubTab] = useState<'templates' | 'sequences'>('templates');
   const [showAddModal, setShowAddModal] = useState(false);
+  const [copiedTplId, setCopiedTplId] = useState<string | null>(null);
+
+  const handleCopy = (tpl: WhatsAppTemplate) => {
+    navigator.clipboard.writeText(tpl.body);
+    setCopiedTplId(tpl.id);
+    setTimeout(() => setCopiedTplId(null), 2500);
+  };
 
   // Template form state
   const [tplName, setTplName] = useState('');
@@ -96,56 +105,75 @@ export const TemplatesManager: React.FC = () => {
 
       {/* TEMPLATES SUB-TAB */}
       {activeSubTab === 'templates' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-          {templates.map((tpl) => (
-            <div
-              key={tpl.id}
-              className="bg-slate-900/80 rounded-2xl border border-slate-800 p-5 space-y-3 shadow-lg hover:border-slate-700 transition-all flex flex-col justify-between"
-            >
-              <div className="space-y-2.5">
-                {/* Header: Name, Language & Status */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="font-bold text-sm text-slate-100">{tpl.name}</h4>
-                    <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                      Meta ID: {tpl.waTemplateName}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
-                      {tpl.language.toUpperCase()}
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
-                      <CheckCircle2 className="w-3 h-3 text-emerald-400" /> APPROVED
-                    </span>
-                  </div>
-                </div>
-
-                {/* Body with highlighted {{1}}, {{2}} variables */}
-                <div className="bg-slate-950 p-3.5 rounded-xl border border-slate-800 text-xs text-slate-200 leading-relaxed font-sans">
-                  {tpl.body.split(/(\{\{\d\}\})/).map((part, idx) => 
-                    part.match(/^\{\{\d\}\}$/) ? (
-                      <span key={idx} className="bg-teal-500/20 text-teal-300 px-1 py-0.5 rounded font-mono text-[11px] font-semibold">
-                        {part}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {templates.map((tpl) => {
+            const isCopied = copiedTplId === tpl.id;
+            return (
+              <div
+                key={tpl.id}
+                className="bg-slate-900/90 rounded-2xl border border-slate-800 p-5 space-y-4 shadow-xl hover:border-slate-700 transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-3">
+                  {/* Header: Name, Language & Status */}
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="font-bold text-sm text-slate-100 tracking-tight">{tpl.name}</h4>
+                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">
+                        Meta ID: {tpl.waTemplateName}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+                        {tpl.language.toUpperCase()}
                       </span>
+                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-400" /> APPROVED
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Body with exact pre-wrapped emojis & line breaks */}
+                  <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 text-xs sm:text-sm text-slate-100 leading-relaxed font-sans whitespace-pre-wrap select-all max-h-64 overflow-y-auto">
+                    {tpl.body}
+                  </div>
+                </div>
+
+                {/* Copy Button & Category Footer */}
+                <div className="pt-2 space-y-2.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCopy(tpl)}
+                    className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-md active:scale-98 ${
+                      isCopied
+                        ? 'bg-emerald-600 text-white border border-emerald-400'
+                        : 'bg-[#00a884] hover:bg-[#00c298] text-slate-950'
+                    }`}
+                  >
+                    {isCopied ? (
+                      <>
+                        <Check className="w-4 h-4 stroke-[3]" />
+                        <span>Copied to Clipboard!</span>
+                      </>
                     ) : (
-                      part
-                    )
-                  )}
+                      <>
+                        <Copy className="w-4 h-4 stroke-[2.5]" />
+                        <span>Copy Message</span>
+                      </>
+                    )}
+                  </button>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
+                    <span className="text-[10px] font-semibold text-slate-500">
+                      Category: {tpl.category}
+                    </span>
+                    <span className="text-[10px] text-teal-400 font-medium">
+                      Ready to Paste into WhatsApp
+                    </span>
+                  </div>
                 </div>
               </div>
-
-              {/* Footer: Category & Variables */}
-              <div className="pt-3 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
-                <span className="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300 text-[10px] font-semibold">
-                  Category: {tpl.category}
-                </span>
-                <span className="text-[10px] text-teal-400">
-                  Variables: {tpl.variables.join(', ')}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

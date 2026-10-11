@@ -1095,6 +1095,7 @@ const server = http.createServer(async (req, res) => {
             messages: { orderBy: { timestamp: 'asc' } },
             notes: true,
             stageHistories: true,
+            assignmentHistories: { orderBy: { assignedAt: 'desc' } },
           },
           orderBy: { updatedAt: 'desc' },
         });
@@ -1139,6 +1140,9 @@ const server = http.createServer(async (req, res) => {
 
         const payload = JSON.parse(body || '{}');
         const { leadId, coordinatorId, coordinatorName, customerId, phone, whatsappId, unassign } = payload;
+        const assignerId = payload.assignedById || authUser?.id || null;
+        const assignerName = payload.assignedByName || authUser?.fullName || 'Admin';
+        const assignmentDate = payload.assignedAt ? new Date(payload.assignedAt) : new Date();
 
         const prisma = getPrisma();
         let updatedLead = null;
@@ -1150,6 +1154,9 @@ const server = http.createServer(async (req, res) => {
               where: { id: leadId },
               data: {
                 assignedTo: null,
+                assignedById: assignerId,
+                assignedByName: assignerName,
+                assignedAt: assignmentDate,
                 stage: 'new',
                 updatedAt: new Date()
               },
@@ -1158,7 +1165,19 @@ const server = http.createServer(async (req, res) => {
                 category: true,
                 treatment: true,
                 assignedCoordinator: true,
+                assignmentHistories: { orderBy: { assignedAt: 'desc' } },
                 messages: { orderBy: { timestamp: 'asc' } }
+              }
+            }).catch(() => null);
+
+            await prisma.leadAssignmentHistory.create({
+              data: {
+                leadId: leadId,
+                assignedToId: null,
+                assignedToName: 'Unassigned',
+                assignedById: assignerId,
+                assignedByName: assignerName,
+                assignedAt: assignmentDate
               }
             }).catch(() => null);
           }
@@ -1239,6 +1258,9 @@ const server = http.createServer(async (req, res) => {
               where: { id: targetLead.id },
               data: {
                 assignedTo: coordinatorId,
+                assignedById: assignerId,
+                assignedByName: assignerName,
+                assignedAt: assignmentDate,
                 stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
                 updatedAt: new Date()
               },
@@ -1247,9 +1269,21 @@ const server = http.createServer(async (req, res) => {
                 category: true,
                 treatment: true,
                 assignedCoordinator: true,
+                assignmentHistories: { orderBy: { assignedAt: 'desc' } },
                 messages: { orderBy: { timestamp: 'asc' } }
               }
             });
+
+            await prisma.leadAssignmentHistory.create({
+              data: {
+                leadId: targetLead.id,
+                assignedToId: coordinatorId,
+                assignedToName: coordUser?.fullName || coordinatorName || 'Staff',
+                assignedById: assignerId,
+                assignedByName: assignerName,
+                assignedAt: assignmentDate
+              }
+            }).catch(err => console.warn('[Assignment History Error]:', err.message));
           } else {
             // Create customer & lead if neither exists yet in DB
             let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }) : null;
@@ -1275,6 +1309,9 @@ const server = http.createServer(async (req, res) => {
                   categoryId: firstCat?.id || 'cat-hair-care',
                   treatmentId: firstTrt?.id || 'trt-prp-hair',
                   assignedTo: coordinatorId,
+                  assignedById: assignerId,
+                  assignedByName: assignerName,
+                  assignedAt: assignmentDate,
                   stage: 'assigned',
                   source: 'whatsapp',
                   language: 'en'
@@ -1284,9 +1321,23 @@ const server = http.createServer(async (req, res) => {
                   category: true,
                   treatment: true,
                   assignedCoordinator: true,
+                  assignmentHistories: { orderBy: { assignedAt: 'desc' } },
                   messages: { orderBy: { timestamp: 'asc' } }
                 }
               }).catch(() => null);
+
+              if (updatedLead) {
+                await prisma.leadAssignmentHistory.create({
+                  data: {
+                    leadId: updatedLead.id,
+                    assignedToId: coordinatorId,
+                    assignedToName: coordUser?.fullName || coordinatorName || 'Staff',
+                    assignedById: assignerId,
+                    assignedByName: assignerName,
+                    assignedAt: assignmentDate
+                  }
+                }).catch(() => null);
+              }
             }
           }
         }
@@ -1599,6 +1650,9 @@ const server = http.createServer(async (req, res) => {
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                 stage: leadStage,
                 assignedTo: targetCoordinatorId,
+                assignedById: targetCoordinatorId ? (authUser?.id || null) : null,
+                assignedByName: targetCoordinatorId ? (authUser?.fullName || 'Admin') : null,
+                assignedAt: targetCoordinatorId ? new Date() : null,
                 source: targetCompany,
                 language: language || 'en',
                 lastCustomerMessageAt: new Date()
@@ -1608,9 +1662,24 @@ const server = http.createServer(async (req, res) => {
                 category: true,
                 treatment: true,
                 assignedCoordinator: true,
+                assignmentHistories: { orderBy: { assignedAt: 'desc' } },
                 messages: true
               }
             });
+
+            if (targetCoordinatorId) {
+              const coordUser = await prisma.user.findUnique({ where: { id: targetCoordinatorId } }).catch(() => null);
+              await prisma.leadAssignmentHistory.create({
+                data: {
+                  leadId: savedLead.id,
+                  assignedToId: targetCoordinatorId,
+                  assignedToName: coordUser?.fullName || 'Staff',
+                  assignedById: authUser?.id || null,
+                  assignedByName: authUser?.fullName || 'Admin',
+                  assignedAt: new Date()
+                }
+              }).catch(() => null);
+            }
           } else {
             savedLead = await prisma.lead.update({
               where: { id: savedLead.id },
@@ -1618,6 +1687,11 @@ const server = http.createServer(async (req, res) => {
                 categoryId: firstCat?.id || savedLead.categoryId,
                 treatmentId: firstTrt?.id || savedLead.treatmentId,
                 assignedTo: targetCoordinatorId || savedLead.assignedTo,
+                ...(targetCoordinatorId && targetCoordinatorId !== savedLead.assignedTo ? {
+                  assignedById: authUser?.id || null,
+                  assignedByName: authUser?.fullName || 'Admin',
+                  assignedAt: new Date(),
+                } : {}),
                 source: company ? targetCompany : savedLead.source,
                 stage: initialMessage ? 'contacted' : savedLead.stage,
                 language: language || savedLead.language,
@@ -1628,9 +1702,24 @@ const server = http.createServer(async (req, res) => {
                 category: true,
                 treatment: true,
                 assignedCoordinator: true,
+                assignmentHistories: { orderBy: { assignedAt: 'desc' } },
                 messages: true
               }
             });
+
+            if (targetCoordinatorId && targetCoordinatorId !== savedLead.assignedTo) {
+              const coordUser = await prisma.user.findUnique({ where: { id: targetCoordinatorId } }).catch(() => null);
+              await prisma.leadAssignmentHistory.create({
+                data: {
+                  leadId: savedLead.id,
+                  assignedToId: targetCoordinatorId,
+                  assignedToName: coordUser?.fullName || 'Staff',
+                  assignedById: authUser?.id || null,
+                  assignedByName: authUser?.fullName || 'Admin',
+                  assignedAt: new Date()
+                }
+              }).catch(() => null);
+            }
           }
 
           // 5. Send initial message if provided via official company number

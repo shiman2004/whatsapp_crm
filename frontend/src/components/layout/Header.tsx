@@ -56,23 +56,25 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
   return (
     <>
-      <header className="h-14 border-b border-slate-800 bg-[#111b21] px-3 sm:px-5 flex items-center justify-between sticky top-0 z-30 shrink-0">
-        {/* Brand Title & Mobile Menu Toggle */}
-        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+      <header className="h-14 border-b border-slate-800 bg-[#111b21] px-2.5 sm:px-5 flex items-center justify-between sticky top-0 z-30 shrink-0 w-full">
+        {/* Left: Mobile Menu Toggle + Brand Logo & Title */}
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           {onToggleMobileSidebar && (
             <button
+              type="button"
               onClick={onToggleMobileSidebar}
-              className="md:hidden p-1.5 rounded-lg text-slate-300 hover:text-white hover:bg-[#202c33] transition-colors"
+              className="md:hidden p-2 -ml-1 rounded-xl text-emerald-400 hover:text-white hover:bg-[#202c33] active:bg-[#2a3942] transition-colors shrink-0 flex items-center justify-center cursor-pointer shadow-xs"
               title="Open Navigation Menu"
+              aria-label="Open Navigation Menu"
             >
-              <Menu className="w-5 h-5" />
+              <Menu className="w-5 h-5 text-whatsapp" />
             </button>
           )}
 
-          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-slate-700/50 shrink-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-slate-700/50 shrink-0">
             <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
           </div>
-          <div className="min-w-0 truncate">
+          <div className="min-w-0 truncate hidden xs:block sm:block">
             <h1 className="text-xs sm:text-sm font-bold text-white font-serif tracking-wide truncate">
               Alpha Health Group
             </h1>
@@ -84,8 +86,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
           
           {/* WhatsApp Web QR Code Link Device Button with Real-time Status */}
           <button
+            type="button"
             onClick={() => setQrModalOpen(true)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 ${
+            title={whatsappStatus === 'connected' ? 'WhatsApp Web Linked' : whatsappStatus === 'syncing' ? 'Syncing...' : 'Link Device (QR)'}
+            className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
               whatsappStatus === 'connected'
                 ? 'bg-emerald-950/80 border border-emerald-500/50 text-emerald-300 hover:bg-emerald-900/80'
                 : whatsappStatus === 'syncing'
@@ -93,36 +97,47 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
                 : 'bg-whatsapp hover:bg-emerald-500 text-slate-950'
             }`}
           >
-            <QrCode className="w-4 h-4" />
-            <span>
+            <QrCode className="w-4 h-4 shrink-0" />
+            <span className="hidden sm:inline">
               {whatsappStatus === 'connected' 
                 ? '🟢 Linked' 
                 : whatsappStatus === 'syncing' 
                 ? '🔄 Syncing...' 
                 : 'Link Device (QR)'}
             </span>
+            <span className="sm:hidden text-[11px]">
+              {whatsappStatus === 'connected' 
+                ? 'Linked' 
+                : whatsappStatus === 'syncing' 
+                ? 'Sync...' 
+                : 'QR'}
+            </span>
           </button>
 
           {/* Meta Cloud API Live Bridge Toggle */}
           <button
+            type="button"
             onClick={() => setMetaModalOpen(true)}
-            className="px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-sm"
+            title="Meta Cloud API Settings & Live Status"
+            className="px-2 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 sm:gap-1.5 transition-all bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60 shadow-xs cursor-pointer"
           >
-            <span className="relative flex h-2 w-2">
+            <span className="relative flex h-2 w-2 shrink-0">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
             </span>
-            <Radio className="w-3.5 h-3.5 text-emerald-400" />
-            <span>Meta API</span>
+            <Radio className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+            <span className="hidden sm:inline">Meta API</span>
+            <span className="sm:hidden text-[11px]">API</span>
           </button>
 
           {/* Authenticated User Profile Badge & Dropdown */}
           <div className="relative" ref={dropdownRef}>
             <button
+              type="button"
               onClick={() => setUserDropdownOpen(!userDropdownOpen)}
-              className="flex items-center gap-2 bg-[#202c33] hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2.5 py-1 transition-all shadow-sm"
+              className="flex items-center gap-1.5 sm:gap-2 bg-[#202c33] hover:bg-slate-800 border border-slate-700/80 rounded-xl px-2 sm:px-2.5 py-1 transition-all shadow-xs cursor-pointer"
             >
-              <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-bold text-[11px]">
+              <div className="w-6 h-6 rounded-lg bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 flex items-center justify-center font-bold text-[11px] shrink-0">
                 {currentUser?.fullName?.charAt(0) || 'U'}
               </div>
               <div className="text-left hidden md:block">
@@ -133,7 +148,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
                   {currentUser?.role === 'super_admin' ? 'Super Admin' : (currentUser?.role === 'leads_officer' ? 'Leads Officer' : 'Coordinator')}
                 </p>
               </div>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400 ml-0.5 shrink-0" />
             </button>
 
             {/* Dropdown Menu */}

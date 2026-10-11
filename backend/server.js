@@ -2142,7 +2142,56 @@ const server = http.createServer(async (req, res) => {
                   body: JSON.stringify(dispatchPayload)
                 });
                 const metaData = await metaRes.json().catch(() => ({}));
-                if (metaRes.ok) {
+                if (!metaRes.ok && metaData.error?.code === 131047 && dispatchPayload.type === 'text') {
+                  // Automatic fallback to approved Meta greeting template
+                  console.log(`ℹ️ [Add Contact] 24h window closed. Automatically dispatching approved Meta greeting template...`);
+                  let autoTplName = 'rwc_welcome_greeting';
+                  let autoTplLang = 'en_US';
+                  if (targetCompany === 'CRAS') {
+                    autoTplName = 'cras_welcome_greeting';
+                    autoTplLang = 'en_US';
+                  } else if (language === 'si') {
+                    autoTplName = 'rwc_welcome_greeting_si';
+                    autoTplLang = 'en_US';
+                  } else if (language === 'ta') {
+                    autoTplName = 'rwc_welcome_greeting_ta';
+                    autoTplLang = 'ta';
+                  }
+
+                  const fallbackTplPayload = {
+                    messaging_product: 'whatsapp',
+                    recipient_type: 'individual',
+                    to: cleanDigits,
+                    type: 'template',
+                    template: {
+                      name: autoTplName,
+                      language: { code: autoTplLang },
+                      components: [
+                        {
+                          type: 'body',
+                          parameters: [{ type: 'text', text: contactName || 'Valued Client' }]
+                        }
+                      ]
+                    }
+                  };
+
+                  const fallbackRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                    method: 'POST',
+                    headers: { 'Authorization': `Bearer ${metaToken}`, 'Content-Type': 'application/json' },
+                    body: JSON.stringify(fallbackTplPayload)
+                  });
+                  const fallbackData = await fallbackRes.json().catch(() => ({}));
+                  if (fallbackRes.ok) {
+                    metaMessageId = fallbackData?.messages?.[0]?.id;
+                    dispatchSuccess = true;
+                    msgContent = `[Welcome Greeting: ${autoTplName}]`;
+                    console.log(`✅ [Add Contact Fallback Success] Delivered via template ${autoTplName}: wamid:`, metaMessageId);
+                  } else {
+                    dispatchErrorCode = fallbackData.error?.code || metaData.error?.code;
+                    const rawMsg = fallbackData.error?.message || metaData.error?.message;
+                    dispatchErrorMessage = getMetaErrorExplanation(dispatchErrorCode, rawMsg);
+                  }
+                } else if (metaRes.ok) {
                   metaMessageId = metaData?.messages?.[0]?.id;
                   dispatchSuccess = true;
                   console.log(`✅ [Add Contact Dispatch Success] (${targetCompany} ${phoneId}): wamid:`, metaMessageId);

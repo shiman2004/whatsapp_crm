@@ -31,6 +31,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const { 
     sendMessage, 
     sendWhatsAppTemplate, 
+    messages,
     templates, 
     categories, 
     treatments,
@@ -228,7 +229,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     reader.readAsDataURL(file);
   };
 
-  const lastCustomerMessageTime = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
+  const leadMessages = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
+  const inboundMessages = leadMessages.filter(m => m.direction === 'inbound');
+  const latestInboundMsg = inboundMessages.length > 0
+    ? inboundMessages.reduce((latest, m) => new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest)
+    : null;
+
+  const lastCustomerMessageTime = latestInboundMsg
+    ? new Date(latestInboundMsg.createdAt).getTime()
+    : (inboundMessages.length > 0 && lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0);
   const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
 
   const handleSendText = (e?: React.FormEvent) => {
@@ -272,7 +281,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     const custName = lead.customer?.displayName || 'Client';
     const trtName = treatment?.name || category?.name || 'Treatment';
     
-    sendWhatsAppTemplate(lead.id, tpl.name || tpl.id, [custName, trtName]);
+    sendWhatsAppTemplate(lead.id, tpl.waTemplateName || tpl.name || tpl.id, [custName, trtName]);
     setShowTemplates(false);
     setShowAttachMenu(false);
   };

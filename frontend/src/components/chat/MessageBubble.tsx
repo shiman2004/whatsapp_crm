@@ -458,9 +458,22 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                           retryFailedMessage(message.id);
                         }}
                         className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-medium transition-colors flex items-center gap-1.5 text-[10.5px]"
+                        title="Retry sending this message"
                       >
                         <RefreshCw className="w-3 h-3" />
                         Retry Send
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const tplBtn = document.getElementById('btn-composer-templates');
+                          if (tplBtn) tplBtn.click();
+                        }}
+                        className="px-2.5 py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 font-medium transition-colors flex items-center gap-1.5 text-[10.5px]"
+                        title="Open approved WhatsApp templates to bypass 24-hour window"
+                      >
+                        <Sparkles className="w-3 h-3 text-emerald-400" />
+                        Send as Template
                       </button>
                     </div>
                   </div>

@@ -13,6 +13,7 @@ import {
   Followup,
   LeadNote,
   LeadStageHistory,
+  LeadAssignmentHistory,
   AuditLog,
   LeadStage,
   LanguageCode,
@@ -408,6 +409,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...l,
               serialNumber: l.serialNumber || undefined,
               assignedTo: l.assignedTo || undefined,
+              assignedById: l.assignedById || undefined,
+              assignedByName: l.assignedByName || undefined,
+              assignedAt: l.assignedAt || undefined,
+              assignmentHistories: l.assignmentHistories || undefined,
               stage: l.stage || 'new',
               customer: finalCust,
               company: comp.code,
@@ -621,6 +626,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     serialNumber: incomingLead?.serialNumber !== undefined ? (incomingLead.serialNumber || undefined) : l.serialNumber,
                     stage: incomingLead?.stage !== undefined ? incomingLead.stage : l.stage,
                     assignedTo: incomingLead?.assignedTo !== undefined ? (incomingLead.assignedTo || undefined) : l.assignedTo,
+                    assignedById: incomingLead?.assignedById !== undefined ? (incomingLead.assignedById || undefined) : l.assignedById,
+                    assignedByName: incomingLead?.assignedByName !== undefined ? (incomingLead.assignedByName || undefined) : l.assignedByName,
+                    assignedAt: incomingLead?.assignedAt !== undefined ? (incomingLead.assignedAt || undefined) : l.assignedAt,
+                    assignmentHistories: incomingLead?.assignmentHistories !== undefined ? incomingLead.assignmentHistories : l.assignmentHistories,
                     company: incomingLead?.company !== undefined ? incomingLead.company : l.company,
                     companyTag: incomingLead?.companyTag !== undefined ? incomingLead.companyTag : l.companyTag,
                     companyColor: incomingLead?.companyColor !== undefined ? incomingLead.companyColor : l.companyColor,
@@ -1063,16 +1072,33 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const assignLead = (leadId: string, coordinatorId: string) => {
     const targetLead = leads.find(l => l.id === leadId);
 
+    const assignerId = currentUser?.id || 'user-admin-1';
+    const assignerName = currentUser?.fullName || 'Admin';
+    const nowIso = new Date().toISOString();
+
     // If unassigning (-- Assign to Coordinator --)
     if (!coordinatorId) {
       setLeads(prev => prev.map(l => {
         if (l.id === leadId) {
           logAudit('LEAD_UNASSIGNED', 'Assignment', leadId, { assignedTo: l.assignedTo }, { assignedTo: undefined, stage: 'new' });
+          const newHist: LeadAssignmentHistory = {
+            id: 'asgn-' + Date.now(),
+            leadId,
+            assignedToId: undefined,
+            assignedToName: 'Unassigned',
+            assignedById: assignerId,
+            assignedByName: assignerName,
+            assignedAt: nowIso
+          };
           return {
             ...l,
             assignedTo: undefined,
+            assignedById: assignerId,
+            assignedByName: assignerName,
+            assignedAt: nowIso,
+            assignmentHistories: [newHist, ...(l.assignmentHistories || [])],
             stage: 'new' as LeadStage,
-            updatedAt: new Date().toISOString()
+            updatedAt: nowIso
           };
         }
         return l;
@@ -1084,11 +1110,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+          'x-coordinator-id': currentUser?.id || 'user-admin-1',
+          'x-user-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
           coordinatorId: '',
+          assignedById: assignerId,
+          assignedByName: assignerName,
+          assignedAt: nowIso,
           unassign: true,
           customerId: targetLead?.customerId,
           phone: targetLead?.customer?.whatsappNumber,
@@ -1121,16 +1151,30 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             changedBy: currentUser.id,
             changedByName: currentUser.fullName,
             reason: `Assigned to coordinator ${coord.fullName}`,
-            createdAt: new Date().toISOString(),
+            createdAt: nowIso,
           };
           setStageHistories(h => [hist, ...h]);
         }
 
+        const newHist: LeadAssignmentHistory = {
+          id: 'asgn-' + Date.now(),
+          leadId,
+          assignedToId: coordinatorId,
+          assignedToName: coord.fullName,
+          assignedById: assignerId,
+          assignedByName: assignerName,
+          assignedAt: nowIso
+        };
+
         return {
           ...l,
           assignedTo: coordinatorId,
+          assignedById: assignerId,
+          assignedByName: assignerName,
+          assignedAt: nowIso,
+          assignmentHistories: [newHist, ...(l.assignmentHistories || [])],
           stage: newStage,
-          updatedAt: new Date().toISOString(),
+          updatedAt: nowIso,
         };
       }
       return l;
@@ -1142,12 +1186,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        'x-coordinator-id': currentUser?.id || 'user-admin-1',
+        'x-user-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
         coordinatorId,
         coordinatorName: coord.fullName,
+        assignedById: assignerId,
+        assignedByName: assignerName,
+        assignedAt: nowIso,
         customerId: targetLead?.customerId,
         phone: targetLead?.customer?.whatsappNumber,
         whatsappId: targetLead?.customer?.whatsappId

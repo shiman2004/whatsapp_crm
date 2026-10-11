@@ -54,6 +54,10 @@ export interface Lead {
   serialNumber?: string;
   assignedTo?: string; // User ID
   assignedCoordinator?: User;
+  assignedById?: string;
+  assignedByName?: string;
+  assignedAt?: string;
+  assignmentHistories?: LeadAssignmentHistory[];
   stage: LeadStage;
   source: string; // 'whatsapp' | 'RWC' | 'CRAS'
   company?: CompanyCode;
@@ -67,6 +71,16 @@ export interface Lead {
   lastCustomerMessageAt: string;
   notesCount?: number;
   unreadCount?: number;
+}
+
+export interface LeadAssignmentHistory {
+  id: string;
+  leadId: string;
+  assignedToId?: string;
+  assignedToName?: string;
+  assignedById?: string;
+  assignedByName?: string;
+  assignedAt: string;
 }
 
 export type MessageDirection = 'inbound' | 'outbound';

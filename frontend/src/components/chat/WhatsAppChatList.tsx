@@ -40,6 +40,25 @@ export const PRESET_LABELS = [
   { id: 'prescription', name: 'Prescription Sent', color: 'bg-purple-500/20 text-purple-300 border-purple-500/30', dot: 'bg-purple-400' }
 ];
 
+export function formatAssignmentDateTime(dateInput?: string | Date | null): string {
+  if (!dateInput) return '';
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return '';
+  
+  const day = d.getDate();
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  const month = months[d.getMonth()];
+  
+  let hours = d.getHours();
+  const minutes = String(d.getMinutes()).padStart(2, '0');
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours = hours % 12;
+  hours = hours ? hours : 12;
+  const strHours = String(hours).padStart(2, '0');
+
+  return `${day} ${month}, ${strHours}:${minutes} ${ampm}`;
+}
+
 export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead, className = '' }) => {
   const { 
     leads, 
@@ -583,9 +602,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             // Stage configuration
             const stageCfg = STAGE_CONFIG[lead.stage || 'new'] || STAGE_CONFIG.new;
 
-            // Coordinator configuration
+            // Coordinator & Assignment configuration
             const coordinator = users.find(u => u.id === lead.assignedTo);
             const coordinatorName = coordinator ? coordinator.fullName : (lead.assignedTo || 'Unassigned');
+            const latestHistory = lead.assignmentHistories && lead.assignmentHistories.length > 0 ? lead.assignmentHistories[0] : null;
+            const assignedByName = lead.assignedByName || latestHistory?.assignedByName || (coordinator ? 'Super Admin' : '');
+            const rawAssignDate = lead.assignedAt || latestHistory?.assignedAt || (coordinator ? (lead.updatedAt || lead.createdAt) : null);
+            const formattedAssignTime = rawAssignDate ? formatAssignmentDateTime(rawAssignDate) : '';
 
             return (
               <div
@@ -705,12 +728,27 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     </div>
                   </div>
 
-                  {/* Bottom Line: Aesthetic Coordinator Tag */}
-                  <div className="flex items-center gap-1 mt-0.5 text-[10px] font-medium">
-                    <User className="w-2.5 h-2.5 text-teal-400 shrink-0" />
-                    <span className={coordinator ? 'text-teal-300 font-semibold' : 'text-slate-500 italic'}>
-                      Assigned to: {coordinatorName}
-                    </span>
+                  {/* Bottom Line: Aesthetic Coordinator & Assignment Details */}
+                  <div className="flex flex-col mt-0.5 text-[10px] font-medium leading-tight">
+                    <div className="flex items-center gap-1">
+                      <User className="w-2.5 h-2.5 text-teal-400 shrink-0" />
+                      <span className={coordinator ? 'text-teal-300 font-semibold' : 'text-slate-500 italic'}>
+                        Assigned to: {coordinatorName}
+                      </span>
+                    </div>
+                    {coordinator && (
+                      <div className="flex items-center gap-1 pl-3.5 mt-0.5 text-[9.5px] text-[#8696a0] truncate">
+                        <span>
+                          Assigned by: <span className="text-[#d1d7db] font-medium">{assignedByName || 'Admin'}</span>
+                          {formattedAssignTime && (
+                            <>
+                              {' • '}
+                              <span className="text-[#8696a0]">{formattedAssignTime}</span>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                    )}
                   </div>
 
                 </div>

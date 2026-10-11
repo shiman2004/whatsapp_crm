@@ -13,10 +13,12 @@ import {
   SlidersHorizontal,
   Lock,
   ChevronDown,
-  ArrowLeft
+  ArrowLeft,
+  AlertCircle
 } from 'lucide-react';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
+import { SessionWindowBadge } from './SessionWindowBadge';
 
 interface WhatsAppChatThreadProps {
   lead: Lead;
@@ -56,6 +58,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   const displayName = lead.customer?.displayName || 'WhatsApp Contact';
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
+
+  const lastCustomerMessageTime = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
+  const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
 
   const filteredMessages = searchQuery.trim()
     ? leadMessages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -102,6 +107,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                   {displayName}
                 </h3>
                 <CompanyTagBadge lead={lead} size="sm" showFullName={true} />
+                <SessionWindowBadge lastCustomerMessageAt={lead.lastCustomerMessageAt} />
               </div>
               <p className="text-[11px] text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
                 {displayPhone ? (
@@ -245,6 +251,29 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* 24-Hour Customer Service Window Closed Alert */}
+      {!is24hWindowOpen && (
+        <div className="bg-[#182229] border-t border-[#31424d] px-4 py-2 flex items-center justify-between gap-3 text-xs text-amber-200 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="truncate">
+              {lastCustomerMessageTime > 0
+                ? 'WhatsApp 24h customer window closed. Meta requires an approved Template to message this contact.'
+                : 'New WhatsApp contact. Meta requires an approved Template message to initiate conversation.'}
+            </span>
+          </div>
+          <button
+            onClick={() => {
+              const tplBtn = document.getElementById('btn-composer-templates');
+              if (tplBtn) tplBtn.click();
+            }}
+            className="px-2.5 py-1 rounded bg-[#00a884] hover:bg-[#008f6f] text-white font-semibold transition-colors shrink-0 text-[11px] shadow-sm flex items-center gap-1"
+          >
+            Send Template
+          </button>
+        </div>
+      )}
 
       {/* 3. Bottom Composer */}
       <MessageComposer lead={lead} />

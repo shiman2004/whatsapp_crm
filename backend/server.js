@@ -48,6 +48,57 @@ let metaConfig = {
   wabaId: process.env.META_WABA_ID || '2332922997481634'
 };
 
+/**
+ * Validate & normalize phone numbers to international E.164 standard
+ */
+function normalizeE164(phone) {
+  if (!phone) return { valid: false, phone: '', clean: '', canonical: '' };
+  let clean = String(phone).replace(/[^0-9]/g, '');
+  if (clean.startsWith('0') && clean.length === 10) {
+    clean = '94' + clean.slice(1);
+  } else if (clean.length === 9 && (clean.startsWith('7') || clean.startsWith('1'))) {
+    clean = '94' + clean;
+  }
+  const valid = clean.length >= 10 && clean.length <= 15;
+  return {
+    valid,
+    clean, // '94706373353' (for Meta API parameter "to")
+    canonical: `+${clean}` // '+94706373353' (for CRM database)
+  };
+}
+
+/**
+ * Human-friendly error mapping for Meta WhatsApp Cloud API codes
+ */
+function getMetaErrorExplanation(code, rawMsg) {
+  const c = Number(code);
+  switch (c) {
+    case 131047:
+      return '24-hour customer care window is closed. More than 24 hours have passed since the customer last replied. An approved WhatsApp Message Template is required to re-engage.';
+    case 131026:
+      return 'Message undeliverable. The phone number is not registered on WhatsApp or has blocked business messaging.';
+    case 131056:
+      return 'Message template not found or not approved by Meta.';
+    case 131058:
+      return 'Sample/test template cannot be sent from live verified phone numbers.';
+    case 131051:
+      return 'Unsupported message type or media parameter.';
+    case 131052:
+      return 'Media download or upload failure on WhatsApp servers.';
+    case 131053:
+      return 'Media format or upload size exceeds WhatsApp limit.';
+    case 130429:
+      return 'Rate limit hit. Too many messages sent in a short period.';
+    case 100:
+      return `Invalid parameters: ${rawMsg || 'Please check template parameters or message format.'}`;
+    case 190:
+      return 'Meta API access token is expired or invalid. Please update credentials.';
+    default:
+      return rawMsg || `Meta Cloud API error (Code ${code})`;
+  }
+}
+
+
 // Periodic SSE Keep-Alive Heartbeat (Prevents proxy/Render timeout drops)
 setInterval(() => {
   const keepAlive = ': keepalive\n\n';
@@ -746,18 +797,34 @@ const server = http.createServer(async (req, res) => {
 
         // If Meta Cloud API token is supplied or configured on server, dispatch directly to Meta Graph API; otherwise use Baileys socket
         const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        
+        // 1. Phone validation in international format
+        const norm = normalizeE164(to || whatsappId);
+        if (!norm.valid) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `Invalid phone number format: "${to || whatsappId}". International E.164 format required (10-15 digits, e.g. 94706373353 or +94706373353).`
+          }));
+          return;
+        }
+        const cleanTo = norm.clean;
+        const formattedTo = norm.canonical;
+
+        // 2. Resolve company & correct Meta Cloud API Phone Number ID
+        const prisma = getPrisma();
+        let resolvedCompany = payload.company;
+        if (!resolvedCompany && leadId && prisma && getDbStatus()) {
+          const checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+          if (checkLead?.source === 'CRAS') {
+            resolvedCompany = 'CRAS';
+          }
+        }
         let targetPhoneId = payload.phoneNumberId;
         if (!targetPhoneId) {
-          targetPhoneId = payload.company === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId);
+          targetPhoneId = resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId);
         }
         const phoneId = (targetPhoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
-
-        let cleanTo = (to || whatsappId || '').replace(/[^0-9]/g, '');
-        if (cleanTo.startsWith('0') && cleanTo.length === 10) {
-          cleanTo = '94' + cleanTo.slice(1);
-        } else if (cleanTo.length === 9 && (cleanTo.startsWith('7') || cleanTo.startsWith('1'))) {
-          cleanTo = '94' + cleanTo;
-        }
 
         let savedMediaUrl = null;
         let localMediaInfo = null;
@@ -774,9 +841,9 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // 1. Dispatch directly via Meta Cloud API using the clinic's official numbers (CRAS +94 70 637 3353 / RWC +94 70 639 3353)
+        // 3. Dispatch directly via Meta Cloud API using the clinic's official numbers (CRAS +94 70 637 3353 / RWC +94 70 639 3353)
         if (metaToken) {
-          console.log(`🚀 [Meta Graph API] Dispatching message to ${cleanTo} via Phone ID ${phoneId} (${payload.company || 'RWC'})...`);
+          console.log(`🚀 [Meta Graph API] Dispatching message to ${cleanTo} via Phone ID ${phoneId} (${resolvedCompany || 'RWC'})...`);
           let metaPayload = null;
 
           if (media && localMediaInfo) {
@@ -837,13 +904,76 @@ const server = http.createServer(async (req, res) => {
             body: JSON.stringify(metaPayload)
           });
           const metaData = await metaRes.json().catch(() => ({}));
+
+          // If Meta rejects the message, DO NOT display success or false delivery status!
           if (!metaRes.ok) {
             console.error('❌ [Meta Graph API Error]:', JSON.stringify(metaData));
-            const errMsg = metaData.error?.message || metaData.error?.error_user_msg || (metaData.error ? JSON.stringify(metaData.error) : 'Meta Cloud API dispatch failed');
-            throw new Error(`Meta API: ${errMsg}`);
+            const errCode = metaData.error?.code || 500;
+            const rawMsg = metaData.error?.message || metaData.error?.error_user_msg || (metaData.error ? JSON.stringify(metaData.error) : 'Meta Cloud API dispatch failed');
+            const explanation = getMetaErrorExplanation(errCode, rawMsg);
+
+            // Save failed message to database so it appears with error details in CRM
+            const failedMsgId = payload.retryMessageId || `failed-${Date.now()}`;
+            if (prisma && getDbStatus() && leadId) {
+              try {
+                let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
+                if (!cust && cleanTo) {
+                  cust = await prisma.customer.findFirst({
+                    where: { OR: [{ whatsappNumber: formattedTo }, { whatsappNumber: cleanTo }, { whatsappId: cleanTo }] }
+                  }).catch(() => null);
+                }
+
+                await prisma.message.upsert({
+                  where: { id: failedMsgId },
+                  update: {
+                    status: 'failed',
+                    errorCode: errCode,
+                    errorMessage: explanation,
+                    content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : '')
+                  },
+                  create: {
+                    id: failedMsgId,
+                    leadId,
+                    customerId: cust?.id || customerId || 'temp-cust',
+                    direction: 'outbound',
+                    senderType: 'coordinator',
+                    coordinatorId: targetCoordinatorId || authUser?.id || null,
+                    content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : ''),
+                    status: 'failed',
+                    errorCode: errCode,
+                    errorMessage: explanation,
+                    timestamp: new Date()
+                  }
+                }).catch(() => {});
+              } catch (e) {}
+            }
+
+            // Broadcast failed SSE status
+            broadcastScopedSSE(targetCoordinatorId || null, {
+              type: 'MESSAGE_STATUS_UPDATE',
+              messageId: failedMsgId,
+              leadId,
+              status: 'failed',
+              errorCode: errCode,
+              errorMessage: explanation,
+              recipientPhone: formattedTo,
+              timestamp: new Date().toISOString()
+            });
+
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              status: 'failed',
+              messageId: failedMsgId,
+              errorCode: errCode,
+              error: explanation,
+              rawError: rawMsg
+            }));
+            return;
           }
-          const messageId = metaData.messages?.[0]?.id || `meta-${Date.now()}`;
-          console.log(`✅ [Meta Graph API] Delivered to customer WhatsApp! Message ID: ${messageId}`);
+
+          const messageId = metaData.messages?.[0]?.id || `wamid-${Date.now()}`;
+          console.log(`✅ [Meta Graph API] Dispatched! Message ID (wamid): ${messageId}`);
           sendResult = {
             success: true,
             messageId,
@@ -853,11 +983,8 @@ const server = http.createServer(async (req, res) => {
           };
 
           // Save message to Prisma database
-          const prisma = getPrisma();
           if (prisma && getDbStatus()) {
             try {
-              const formattedTo = cleanTo.startsWith('+') ? cleanTo : `+${cleanTo}`;
-
               // 1. Resolve Customer
               let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
               if (!cust && cleanTo) {
@@ -896,10 +1023,10 @@ const server = http.createServer(async (req, res) => {
                   lead = await prisma.lead.create({
                     data: {
                       customerId: cust.id,
-                      categoryId: firstCat?.id || 'cat-hair-care',
-                      treatmentId: firstTrt?.id || 'trt-hair-prp',
+                      categoryId: firstCat?.id || (resolvedCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
+                      treatmentId: firstTrt?.id || (resolvedCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                       stage: 'contacted',
-                      source: 'whatsapp',
+                      source: resolvedCompany || 'RWC',
                       language: 'en'
                     }
                   }).catch(() => null);
@@ -913,6 +1040,11 @@ const server = http.createServer(async (req, res) => {
                   if (coordExists) validCoordinatorId = coordExists.id;
                 }
 
+                // If retrying a previous failed message, delete or update the old failed message
+                if (payload.retryMessageId && payload.retryMessageId !== messageId) {
+                  await prisma.message.delete({ where: { id: payload.retryMessageId } }).catch(() => {});
+                }
+
                 await prisma.message.upsert({
                   where: { id: messageId },
                   update: {
@@ -920,6 +1052,8 @@ const server = http.createServer(async (req, res) => {
                     content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
                     mediaType: media ? media.type : null,
                     mediaUrl: savedMediaUrl || null,
+                    errorCode: null,
+                    errorMessage: null
                   },
                   create: {
                     id: messageId,
@@ -954,6 +1088,7 @@ const server = http.createServer(async (req, res) => {
                     url: savedMediaUrl || media.url,
                     fileName: media.fileName || (media.type === 'audio' ? 'voice_note.mp3' : 'attachment')
                   } : null,
+                  status: 'sent',
                   direction: 'outbound',
                   senderType: 'coordinator',
                   timestamp: new Date().toISOString(),
@@ -977,7 +1112,7 @@ const server = http.createServer(async (req, res) => {
           success: true,
           messageId: sendResult.messageId,
           status: 'sent',
-          to,
+          to: formattedTo,
           coordinatorId: targetCoordinatorId,
           authenticatedUserId: authUser.id
         }));
@@ -988,6 +1123,231 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, error: err.message, coordinatorId: errorCoordinatorId }));
       }
     });
+    return;
+  }
+
+  // 5b. Send WhatsApp Message Template (Meta Pre-Approved HSM Templates)
+  if (req.method === 'POST' && (pathname === '/api/send-template' || pathname === '/api/templates/send')) {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const { leadId, customerId, templateName, language = 'en_US', parameters = [], retryMessageId } = payload;
+        const to = payload.to || payload.phone || '';
+        const norm = normalizeE164(to);
+
+        if (!norm.valid) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `Invalid phone number format: "${to}". International format required (e.g. 94706373353).`
+          }));
+          return;
+        }
+
+        if (!templateName) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing required "templateName" parameter.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        let resolvedCompany = payload.company;
+        if (!resolvedCompany && leadId && prisma && getDbStatus()) {
+          const checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+          if (checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
+        }
+
+        const phoneId = (payload.phoneNumberId || (resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId)) || '1358157244046701').trim();
+        const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+
+        if (!metaToken) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Meta API token not configured on server.' }));
+          return;
+        }
+
+        const cleanTo = norm.clean;
+        const formattedTo = norm.canonical;
+
+        const templatePayload = {
+          messaging_product: 'whatsapp',
+          recipient_type: 'individual',
+          to: cleanTo,
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: language },
+            components: Array.isArray(parameters) && parameters.length > 0 ? [
+              {
+                type: 'body',
+                parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+              }
+            ] : undefined
+          }
+        };
+
+        console.log(`🚀 [Meta Send Template] Sending template "${templateName}" to ${cleanTo} via Phone ID ${phoneId}...`);
+        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${metaToken}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(templatePayload)
+        });
+
+        const metaData = await metaRes.json().catch(() => ({}));
+        if (!metaRes.ok) {
+          console.error('❌ [Meta Send Template Error]:', JSON.stringify(metaData));
+          const errCode = metaData.error?.code || 500;
+          const rawMsg = metaData.error?.message || metaData.error?.error_user_msg || 'Template dispatch failed';
+          const explanation = getMetaErrorExplanation(errCode, rawMsg);
+
+          const failedMsgId = retryMessageId || `failed-${Date.now()}`;
+          if (prisma && getDbStatus() && leadId) {
+            try {
+              await prisma.message.upsert({
+                where: { id: failedMsgId },
+                update: {
+                  status: 'failed',
+                  errorCode: errCode,
+                  errorMessage: explanation,
+                  content: `[Template: ${templateName}]`
+                },
+                create: {
+                  id: failedMsgId,
+                  leadId,
+                  customerId: customerId || 'temp-cust',
+                  direction: 'outbound',
+                  senderType: 'coordinator',
+                  coordinatorId: authUser?.id || null,
+                  content: `[Template: ${templateName}]`,
+                  status: 'failed',
+                  errorCode: errCode,
+                  errorMessage: explanation,
+                  timestamp: new Date()
+                }
+              }).catch(() => {});
+            } catch (e) {}
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'MESSAGE_STATUS_UPDATE',
+            messageId: failedMsgId,
+            leadId,
+            status: 'failed',
+            errorCode: errCode,
+            errorMessage: explanation,
+            recipientPhone: formattedTo,
+            timestamp: new Date().toISOString()
+          });
+
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            status: 'failed',
+            errorCode: errCode,
+            error: explanation,
+            rawError: rawMsg
+          }));
+          return;
+        }
+
+        const messageId = metaData.messages?.[0]?.id || `wamid-${Date.now()}`;
+        console.log(`✅ [Meta Send Template] Template dispatched! Message ID: ${messageId}`);
+
+        // Persist to DB
+        if (prisma && getDbStatus() && leadId) {
+          try {
+            if (retryMessageId && retryMessageId !== messageId) {
+              await prisma.message.delete({ where: { id: retryMessageId } }).catch(() => {});
+            }
+
+            await prisma.message.upsert({
+              where: { id: messageId },
+              update: {
+                status: 'sent',
+                content: `[Template: ${templateName}]`,
+                errorCode: null,
+                errorMessage: null
+              },
+              create: {
+                id: messageId,
+                leadId,
+                customerId: customerId || 'temp-cust',
+                direction: 'outbound',
+                senderType: 'coordinator',
+                coordinatorId: authUser?.id || null,
+                content: `[Template: ${templateName}]`,
+                status: 'sent',
+                timestamp: new Date()
+              }
+            });
+
+            // Broadcast outbound message to UI
+            broadcastScopedSSE(null, {
+              type: 'OUTBOUND_WHATSAPP_MESSAGE',
+              messageId,
+              leadId,
+              customerId,
+              phone: formattedTo,
+              realPhone: formattedTo,
+              whatsappId: cleanTo,
+              text: `[Template: ${templateName}]`,
+              status: 'sent',
+              direction: 'outbound',
+              senderType: 'coordinator',
+              timestamp: new Date().toISOString()
+            });
+          } catch (dbE) {
+            console.warn('[DB Error saving template msg]:', dbE.message);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          messageId,
+          status: 'sent',
+          templateName
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 5c. GET Available WhatsApp Templates from Meta Cloud API
+  if (req.method === 'GET' && (pathname === '/api/templates' || pathname === '/api/whatsapp/templates')) {
+    try {
+      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+      const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+      let metaTemplates = [];
+      if (metaToken && wabaId) {
+        try {
+          const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=50`, {
+            headers: { 'Authorization': `Bearer ${metaToken}` }
+          });
+          const dataMeta = await resMeta.json().catch(() => ({}));
+          if (Array.isArray(dataMeta?.data)) {
+            metaTemplates = dataMeta.data;
+          }
+        } catch (e) {
+          console.warn('⚠️ [Meta Templates Fetch Warning]:', e.message);
+        }
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, templates: metaTemplates }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
     return;
   }
 
@@ -1548,30 +1908,30 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage, company } = payload;
+        const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage, templateName, templateParams, company } = payload;
         const targetCompany = (company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
 
         const rawPhone = (phone || whatsappNumber || '').trim();
-        if (!rawPhone) {
+        const norm = normalizeE164(rawPhone);
+        if (!norm.valid) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Phone number is required.' }));
+          res.end(JSON.stringify({
+            success: false,
+            error: `Invalid phone number format: "${rawPhone}". International E.164 format required (10-15 digits, e.g. 94706373353 or +94706373353).`
+          }));
           return;
         }
 
-        let cleanDigits = rawPhone.replace(/[^0-9]/g, '');
-        if (cleanDigits.startsWith('0') && cleanDigits.length === 10) {
-          cleanDigits = '94' + cleanDigits.slice(1);
-        } else if (cleanDigits.length === 9 && (cleanDigits.startsWith('7') || cleanDigits.startsWith('1'))) {
-          cleanDigits = '94' + cleanDigits;
-        }
-
-        const canonicalPhone = `+${cleanDigits}`;
+        const cleanDigits = norm.clean;
+        const canonicalPhone = norm.canonical;
         const contactName = (name || '').trim() || canonicalPhone;
 
         const prisma = getPrisma();
         let savedCustomer = null;
         let savedLead = null;
         let savedMessage = null;
+        let dispatchSuccess = null;
+        let dispatchErrorMessage = null;
 
         if (prisma && getDbStatus()) {
           // 1. Find or create Customer in Supabase PostgreSQL
@@ -1722,72 +2082,114 @@ const server = http.createServer(async (req, res) => {
             }
           }
 
-          // 5. Send initial message if provided via official company number
-          if (initialMessage && initialMessage.trim()) {
-            const msgContent = initialMessage.trim();
-            const messageId = `msg-${Date.now()}`;
-            
+          // 5. Send initial message or approved template via official company number
+          let dispatchPayload = null;
+          let msgContent = '';
+          if (templateName && templateName.trim()) {
+            msgContent = `[Template: ${templateName.trim()}]`;
+            dispatchPayload = {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: cleanDigits,
+              type: 'template',
+              template: {
+                name: templateName.trim(),
+                language: { code: language || 'en_US' },
+                components: Array.isArray(templateParams) && templateParams.length > 0 ? [
+                  {
+                    type: 'body',
+                    parameters: templateParams.map(p => ({ type: 'text', text: String(p) }))
+                  }
+                ] : undefined
+              }
+            };
+          } else if (initialMessage && initialMessage.trim()) {
+            msgContent = initialMessage.trim();
+            dispatchPayload = {
+              messaging_product: 'whatsapp',
+              recipient_type: 'individual',
+              to: cleanDigits,
+              type: 'text',
+              text: { body: msgContent }
+            };
+          }
+
+          let metaMessageId = null;
+          dispatchSuccess = false;
+          let dispatchErrorCode = null;
+          dispatchErrorMessage = null;
+
+          if (dispatchPayload) {
             const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
             const phoneId = targetCompany === 'CRAS'
               ? (metaConfig.phoneNumberIdCras || process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim()
               : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
 
-            let metaMessageId = null;
             if (metaToken) {
               try {
+                console.log(`🚀 [Add Contact Dispatch] Sending to ${cleanDigits} via Phone ID ${phoneId} (${targetCompany})...`);
                 const metaRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
                   method: 'POST',
                   headers: {
                     'Authorization': `Bearer ${metaToken}`,
                     'Content-Type': 'application/json'
                   },
-                  body: JSON.stringify({
-                    messaging_product: 'whatsapp',
-                    recipient_type: 'individual',
-                    to: cleanDigits,
-                    type: 'text',
-                    text: { body: msgContent }
-                  })
+                  body: JSON.stringify(dispatchPayload)
                 });
                 const metaData = await metaRes.json().catch(() => ({}));
-                metaMessageId = metaData?.messages?.[0]?.id;
-                console.log(`✅ [Initial Message via Meta API] (${targetCompany} ${phoneId}):`, metaData);
+                if (metaRes.ok) {
+                  metaMessageId = metaData?.messages?.[0]?.id;
+                  dispatchSuccess = true;
+                  console.log(`✅ [Add Contact Dispatch Success] (${targetCompany} ${phoneId}): wamid:`, metaMessageId);
+                } else {
+                  dispatchErrorCode = metaData.error?.code || 400;
+                  const rawMsg = metaData.error?.message || metaData.error?.error_user_msg || 'Meta Cloud API rejected dispatch';
+                  dispatchErrorMessage = getMetaErrorExplanation(dispatchErrorCode, rawMsg);
+                  console.warn(`❌ [Add Contact Dispatch Failed] Code ${dispatchErrorCode}: ${dispatchErrorMessage}`);
+                }
               } catch (e) {
+                dispatchErrorCode = 500;
+                dispatchErrorMessage = e.message;
                 console.warn('[Initial message Meta API dispatch warning]:', e.message);
               }
             }
 
             savedMessage = await prisma.message.create({
               data: {
-                id: metaMessageId || messageId,
+                id: metaMessageId || `msg-${Date.now()}`,
                 leadId: savedLead.id,
                 customerId: savedCustomer.id,
                 direction: 'outbound',
                 senderType: 'coordinator',
                 coordinatorId: targetCoordinatorId || authUser?.id || null,
                 content: msgContent,
-                status: 'sent',
+                status: dispatchSuccess ? 'sent' : 'failed',
+                errorCode: dispatchErrorCode || null,
+                errorMessage: dispatchErrorMessage || null,
                 timestamp: new Date()
               }
             }).catch(() => null);
 
-              // Broadcast real-time outbound SSE
-              broadcastScopedSSE(targetCoordinatorId || null, {
-                type: 'OUTBOUND_WHATSAPP_MESSAGE',
-                messageId,
-                leadId: savedLead.id,
-                customerId: savedCustomer.id,
-                phone: canonicalPhone,
-                realPhone: canonicalPhone,
-                whatsappId: cleanDigits,
-                name: contactName,
-                text: msgContent,
-                direction: 'outbound',
-                senderType: 'coordinator',
-                timestamp: new Date().toISOString(),
-                source: 'live'
-              });
-            }
+            // Broadcast real-time outbound SSE with truthful status
+            broadcastScopedSSE(targetCoordinatorId || null, {
+              type: 'OUTBOUND_WHATSAPP_MESSAGE',
+              messageId: savedMessage?.id || metaMessageId || `msg-${Date.now()}`,
+              leadId: savedLead.id,
+              customerId: savedCustomer.id,
+              phone: canonicalPhone,
+              realPhone: canonicalPhone,
+              whatsappId: cleanDigits,
+              name: contactName,
+              text: msgContent,
+              status: dispatchSuccess ? 'sent' : 'failed',
+              errorCode: dispatchErrorCode || null,
+              errorMessage: dispatchErrorMessage || null,
+              direction: 'outbound',
+              senderType: 'coordinator',
+              timestamp: new Date().toISOString(),
+              source: 'live'
+            });
+          }
 
           // Broadcast Lead Created/Assigned SSE with company metadata
           const compCode = (targetCompany || savedLead.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
@@ -1858,7 +2260,9 @@ const server = http.createServer(async (req, res) => {
           customer: savedCustomer,
           lead: finalEnrichedLead,
           message: savedMessage,
-          leadId: savedLead?.id
+          leadId: savedLead?.id,
+          messageSent: dispatchSuccess,
+          messageError: dispatchErrorMessage
         }));
       } catch (err) {
         console.error('❌ [Add Contact Error]:', err.message);
@@ -2549,6 +2953,93 @@ const server = http.createServer(async (req, res) => {
                         console.error('❌ Auto-reply webhook error:', autoErr.message);
                       }
                     }
+
+                  // 12b. Handle Outbound Message Status Tracking (sent, delivered, read, failed)
+                  if (Array.isArray(val.statuses) && val.statuses.length > 0) {
+                    for (const statusItem of val.statuses) {
+                      const wamid = statusItem.id;
+                      const status = statusItem.status; // 'sent' | 'delivered' | 'read' | 'failed'
+                      const recipientPhone = statusItem.recipient_id;
+                      let errorCode = null;
+                      let errorMessage = null;
+
+                      if (Array.isArray(statusItem.errors) && statusItem.errors.length > 0) {
+                        errorCode = statusItem.errors[0].code;
+                        const rawMsg = statusItem.errors[0].message || statusItem.errors[0].title;
+                        errorMessage = getMetaErrorExplanation(errorCode, rawMsg);
+                      }
+
+                      console.log(`📩 [Meta Webhook Status] Message ${wamid} -> ${status}${errorCode ? ` [Code ${errorCode}: ${errorMessage}]` : ''} (Recipient: ${recipientPhone})`);
+
+                      const prisma = getPrisma();
+                      let leadId = null;
+                      let customerId = null;
+
+                      if (prisma && getDbStatus() && wamid) {
+                        try {
+                          const existingMsg = await prisma.message.findUnique({ where: { id: wamid } });
+                          if (existingMsg) {
+                            leadId = existingMsg.leadId;
+                            customerId = existingMsg.customerId;
+                            await prisma.message.update({
+                              where: { id: wamid },
+                              data: {
+                                status: status,
+                                errorCode: errorCode || undefined,
+                                errorMessage: errorMessage || undefined
+                              }
+                            });
+                          } else {
+                            // Find recent outbound message to this customer if stored under temporary ID
+                            const cleanRecip = recipientPhone ? recipientPhone.replace(/[^0-9]/g, '') : '';
+                            const matchedCust = await prisma.customer.findFirst({
+                              where: {
+                                OR: [
+                                  { whatsappNumber: `+${cleanRecip}` },
+                                  { whatsappNumber: cleanRecip },
+                                  { whatsappId: cleanRecip }
+                                ]
+                              }
+                            });
+                            if (matchedCust) {
+                              customerId = matchedCust.id;
+                              const recentOutbound = await prisma.message.findFirst({
+                                where: { customerId: matchedCust.id, direction: 'outbound' },
+                                orderBy: { timestamp: 'desc' }
+                              });
+                              if (recentOutbound) {
+                                leadId = recentOutbound.leadId;
+                                await prisma.message.update({
+                                  where: { id: recentOutbound.id },
+                                  data: {
+                                    id: wamid,
+                                    status: status,
+                                    errorCode: errorCode || undefined,
+                                    errorMessage: errorMessage || undefined
+                                  }
+                                });
+                              }
+                            }
+                          }
+                        } catch (stErr) {
+                          console.warn('⚠️ [Webhook Status DB Error]:', stErr.message);
+                        }
+                      }
+
+                      // Real-time broadcast to all connected staff
+                      broadcastScopedSSE(null, {
+                        type: 'MESSAGE_STATUS_UPDATE',
+                        messageId: wamid,
+                        status: status,
+                        errorCode: errorCode || null,
+                        errorMessage: errorMessage || null,
+                        recipientPhone,
+                        leadId,
+                        customerId,
+                        timestamp: new Date().toISOString()
+                      });
+                    }
+                  }
                 }
               }
             }

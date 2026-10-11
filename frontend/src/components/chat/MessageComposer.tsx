@@ -228,9 +228,25 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     reader.readAsDataURL(file);
   };
 
+  const lastCustomerMessageTime = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
+  const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
+
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputVal.trim()) return;
+
+    if (!is24hWindowOpen) {
+      const proceed = confirm(
+        '⚠️ WhatsApp 24-Hour Customer Care Window is Closed.\n\n' +
+        'More than 24 hours have passed since the customer last messaged (or this is a new contact).\n' +
+        'Meta WhatsApp API will reject free-form messages with error 131047.\n\n' +
+        'Click CANCEL to open Templates, or OK to attempt sending anyway.'
+      );
+      if (!proceed) {
+        setShowTemplates(true);
+        return;
+      }
+    }
 
     sendMessage(lead.id, inputVal.trim(), 'coordinator');
     setInputVal('');
@@ -256,7 +272,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     const custName = lead.customer?.displayName || 'Client';
     const trtName = treatment?.name || category?.name || 'Treatment';
     
-    sendWhatsAppTemplate(lead.id, tpl.id, [custName, trtName]);
+    sendWhatsAppTemplate(lead.id, tpl.name || tpl.id, [custName, trtName]);
     setShowTemplates(false);
     setShowAttachMenu(false);
   };
@@ -472,6 +488,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             e.stopPropagation();
             setShowEmojiPicker(!showEmojiPicker);
             setShowAttachMenu(false);
+            setShowTemplates(false);
           }}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
             showEmojiPicker ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
@@ -479,6 +496,24 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           title="Emojis"
         >
           <Smile className="w-5 h-5" />
+        </button>
+
+        {/* Pre-Approved WhatsApp Templates Button */}
+        <button
+          id="btn-composer-templates"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowTemplates(!showTemplates);
+            setShowAttachMenu(false);
+            setShowEmojiPicker(false);
+          }}
+          className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 ${
+            showTemplates ? 'bg-[#00a884]/20 text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
+          }`}
+          title="Pre-Approved WhatsApp Templates"
+        >
+          <Sparkles className="w-5 h-5" />
         </button>
 
         {/* Input Field / Voice Recording View */}

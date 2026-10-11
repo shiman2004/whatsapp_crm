@@ -85,7 +85,7 @@ export interface LeadAssignmentHistory {
 
 export type MessageDirection = 'inbound' | 'outbound';
 export type SenderType = 'customer' | 'coordinator' | 'system' | 'ai';
-export type MessageStatus = 'sent' | 'delivered' | 'read' | 'failed';
+export type MessageStatus = 'pending' | 'sent' | 'delivered' | 'read' | 'failed';
 
 export interface Message {
   id: string;
@@ -105,8 +105,10 @@ export interface Message {
     caption?: string;
     fileName?: string;
   };
-  waMessageId: string;
+  waMessageId?: string;
   status: MessageStatus;
+  errorCode?: number;
+  errorMessage?: string;
   createdAt: string;
   suggestedByAi?: boolean;
   starred?: boolean;

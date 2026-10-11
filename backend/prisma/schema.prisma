@@ -50,6 +50,7 @@ enum SenderType {
 }
 
 enum MessageStatus {
+  pending
   sent
   delivered
   read
@@ -265,6 +266,8 @@ model Message {
   replyToSender       String?           @db.VarChar(255)
   mediaUrl            String?           @db.VarChar(500)
   mediaType           String?           @db.VarChar(50)
+  errorCode           Int?
+  errorMessage        String?           @db.Text
 
   // Relations
   lead                Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)

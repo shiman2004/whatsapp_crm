@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
 import path from 'path';
 
-console.log('🚀 Starting Royal Wellness Full-Stack Environment...\n');
+console.log('🚀 Starting Alpha Health Group Full-Stack Environment...\n');
 
 // 1. Spawn Backend
 const backend = spawn('npm', ['run', 'dev'], {

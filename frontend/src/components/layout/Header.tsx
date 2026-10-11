@@ -69,12 +69,12 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
             </button>
           )}
 
-          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-emerald-500/30 shrink-0">
-            <img src="/logo.png" alt="Royal Wellness Logo" className="w-full h-full object-contain" />
+          <div className="w-8 h-8 rounded-lg bg-white p-0.5 flex items-center justify-center shadow overflow-hidden ring-1 ring-slate-700/50 shrink-0">
+            <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
           </div>
           <div className="min-w-0 truncate">
             <h1 className="text-xs sm:text-sm font-bold text-white font-serif tracking-wide truncate">
-              Royal Wellness Center
+              Alpha Health Group
             </h1>
           </div>
         </div>

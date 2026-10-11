@@ -145,7 +145,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                Royal Wellness Official WhatsApp Line
+                Alpha Health Group Official WhatsApp Line
                 <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
                   status === 'connected' 
                     ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
@@ -181,7 +181,7 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
                 <CheckCircle2 className="w-8 h-8" />
               </div>
               <div>
-                <h3 className="text-base font-bold text-white">Royal Wellness Clinic WhatsApp is Active!</h3>
+                <h3 className="text-base font-bold text-white">Alpha Health Group WhatsApp is Active!</h3>
                 <p className="text-xs text-slate-300 mt-1 font-mono">
                   Official Clinic Line: <span className="text-emerald-400 font-bold">+{connectedPhone || 'Active SIM'}</span>
                 </p>

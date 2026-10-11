@@ -79,12 +79,12 @@ export const WhatsAppSimulator: React.FC = () => {
         <div className="flex items-center gap-2.5">
           <div className="relative">
             <div className="w-9 h-9 rounded-full bg-white p-0.5 flex items-center justify-center shadow overflow-hidden">
-              <img src="/logo.png" alt="Royal Wellness" className="w-full h-full object-contain" />
+              <img src="/logo.png" alt="Alpha Health Group" className="w-full h-full object-contain" />
             </div>
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 border border-white absolute bottom-0 right-0"></span>
           </div>
           <div>
-            <h3 className="font-semibold text-xs leading-tight">Royal Wellness Center</h3>
+            <h3 className="font-semibold text-xs leading-tight">Alpha Health Group</h3>
             <p className="text-[10px] text-teal-100/90 flex items-center gap-1">
               <span>Official WhatsApp Business</span>
             </p>

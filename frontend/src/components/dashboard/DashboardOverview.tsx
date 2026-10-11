@@ -20,7 +20,7 @@ export const DashboardOverview: React.FC = () => {
         <div className="relative z-10 max-w-2xl space-y-2">
           <div className="flex items-center gap-2">
             <span className="px-2.5 py-0.5 rounded-full bg-gold-500/20 text-gold-300 border border-gold-500/30 text-xs font-semibold">
-              ⭐ Royal Wellness Concierge Intelligence
+              ⭐ Alpha Health Group Concierge Intelligence
             </span>
             <span className="text-xs text-slate-400">Colombo, Sri Lanka</span>
           </div>

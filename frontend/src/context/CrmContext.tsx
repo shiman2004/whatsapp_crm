@@ -99,6 +99,7 @@ interface CrmContextType {
   setReplyingMessage: (msg: Message | null) => void;
   sendMessage: (leadId: string, content: string, senderType?: 'coordinator' | 'system' | 'ai', media?: any, replyTo?: { id: string; content: string; senderName: string }) => void;
   sendWhatsAppTemplate: (leadId: string, templateId: string, params: string[]) => void;
+  retryFailedMessage: (messageId: string) => Promise<void>;
   markChatAsRead: (leadId: string) => void;
   markChatAsUnread: (leadId: string) => void;
   reactToMessage: (messageId: string, emoji: string) => void;
@@ -158,7 +159,9 @@ interface CrmContextType {
     language?: 'en' | 'si' | 'ta';
     assignedTo?: string;
     initialMessage?: string;
-  }) => Promise<{ success: boolean; leadId?: string; error?: string }>;
+    templateName?: string;
+    templateParams?: string[];
+  }) => Promise<{ success: boolean; leadId?: string; error?: string; messageSent?: boolean; messageError?: string }>;
 
   // Toasts
   dismissNotification: (id: string) => void;
@@ -583,6 +586,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data.type === 'CONNECTION_STATUS') {
             if (data.status) {
               setWhatsappStatus(data.status);
+            }
+            return;
+          }
+
+          if (data.type === 'MESSAGE_STATUS_UPDATE') {
+            const { messageId, status, errorCode, errorMessage } = data;
+            console.log('🔄 [SSE Message Status Update]:', messageId, status, errorCode, errorMessage);
+            setMessages(prev => prev.map(m => {
+              if (m.id === messageId || m.waMessageId === messageId) {
+                return {
+                  ...m,
+                  status: status as any,
+                  errorCode: errorCode !== undefined ? errorCode : m.errorCode,
+                  errorMessage: errorMessage !== undefined ? errorMessage : m.errorMessage
+                };
+              }
+              return m;
+            }));
+            if (status === 'failed' && errorMessage) {
+              notify('Delivery Failed', errorMessage, 'warning');
             }
             return;
           }
@@ -1504,8 +1527,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return;
     }
 
+    const tempMsgId = 'msg-' + Date.now();
     const newMsg: Message = {
-      id: 'msg-' + Date.now(),
+      id: tempMsgId,
       leadId,
       customerId: lead.customerId,
       direction: 'outbound',
@@ -1519,8 +1543,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           ? (lead.customer?.displayName || 'Customer')
           : currentUser.fullName
       } : undefined),
-      waMessageId: 'wamid.HBg' + Date.now(),
-      status: 'delivered',
+      waMessageId: undefined,
+      status: 'pending',
       createdAt: new Date().toISOString(),
     };
 
@@ -1561,29 +1585,34 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (!res.ok) {
           const err = await res.json().catch(() => ({ error: 'Failed to send message via WhatsApp' }));
           console.warn('❌ WhatsApp send error:', err);
-          setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+          setMessages(prev => prev.map(m => m.id === tempMsgId ? {
             ...m,
-            status: 'failed' as any
+            status: 'failed',
+            errorCode: err.errorCode,
+            errorMessage: err.error
           } : m));
-          notify('Delivery Failed', err.error || 'Could not deliver message to customer.', 'warning');
+          notify('Failed to Send', err.error || 'Could not deliver message to customer.', 'warning');
         } else {
           const data = await res.json().catch(() => ({}));
-          console.log('✅ Outbound WhatsApp message delivered! ID:', data.messageId);
+          console.log('✅ Outbound WhatsApp message accepted! ID:', data.messageId);
           if (data.messageId) {
-            setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+            setMessages(prev => prev.map(m => m.id === tempMsgId ? {
               ...m,
               id: data.messageId,
               waMessageId: data.messageId,
-              status: 'sent'
+              status: 'sent',
+              errorCode: undefined,
+              errorMessage: undefined
             } : m));
           }
-          notify('Message Delivered', `Outbound WhatsApp message delivered to ${lead.customer?.displayName || 'client'}`, 'success');
+          notify('Message Sent', `Message accepted by Meta WhatsApp API`, 'success');
         }
       }).catch(err => {
         console.warn('WhatsApp bridge offline:', err);
-        setMessages(prev => prev.map(m => m.id === newMsg.id ? {
+        setMessages(prev => prev.map(m => m.id === tempMsgId ? {
           ...m,
-          status: 'failed' as any
+          status: 'failed',
+          errorMessage: err.message || 'Network error reaching WhatsApp server'
         } : m));
         notify('Send Failed', 'Could not reach WhatsApp server.', 'warning');
       });
@@ -1726,18 +1755,156 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Message Forwarded ➡️', `Message forwarded to ${targetLead.customer?.displayName || 'contact'}`, 'success');
   };
 
-  // Send approved WhatsApp template
-  const sendWhatsAppTemplate = (leadId: string, templateId: string, params: string[]) => {
-    const template = templates.find(t => t.id === templateId);
+  // Send approved WhatsApp template via Meta Cloud API
+  const sendWhatsAppTemplate = async (leadId: string, templateId: string, params: string[]) => {
+    const template = templates.find(t => t.id === templateId || t.name === templateId);
     const lead = leads.find(l => l.id === leadId);
-    if (!template || !lead) return;
+    if (!lead) return;
 
-    let body = template.body;
+    const templateName = template?.name || templateId;
+    let body = template?.body || `[WhatsApp Template: ${templateName}]`;
     params.forEach((param, idx) => {
       body = body.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), param);
     });
 
-    sendMessage(leadId, body, 'coordinator');
+    const tempId = 'tpl-' + Date.now();
+    const newMsg: Message = {
+      id: tempId,
+      leadId,
+      customerId: lead.customerId,
+      direction: 'outbound',
+      senderType: 'coordinator',
+      content: body,
+      status: 'pending',
+      createdAt: new Date().toISOString()
+    };
+    setMessages(prev => [...prev, newMsg]);
+
+    const recipientPhone = lead.customer?.whatsappNumber;
+    const recipientWaId = lead.customer?.whatsappId;
+    const savedToken = localStorage.getItem('meta_access_token');
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/send-template`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`
+        },
+        body: JSON.stringify({
+          to: recipientPhone,
+          phone: recipientPhone,
+          whatsappId: recipientWaId,
+          templateName,
+          language: template?.language || 'en_US',
+          parameters: params,
+          leadId: lead.id,
+          customerId: lead.customerId,
+          company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
+          phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
+          token: savedToken || undefined
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessages(prev => prev.map(m => m.id === tempId ? {
+          ...m,
+          status: 'failed',
+          errorCode: data.errorCode,
+          errorMessage: data.error
+        } : m));
+        notify('Template Failed', data.error || 'Failed to dispatch template', 'warning');
+      } else {
+        if (data.messageId) {
+          setMessages(prev => prev.map(m => m.id === tempId ? {
+            ...m,
+            id: data.messageId,
+            waMessageId: data.messageId,
+            status: 'sent',
+            errorCode: undefined,
+            errorMessage: undefined
+          } : m));
+        }
+        notify('Template Sent', `WhatsApp template dispatched to customer`, 'success');
+      }
+    } catch (err: any) {
+      setMessages(prev => prev.map(m => m.id === tempId ? {
+        ...m,
+        status: 'failed',
+        errorMessage: err.message
+      } : m));
+      notify('Template Error', err.message || 'Server error', 'warning');
+    }
+  };
+
+  // Retry sending a previously failed message (Prevents duplicates by passing retryMessageId)
+  const retryFailedMessage = async (failedMessageId: string) => {
+    const msg = messages.find(m => m.id === failedMessageId);
+    if (!msg) return;
+
+    const lead = leads.find(l => l.id === msg.leadId);
+    if (!lead) return;
+
+    // Set status to pending immediately
+    setMessages(prev => prev.map(m => m.id === failedMessageId ? { ...m, status: 'pending', errorMessage: undefined } : m));
+
+    const recipientPhone = lead.customer?.whatsappNumber;
+    const recipientWaId = lead.customer?.whatsappId;
+    const savedToken = localStorage.getItem('meta_access_token');
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/send-message`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`
+        },
+        body: JSON.stringify({
+          to: recipientPhone,
+          whatsappId: recipientWaId,
+          text: msg.content,
+          message: msg.content,
+          media: msg.media || undefined,
+          leadId: lead.id,
+          customerId: lead.customerId,
+          token: savedToken || undefined,
+          company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
+          phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
+          retryMessageId: failedMessageId
+        })
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMessages(prev => prev.map(m => m.id === failedMessageId ? {
+          ...m,
+          status: 'failed',
+          errorCode: data.errorCode,
+          errorMessage: data.error
+        } : m));
+        notify('Retry Failed', data.error || 'Message still could not be sent.', 'warning');
+      } else {
+        if (data.messageId) {
+          setMessages(prev => prev.map(m => m.id === failedMessageId ? {
+            ...m,
+            id: data.messageId,
+            waMessageId: data.messageId,
+            status: 'sent',
+            errorCode: undefined,
+            errorMessage: undefined
+          } : m));
+        }
+        notify('Message Resent', `Message successfully dispatched to WhatsApp`, 'success');
+      }
+    } catch (err: any) {
+      setMessages(prev => prev.map(m => m.id === failedMessageId ? {
+        ...m,
+        status: 'failed',
+        errorMessage: err.message
+      } : m));
+      notify('Retry Error', err.message || 'Failed to connect to server', 'warning');
+    }
   };
 
   // Followup controls
@@ -2276,7 +2443,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     language?: 'en' | 'si' | 'ta';
     assignedTo?: string;
     initialMessage?: string;
-  }): Promise<{ success: boolean; leadId?: string; error?: string }> => {
+    templateName?: string;
+    templateParams?: string[];
+  }): Promise<{ success: boolean; leadId?: string; error?: string; messageSent?: boolean; messageError?: string }> => {
     try {
       const authHeaders = {
         'Content-Type': 'application/json',
@@ -2295,7 +2464,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           treatmentId: data.treatmentId,
           language: data.language || 'en',
           assignedTo: data.assignedTo || (isCoordinator ? currentUser.id : undefined),
-          initialMessage: data.initialMessage
+          initialMessage: data.initialMessage,
+          templateName: data.templateName,
+          templateParams: data.templateParams
         })
       });
 
@@ -2305,7 +2476,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return { success: false, error: resData.error };
       }
 
-      const { customer: dbCust, lead: dbLead, message: dbMsg, leadId } = resData;
+      const { customer: dbCust, lead: dbLead, message: dbMsg, leadId, messageSent, messageError } = resData;
 
       if (dbCust) {
         setCustomers(prev => {
@@ -2327,7 +2498,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setMessages(prev => {
           const exists = prev.some(m => m.id === dbMsg.id);
           if (!exists) return [...prev, dbMsg];
-          return prev;
+          return prev.map(m => m.id === dbMsg.id ? { ...m, ...dbMsg } : m);
         });
       }
 
@@ -2336,8 +2507,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setSelectedLeadId(targetLeadId);
       }
 
-      notify('Contact Added', `${data.name || data.phone} saved to Supabase!`, 'success');
-      return { success: true, leadId: targetLeadId };
+      if (messageSent === false && messageError) {
+        notify('Contact Saved (Message Delivery Failed)', messageError, 'warning');
+      } else if (messageSent === true) {
+        notify('Contact Added & Message Sent', `${data.name || data.phone} saved and WhatsApp message delivered!`, 'success');
+      } else {
+        notify('Contact Added', `${data.name || data.phone} saved to Supabase!`, 'success');
+      }
+
+      return {
+        success: true,
+        leadId: targetLeadId,
+        messageSent: messageSent,
+        messageError: messageError
+      };
     } catch (err: any) {
       notify('Contact Error', err.message || 'Failed to add contact', 'warning');
       return { success: false, error: err.message };
@@ -2420,6 +2603,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteChat,
     clearChat,
     sendWhatsAppTemplate,
+    retryFailedMessage,
     markChatAsRead,
     markChatAsUnread,
     cancelFollowup,

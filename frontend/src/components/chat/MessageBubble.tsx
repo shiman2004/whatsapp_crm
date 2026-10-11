@@ -19,7 +19,9 @@ import {
   Plus,
   AlertCircle,
   Pencil,
-  Flag
+  Flag,
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -46,7 +48,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     pinMessage, 
     deleteMessage,
     editMessage,
-    reportMessage
+    reportMessage,
+    retryFailedMessage
   } = useCrm();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -425,16 +428,43 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                   </span>
                   {isOutbound && (
                     message.status === 'failed' ? (
-                      <span title="Delivery failed. Please check Meta API Token or WhatsApp connection."><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
+                      <span title={`Failed to Send${message.errorCode ? ` (Code ${message.errorCode})` : ''}: ${message.errorMessage || 'WhatsApp API dispatch failed'}`}><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
                     ) : message.status === 'read' ? (
-                      <span title="Read"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                      <span title="Read by customer"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
                     ) : message.status === 'delivered' ? (
-                      <span title="Delivered"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                      <span title="Delivered to customer"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                    ) : message.status === 'sent' ? (
+                      <span title="Sent to WhatsApp Cloud"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                     ) : (
-                      <span title="Sent"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
+                      <span title="Sending to WhatsApp..."><Clock className="w-3.5 h-3.5 text-[#8696a0] animate-pulse" /></span>
                     )
                   )}
                 </span>
+
+                {/* Failed to send detailed error banner */}
+                {message.status === 'failed' && isOutbound && (
+                  <div className="mt-2 pt-1.5 border-t border-rose-500/30 flex flex-col gap-1 text-[11px] text-rose-300">
+                    <div className="flex items-center gap-1.5 font-semibold text-rose-400">
+                      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span>Failed to Send {message.errorCode ? `[Code ${message.errorCode}]` : ''}</span>
+                    </div>
+                    <p className="text-[10.5px] leading-tight text-rose-200/90 break-words">
+                      {message.errorMessage || 'Message was rejected by Meta WhatsApp Cloud API. Customer may not have replied within 24 hours.'}
+                    </p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          retryFailedMessage(message.id);
+                        }}
+                        className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-medium transition-colors flex items-center gap-1.5 text-[10.5px]"
+                      >
+                        <RefreshCw className="w-3 h-3" />
+                        Retry Send
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           )}

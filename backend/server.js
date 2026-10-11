@@ -1504,7 +1504,8 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage } = payload;
+        const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage, company } = payload;
+        const targetCompany = (company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
 
         const rawPhone = (phone || whatsappNumber || '').trim();
         if (!rawPhone) {
@@ -1597,11 +1598,12 @@ const server = http.createServer(async (req, res) => {
             savedLead = await prisma.lead.create({
               data: {
                 customerId: savedCustomer.id,
-                categoryId: firstCat?.id || 'cat-hair-care',
-                treatmentId: firstTrt?.id || 'trt-hair-prp',
+                categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
+                treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                 stage: leadStage,
                 assignedTo: targetCoordinatorId,
-                source: 'whatsapp',
+                source: targetCompany,
+                whatsappSessionId: targetCompany,
                 language: language || 'en',
                 lastCustomerMessageAt: new Date()
               },
@@ -1620,6 +1622,8 @@ const server = http.createServer(async (req, res) => {
                 categoryId: firstCat?.id || savedLead.categoryId,
                 treatmentId: firstTrt?.id || savedLead.treatmentId,
                 assignedTo: targetCoordinatorId || savedLead.assignedTo,
+                source: company ? targetCompany : savedLead.source,
+                whatsappSessionId: company ? targetCompany : (savedLead.whatsappSessionId || savedLead.source),
                 stage: initialMessage ? 'contacted' : savedLead.stage,
                 language: language || savedLead.language,
                 updatedAt: new Date()
@@ -1641,7 +1645,9 @@ const server = http.createServer(async (req, res) => {
             
             // Dispatch via Meta Cloud API or Baileys
             const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-            const phoneId = (metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim();
+            const phoneId = targetCompany === 'CRAS'
+              ? (metaConfig.phoneNumberIdCras || process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim()
+              : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
 
             if (metaToken) {
               try {
@@ -1696,16 +1702,28 @@ const server = http.createServer(async (req, res) => {
             });
           }
 
-          // Broadcast Lead Created/Assigned SSE
+          // Broadcast Lead Created/Assigned SSE with company metadata
+          const compCode = (targetCompany || savedLead.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
+          const enrichedLead = {
+            ...savedLead,
+            company: compCode,
+            source: compCode,
+            companyTag: compConfig.tag,
+            companyColor: compConfig.color,
+            companyPhoneNumberId: compConfig.phoneId,
+            companyPhoneNumber: compConfig.phone
+          };
+
           broadcastScopedSSE(targetCoordinatorId || null, {
             type: 'LEAD_ASSIGNED',
             leadId: savedLead.id,
             clientLeadId: savedLead.id,
             coordinatorId: targetCoordinatorId,
-            lead: savedLead
+            lead: enrichedLead
           });
 
-          console.log(`✅ [Contact Created] ${contactName} (${canonicalPhone}) saved to Supabase PostgreSQL. Lead ID: ${savedLead.id}`);
+          console.log(`✅ [Contact Created] ${contactName} (${canonicalPhone}) saved to Supabase PostgreSQL. Lead ID: ${savedLead.id}, Company: ${compCode}`);
         } else {
           // In-memory fallback
           savedCustomer = {
@@ -1715,25 +1733,43 @@ const server = http.createServer(async (req, res) => {
             displayName: contactName,
             preferredLanguage: language || 'en'
           };
+          const compConfig = COMPANIES[targetCompany] || COMPANIES.RWC;
           savedLead = {
             id: 'lead-' + Date.now(),
             customerId: savedCustomer.id,
             customer: savedCustomer,
-            categoryId: categoryId || 'cat-hair-care',
-            treatmentId: treatmentId || 'trt-hair-prp',
+            categoryId: categoryId || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
+            treatmentId: treatmentId || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
             stage: initialMessage ? 'contacted' : 'new',
-            source: 'whatsapp',
+            source: targetCompany,
+            company: targetCompany,
+            companyTag: compConfig.tag,
+            companyColor: compConfig.color,
+            companyPhoneNumberId: compConfig.phoneId,
+            companyPhoneNumber: compConfig.phone,
             language: language || 'en',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
         }
 
+        const compCodeFinal = (savedLead?.company || savedLead?.source || targetCompany).toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+        const finalCompConfig = COMPANIES[compCodeFinal] || COMPANIES.RWC;
+        const finalEnrichedLead = {
+          ...savedLead,
+          company: compCodeFinal,
+          source: compCodeFinal,
+          companyTag: finalCompConfig.tag,
+          companyColor: finalCompConfig.color,
+          companyPhoneNumberId: finalCompConfig.phoneId,
+          companyPhoneNumber: finalCompConfig.phone
+        };
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           success: true,
           customer: savedCustomer,
-          lead: savedLead,
+          lead: finalEnrichedLead,
           message: savedMessage,
           leadId: savedLead?.id
         }));

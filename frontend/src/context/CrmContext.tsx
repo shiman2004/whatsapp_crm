@@ -151,6 +151,7 @@ interface CrmContextType {
   addNewContact: (data: {
     name: string;
     phone: string;
+    company?: CompanyCode;
     categoryId?: string;
     treatmentId?: string;
     language?: 'en' | 'si' | 'ta';
@@ -2221,6 +2222,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const addNewContact = async (data: {
     name: string;
     phone: string;
+    company?: CompanyCode;
     categoryId?: string;
     treatmentId?: string;
     language?: 'en' | 'si' | 'ta';
@@ -2240,6 +2242,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify({
           name: data.name,
           phone: data.phone,
+          company: data.company || 'RWC',
           categoryId: data.categoryId,
           treatmentId: data.treatmentId,
           language: data.language || 'en',

@@ -11,7 +11,6 @@ import pino from 'pino';
 import fs from 'fs';
 import { getPrisma, getDbStatus } from './db.js';
 import { useSupabaseAuthState } from './supabaseAuthState.js';
-import { evaluateAutoReply, pauseAutoReply } from './autoReplyEngine.js';
 import { saveMediaToSupabase } from './supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 
@@ -570,122 +569,6 @@ class WhatsAppSessionManager {
       timestamp: timestampDate.toISOString(),
       source: eventSource,
     });
-
-    // Auto-Reply Concierge Engine evaluation
-    if (!isFromMe && messageText) {
-      try {
-        const autoReplyResult = await evaluateAutoReply({
-          senderPhone: canonicalPhone || rawSenderDigits,
-          messageText,
-          customer,
-          lead
-        });
-
-        if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
-          // Find active connected Baileys socket
-          let activeSock = (sessionCtx?.sock && sessionCtx.status === 'connected') ? sessionCtx.sock : null;
-          let activeSessionId = sessionCtx?.sessionId || null;
-
-          if (!activeSock) {
-            const masterSession = this.sessions.get('user-admin-1');
-            if (masterSession?.sock && masterSession.status === 'connected') {
-              activeSock = masterSession.sock;
-              activeSessionId = masterSession.sessionId;
-            } else {
-              for (const s of this.sessions.values()) {
-                if (s.sock && s.status === 'connected') {
-                  activeSock = s.sock;
-                  activeSessionId = s.sessionId;
-                  break;
-                }
-              }
-            }
-          }
-
-          // Dispatch message via active socket
-          if (activeSock) {
-            try {
-              await activeSock.sendMessage(remoteJid, { text: autoReplyResult.replyText });
-            } catch (sockErr) {
-              console.warn('⚠️ Primary socket send failed, trying phone JID:', sockErr.message);
-              if (canonicalPhone) {
-                const standardJid = `${canonicalPhone.replace(/[^0-9]/g, '')}@s.whatsapp.net`;
-                if (standardJid !== remoteJid) {
-                  await activeSock.sendMessage(standardJid, { text: autoReplyResult.replyText }).catch(err2 => {
-                    console.warn('⚠️ Fallback phone JID send failed:', err2.message);
-                  });
-                }
-              }
-            }
-          }
-
-          const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-          const autoTimestamp = new Date();
-
-          // Save auto-reply message in database
-          if (prisma && getDbStatus() && lead?.id) {
-            await prisma.message.create({
-              data: {
-                id: autoMsgId,
-                leadId: lead.id,
-                customerId: customer?.id || lead.customerId,
-                whatsappSessionId: sessionCtx.sessionId || null,
-                coordinatorId: null,
-                direction: 'outbound',
-                senderType: 'ai',
-                content: autoReplyResult.replyText,
-                status: 'delivered',
-                timestamp: autoTimestamp
-              }
-            }).catch(e => console.warn('Could not save auto-reply message:', e.message));
-          }
-
-          // Emit SSE for outbound bot message
-          this.emitToCoordinator(targetCoordinator, {
-            type: 'OUTBOUND_WHATSAPP_MESSAGE',
-            messageId: autoMsgId,
-            leadId: lead?.id,
-            customerId: customer?.id,
-            whatsappSessionId: sessionCtx.sessionId,
-            coordinatorId: null,
-            phone: canonicalPhone || rawSenderDigits,
-            realPhone: canonicalPhone || null,
-            whatsappId: rawSenderDigits,
-            name: 'Royal Wellness Concierge',
-            text: autoReplyResult.replyText,
-            direction: 'outbound',
-            senderType: 'ai',
-            timestamp: autoTimestamp.toISOString(),
-            source: 'auto_reply'
-          });
-
-          // If lead attributes were updated (language, treatment, serialNumber), broadcast updated lead state
-          if (autoReplyResult.selectedLang || autoReplyResult.treatmentId || autoReplyResult.serialNumber) {
-            this.emitToCoordinator(null, {
-              type: 'LEAD_UPDATED',
-              leadId: lead?.id,
-              lead: {
-                id: lead?.id,
-                language: autoReplyResult.selectedLang || lead?.language,
-                treatmentId: autoReplyResult.treatmentId || lead?.treatmentId,
-                categoryId: autoReplyResult.categoryId || lead?.categoryId,
-                serialNumber: autoReplyResult.serialNumber || lead?.serialNumber,
-                stage: 'new'
-              },
-              customer: {
-                id: customer?.id,
-                preferredLanguage: autoReplyResult.selectedLang || customer?.preferredLanguage
-              }
-            });
-          }
-        }
-      } catch (autoErr) {
-        console.error('⚠️ [Auto-Reply Engine Error]:', autoErr);
-      }
-    } else if (isFromMe) {
-      // Coordinator is actively talking to customer -> pause auto-reply for this phone
-      pauseAutoReply(canonicalPhone || rawSenderDigits);
-    }
   }
 
   /**
@@ -870,7 +753,6 @@ class WhatsAppSessionManager {
       source: 'live',
     });
 
-    pauseAutoReply(to || whatsappId);
     return { success: true, messageId: outboundMsgId, status: 'sent' };
   }
 

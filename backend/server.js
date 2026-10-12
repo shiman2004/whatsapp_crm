@@ -6,7 +6,6 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
-import { evaluateAutoReply, pauseAutoReply, clearAutoReplySessions } from './src/autoReplyEngine.js';
 import { resolveCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './src/audioConverter.js';
@@ -1150,8 +1149,6 @@ const server = http.createServer(async (req, res) => {
         if (!sendResult) {
           throw new Error('No active WhatsApp line or Meta API token configured.');
         }
-
-        pauseAutoReply(to || whatsappId);
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
@@ -3169,129 +3166,6 @@ const server = http.createServer(async (req, res) => {
                         companyPhoneNumber: companyInfo.phoneNumber,
                         timestamp: new Date().toISOString()
                       });
-
-                      // 5. Evaluate Auto-Reply Engine for Specific Company (RWC vs CRAS)
-                      try {
-                        const cleanToDigits = String(phone || '').replace(/[^0-9]/g, '');
-                        let metaCleanTo = cleanToDigits;
-                        if (metaCleanTo.startsWith('0') && metaCleanTo.length === 10) {
-                          metaCleanTo = '94' + metaCleanTo.slice(1);
-                        } else if (metaCleanTo.length === 9 && (metaCleanTo.startsWith('7') || metaCleanTo.startsWith('1'))) {
-                          metaCleanTo = '94' + metaCleanTo;
-                        }
-
-                        const autoReplyResult = await evaluateAutoReply({
-                          senderPhone: metaCleanTo || phone,
-                          messageText: text,
-                          customer: cust,
-                          lead,
-                          company: companyInfo.code
-                        });
-
-                        if (autoReplyResult?.shouldReply && autoReplyResult?.replyText) {
-                          console.log(`🤖 [Meta Auto-Reply] Generating response for [${companyInfo.code}] ${metaCleanTo}: "${autoReplyResult.replyText.slice(0, 40)}..."`);
-                          const autoMsgId = `auto_${Date.now()}_${Math.random().toString(36).substring(7)}`;
-
-                          // Dispatch via Meta Cloud API using the corresponding company's phone ID
-                          const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-                          const dispatchPhoneId = (companyInfo.phoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
-
-                          const autoTime = new Date();
-                          let actualAutoMsgId = autoMsgId;
-
-                          if (metaToken) {
-                            try {
-                              console.log(`🚀 [Meta Auto-Reply Dispatch] Sending [${companyInfo.code}] to ${metaCleanTo} via Phone ID ${dispatchPhoneId}...`);
-                              const metaRes = await fetch(`https://graph.facebook.com/v20.0/${dispatchPhoneId}/messages`, {
-                                method: 'POST',
-                                headers: {
-                                  'Authorization': `Bearer ${metaToken}`,
-                                  'Content-Type': 'application/json'
-                                },
-                                body: JSON.stringify({
-                                  messaging_product: 'whatsapp',
-                                  recipient_type: 'individual',
-                                  to: metaCleanTo,
-                                  type: 'text',
-                                  text: { body: autoReplyResult.replyText }
-                                })
-                              });
-                              const metaData = await metaRes.json().catch(() => ({}));
-                              if (metaRes.ok) {
-                                actualAutoMsgId = metaData.messages?.[0]?.id || autoMsgId;
-                                console.log(`✅ [Meta Auto-Reply Sent!] Message ID: ${actualAutoMsgId}`);
-                              } else {
-                                console.error(`❌ [Meta Auto-Reply API Error]:`, JSON.stringify(metaData));
-                              }
-                            } catch (metaErr) {
-                              console.error('❌ [Meta Auto-Reply Network Error]:', metaErr.message);
-                            }
-                          }
-
-                          // Also dispatch via Baileys socket if connected
-                          try {
-                            const masterSession = sessionManager.getRuntimeSession('user-admin-1');
-                            const activeSock = masterSession?.sock && masterSession.status === 'connected' ? masterSession.sock : null;
-                            if (activeSock) {
-                              await activeSock.sendMessage(`${metaCleanTo}@s.whatsapp.net`, { text: autoReplyResult.replyText });
-                              console.log(`✅ [Baileys Auto-Reply Sent!]`);
-                            }
-                          } catch (bErr) {}
-
-                          // Save auto-reply message in database
-                          if (prisma && getDbStatus() && lead?.id) {
-                            await prisma.message.create({
-                              data: {
-                                id: actualAutoMsgId,
-                                leadId: lead.id,
-                                customerId: cust?.id || lead.customerId,
-                                direction: 'outbound',
-                                senderType: 'ai',
-                                content: autoReplyResult.replyText,
-                                status: 'delivered',
-                                timestamp: autoTime
-                              }
-                            }).catch((err) => console.error('❌ [Error saving auto-reply to DB]:', err));
-                            console.log(`✅ [DB] Successfully saved auto-reply ${actualAutoMsgId} to lead ${lead.id}`);
-                          }
-
-                          broadcastScopedSSE(null, {
-                            type: 'OUTBOUND_WHATSAPP_MESSAGE',
-                            messageId: actualAutoMsgId,
-                            leadId: lead?.id,
-                            customerId: cust?.id || lead?.customerId,
-                            phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
-                            realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
-                            whatsappId: phone,
-                            name: companyInfo.name || 'Royal Wellness Concierge',
-                            text: autoReplyResult.replyText,
-                            direction: 'outbound',
-                            senderType: 'ai',
-                            company: companyInfo.code,
-                            companyTag: companyInfo.tag,
-                            companyColor: companyInfo.colorHex,
-                            timestamp: autoTime.toISOString(),
-                            source: 'auto_reply'
-                          });
-
-                          if (autoReplyResult.selectedLang || autoReplyResult.treatmentId || autoReplyResult.serialNumber) {
-                            broadcastScopedSSE(null, {
-                              type: 'LEAD_UPDATED',
-                              leadId: lead?.id,
-                              lead: {
-                                id: lead?.id,
-                                language: autoReplyResult.selectedLang || lead?.language,
-                                treatmentId: autoReplyResult.treatmentId || lead?.treatmentId,
-                                categoryId: autoReplyResult.categoryId || lead?.categoryId,
-                                serialNumber: autoReplyResult.serialNumber || lead?.serialNumber,
-                                stage: 'new'
-                              }
-                            });
-                          }
-                        }
-                      } catch (autoErr) {
-                        console.error('❌ Auto-reply webhook error:', autoErr.message);
-                      }
                     }
 
                   // 12b. Handle Outbound Message Status Tracking (sent, delivered, read, failed)
@@ -3393,48 +3267,6 @@ const server = http.createServer(async (req, res) => {
       });
       return;
     }
-  }
-
-  // 12b. Auto-Reply Test / Simulation Endpoint
-  if (req.method === 'POST' && pathname === '/api/auto-reply/test') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const phone = payload.phone || payload.senderPhone || '94770049469';
-        const messageText = payload.message || payload.messageText || payload.text || 'Hi';
-
-        const prisma = getPrisma();
-        let customer = null;
-        let lead = null;
-        if (prisma && getDbStatus()) {
-          customer = await prisma.customer.findFirst({
-            where: { OR: [{ whatsappNumber: phone }, { whatsappId: phone }] }
-          });
-          if (customer) {
-            lead = await prisma.lead.findFirst({
-              where: { customerId: customer.id },
-              orderBy: { updatedAt: 'desc' }
-            });
-          }
-        }
-
-        const result = await evaluateAutoReply({
-          senderPhone: phone,
-          messageText,
-          customer,
-          lead
-        });
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, result }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
   }
 
   res.writeHead(404, { 'Content-Type': 'application/json' });

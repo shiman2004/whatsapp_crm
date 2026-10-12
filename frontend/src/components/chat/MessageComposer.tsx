@@ -15,7 +15,10 @@ import {
   RefreshCw,
   Trash2,
   Check,
-  Copy
+  Copy,
+  MapPin,
+  ChevronRight,
+  ChevronLeft
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -45,6 +48,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
   const [inputVal, setInputVal] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [attachMenuMode, setAttachMenuMode] = useState<'main' | 'location'>('main');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showTemplates, setShowTemplates] = useState(false);
   const [copiedTplId, setCopiedTplId] = useState<string | null>(null);
@@ -95,6 +99,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     const handleClickOutside = (e: MouseEvent) => {
       if (attachRef.current && !attachRef.current.contains(e.target as Node)) {
         setShowAttachMenu(false);
+        setAttachMenuMode('main');
       }
       if (emojiRef.current && !emojiRef.current.contains(e.target as Node)) {
         setShowEmojiPicker(false);
@@ -258,6 +263,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     }
   };
 
+  const handleSendLocation = (locationName: string, mapUrl: string) => {
+    setShowAttachMenu(false);
+    setAttachMenuMode('main');
+    sendMessage(lead.id, `${locationName} - ${mapUrl}`, 'coordinator');
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
       if (e.shiftKey) {
@@ -334,46 +345,119 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       {showAttachMenu && (
         <div 
           ref={attachRef}
-          className="absolute bottom-16 left-4 bg-[#233138] border border-slate-700/80 rounded-2xl shadow-2xl p-2 w-52 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db] space-y-1 select-none"
+          className={`absolute bottom-16 left-4 bg-[#233138] border border-slate-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db] space-y-1 select-none ${
+            attachMenuMode === 'location' ? 'w-64' : 'w-52'
+          }`}
         >
-          <button 
-            onClick={() => {
-              setShowAttachMenu(false);
-              fileInputRef.current?.click();
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
-          >
-            <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
-              <Image className="w-4 h-4" />
-            </div>
-            <span>Photos & videos</span>
-          </button>
+          {attachMenuMode === 'main' ? (
+            <>
+              <button 
+                onClick={() => {
+                  setShowAttachMenu(false);
+                  fileInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                  <Image className="w-4 h-4" />
+                </div>
+                <span>Photos & videos</span>
+              </button>
 
-          <button 
-            onClick={() => {
-              setShowAttachMenu(false);
-              docInputRef.current?.click();
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
-          >
-            <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </div>
-            <span>Document</span>
-          </button>
+              <button 
+                onClick={() => {
+                  setShowAttachMenu(false);
+                  docInputRef.current?.click();
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                  <FileText className="w-4 h-4" />
+                </div>
+                <span>Document</span>
+              </button>
 
-          <button 
-            onClick={() => {
-              setShowAttachMenu(false);
-              setShowAddContactModal(true);
-            }}
-            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
-          >
-            <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
-              <User className="w-4 h-4" />
+              <button 
+                onClick={() => {
+                  setShowAttachMenu(false);
+                  setShowAddContactModal(true);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
+              >
+                <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                  <User className="w-4 h-4" />
+                </div>
+                <span>Contact</span>
+              </button>
+
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setAttachMenuMode('location');
+                }}
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-[#00a884] flex items-center justify-center">
+                    <MapPin className="w-4 h-4" />
+                  </div>
+                  <span>Location</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-[#8696a0] group-hover:text-white transition-colors" />
+              </button>
+            </>
+          ) : (
+            <div className="space-y-1">
+              <div className="flex items-center gap-2 px-1 py-1 border-b border-slate-700/60 pb-2 mb-1">
+                <button 
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setAttachMenuMode('main');
+                  }}
+                  className="p-1 rounded-lg hover:bg-[#182229] text-[#8696a0] hover:text-white transition-colors cursor-pointer"
+                  title="Back"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="font-semibold text-xs text-white">Select Location</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => handleSendLocation('Colombo', 'https://maps.app.goo.gl/u77VA9jioG22DaDWA')}
+                className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer text-left group"
+              >
+                <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-[#00a884] flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-white text-xs flex items-center justify-between">
+                    <span>Colombo</span>
+                    <Send className="w-3 h-3 text-[#00a884] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <p className="text-[10px] text-[#8696a0] truncate mt-0.5">https://maps.app.goo.gl/u77VA9jioG22DaDWA</p>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleSendLocation('Maruthamunai', 'https://maps.app.goo.gl/9eBdvv4jbWv8aQ3A6')}
+                className="w-full flex items-start gap-2.5 px-2.5 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer text-left group"
+              >
+                <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-[#00a884] flex items-center justify-center shrink-0 mt-0.5 group-hover:scale-110 transition-transform">
+                  <MapPin className="w-4 h-4" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-white text-xs flex items-center justify-between">
+                    <span>Maruthamunai</span>
+                    <Send className="w-3 h-3 text-[#00a884] opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                  <p className="text-[10px] text-[#8696a0] truncate mt-0.5">https://maps.app.goo.gl/9eBdvv4jbWv8aQ3A6</p>
+                </div>
+              </button>
             </div>
-            <span>Contact</span>
-          </button>
+          )}
         </div>
       )}
 
@@ -503,6 +587,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               setQrModalOpen(true);
               return;
             }
+            if (!showAttachMenu) {
+              setAttachMenuMode('main');
+            }
             setShowAttachMenu(!showAttachMenu);
             setShowEmojiPicker(false);
             setShowTemplates(false);
@@ -522,6 +609,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             e.stopPropagation();
             setShowEmojiPicker(!showEmojiPicker);
             setShowAttachMenu(false);
+            setAttachMenuMode('main');
             setShowTemplates(false);
           }}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
@@ -540,6 +628,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setShowTemplates(!showTemplates);
             setShowEmojiPicker(false);
             setShowAttachMenu(false);
+            setAttachMenuMode('main');
           }}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
             showTemplates ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'

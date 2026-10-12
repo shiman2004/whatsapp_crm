@@ -10,10 +10,15 @@ import {
 } from 'recharts';
 import { useCrm } from '../../context/CrmContext';
 import { STAGE_CONFIG } from '../leads/StageBadge';
-import { LeadStage } from '../../types';
+import { LeadStage, Lead } from '../../types';
 
-export const LeadFunnelChart: React.FC = () => {
-  const { leads } = useCrm();
+interface LeadFunnelChartProps {
+  leads?: Lead[];
+}
+
+export const LeadFunnelChart: React.FC<LeadFunnelChartProps> = ({ leads: propLeads }) => {
+  const { leads: ctxLeads } = useCrm();
+  const leads = propLeads || ctxLeads;
 
   const stages: LeadStage[] = ['new', 'assigned', 'contacted', 'potential', 'under_discussion', 'not_relevant', 'converted', 'lost'];
 

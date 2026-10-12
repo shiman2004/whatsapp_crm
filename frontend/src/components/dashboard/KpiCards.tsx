@@ -10,15 +10,22 @@ import {
   PhoneCall
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
+import { Lead } from '../../types';
 
-export const KpiCards: React.FC = () => {
-  const { leads, followups, messages } = useCrm();
+interface KpiCardsProps {
+  leads?: Lead[];
+}
+
+export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
+  const { leads: ctxLeads, followups, messages } = useCrm();
+  const leads = propLeads || ctxLeads;
+  const leadIds = new Set(leads.map(l => l.id));
 
   const totalLeads = leads.length;
   const newLeads = leads.filter(l => l.stage === 'new').length;
   const convertedLeads = leads.filter(l => l.stage === 'converted').length;
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
-  const pendingFollowups = followups.filter(f => f.status === 'pending').length;
+  const pendingFollowups = followups.filter(f => f.status === 'pending' && leadIds.has(f.leadId)).length;
 
   const kpis = [
     {

@@ -251,14 +251,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   return (
     <>
       <div 
-        ref={bubbleRef}
         className={`flex items-center gap-1.5 my-1 group relative z-10 ${
           isOutbound ? 'justify-end' : 'justify-start'
         } ${menuOpen || showReactionPicker ? 'z-40' : ''}`}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          handleOpenMenu(e);
-        }}
       >
         {/* Outbound Hover Emoji Trigger (Appears to the LEFT of outbound bubble) */}
         {isOutbound && (

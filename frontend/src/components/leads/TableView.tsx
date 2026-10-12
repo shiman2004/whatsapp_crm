@@ -9,7 +9,8 @@ import {
   Clock, 
   MessageSquare, 
   UserCheck, 
-  AlertTriangle 
+  AlertTriangle,
+  Lock
 } from 'lucide-react';
 
 interface TableViewProps {
@@ -18,7 +19,7 @@ interface TableViewProps {
 }
 
 export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => {
-  const { categories, treatments, users, selectedLeadId, isSuperAdmin, canAssignLeads, assignLead } = useCrm();
+  const { categories, treatments, users, selectedLeadId, isSuperAdmin, isLeadsOfficer, canAssignLeads, canModifyAssignment, assignLead } = useCrm();
 
   const coordinators = users.filter(u => u.role === 'coordinator');
 
@@ -113,19 +114,30 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
 
                     {/* Coordinator */}
                     <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
-                      {canAssignLeads ? (
+                      {canModifyAssignment(lead) ? (
                         <select
                           value={lead.assignedTo || ''}
                           onChange={(e) => assignLead(lead.id, e.target.value)}
-                          className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-teal-500"
+                          className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
                         >
-                          <option value="" disabled>-- Assign Coordinator --</option>
+                          <option value="">{lead.assignedTo ? '-- Unassign Coordinator --' : '-- Assign Coordinator --'}</option>
                           {coordinators.map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.fullName}
                             </option>
                           ))}
                         </select>
+                      ) : isLeadsOfficer && lead.assignedTo ? (
+                        <div 
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/70 border border-slate-800 text-slate-300 font-medium"
+                          title="Assignment locked. Once assigned, only Super Admin can reassign this lead."
+                        >
+                          <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <span className="truncate">{coordinator?.fullName || 'Assigned Coordinator'}</span>
+                          <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-0.5 shrink-0 font-bold">
+                            <Lock className="w-2.5 h-2.5" /> Locked
+                          </span>
+                        </div>
                       ) : (
                         <div className="flex items-center gap-1.5 text-slate-300">
                           {coordinator ? (

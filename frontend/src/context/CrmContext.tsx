@@ -67,6 +67,8 @@ interface CrmContextType {
   isLeadsOfficer: boolean;
   isCoordinator: boolean;
   canAssignLeads: boolean;
+  canReassignLead: (lead?: Lead) => boolean;
+  canModifyAssignment: (lead?: Lead) => boolean;
 
   // Data collections
   leads: Lead[];
@@ -88,7 +90,7 @@ interface CrmContextType {
   selectedLead: Lead | undefined;
 
   // Lead actions
-  assignLead: (leadId: string, coordinatorId: string) => void;
+  assignLead: (leadId: string, coordinatorId: string) => Promise<boolean>;
   updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string) => void;
   updateLeadTreatment: (leadId: string, treatmentId: string, customSerial?: string) => void;
   updateLeadLanguage: (leadId: string, language: 'en' | 'si' | 'ta') => void;
@@ -582,6 +584,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const isCoordinator = currentUser.role === 'coordinator';
   const canAssignLeads = isSuperAdmin || isLeadsOfficer;
 
+  // Role-based reassignment & assignment locking permissions
+  const canReassignLead = (_lead?: Lead): boolean => {
+    return isSuperAdmin;
+  };
+
+  const canModifyAssignment = (lead?: Lead): boolean => {
+    if (isSuperAdmin) return true;
+    if (isLeadsOfficer) {
+      // Leads Officers can ONLY assign if the lead is not currently assigned
+      return !lead || !lead.assignedTo;
+    }
+    return false;
+  };
+
   // Strict isolation: if a coordinator has an unassigned lead or someone else's lead selected, reset it
   useEffect(() => {
     if (isCoordinator && selectedLeadId) {
@@ -658,11 +674,19 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 (incomingLead?.customerId && l.customerId === incomingLead.customerId)
               );
               if (matchIdx !== -1) {
+                // If current user is coordinator and lead reassigned to someone else, remove it immediately
+                if (currentUser?.role === 'coordinator' && assignedCoordId !== currentUser?.id) {
+                  return prevLeads.filter((_, idx) => idx !== matchIdx);
+                }
                 const nextLeads = [...prevLeads];
                 nextLeads[matchIdx] = {
                   ...nextLeads[matchIdx],
                   id: incomingLead?.id || nextLeads[matchIdx].id,
                   assignedTo: assignedCoordId || undefined,
+                  assignedById: incomingLead?.assignedById || nextLeads[matchIdx].assignedById,
+                  assignedByName: incomingLead?.assignedByName || nextLeads[matchIdx].assignedByName,
+                  assignedAt: incomingLead?.assignedAt || nextLeads[matchIdx].assignedAt,
+                  assignmentHistories: incomingLead?.assignmentHistories || nextLeads[matchIdx].assignmentHistories,
                   stage: assignedCoordId ? (nextLeads[matchIdx].stage === 'new' ? 'assigned' : nextLeads[matchIdx].stage) : 'new',
                   updatedAt: new Date().toISOString(),
                 };
@@ -672,6 +696,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
               return prevLeads;
             });
+            return;
+          }
+
+          if (data.type === 'LEAD_UNASSIGNED') {
+            const { leadId: unassignedLeadId, previousCoordinatorId, reassignedTo } = data;
+            if (currentUser?.role === 'coordinator' && previousCoordinatorId === currentUser?.id && reassignedTo !== currentUser?.id) {
+              setLeads(prevLeads => prevLeads.filter(l => l.id !== unassignedLeadId));
+              if (selectedLeadIdRef.current === unassignedLeadId) {
+                setSelectedLeadId(null);
+              }
+            }
             return;
           }
 
@@ -1149,44 +1184,35 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Enriched selected lead
   const selectedLead = leads.find(l => l.id === selectedLeadId);
 
-  // Assign lead
-  const assignLead = (leadId: string, coordinatorId: string) => {
+  // Assign or reassign lead with strict role validation and assignment locking
+  const assignLead = async (leadId: string, coordinatorId: string): Promise<boolean> => {
     const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return false;
 
-    const assignerId = currentUser?.id || 'user-admin-1';
-    const assignerName = currentUser?.fullName || 'Admin';
+    // 1. Role validation
+    if (isCoordinator) {
+      notify('Action Forbidden', 'Coordinators are not permitted to assign or reassign leads.', 'warning');
+      return false;
+    }
+
+    if (isLeadsOfficer) {
+      if (targetLead.assignedTo) {
+        notify('Assignment Locked', 'This lead is already assigned. Once assigned, only Super Admin can change or reassign coordinators.', 'warning');
+        return false;
+      }
+      if (!coordinatorId) {
+        notify('Action Forbidden', 'Leads Officers cannot unassign leads. Only Super Admin can modify or remove existing assignments.', 'warning');
+        return false;
+      }
+    }
+
+    const prevAssignedTo = targetLead.assignedTo;
+    const prevStage = targetLead.stage;
     const nowIso = new Date().toISOString();
+    const coord = users.find(u => u.id === coordinatorId);
 
-    // If unassigning (-- Assign to Coordinator --)
-    if (!coordinatorId) {
-      setLeads(prev => prev.map(l => {
-        if (l.id === leadId) {
-          logAudit('LEAD_UNASSIGNED', 'Assignment', leadId, { assignedTo: l.assignedTo }, { assignedTo: undefined, stage: 'new' });
-          const newHist: LeadAssignmentHistory = {
-            id: 'asgn-' + Date.now(),
-            leadId,
-            assignedToId: undefined,
-            assignedToName: 'Unassigned',
-            assignedById: assignerId,
-            assignedByName: assignerName,
-            assignedAt: nowIso
-          };
-          return {
-            ...l,
-            assignedTo: undefined,
-            assignedById: assignerId,
-            assignedByName: assignerName,
-            assignedAt: nowIso,
-            assignmentHistories: [newHist, ...(l.assignmentHistories || [])],
-            stage: 'new' as LeadStage,
-            updatedAt: nowIso
-          };
-        }
-        return l;
-      }));
-
-      // Sync unassignment to backend
-      fetch(`${API_BASE_URL}/api/leads/assign`, {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/leads/assign`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1196,94 +1222,78 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         body: JSON.stringify({
           leadId,
-          coordinatorId: '',
-          assignedById: assignerId,
-          assignedByName: assignerName,
+          coordinatorId: coordinatorId || '',
+          coordinatorName: coord?.fullName || '',
+          assignedById: currentUser?.id,
+          assignedByName: currentUser?.fullName,
           assignedAt: nowIso,
-          unassign: true,
-          customerId: targetLead?.customerId,
-          phone: targetLead?.customer?.whatsappNumber,
-          whatsappId: targetLead?.customer?.whatsappId
+          unassign: !coordinatorId,
+          customerId: targetLead.customerId,
+          phone: targetLead.customer?.whatsappNumber,
+          whatsappId: targetLead.customer?.whatsappId
         })
-      }).catch(err => console.warn('Could not sync lead unassignment to backend:', err));
+      });
 
-      notify('Lead Unassigned', 'Lead marked as Unassigned', 'info');
-      return;
-    }
+      const data = await res.json().catch(() => ({}));
 
-    const coord = users.find(u => u.id === coordinatorId);
-    if (!coord) return;
-
-    setLeads(prev => prev.map(l => {
-      if (l.id === leadId) {
-        const prevStage = l.stage;
-        const newStage: LeadStage = prevStage === 'new' ? 'assigned' : prevStage;
-        
-        // Audit log
-        logAudit('LEAD_ASSIGNED', 'Assignment', leadId, { assignedTo: l.assignedTo, stage: prevStage }, { assignedTo: coordinatorId, stage: newStage });
-
-        // Add stage history if stage moved from new -> assigned
-        if (prevStage === 'new') {
-          const hist: LeadStageHistory = {
-            id: 'hist-' + Date.now(),
-            leadId,
-            fromStage: 'new',
-            toStage: 'assigned',
-            changedBy: currentUser.id,
-            changedByName: currentUser.fullName,
-            reason: `Assigned to coordinator ${coord.fullName}`,
-            createdAt: nowIso,
-          };
-          setStageHistories(h => [hist, ...h]);
-        }
-
-        const newHist: LeadAssignmentHistory = {
-          id: 'asgn-' + Date.now(),
-          leadId,
-          assignedToId: coordinatorId,
-          assignedToName: coord.fullName,
-          assignedById: assignerId,
-          assignedByName: assignerName,
-          assignedAt: nowIso
-        };
-
-        return {
-          ...l,
-          assignedTo: coordinatorId,
-          assignedById: assignerId,
-          assignedByName: assignerName,
-          assignedAt: nowIso,
-          assignmentHistories: [newHist, ...(l.assignmentHistories || [])],
-          stage: newStage,
-          updatedAt: nowIso,
-        };
+      if (!res.ok || !data.success) {
+        notify('Assignment Forbidden', data.error || 'Server rejected assignment update.', 'warning');
+        return false;
       }
-      return l;
-    }));
 
-    // Sync assignment to Supabase PostgreSQL backend in real-time
-    fetch(`${API_BASE_URL}/api/leads/assign`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1',
-        'x-user-id': currentUser?.id || 'user-admin-1'
-      },
-      body: JSON.stringify({
-        leadId,
-        coordinatorId,
-        coordinatorName: coord.fullName,
-        assignedById: assignerId,
-        assignedByName: assignerName,
-        assignedAt: nowIso,
-        customerId: targetLead?.customerId,
-        phone: targetLead?.customer?.whatsappNumber,
-        whatsappId: targetLead?.customer?.whatsappId
-      })
-    }).catch(err => console.warn('Could not sync lead assignment to backend:', err));
+      // Update state upon verified server confirmation
+      setLeads(prev => prev.map(l => {
+        if (l.id === leadId) {
+          if (!coordinatorId) {
+            logAudit('LEAD_UNASSIGNED', 'Assignment', leadId, { assignedTo: prevAssignedTo }, { assignedTo: undefined, stage: 'new' });
+            return {
+              ...l,
+              assignedTo: undefined,
+              assignedById: currentUser.id,
+              assignedByName: currentUser.fullName,
+              assignedAt: nowIso,
+              stage: 'new' as LeadStage,
+              updatedAt: nowIso
+            };
+          }
 
-    notify('Lead Assigned', `Lead successfully assigned to ${coord.fullName}`, 'success');
+          const newStage: LeadStage = prevStage === 'new' ? 'assigned' : prevStage;
+          logAudit('LEAD_ASSIGNED', 'Assignment', leadId, { assignedTo: prevAssignedTo, stage: prevStage }, { assignedTo: coordinatorId, stage: newStage });
+
+          const newHist: LeadAssignmentHistory = {
+            id: 'asgn-' + Date.now(),
+            leadId,
+            assignedToId: coordinatorId,
+            assignedToName: coord?.fullName || 'Staff',
+            assignedById: currentUser.id,
+            assignedByName: currentUser.fullName,
+            assignedAt: nowIso
+          };
+
+          return {
+            ...l,
+            assignedTo: coordinatorId,
+            assignedById: currentUser.id,
+            assignedByName: currentUser.fullName,
+            assignedAt: nowIso,
+            assignmentHistories: [newHist, ...(l.assignmentHistories || [])],
+            stage: newStage,
+            updatedAt: nowIso
+          };
+        }
+        return l;
+      }));
+
+      if (!coordinatorId) {
+        notify('Lead Unassigned', 'Lead marked as Unassigned by Super Admin', 'info');
+      } else {
+        notify('Lead Assigned', `Lead successfully assigned to ${coord?.fullName || 'Coordinator'}`, 'success');
+      }
+      return true;
+    } catch (err: any) {
+      notify('Assignment Error', err.message || 'Failed to communicate with server', 'warning');
+      return false;
+    }
   };
 
   // Update lead stage
@@ -2814,6 +2824,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isLeadsOfficer,
     isCoordinator,
     canAssignLeads,
+    canReassignLead,
+    canModifyAssignment,
     leads: hydratedLeads,
     customers,
     messages,

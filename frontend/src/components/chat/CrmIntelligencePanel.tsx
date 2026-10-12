@@ -20,7 +20,8 @@ import {
   Search,
   RotateCw,
   Globe,
-  Building2
+  Building2,
+  Lock
 } from 'lucide-react';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
@@ -42,6 +43,9 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     leads,
     treatments,
     canAssignLeads, 
+    canModifyAssignment,
+    isSuperAdmin,
+    isLeadsOfficer,
     assignLead, 
     updateLeadStage,
     updateLeadTreatment,
@@ -430,11 +434,18 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
         {/* Coordinator Assignment */}
         <div className="space-y-1">
-          <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-            Assigned Coordinator
-          </label>
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+              Assigned Coordinator
+            </label>
+            {isLeadsOfficer && lead.assignedTo && (
+              <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                <Lock className="w-2.5 h-2.5" /> Locked
+              </span>
+            )}
+          </div>
 
-          {canAssignLeads ? (
+          {canModifyAssignment(lead) ? (
             <div className="relative">
               <select
                 value={coordinators.some(c => c.id === lead.assignedTo) ? (lead.assignedTo || '') : ''}
@@ -453,11 +464,18 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
           ) : (
-            <div className="flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-[#111b21] border border-slate-800 text-xs">
-              <UserCheck className="w-3.5 h-3.5 text-teal-400" />
-              <span className="text-slate-200 font-medium">
-                {coordinator ? coordinator.fullName : 'Unassigned'}
-              </span>
+            <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#111b21] border border-slate-800 text-xs">
+              <div className="flex items-center gap-2">
+                <UserCheck className="w-3.5 h-3.5 text-teal-400" />
+                <span className="text-slate-200 font-medium">
+                  {coordinator ? coordinator.fullName : 'Unassigned'}
+                </span>
+              </div>
+              {lead.assignedTo && isLeadsOfficer && (
+                <span className="text-[10px] text-slate-500 italic">
+                  Admin only to change
+                </span>
+              )}
             </div>
           )}
         </div>

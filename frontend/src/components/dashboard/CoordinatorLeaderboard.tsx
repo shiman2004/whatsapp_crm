@@ -1,11 +1,25 @@
-import React from 'react';
 import { useCrm } from '../../context/CrmContext';
 import { Award, Clock, TrendingUp, UserCheck } from 'lucide-react';
+import { CompanyCode, Lead } from '../../types';
 
-export const CoordinatorLeaderboard: React.FC = () => {
-  const { users, leads } = useCrm();
+interface CoordinatorLeaderboardProps {
+  leads?: Lead[];
+  companyFilter?: CompanyCode | 'all';
+}
 
-  const coordinators = users.filter(u => u.role === 'coordinator');
+export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({ 
+  leads: propLeads, 
+  companyFilter = 'all' 
+}) => {
+  const { users, leads: ctxLeads } = useCrm();
+  const leads = propLeads || ctxLeads;
+
+  const coordinators = users.filter(u => {
+    if (u.role !== 'coordinator') return false;
+    if (companyFilter === 'CRAS') return u.company === 'CRAS';
+    if (companyFilter === 'RWC') return u.company === 'RWC' || !u.company;
+    return true;
+  });
 
   const stats = coordinators.map(coord => {
     const assignedLeads = leads.filter(l => l.assignedTo === coord.id);
@@ -33,7 +47,12 @@ export const CoordinatorLeaderboard: React.FC = () => {
       </div>
 
       <div className="space-y-3">
-        {stats.map((item, idx) => (
+        {stats.length === 0 ? (
+          <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
+            No coordinators registered for this company portfolio yet.
+          </div>
+        ) : (
+          stats.map((item, idx) => (
           <div
             key={item.coordinator.id}
             className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 flex items-center justify-between gap-4 text-xs"
@@ -83,7 +102,7 @@ export const CoordinatorLeaderboard: React.FC = () => {
               </span>
             </div>
           </div>
-        ))}
+        )))}
       </div>
     </div>
   );

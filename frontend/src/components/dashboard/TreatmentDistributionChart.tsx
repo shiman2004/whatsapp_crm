@@ -8,11 +8,17 @@ import {
   Legend 
 } from 'recharts';
 import { useCrm } from '../../context/CrmContext';
+import { Lead } from '../../types';
 
 const COLORS = ['#14b8a6', '#f59e0b', '#8b5cf6', '#3b82f6', '#ec4899', '#10b981', '#64748b'];
 
-export const TreatmentDistributionChart: React.FC = () => {
-  const { leads, categories } = useCrm();
+interface TreatmentDistributionChartProps {
+  leads?: Lead[];
+}
+
+export const TreatmentDistributionChart: React.FC<TreatmentDistributionChartProps> = ({ leads: propLeads }) => {
+  const { leads: ctxLeads, categories } = useCrm();
+  const leads = propLeads || ctxLeads;
 
   const data = categories.map((cat) => ({
     name: cat.name.split('&')[0].trim(),

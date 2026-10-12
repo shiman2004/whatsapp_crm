@@ -19,7 +19,8 @@ import {
   LanguageCode,
   OnboardingSession,
   WhatsAppConnectionStatus,
-  CompanyCode
+  CompanyCode,
+  TeamBroadcast
 } from '../types';
 import {
   INITIAL_USERS,
@@ -132,6 +133,20 @@ interface CrmContextType {
   updateCoordinator: (id: string, data: { fullName: string; branch: string }) => Promise<void>;
   deleteCoordinator: (id: string) => void;
 
+  // Team Broadcast Channel
+  broadcasts: TeamBroadcast[];
+  sendBroadcast: (data: {
+    title?: string;
+    content: string;
+    mediaType?: 'image' | 'video' | 'document' | 'audio';
+    mediaUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    isPinned?: boolean;
+    company?: string;
+  }) => Promise<boolean>;
+  deleteBroadcast: (id: string) => Promise<boolean>;
+
   // Simulator State & Actions
   simulatorOpen: boolean;
   setSimulatorOpen: (open: boolean) => void;
@@ -235,6 +250,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
+  const [broadcasts, setBroadcasts] = useState<TeamBroadcast[]>(() => getStored('rw_crm_broadcasts', []));
   
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
     const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
@@ -344,12 +360,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
-      const [leadsRes, msgsRes, metaRes, coordsRes] = await Promise.all([
+      const [leadsRes, msgsRes, metaRes, coordsRes, broadcastsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/leads`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/messages`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/meta/config`).catch(() => null),
-        fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null)
+        fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/api/broadcasts`, { headers: authHeaders }).catch(() => null)
       ]);
+
+      if (broadcastsRes && broadcastsRes.ok) {
+        const bData = await broadcastsRes.json().catch(() => null);
+        if (bData && Array.isArray(bData.broadcasts)) {
+          setBroadcasts(bData.broadcasts);
+          localStorage.setItem('rw_crm_broadcasts', JSON.stringify(bData.broadcasts));
+        }
+      }
 
       if (metaRes && metaRes.ok) {
         const metaData = await metaRes.json().catch(() => null);
@@ -1015,6 +1040,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const { messageId } = data;
             if (messageId) {
               setMessages(prev => prev.filter(m => m.id !== messageId && m.waMessageId !== messageId));
+            }
+          } else if (data.type === 'TEAM_BROADCAST_CREATED') {
+            const { broadcast } = data;
+            if (broadcast) {
+              setBroadcasts(prev => {
+                const filtered = prev.filter(b => b.id !== broadcast.id);
+                const next = [broadcast, ...filtered];
+                localStorage.setItem('rw_crm_broadcasts', JSON.stringify(next));
+                return next;
+              });
+              notify('Team Broadcast 📢', `${broadcast.senderName}: ${broadcast.title || broadcast.content.slice(0, 40)}`, 'info');
+            }
+          } else if (data.type === 'TEAM_BROADCAST_DELETED') {
+            const { broadcastId } = data;
+            if (broadcastId) {
+              setBroadcasts(prev => {
+                const next = prev.filter(b => b.id !== broadcastId);
+                localStorage.setItem('rw_crm_broadcasts', JSON.stringify(next));
+                return next;
+              });
             }
           } else if (data.type === 'INIT') {
             if (data.status) setWhatsappStatus(data.status);
@@ -2193,6 +2238,84 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Staff Updated', `${cleanName} (${cleanBranch}) updated in Supabase successfully`, 'success');
   };
 
+  const sendBroadcast = async (data: {
+    title?: string;
+    content: string;
+    mediaType?: 'image' | 'video' | 'document' | 'audio';
+    mediaUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    isPinned?: boolean;
+    company?: string;
+  }): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('rw_crm_auth_token') || currentUser?.id || 'user-admin-1';
+      const res = await fetch(`${API_BASE_URL}/api/broadcasts`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
+        body: JSON.stringify({
+          ...data,
+          senderName: currentUser?.fullName || 'Super Admin',
+          senderRole: currentUser?.role || 'super_admin'
+        })
+      });
+
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.error || 'Failed to post broadcast message');
+      }
+
+      const result = await res.json();
+      if (result.success && result.broadcast) {
+        setBroadcasts(prev => {
+          const filtered = prev.filter(b => b.id !== result.broadcast.id);
+          const next = [result.broadcast, ...filtered];
+          localStorage.setItem('rw_crm_broadcasts', JSON.stringify(next));
+          return next;
+        });
+        notify('Broadcast Published', 'Team broadcast posted to all staff successfully.', 'success');
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('Error posting broadcast:', err);
+      notify('Broadcast Failed', err.message || 'Could not send broadcast message.', 'warning');
+      return false;
+    }
+  };
+
+  const deleteBroadcast = async (id: string): Promise<boolean> => {
+    try {
+      const token = localStorage.getItem('rw_crm_auth_token') || currentUser?.id || 'user-admin-1';
+      const res = await fetch(`${API_BASE_URL}/api/broadcasts/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        }
+      });
+
+      if (res.ok) {
+        setBroadcasts(prev => {
+          const next = prev.filter(b => b.id !== id);
+          localStorage.setItem('rw_crm_broadcasts', JSON.stringify(next));
+          return next;
+        });
+        notify('Broadcast Removed', 'Broadcast announcement has been deleted.', 'info');
+        return true;
+      }
+      return false;
+    } catch (err: any) {
+      console.error('Error deleting broadcast:', err);
+      notify('Delete Failed', err.message || 'Could not delete broadcast.', 'warning');
+      return false;
+    }
+  };
+
   const login = (identifier: string, secret?: string) => {
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanSecret = (secret || '').trim();
@@ -2674,6 +2797,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addCoordinator,
     updateCoordinator,
     deleteCoordinator,
+    broadcasts,
+    sendBroadcast,
+    deleteBroadcast,
     clearAllData,
     addNewContact,
     simulatorOpen,

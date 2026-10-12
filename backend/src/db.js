@@ -56,6 +56,26 @@ export const checkDbConnection = async () => {
     `).catch(() => null);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_media_files_name ON public.media_files(file_name);`).catch(() => null);
 
+    // Ensure team_broadcasts table exists for staff announcements & multimedia broadcasts
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.team_broadcasts (
+        id VARCHAR(50) PRIMARY KEY,
+        sender_id VARCHAR(36) NOT NULL,
+        sender_name VARCHAR(255) NOT NULL,
+        sender_role VARCHAR(50) NOT NULL,
+        company VARCHAR(50) DEFAULT 'ALL',
+        title VARCHAR(255),
+        content TEXT NOT NULL,
+        media_type VARCHAR(50),
+        media_url TEXT,
+        file_name VARCHAR(255),
+        file_size INT,
+        is_pinned BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON public.team_broadcasts(created_at DESC);`).catch(() => null);
+
     // Ensure LeadStage enum has all required values in Postgres
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'new';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'assigned';`).catch(() => null);

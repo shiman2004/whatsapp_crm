@@ -2735,6 +2735,176 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10d-2. REST: Team Broadcast Messages (Super Admin & Leads Officer Channel)
+  if (pathname === '/api/broadcasts' || pathname.startsWith('/api/broadcasts/')) {
+    const prisma = getPrisma();
+
+    // GET /api/broadcasts
+    if (req.method === 'GET') {
+      try {
+        let broadcasts = [];
+        if (prisma && getDbStatus()) {
+          try {
+            const rawRows = await prisma.$queryRawUnsafe(`
+              SELECT 
+                id, 
+                sender_id as "senderId", 
+                sender_name as "senderName", 
+                sender_role as "senderRole", 
+                company, 
+                title, 
+                content, 
+                media_type as "mediaType", 
+                media_url as "mediaUrl", 
+                file_name as "fileName", 
+                file_size as "fileSize", 
+                is_pinned as "isPinned", 
+                created_at as "createdAt"
+              FROM public.team_broadcasts 
+              ORDER BY is_pinned DESC, created_at DESC 
+              LIMIT 100;
+            `);
+            if (Array.isArray(rawRows)) {
+              broadcasts = rawRows;
+            }
+          } catch (dbErr) {
+            console.warn('⚠️ [Team Broadcasts DB Query Fallback]:', dbErr.message);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, broadcasts }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message, broadcasts: [] }));
+      }
+      return;
+    }
+
+    // POST /api/broadcasts (Super Admin & Leads Officer only)
+    if (req.method === 'POST') {
+      if (authUser.role !== 'super_admin' && authUser.role !== 'leads_officer') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: 'Forbidden: Only Super Admin and Leads Officers can send team broadcasts.' 
+        }));
+        return;
+      }
+
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const content = String(payload.content || '').trim();
+          const title = payload.title ? String(payload.title).trim() : null;
+          const mediaType = payload.mediaType || null; // 'image' | 'video' | 'document' | 'audio'
+          const mediaUrl = payload.mediaUrl || null;
+          const fileName = payload.fileName || null;
+          const fileSize = payload.fileSize ? Number(payload.fileSize) : null;
+          const isPinned = Boolean(payload.isPinned);
+          const company = payload.company || 'ALL'; // 'ALL', 'RWC', 'CRAS'
+
+          if (!content && !mediaUrl) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Broadcast message content or media is required.' }));
+            return;
+          }
+
+          const broadcastId = `tb-${Date.now()}`;
+          const newBroadcast = {
+            id: broadcastId,
+            senderId: authUser.id,
+            senderName: authUser.fullName || 'Management',
+            senderRole: authUser.role,
+            company,
+            title,
+            content,
+            mediaType,
+            mediaUrl,
+            fileName,
+            fileSize,
+            isPinned,
+            createdAt: new Date().toISOString()
+          };
+
+          if (prisma && getDbStatus()) {
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.team_broadcasts (
+                id, sender_id, sender_name, sender_role, company, title, content, 
+                media_type, media_url, file_name, file_size, is_pinned, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW());
+            `, 
+              newBroadcast.id, 
+              newBroadcast.senderId, 
+              newBroadcast.senderName, 
+              newBroadcast.senderRole, 
+              newBroadcast.company, 
+              newBroadcast.title, 
+              newBroadcast.content, 
+              newBroadcast.mediaType, 
+              newBroadcast.mediaUrl, 
+              newBroadcast.fileName, 
+              newBroadcast.fileSize, 
+              newBroadcast.isPinned
+            ).catch(e => console.warn('⚠️ Could not insert broadcast into Supabase:', e.message));
+          }
+
+          // Broadcast SSE event to all connected team members in real-time
+          broadcastScopedSSE(null, {
+            type: 'TEAM_BROADCAST_CREATED',
+            broadcast: newBroadcast
+          });
+
+          console.log(`📢 [Team Broadcast Posted] By: ${authUser.fullName} (${authUser.role}), Title: ${title || 'Notice'}`);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, broadcast: newBroadcast }));
+        } catch (err) {
+          console.error('❌ [Broadcast Create Error]:', err.message);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // DELETE /api/broadcasts/:id (Super Admin only or author)
+    if (req.method === 'DELETE') {
+      const urlParts = pathname.split('/');
+      const broadcastId = urlParts[3] || parsedUrl.query.id;
+
+      if (!broadcastId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Missing broadcast ID' }));
+        return;
+      }
+
+      if (authUser.role !== 'super_admin' && authUser.role !== 'leads_officer') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Forbidden: Cannot delete broadcasts.' }));
+        return;
+      }
+
+      if (prisma && getDbStatus()) {
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM public.team_broadcasts WHERE id = $1;`, 
+          broadcastId
+        ).catch(() => null);
+      }
+
+      broadcastScopedSSE(null, {
+        type: 'TEAM_BROADCAST_DELETED',
+        broadcastId
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, deletedId: broadcastId }));
+      return;
+    }
+  }
+
   // 10e. REST: Get/Save Meta Cloud API Configuration
   if (pathname === '/api/meta/config' || pathname === '/api/meta/token') {
     if (req.method === 'GET') {

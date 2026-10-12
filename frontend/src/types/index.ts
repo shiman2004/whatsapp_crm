@@ -242,3 +242,19 @@ export interface OnboardingSession {
 }
 
 export type WhatsAppConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'qr_ready' | 'syncing' | 'sync_error';
+
+export interface TeamBroadcast {
+  id: string;
+  senderId: string;
+  senderName: string;
+  senderRole: string;
+  company?: 'ALL' | 'RWC' | 'CRAS' | string;
+  title?: string;
+  content: string;
+  mediaType?: 'image' | 'video' | 'document' | 'audio';
+  mediaUrl?: string;
+  fileName?: string;
+  fileSize?: number;
+  isPinned?: boolean;
+  createdAt: string;
+}

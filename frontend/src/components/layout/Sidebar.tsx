@@ -9,6 +9,7 @@ import {
   BarChart3,
   ScrollText,
   Code2,
+  Megaphone,
   X
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
@@ -17,6 +18,7 @@ export type NavTab =
   | 'dashboard' 
   | 'leads-kanban' 
   | 'chat' 
+  | 'broadcast'
   | 'treatments' 
   | 'coordinators' 
   | 'templates' 
@@ -38,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen = false, 
   onCloseMobile 
 }) => {
-  const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups } = useCrm();
+  const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, broadcasts = [] } = useCrm();
 
   const unassignedCount = leads.filter(l => l.stage === 'new').length;
   const myAssignedCount = leads.filter(l => l.assignedTo === currentUser.id).length;
@@ -108,6 +110,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'API Specs',
       icon: Code2,
       adminOnly: true, // Super Admin only
+    },
+    {
+      id: 'broadcast' as NavTab,
+      label: 'Team Broadcast 📢',
+      icon: Megaphone,
+      badge: broadcasts.length > 0 ? broadcasts.length : undefined,
+      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+      adminOnly: false, // Visible to all team members
     }
   ];
 

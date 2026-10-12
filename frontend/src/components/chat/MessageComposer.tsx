@@ -594,7 +594,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         >
           <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/80">
             <span className="text-xs font-bold text-[#e9edef] flex items-center gap-1.5">
-              <span>🌸 Royal Wellness Center Templates</span>
+              <span>🌿 Royal Wellness Center Templates</span>
             </span>
             <button
               type="button"

@@ -174,49 +174,40 @@ export const INITIAL_TREATMENTS: Treatment[] = [
 export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [
   {
     id: 'tpl-rwc-si',
-    name: '🌸 Royal Wellness Center (Sinhala)',
+    name: '🌿 Royal Wellness Center (Sinhala)',
     language: 'si',
     waTemplateName: 'rwc_welcome_greeting_si',
     category: 'UTILITY',
-    body: `🌸 Royal Wellness Center – ඔබ සාදරයෙන් පිළිගනිමු!
-
-💙 මේ මොහොතේ මම වෙනත් සේවාදායකයෙකුට සහාය වෙමින් සිටිමි. ඔබගේ පණිවිඩය මට ඉතා වැදගත් වේ.
-
-කරුණාකර මඳ වේලාවක් රැඳී සිටින්න. හැකි ඉක්මනින් මම ඔබව සම්බන්ධ කරගන්නෙමි.
-
-ඔබගේ ඉවසීම සහ අවබෝධය වෙනුවෙන් හෘදයාංගම ස්තූතියි! 🌷`,
+    body: `*🌿 Royal Wellness Center වෙතින් උණුසුම් සුබපැතුම්!*
+සාදරයෙන් පිළිගනිමු, අප හා සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි.
+මම _ජහාන් (Jahan)_, අපගේ ප්‍රතිකාර, සේවාවන් සහ වේලාවන් වෙන්කරවා ගැනීම් සම්බන්ධයෙන් ඔබට සහාය වීමට මම සතුටු වෙමි.
+💬 අද දින මම ඔබට කෙසේ සහාය විය හැකිද?`,
     variables: [],
     approved: true,
   },
   {
     id: 'tpl-rwc-ta',
-    name: '🌸 Royal Wellness Center (Tamil)',
+    name: '🌿 Royal Wellness Center (Tamil)',
     language: 'ta',
     waTemplateName: 'rwc_welcome_greeting_ta',
     category: 'UTILITY',
-    body: `🌸 Royal Wellness Center – உங்களை அன்புடன் வரவேற்கிறோம்!
-
-💙 தற்போது நான் மற்றொரு வாடிக்கையாளருக்கு உதவி செய்து கொண்டிருக்கிறேன். உங்கள் செய்தி எனக்கு மிகவும் முக்கியமானது.
-
-தயவுசெய்து சிறிது நேரம் காத்திருக்கவும். கூடிய விரைவில் உங்களைத் தொடர்புகொள்வேன்.
-
-உங்கள் பொறுமைக்கும் புரிந்துணர்விற்கும் மனமார்ந்த நன்றி! 🌷`,
+    body: `*🌿 Royal Wellness Center-ன் அன்பான நல்வாழ்த்துகள்!*
+வரவேற்கிறோம், எங்களைத் தொடர்பு கொண்டதற்கு நன்றி.
+நான் _ஜஹான் (Jahan)_, எங்களின் சிகிச்சைகள், சேவைகள் மற்றும் முன்பதிவுகள் தொடர்பாக உங்களுக்கு உதவுவதில் மகிழ்ச்சியடைகிறேன்.
+💬 இன்று நான் உங்களுக்கு எவ்வாறு உதவ முடியும்?`,
     variables: [],
     approved: true,
   },
   {
     id: 'tpl-rwc-en',
-    name: '🌸 Royal Wellness Center (English)',
+    name: '🌿 Royal Wellness Center (English)',
     language: 'en',
     waTemplateName: 'rwc_welcome_greeting',
     category: 'UTILITY',
-    body: `🌸 Royal Wellness Center – A Warm Welcome to You!
-
-💙 I'm currently assisting another client, but your message is very important to me.
-
-Kindly allow me a little time, and I'll get back to you as soon as possible.
-
-Thank you sincerely for your patience and understanding! 🌷`,
+    body: `*🌿 Warm Greetings from Royal Wellness Center!*
+Welcome, and thank you for reaching out to us.
+I'm _Jahan,_ and I'll be happy to assist you with our treatments, services, and appointments.
+💬 How may I assist you today?`,
     variables: [],
     approved: true,
   }

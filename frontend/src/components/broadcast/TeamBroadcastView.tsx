@@ -30,7 +30,12 @@ import { WhatsAppVoiceRecorder, AudioRecordingResult } from '../../utils/audioRe
 import { API_BASE_URL } from '../../config/api';
 
 export const TeamBroadcastView: React.FC = () => {
-  const { currentUser, broadcasts, sendBroadcast, deleteBroadcast } = useCrm();
+  const { currentUser, broadcasts, sendBroadcast, deleteBroadcast, markAllBroadcastsAsRead } = useCrm();
+
+  // Automatically mark all current broadcasts as read when staff member views this screen
+  useEffect(() => {
+    markAllBroadcastsAsRead();
+  }, [markAllBroadcastsAsRead, broadcasts.length]);
 
   const isSuperAdmin = currentUser?.role === 'super_admin';
   const isLeadsOfficer = currentUser?.role === 'leads_officer';

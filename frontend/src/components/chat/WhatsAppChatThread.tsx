@@ -226,6 +226,16 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                     <span className="font-mono text-[#00a884] font-medium">{displayPhone}</span>
                     <span className="text-slate-600 hidden sm:inline">•</span>
                     <span className="hidden sm:inline">WhatsApp Direct</span>
+                    <span className="text-slate-600 hidden sm:inline">•</span>
+                    {is24hWindowOpen ? (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-medium">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 24h Window Active
+                      </span>
+                    ) : (
+                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-medium" title="24-hour care window closed. WhatsApp template required to message customer.">
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Window Closed (Template Req.)
+                      </span>
+                    )}
                   </>
                 ) : (
                   <span>online</span>

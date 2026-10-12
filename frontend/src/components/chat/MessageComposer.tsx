@@ -18,7 +18,8 @@ import {
   Copy,
   MapPin,
   ChevronRight,
-  ChevronLeft
+  ChevronLeft,
+  Clock
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -384,7 +385,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   };
 
   const handleSendTemplate = (tpl: WhatsAppTemplate) => {
-    const custName = lead.customer?.displayName || 'Client';
+    const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS' || tpl.waTemplateName === 'cras_welcome_greeting';
+    const custName = lead.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
     const trtName = treatment?.name || category?.name || 'Treatment';
     
     sendWhatsAppTemplate(lead.id, tpl.waTemplateName || tpl.name || tpl.id, [custName, trtName]);
@@ -609,6 +611,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           <div className="space-y-2">
             {templates.map((tpl) => {
               const isCopied = copiedTplId === tpl.id;
+              const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS' || tpl.waTemplateName === 'cras_welcome_greeting';
+              const defaultName = lead.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
+              const renderedBody = tpl.body.replace(/\{\{1\}\}/g, defaultName);
               return (
                 <div key={tpl.id} className="bg-[#111b21] p-3 rounded-xl border border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
@@ -617,13 +622,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          navigator.clipboard.writeText(tpl.body);
+                          navigator.clipboard.writeText(renderedBody);
                           setCopiedTplId(tpl.id);
                           setTimeout(() => setCopiedTplId(null), 2000);
                         }}
-                        className={`px-2.5 py-1 rounded-lg font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
+                        className={`px-2 py-1 rounded-lg font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
                           isCopied ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-[#00a884]'
                         }`}
+                        title="Copy text"
                       >
                         {isCopied ? <Check className="w-3.5 h-3.5 stroke-[3]" /> : <Copy className="w-3.5 h-3.5" />}
                         <span>{isCopied ? 'Copied' : 'Copy'}</span>
@@ -631,18 +637,28 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                       <button
                         type="button"
                         onClick={() => {
-                          setInputVal(tpl.body);
+                          setInputVal(renderedBody);
                           setShowTemplates(false);
                           textareaRef.current?.focus();
                         }}
-                        className="px-2.5 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-[11px] transition-all cursor-pointer"
+                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-[11px] transition-all cursor-pointer"
+                        title="Insert into chat box"
                       >
-                        Insert in Chat
+                        Insert
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleSendTemplate(tpl)}
+                        className="px-2.5 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-[11px] flex items-center gap-1 transition-all cursor-pointer shadow-sm"
+                        title="Send directly via Meta Cloud API"
+                      >
+                        <Send className="w-3 h-3" />
+                        <span>Send (Meta API)</span>
                       </button>
                     </div>
                   </div>
                   <p className="text-[11px] text-slate-300 whitespace-pre-wrap max-h-24 overflow-y-auto font-sans leading-relaxed bg-slate-950/60 p-2 rounded-lg select-all">
-                    {tpl.body}
+                    {renderedBody}
                   </p>
                 </div>
               );
@@ -651,7 +667,33 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
-      {/* 4b. WhatsApp Connection State Status Banner */}
+      {/* 4b. 24-Hour Customer Care Window Banner */}
+      {!is24hWindowOpen && (
+        <div className="mb-2 px-3.5 py-2 rounded-xl bg-amber-950/70 border border-amber-500/40 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-sm animate-in fade-in duration-200">
+          <div className="flex items-center gap-2 min-w-0">
+            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="font-medium text-[11.5px]">
+              24-hour WhatsApp customer window is closed. Regular text will fail. Re-engage with an approved template:
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS';
+              const tplName = isCras ? 'cras_welcome_greeting' : 'rwc_welcome_greeting';
+              const clientName = lead.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
+              sendWhatsAppTemplate(lead.id, tplName, [clientName]);
+            }}
+            className="px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer shrink-0"
+            title="Send official Meta-approved template to re-open 24-hour conversation window"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            <span>Send Approved Welcome Template 🚀</span>
+          </button>
+        </div>
+      )}
+
+      {/* 4c. WhatsApp Connection State Status Banner */}
       {whatsappStatus === 'syncing' && (
         <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-emerald-950/80 border border-emerald-500/40 text-emerald-300 text-xs flex items-center justify-between shadow-sm animate-pulse">
           <div className="flex items-center gap-2">

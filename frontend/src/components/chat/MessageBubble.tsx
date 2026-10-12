@@ -51,7 +51,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     deleteMessage,
     editMessage,
     reportMessage,
-    retryFailedMessage
+    retryFailedMessage,
+    sendWhatsAppTemplate
   } = useCrm();
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -528,13 +529,29 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                     <p className="text-[10.5px] leading-tight text-rose-200/90 break-words">
                       {message.errorMessage || 'Message was rejected by Meta WhatsApp Cloud API. Customer may not have replied within 24 hours.'}
                     </p>
-                    <div className="flex items-center gap-2 mt-1">
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                      {message.errorCode === 131047 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const isCras = lead?.source?.toUpperCase() === 'CRAS' || lead?.company === 'CRAS';
+                            const tplName = isCras ? 'cras_welcome_greeting' : 'rwc_welcome_greeting';
+                            const clientName = lead?.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
+                            sendWhatsAppTemplate(lead?.id || message.leadId, tplName, [clientName], message.id);
+                          }}
+                          className="px-3 py-1 rounded bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold transition-all flex items-center gap-1.5 text-[11px] shadow-sm cursor-pointer"
+                          title="Send official Meta-approved template to re-engage contact"
+                        >
+                          <Sparkles className="w-3.5 h-3.5" />
+                          Send Approved Template 🚀
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           retryFailedMessage(message.id);
                         }}
-                        className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-medium transition-colors flex items-center gap-1.5 text-[10.5px]"
+                        className="px-2.5 py-1 rounded bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 font-medium transition-colors flex items-center gap-1.5 text-[10.5px] cursor-pointer"
                         title="Retry sending this message"
                       >
                         <RefreshCw className="w-3 h-3" />

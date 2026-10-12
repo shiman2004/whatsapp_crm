@@ -242,6 +242,101 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     reader.readAsDataURL(file);
   };
 
+  // Process clipboard files/items for screenshot/image pasting (Ctrl+V)
+  const processClipboardData = (clipboardData: DataTransfer | null): boolean => {
+    if (!clipboardData) return false;
+
+    // 1. Check items (standard for browser screenshot pasting, e.g. Win+Shift+S or PrtScn)
+    const items = clipboardData.items;
+    if (items && items.length > 0) {
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+            const namedFile = new File(
+              [file],
+              `screenshot_${timestamp}.${ext}`,
+              { type: file.type }
+            );
+            const previewUrl = URL.createObjectURL(namedFile);
+            setMediaPreview({
+              file: namedFile,
+              previewUrl,
+              type: 'image',
+              fileName: namedFile.name,
+              caption: inputVal.trim()
+            });
+            setInputVal('');
+            return true;
+          }
+        }
+      }
+    }
+
+    // 2. Check files (copied image files from clipboard / file manager)
+    const files = clipboardData.files;
+    if (files && files.length > 0) {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        if (file.type.startsWith('image/')) {
+          const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+          const namedFile = new File(
+            [file],
+            file.name && file.name !== 'image.png' ? file.name : `screenshot_${timestamp}.${ext}`,
+            { type: file.type }
+          );
+          const previewUrl = URL.createObjectURL(namedFile);
+          setMediaPreview({
+            file: namedFile,
+            previewUrl,
+            type: 'image',
+            fileName: namedFile.name,
+            caption: inputVal.trim()
+          });
+          setInputVal('');
+          return true;
+        }
+      }
+    }
+
+    return false;
+  };
+
+  // Global window paste listener: paste screenshot anywhere in active chat
+  useEffect(() => {
+    const handleGlobalPaste = (e: ClipboardEvent) => {
+      const target = e.target as HTMLElement | null;
+      if (target && target.tagName === 'INPUT' && target.getAttribute('type') !== 'file') {
+        return;
+      }
+      if (mediaPreview) return;
+
+      const handled = processClipboardData(e.clipboardData);
+      if (handled) {
+        e.preventDefault();
+      }
+    };
+
+    window.addEventListener('paste', handleGlobalPaste);
+    return () => window.removeEventListener('paste', handleGlobalPaste);
+  }, [inputVal, mediaPreview]);
+
+  // Escape key cancels media preview modal
+  useEffect(() => {
+    const handleEscKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && mediaPreview) {
+        URL.revokeObjectURL(mediaPreview.previewUrl);
+        setMediaPreview(null);
+      }
+    };
+    window.addEventListener('keydown', handleEscKey);
+    return () => window.removeEventListener('keydown', handleEscKey);
+  }, [mediaPreview]);
+
   const leadMessages = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
   const inboundMessages = leadMessages.filter(m => m.direction === 'inbound');
   const latestInboundMsg = inboundMessages.length > 0
@@ -676,6 +771,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               value={inputVal}
               onChange={(e) => setInputVal(e.target.value)}
               onKeyDown={handleKeyDown}
+              onPaste={(e) => {
+                const handled = processClipboardData(e.clipboardData);
+                if (handled) {
+                  e.preventDefault();
+                }
+              }}
               placeholder={whatsappStatus === 'connected' || localStorage.getItem('meta_access_token') ? 'Type a message' : 'Please link your WhatsApp or configure Meta API to send messages...'}
               className="w-full bg-transparent text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
             />

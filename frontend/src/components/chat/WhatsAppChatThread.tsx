@@ -14,7 +14,12 @@ import {
   Lock,
   ChevronDown,
   ArrowLeft,
-  AlertCircle
+  AlertCircle,
+  XCircle,
+  User,
+  CheckSquare,
+  BellOff,
+  Trash2
 } from 'lucide-react';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
@@ -32,11 +37,36 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   setCrmPanelOpen,
   onBack
 }) => {
-  const { messages, deleteChat, clearChat } = useCrm();
+  const { messages, deleteChat, clearChat, setSelectedLeadId } = useCrm();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const threadMenuRef = useRef<HTMLDivElement>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [searchInChat, setSearchInChat] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Close 3-dots thread menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (threadMenuRef.current && !threadMenuRef.current.contains(e.target as Node)) {
+        setThreadMenuOpen(false);
+      }
+    };
+    if (threadMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [threadMenuOpen]);
+
+  // Close chat handler (exact behavior of WhatsApp Web 'Close chat')
+  const handleCloseChat = () => {
+    setThreadMenuOpen(false);
+    if (onBack) {
+      onBack();
+    }
+    setSelectedLeadId(null);
+  };
 
   const rawLeadMessages = messages.filter(m => 
     m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId)
@@ -155,36 +185,71 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             </button>
 
             {threadMenuOpen && (
-              <div className="absolute right-0 top-10 w-48 bg-[#233138] border border-slate-700/60 rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db]">
-                <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229]">
-                  Contact info
+              <div 
+                ref={threadMenuRef}
+                className="absolute right-0 top-10 w-52 bg-[#233138] border border-[#2a3942] rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db]"
+              >
+                <button 
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    setCrmPanelOpen(true);
+                  }} 
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <User className="w-4 h-4 text-[#8696a0]" />
+                  <span>Contact info</span>
                 </button>
-                <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229]">
-                  Select messages
+                <button 
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    setSearchInChat(true);
+                  }} 
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Search className="w-4 h-4 text-[#8696a0]" />
+                  <span>Search</span>
                 </button>
-                <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229]">
-                  Close chat
+                <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <CheckSquare className="w-4 h-4 text-[#8696a0]" />
+                  <span>Select messages</span>
                 </button>
-                <button onClick={() => setThreadMenuOpen(false)} className="w-full text-left px-4 py-2 hover:bg-[#182229]">
-                  Mute notifications
+                <button 
+                  onClick={handleCloseChat} 
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 text-[#e9edef] hover:text-white font-medium transition-colors cursor-pointer"
+                >
+                  <XCircle className="w-4 h-4 text-[#8696a0]" />
+                  <span>Close chat</span>
                 </button>
+                <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <BellOff className="w-4 h-4 text-[#8696a0]" />
+                  <span>Mute notifications</span>
+                </button>
+                <div className="h-px bg-[#2a3942] my-1" />
                 <button 
                   onClick={() => {
                     clearChat(lead.id);
                     setThreadMenuOpen(false);
                   }} 
-                  className="w-full text-left px-4 py-2 hover:bg-[#182229]"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#d1d7db] cursor-pointer"
                 >
-                  Clear chat
+                  <Trash2 className="w-4 h-4 text-[#8696a0]" />
+                  <span>Clear chat</span>
                 </button>
                 <button 
                   onClick={() => {
                     deleteChat(lead.id);
                     setThreadMenuOpen(false);
                   }} 
-                  className="w-full text-left px-4 py-2 hover:bg-[#182229] text-rose-400 font-medium"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-400 font-medium cursor-pointer"
                 >
-                  Delete chat
+                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <span>Delete chat</span>
                 </button>
               </div>
             )}

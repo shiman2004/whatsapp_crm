@@ -123,6 +123,55 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     setMenuOpen(true);
   };
 
+  // Open context menu on mouse right-click (exact WhatsApp Web behavior)
+  const handleContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const menuWidth = 220;
+    const menuHeight = 440;
+    const windowWidth = window.innerWidth;
+    const windowHeight = window.innerHeight;
+
+    let left = e.clientX;
+    if (left + menuWidth > windowWidth - 12) {
+      left = windowWidth - menuWidth - 12;
+    }
+    if (left < 12) left = 12;
+
+    let top = e.clientY;
+    if (top + menuHeight > windowHeight - 12) {
+      top = windowHeight - menuHeight - 12;
+    }
+    if (top < 60) top = 60;
+
+    setMenuPos({ top, left });
+    setShowReactionPicker(false);
+    setShowFullPicker(false);
+    setMenuOpen(true);
+  };
+
+  // Close context menu on outside click or Escape
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleDocumentClick = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleDocumentClick);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentClick);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [menuOpen]);
+
   // Close context menu on scroll or window resize
   useEffect(() => {
     if (!menuOpen) return;
@@ -239,6 +288,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
         {/* Message Bubble Box */}
         <div
+          ref={bubbleRef}
+          onContextMenu={handleContextMenu}
           className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-2.5 pt-1.5 pb-1.5 shadow-sm text-xs leading-relaxed transition-all ${
             isOutbound
               ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none wa-bubble-out'
@@ -571,7 +622,38 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           className="z-[100] w-52 bg-[#233138] border border-slate-700/90 rounded-2xl shadow-2xl py-1.5 text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md select-none custom-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* 1. Message info */}
+          {/* 1. Quick Reaction Bar (WhatsApp Web style at top of context menu) */}
+          <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between gap-1 bg-[#182229]/80 rounded-t-2xl">
+            {QUICK_EMOJIS.map((emoji) => {
+              const isActive = message.reactions?.[0] === emoji;
+              return (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => handleToggleReaction(emoji)}
+                  className={`w-7 h-7 flex items-center justify-center text-sm hover:scale-125 transition-transform rounded-full ${
+                    isActive ? 'bg-emerald-950/80 ring-1 ring-emerald-500 scale-110 shadow-sm' : 'hover:bg-slate-700/60'
+                  }`}
+                  title={`React ${emoji}`}
+                >
+                  {emoji}
+                </button>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() => {
+                setShowFullPicker(true);
+                setShowReactionPicker(true);
+              }}
+              className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white rounded-full hover:bg-slate-700/60 transition-all"
+              title="More reactions"
+            >
+              <Plus className="w-3.5 h-3.5" />
+            </button>
+          </div>
+
+          {/* 2. Message info */}
           <button
             onClick={() => {
               setInfoModalOpen(true);
@@ -583,7 +665,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             <span>Message info</span>
           </button>
 
-          {/* 2. Reply */}
+          {/* 3. Reply */}
           <button
             onClick={handleReply}
             className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
@@ -592,7 +674,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             <span>Reply</span>
           </button>
 
-          {/* 3. Copy */}
+          {/* 4. Copy */}
           <button
             onClick={handleCopy}
             className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
@@ -601,7 +683,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             <span>Copy</span>
           </button>
 
-          {/* 4. Edit (WhatsApp Web: Available for outbound text messages) */}
+          {/* 5. Edit (WhatsApp Web: Available for outbound text messages) */}
           {isOutbound && !message.media && (
             <button
               onClick={() => {
@@ -616,7 +698,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             </button>
           )}
 
-          {/* 5. React */}
+          {/* 6. React */}
           <button
             onClick={() => {
               if (bubbleRef.current) {
@@ -632,7 +714,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             <span>React</span>
           </button>
 
-          {/* 6. Forward */}
+          {/* 7. Download (For media messages) */}
+          {message.media && message.media.url && (
+            <button
+              onClick={() => {
+                if (!message.media?.url) return;
+                const link = document.createElement('a');
+                link.href = message.media.url;
+                link.download = message.media.fileName || 'media';
+                link.target = '_blank';
+                link.click();
+                setMenuOpen(false);
+              }}
+              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            >
+              <Download className="w-4 h-4 text-slate-400 shrink-0" />
+              <span>Download</span>
+            </button>
+          )}
+
+          {/* 8. Forward */}
           <button
             onClick={() => {
               setForwardModalOpen(true);

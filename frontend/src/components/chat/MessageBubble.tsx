@@ -335,7 +335,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                       className="w-full max-h-80 rounded-lg"
                     />
                   </div>
-                ) : (message.media.type === 'audio' || mediaUrl.match(/\.(ogg|mp3|wav|m4a|aac)($|\?)/i)) ? (
+                ) : (message.media.type === 'audio' || mediaUrl.match(/\.(ogg|opus|mp3|wav|m4a|aac|webm)($|\?)/i)) ? (
                   <WhatsAppVoiceNotePlayer 
                     message={{ ...message, media: { ...message.media, url: mediaUrl } }}
                     senderName={isOutbound ? currentUser.fullName : (lead?.customer?.displayName || 'Customer')}

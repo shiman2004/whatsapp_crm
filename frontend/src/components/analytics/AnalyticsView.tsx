@@ -33,7 +33,6 @@ import {
   PieChart as PieIcon,
   ShieldCheck,
   Languages,
-  DollarSign,
   HeartPulse,
   Flame,
   UserCheck
@@ -99,18 +98,6 @@ export const AnalyticsView: React.FC = () => {
   // Average First Response Speed SLA (Simulated clinical response telemetry)
   const avgResponseMinutes = 2.1;
   const slaCompliancePct = 98.4;
-
-  // Pipeline Estimated Value (LKR calculation)
-  const estimatedPipelineLKR = useMemo(() => {
-    // Standard aesthetic treatment average ticket ~ 35,000 LKR, CRAS programs ~ 120,000 LKR
-    return filteredLeads.reduce((acc, lead) => {
-      const isCras = lead.company === 'CRAS';
-      const baseTicket = isCras ? 120000 : 35000;
-      if (lead.stage === 'converted') return acc + baseTicket;
-      if (lead.stage === 'under_discussion' || lead.stage === 'potential') return acc + (baseTicket * 0.5);
-      return acc + (baseTicket * 0.1);
-    }, 0);
-  }, [filteredLeads]);
 
   // Stage Velocity Data (Conversion Funnel)
   const funnelData = useMemo(() => {
@@ -363,8 +350,8 @@ export const AnalyticsView: React.FC = () => {
         </div>
       </div>
 
-      {/* Primary Clinical & Operational KPI Grid (6 High-Impact Cards) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
+      {/* Primary Clinical & Operational KPI Grid (5 High-Impact Cards) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Card 1: Conversion Rate */}
         <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
@@ -395,23 +382,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 3: Estimated Pipeline Value */}
-        <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-teal-500/40 transition-all">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400">Estimated Pipeline</span>
-            <span className="p-1.5 rounded-lg bg-teal-500/15 text-teal-400">
-              <DollarSign className="w-4 h-4" />
-            </span>
-          </div>
-          <div className="text-xl font-black font-mono text-teal-300">
-            LKR {(estimatedPipelineLKR / 1000000).toFixed(2)}M
-          </div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-            <span>Wellness & Academy value</span>
-          </div>
-        </div>
-
-        {/* Card 4: Active Triage & Discussion */}
+        {/* Card 3: Active Triage & Discussion */}
         <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-indigo-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold text-slate-400">Active Consultations</span>
@@ -425,7 +396,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 5: Automated Follow-up Health */}
+        {/* Card 4: Automated Follow-up Health */}
         <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-purple-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold text-slate-400">Nurture Automation</span>
@@ -439,7 +410,7 @@ export const AnalyticsView: React.FC = () => {
           </div>
         </div>
 
-        {/* Card 6: Total WhatsApp Inquiries */}
+        {/* Card 5: Total WhatsApp Inquiries */}
         <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-blue-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] font-semibold text-slate-400">Inbound WhatsApp</span>

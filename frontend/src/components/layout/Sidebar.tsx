@@ -69,7 +69,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'treatments' as NavTab,
       label: 'Treatments',
       icon: Sparkles,
-      adminOnly: false,
+      adminOnly: true, // Super Admin only
     },
     {
       id: 'templates' as NavTab,
@@ -83,7 +83,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'reports' as NavTab,
       label: 'Analytics',
       icon: BarChart3,
-      adminOnly: false,
+      adminOnly: true, // Super Admin only
     },
     {
       id: 'coordinators' as NavTab,
@@ -101,13 +101,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'webhook-sandbox' as NavTab,
       label: 'Webhook Sandbox',
       icon: Code2,
-      adminOnly: false,
+      adminOnly: true, // Super Admin only
     },
     {
       id: 'architecture' as NavTab,
       label: 'API Specs',
       icon: Code2,
-      adminOnly: false,
+      adminOnly: true, // Super Admin only
     }
   ];
 

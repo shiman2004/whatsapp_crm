@@ -1818,10 +1818,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const template = templates.find(t => t.id === templateId || t.name === templateId || t.waTemplateName === templateId);
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
-
     const templateName = template?.waTemplateName || template?.name || templateId;
+    const defaultParam = lead.customer?.displayName || (templateName === 'cras_welcome_greeting' ? 'Dr. Perera' : 'Valued Client');
+    const effectiveParams = (params && params.length > 0) ? params : [defaultParam];
+
     let body = template?.body || `[WhatsApp Template: ${templateName}]`;
-    params.forEach((param, idx) => {
+    effectiveParams.forEach((param, idx) => {
       body = body.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), param);
     });
 
@@ -1854,8 +1856,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           phone: recipientPhone,
           whatsappId: recipientWaId,
           templateName,
-          language: template?.language || 'en_US',
-          parameters: params,
+          language: template?.language === 'en' ? 'en_US' : (template?.language || 'en_US'),
+          parameters: effectiveParams,
           leadId: lead.id,
           customerId: lead.customerId,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),

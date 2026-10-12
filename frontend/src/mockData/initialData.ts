@@ -173,6 +173,26 @@ export const INITIAL_TREATMENTS: Treatment[] = [
 
 export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [
   {
+    id: 'tpl-rwc-en',
+    name: '🌿 Royal Wellness Center (English - Meta Approved)',
+    language: 'en',
+    waTemplateName: 'rwc_welcome_greeting',
+    category: 'UTILITY',
+    body: `Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?`,
+    variables: ['Valued Client'],
+    approved: true,
+  },
+  {
+    id: 'tpl-cras-en',
+    name: '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)',
+    language: 'en',
+    waTemplateName: 'cras_welcome_greeting',
+    category: 'UTILITY',
+    body: `Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?`,
+    variables: ['Dr. Perera'],
+    approved: true,
+  },
+  {
     id: 'tpl-rwc-si',
     name: '🌿 Royal Wellness Center (Sinhala)',
     language: 'si',
@@ -195,19 +215,6 @@ export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [
 வரவேற்கிறோம், எங்களைத் தொடர்பு கொண்டதற்கு நன்றி.
 நான் _ஜஹான் (Jahan)_, எங்களின் சிகிச்சைகள், சேவைகள் மற்றும் முன்பதிவுகள் தொடர்பாக உங்களுக்கு உதவுவதில் மகிழ்ச்சியடைகிறேன்.
 💬 இன்று நான் உங்களுக்கு எவ்வாறு உதவ முடியும்?`,
-    variables: [],
-    approved: true,
-  },
-  {
-    id: 'tpl-rwc-en',
-    name: '🌿 Royal Wellness Center (English)',
-    language: 'en',
-    waTemplateName: 'rwc_welcome_greeting',
-    category: 'UTILITY',
-    body: `*🌿 Warm Greetings from Royal Wellness Center!*
-Welcome, and thank you for reaching out to us.
-I'm _Jahan,_ and I'll be happy to assist you with our treatments, services, and appointments.
-💬 How may I assist you today?`,
     variables: [],
     approved: true,
   }

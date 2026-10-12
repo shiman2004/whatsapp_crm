@@ -13,6 +13,7 @@ import { getPrisma, getDbStatus } from './db.js';
 import { useSupabaseAuthState } from './supabaseAuthState.js';
 import { evaluateAutoReply, pauseAutoReply } from './autoReplyEngine.js';
 import { saveMediaToSupabase } from './supabaseMedia.js';
+import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 
 const makeWASocket = makeWASocketDefault.default || makeWASocketDefault;
 
@@ -756,16 +757,26 @@ class WhatsAppSessionManager {
     let storedMediaUrl = media?.url || null;
     if (media && media.dataUrl) {
       const base64Data = media.dataUrl.split(';base64,').pop();
-      const buffer = Buffer.from(base64Data, 'base64');
-      if (media.type === 'image') payload = { image: buffer, caption: message || media.caption || '' };
-      else if (media.type === 'video') payload = { video: buffer, caption: message || media.caption || '' };
-      else if (media.type === 'audio') payload = { audio: buffer, mimetype: 'audio/mp4', ptt: true };
-      else payload = { document: buffer, mimetype: 'application/pdf', fileName: media.fileName || 'document.pdf', caption: message || '' };
+      let buffer = Buffer.from(base64Data, 'base64');
+      if (media.type === 'audio') {
+        let inExt = 'webm';
+        if (media.fileName && media.fileName.includes('.')) {
+          inExt = media.fileName.split('.').pop() || 'webm';
+        }
+        buffer = convertAudioToWhatsAppOggOpus(buffer, inExt);
+        payload = { audio: buffer, mimetype: 'audio/ogg; codecs=opus', ptt: true };
+      } else if (media.type === 'image') {
+        payload = { image: buffer, caption: message || media.caption || '' };
+      } else if (media.type === 'video') {
+        payload = { video: buffer, caption: message || media.caption || '' };
+      } else {
+        payload = { document: buffer, mimetype: 'application/pdf', fileName: media.fileName || 'document.pdf', caption: message || '' };
+      }
 
       try {
         let ext = 'bin';
         if (media.type === 'image') ext = 'jpg';
-        else if (media.type === 'audio') ext = 'mp3';
+        else if (media.type === 'audio') ext = 'ogg';
         else if (media.type === 'video') ext = 'mp4';
         else if (media.type === 'document') ext = media.fileName ? path.extname(media.fileName).replace('.', '') || 'pdf' : 'pdf';
 

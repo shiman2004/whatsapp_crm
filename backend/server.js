@@ -9,6 +9,7 @@ import { sessionManager } from './src/sessionManager.js';
 import { evaluateAutoReply, pauseAutoReply, clearAutoReplySessions } from './src/autoReplyEngine.js';
 import { resolveCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
+import { convertAudioToWhatsAppOggOpus } from './src/audioConverter.js';
 
 dotenv.config();
 
@@ -145,15 +146,37 @@ function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) 
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl ? { mediaUrl: dataUrl, buffer: null, mimeType: '', fileName: customFilename } : null;
   try {
     const [mimePart, base64Part] = dataUrl.split(';base64,');
-    const mimeType = mimePart.replace('data:', '');
-    const buffer = Buffer.from(base64Part, 'base64');
+    let mimeType = mimePart.replace('data:', '');
+    let buffer = Buffer.from(base64Part, 'base64');
     let ext = 'bin';
-    if (customFilename && customFilename.includes('.')) {
+
+    if (type === 'audio' || mimeType.includes('audio/')) {
+      let inExt = 'webm';
+      if (customFilename && customFilename.includes('.')) {
+        inExt = customFilename.split('.').pop() || 'webm';
+      } else if (mimeType.includes('ogg')) {
+        inExt = 'ogg';
+      } else if (mimeType.includes('mp4') || mimeType.includes('m4a')) {
+        inExt = 'mp4';
+      } else if (mimeType.includes('wav')) {
+        inExt = 'wav';
+      } else if (mimeType.includes('mp3') || mimeType.includes('mpeg')) {
+        inExt = 'mp3';
+      }
+
+      // Convert any audio format to WhatsApp-compliant OGG Opus (48kHz mono libopus)
+      const converted = convertAudioToWhatsAppOggOpus(buffer, inExt);
+      if (converted && converted.length > 0) {
+        buffer = converted;
+        mimeType = 'audio/ogg; codecs=opus';
+        ext = 'ogg';
+      } else {
+        ext = inExt;
+      }
+    } else if (customFilename && customFilename.includes('.')) {
       ext = customFilename.split('.').pop();
     } else if (type === 'image' || mimeType.includes('image/')) {
       ext = mimeType.includes('png') ? 'png' : mimeType.includes('webp') ? 'webp' : 'jpg';
-    } else if (type === 'audio' || mimeType.includes('audio/')) {
-      ext = mimeType.includes('mp4') || mimeType.includes('m4a') ? 'm4a' : mimeType.includes('mpeg') || mimeType.includes('mp3') ? 'mp3' : 'ogg';
     } else if (type === 'video' || mimeType.includes('video/')) {
       ext = 'mp4';
     } else if (mimeType.includes('pdf')) {
@@ -168,12 +191,12 @@ function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) 
     const filePath = path.join(uploadDir, fileName);
     fs.writeFileSync(filePath, buffer);
     saveMediaToSupabase(fileName, mimeType, buffer).catch(() => null);
-    console.log(`💾 [Media Stored] Saved to: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB)`);
+    console.log(`💾 [Media Stored] Saved to: ${fileName} (${(buffer.length / 1024).toFixed(1)} KB, MIME: ${mimeType})`);
     return {
       mediaUrl: `/uploads/${fileName}`,
       buffer,
       mimeType,
-      fileName: customFilename || fileName
+      fileName: (type === 'audio' || mimeType.includes('audio/')) ? `voice_note_${Date.now()}.${ext}` : (customFilename || fileName)
     };
   } catch (err) {
     console.warn('⚠️ Error saving base64 media locally:', err.message);
@@ -257,26 +280,24 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
 
     // Normalize audio mime types for Meta Cloud API requirements
     if (effectiveMime.includes('audio/') || effectiveFilename.endsWith('.ogg') || effectiveFilename.endsWith('.webm') || effectiveFilename.endsWith('.mp3') || effectiveFilename.endsWith('.wav') || effectiveFilename.endsWith('.m4a')) {
-      if (effectiveMime.includes('mpeg') || effectiveMime.includes('mp3') || effectiveFilename.endsWith('.mp3')) {
-        effectiveMime = 'audio/mpeg';
-        if (!effectiveFilename.endsWith('.mp3')) {
-          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp3';
+      if (effectiveMime.includes('ogg') || effectiveMime.includes('opus') || effectiveFilename.endsWith('.ogg') || effectiveFilename.includes('voice_note')) {
+        effectiveMime = 'audio/ogg; codecs=opus';
+        if (!effectiveFilename.endsWith('.ogg')) {
+          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.ogg';
         }
       } else if (effectiveMime.includes('mp4') || effectiveMime.includes('m4a') || effectiveMime.includes('aac')) {
         effectiveMime = 'audio/mp4';
         if (!effectiveFilename.endsWith('.m4a') && !effectiveFilename.endsWith('.mp4')) {
           effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp4';
         }
-      } else if (effectiveMime.includes('ogg') || effectiveMime.includes('opus')) {
-        effectiveMime = 'audio/ogg; codecs=opus';
-        if (!effectiveFilename.endsWith('.ogg')) {
-          effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.ogg';
-        }
-      } else {
+      } else if (effectiveMime.includes('mpeg') || effectiveMime.includes('mp3') || effectiveFilename.endsWith('.mp3')) {
         effectiveMime = 'audio/mpeg';
         if (!effectiveFilename.endsWith('.mp3')) {
           effectiveFilename = effectiveFilename.replace(/\.[^/.]+$/, '') + '.mp3';
         }
+      } else {
+        effectiveMime = 'audio/ogg; codecs=opus';
+        effectiveFilename = 'voice_note.ogg';
       }
     }
 
@@ -1098,6 +1119,31 @@ const server = http.createServer(async (req, res) => {
             } catch (dbErr) {
               console.warn('[DB Error saving Meta message]:', dbErr.message);
             }
+          }
+        }
+
+        // If Meta Cloud API was not used or failed, fallback to active Baileys socket
+        if (!sendResult && isBaileysConnected) {
+          console.log(`🚀 [Baileys Dispatch] Sending message to ${formattedTo || cleanTo} via linked coordinator socket...`);
+          const baileysMsg = await sessionManager.sendMessage(targetCoordinatorId, {
+            to: formattedTo,
+            whatsappId: cleanTo,
+            message: msgContent,
+            media: media ? {
+              type: media.type,
+              dataUrl: media.dataUrl,
+              url: savedMediaUrl || media.url,
+              fileName: media.fileName
+            } : null,
+            leadId,
+            customerId
+          });
+          if (baileysMsg) {
+            sendResult = {
+              success: true,
+              messageId: baileysMsg.key?.id || `baileys-${Date.now()}`,
+              status: 'sent'
+            };
           }
         }
 

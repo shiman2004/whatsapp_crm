@@ -146,7 +146,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     }
   };
 
-  // Stop & Send Voice Note as clean standard MP3
+  // Stop & Send Voice Note
   const handleStopAndSendRecording = async () => {
     const recorder = voiceRecorderRef.current;
     if (!recorder) {
@@ -157,6 +157,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     try {
       const result = await recorder.stop();
       if (result && result.dataUrl) {
+        const ext = result.extension || (result.mimeType?.includes('ogg') ? 'ogg' : result.mimeType?.includes('mp4') ? 'mp4' : 'webm');
         sendMessage(
           lead.id,
           '',
@@ -165,7 +166,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             type: 'audio',
             url: result.dataUrl,
             dataUrl: result.dataUrl,
-            fileName: `voice_note_${Date.now()}.mp3`,
+            fileName: `voice_note_${Date.now()}.${ext}`,
+            mimeType: result.mimeType,
             caption: ''
           }
         );

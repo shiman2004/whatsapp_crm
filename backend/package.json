@@ -16,6 +16,7 @@
     "seed": "node prisma/seed.js"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@prisma/client": "^6.4.1",
     "@supabase/supabase-js": "^2.49.1",
     "@whiskeysockets/baileys": "^7.0.0-rc14",

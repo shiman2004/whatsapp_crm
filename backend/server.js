@@ -1202,6 +1202,12 @@ const server = http.createServer(async (req, res) => {
           if (checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
         }
 
+        if (templateName === 'cras_welcome_greeting') {
+          resolvedCompany = 'CRAS';
+        } else if (templateName === 'rwc_welcome_greeting') {
+          resolvedCompany = 'RWC';
+        }
+
         const phoneId = (payload.phoneNumberId || (resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId)) || '1358157244046701').trim();
         const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
 
@@ -1214,6 +1220,18 @@ const server = http.createServer(async (req, res) => {
         const cleanTo = norm.clean;
         const formattedTo = norm.canonical;
 
+        let effectiveLanguage = language;
+        if (templateName === 'rwc_welcome_greeting' || templateName === 'cras_welcome_greeting' || effectiveLanguage === 'en') {
+          effectiveLanguage = 'en_US';
+        }
+
+        let effectiveParams = Array.isArray(parameters) ? [...parameters] : [];
+        if (templateName === 'rwc_welcome_greeting') {
+          effectiveParams = [effectiveParams[0] || 'Valued Client'];
+        } else if (templateName === 'cras_welcome_greeting') {
+          effectiveParams = [effectiveParams[0] || 'Dr. Perera'];
+        }
+
         const templatePayload = {
           messaging_product: 'whatsapp',
           recipient_type: 'individual',
@@ -1221,11 +1239,11 @@ const server = http.createServer(async (req, res) => {
           type: 'template',
           template: {
             name: templateName,
-            language: { code: language },
-            components: Array.isArray(parameters) && parameters.length > 0 ? [
+            language: { code: effectiveLanguage },
+            components: effectiveParams.length > 0 ? [
               {
                 type: 'body',
-                parameters: parameters.map(p => ({ type: 'text', text: String(p) }))
+                parameters: effectiveParams.map(p => ({ type: 'text', text: String(p) }))
               }
             ] : undefined
           }

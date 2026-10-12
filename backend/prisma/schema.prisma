@@ -392,3 +392,23 @@ model LeadAssignmentHistory {
   @@index([assignedAt])
   @@map("lead_assignment_histories")
 }
+
+// 14. Internal Team Broadcast Messages (Super Admin & Leads Officer to all staff)
+model TeamBroadcast {
+  id          String    @id @default(uuid()) @db.VarChar(50)
+  senderId    String    @map("sender_id") @db.VarChar(36)
+  senderName  String    @map("sender_name") @db.VarChar(255)
+  senderRole  String    @map("sender_role") @db.VarChar(50)
+  company     String?   @default("ALL") @db.VarChar(50) // 'ALL', 'RWC', 'CRAS'
+  title       String?   @db.VarChar(255)
+  content     String    @db.Text
+  mediaType   String?   @map("media_type") @db.VarChar(50) // 'image' | 'video' | 'document' | 'audio'
+  mediaUrl    String?   @map("media_url") @db.Text
+  fileName    String?   @map("file_name") @db.VarChar(255)
+  fileSize    Int?      @map("file_size")
+  isPinned    Boolean   @default(false) @map("is_pinned")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("team_broadcasts")
+}

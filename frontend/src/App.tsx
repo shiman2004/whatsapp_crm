@@ -14,6 +14,7 @@ import { TemplatesManager } from './components/admin/TemplatesManager';
 import { AuditLogsViewer } from './components/admin/AuditLogsViewer';
 import { ArchitectureBlueprint } from './components/admin/ArchitectureBlueprint';
 import { WebhookSimulatorPlayground } from './components/admin/WebhookSimulatorPlayground';
+import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
 import { LoginScreen } from './components/auth/LoginScreen';
 
 import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
@@ -74,6 +75,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
           {activeTab === 'templates' && <TemplatesManager />}
+          {activeTab === 'broadcast' && <TeamBroadcastView />}
           {activeTab === 'reports' && currentUser?.role === 'super_admin' && <AnalyticsView />}
           {activeTab === 'audit' && currentUser?.role === 'super_admin' && <AuditLogsViewer />}
           {activeTab === 'webhook-sandbox' && currentUser?.role === 'super_admin' && <WebhookSimulatorPlayground />}

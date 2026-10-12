@@ -1637,30 +1637,56 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 10b. REST: Assign Lead to Coordinator (Admin or Leads Officer Dispatches to Coordinator)
+  // 10b. REST: Assign Lead to Coordinator (Strict Role-Based Locking & Permission Enforcement)
   if (req.method === 'POST' && (pathname === '/api/leads/assign' || pathname === '/api/assign')) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
-        // RBAC: Only Super Admin and Leads Officer can assign leads
+        if (!authUser || !authUser.id) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Unauthorized: Authentication required.' }));
+          return;
+        }
+
+        // 1. RBAC: Coordinators can NEVER assign, reassign, or unassign leads
         if (authUser.role === 'coordinator') {
+          console.warn(`⛔ [Forbidden Assignment] Coordinator [${authUser.id}] attempted assignment operation.`);
           res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Forbidden: Coordinators cannot assign leads.' }));
+          res.end(JSON.stringify({
+            success: false,
+            errorCode: 'FORBIDDEN_COORDINATOR',
+            error: 'Forbidden: Coordinators cannot assign, reassign, or unassign leads.'
+          }));
           return;
         }
 
         const payload = JSON.parse(body || '{}');
         const { leadId, coordinatorId, coordinatorName, customerId, phone, whatsappId, unassign } = payload;
-        const assignerId = payload.assignedById || authUser?.id || null;
-        const assignerName = payload.assignedByName || authUser?.fullName || 'Admin';
+        const assignerId = authUser.id;
+        const assignerName = authUser.fullName || 'Admin';
         const assignmentDate = payload.assignedAt ? new Date(payload.assignedAt) : new Date();
 
         const prisma = getPrisma();
         let updatedLead = null;
 
-        // Handle Unassignment
+        // 2. Handle Unassignment (Strictly Super Admin only)
         if (unassign || !coordinatorId) {
+          if (authUser.role !== 'super_admin') {
+            console.warn(`⛔ [Forbidden Unassign] User ${authUser.fullName} (${authUser.role}) attempted to unassign Lead ${leadId}`);
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              errorCode: 'UNASSIGN_FORBIDDEN',
+              error: 'Forbidden: Leads Officers cannot unassign leads. Only Super Admin can modify or remove assignments.'
+            }));
+            return;
+          }
+
           if (prisma && getDbStatus() && leadId) {
+            const currentLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+            const prevCoord = currentLead?.assignedTo || null;
+
             updatedLead = await prisma.lead.update({
               where: { id: leadId },
               data: {
@@ -1691,9 +1717,20 @@ const server = http.createServer(async (req, res) => {
                 assignedAt: assignmentDate
               }
             }).catch(() => null);
+
+            // Notify previously assigned coordinator that they lost access
+            if (prevCoord) {
+              broadcastScopedSSE(prevCoord, {
+                type: 'LEAD_UNASSIGNED',
+                leadId,
+                previousCoordinatorId: prevCoord,
+                reassignedTo: null,
+                lead: updatedLead
+              });
+            }
           }
 
-          broadcastScopedSSE('user-admin-1', {
+          broadcastScopedSSE(null, {
             type: 'LEAD_ASSIGNED',
             leadId,
             clientLeadId: leadId,
@@ -1706,14 +1743,15 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        if (!leadId || !coordinatorId) {
+        // 3. Handle Assignment / Reassignment
+        if (!leadId && !customerId && !phone && !whatsappId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Missing leadId or coordinatorId' }));
+          res.end(JSON.stringify({ success: false, error: 'Missing lead identifier or coordinatorId' }));
           return;
         }
 
         if (prisma && getDbStatus()) {
-          // 1. Ensure the coordinator exists in the database to satisfy the foreign key constraint
+          // Ensure target coordinator user exists in DB
           let coordUser = await prisma.user.findUnique({ where: { id: coordinatorId } });
           if (!coordUser) {
             const name = coordinatorName || (coordinatorId.includes('1') ? 'Dr. Shenali (Trichology)' : (coordinatorId.includes('2') ? 'Dilini Perera (Skin Care)' : `Coordinator ${coordinatorId.slice(-4)}`));
@@ -1729,18 +1767,22 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => null);
           }
 
-          // 2. Ensure WhatsApp session record exists for coordinator
+          // Ensure session record exists
           await sessionManager.getOrCreateSessionRecord(coordinatorId);
 
-          // 3. Find lead by id, customerId, or phone
+          // Find lead by leadId, customerId, or phone
           let targetLead = null;
           if (leadId) {
-            targetLead = await prisma.lead.findUnique({ where: { id: leadId } });
+            targetLead = await prisma.lead.findUnique({
+              where: { id: leadId },
+              include: { assignedCoordinator: true }
+            });
           }
 
           if (!targetLead && customerId) {
             targetLead = await prisma.lead.findFirst({
               where: { customerId: customerId },
+              include: { assignedCoordinator: true },
               orderBy: { updatedAt: 'desc' }
             });
           }
@@ -1759,32 +1801,102 @@ const server = http.createServer(async (req, res) => {
             if (cust) {
               targetLead = await prisma.lead.findFirst({
                 where: { customerId: cust.id },
+                include: { assignedCoordinator: true },
                 orderBy: { updatedAt: 'desc' }
               });
             }
           }
 
           if (targetLead) {
-            updatedLead = await prisma.lead.update({
-              where: { id: targetLead.id },
-              data: {
-                assignedTo: coordinatorId,
-                assignedById: assignerId,
-                assignedByName: assignerName,
-                assignedAt: assignmentDate,
-                stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
-                updatedAt: new Date()
-              },
-              include: {
-                customer: true,
-                category: true,
-                treatment: true,
-                assignedCoordinator: true,
-                assignmentHistories: { orderBy: { assignedAt: 'desc' } },
-                messages: { orderBy: { timestamp: 'asc' } }
-              }
-            });
+            const prevCoordinatorId = targetLead.assignedTo;
 
+            // CHECK: Is the lead already assigned to a coordinator?
+            if (targetLead.assignedTo) {
+              if (targetLead.assignedTo === coordinatorId) {
+                // Idempotent: already assigned to this exact coordinator
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: true, lead: targetLead, message: 'Lead already assigned to this coordinator.' }));
+                return;
+              }
+
+              // REASSIGNMENT: Only Super Admin can change an existing coordinator assignment
+              if (authUser.role !== 'super_admin') {
+                console.warn(`⛔ [Forbidden Reassign] User ${authUser.fullName} (${authUser.role}) attempted to reassign locked Lead ${targetLead.id} from ${targetLead.assignedTo} to ${coordinatorId}`);
+                res.writeHead(403, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  errorCode: 'ASSIGNMENT_LOCKED',
+                  error: `Forbidden: Lead assignment is locked to ${targetLead.assignedCoordinator?.fullName || 'the assigned coordinator'}. Once assigned, only Super Admin can change or reassign this lead.`
+                }));
+                return;
+              }
+            }
+
+            // Leads Officer assigning an UNASSIGNED lead:
+            // Use database atomic conditional check to prevent concurrent race condition (Scenario 7)
+            if (authUser.role === 'leads_officer') {
+              const updateResult = await prisma.lead.updateMany({
+                where: {
+                  id: targetLead.id,
+                  assignedTo: null // Must be unassigned at the exact atomic execution moment
+                },
+                data: {
+                  assignedTo: coordinatorId,
+                  assignedById: assignerId,
+                  assignedByName: assignerName,
+                  assignedAt: assignmentDate,
+                  stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
+                  updatedAt: new Date()
+                }
+              });
+
+              if (updateResult.count === 0) {
+                // Another Leads Officer or Admin assigned it simultaneously!
+                console.warn(`⚠️ [Assignment Race Conflict] Lead ${targetLead.id} was already assigned by another officer.`);
+                res.writeHead(409, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  errorCode: 'ASSIGNMENT_CONFLICT',
+                  error: 'Conflict: This lead was already assigned by another user while processing your request. Assignment is now locked.'
+                }));
+                return;
+              }
+
+              updatedLead = await prisma.lead.findUnique({
+                where: { id: targetLead.id },
+                include: {
+                  customer: true,
+                  category: true,
+                  treatment: true,
+                  assignedCoordinator: true,
+                  assignmentHistories: { orderBy: { assignedAt: 'desc' } },
+                  messages: { orderBy: { timestamp: 'asc' } }
+                }
+              });
+            } else {
+              // Super Admin assigning or reassigning
+              updatedLead = await prisma.lead.update({
+                where: { id: targetLead.id },
+                data: {
+                  assignedTo: coordinatorId,
+                  assignedById: assignerId,
+                  assignedByName: assignerName,
+                  assignedAt: assignmentDate,
+                  stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
+                  updatedAt: new Date()
+                },
+                include: {
+                  customer: true,
+                  category: true,
+                  treatment: true,
+                  assignedCoordinator: true,
+                  assignmentHistories: { orderBy: { assignedAt: 'desc' } },
+                  messages: { orderBy: { timestamp: 'asc' } }
+                }
+              });
+            }
+
+            // Create assignment audit history entry
             await prisma.leadAssignmentHistory.create({
               data: {
                 leadId: targetLead.id,
@@ -1795,8 +1907,19 @@ const server = http.createServer(async (req, res) => {
                 assignedAt: assignmentDate
               }
             }).catch(err => console.warn('[Assignment History Error]:', err.message));
+
+            // Notify previous coordinator that they lost access (Scenario 8)
+            if (prevCoordinatorId && prevCoordinatorId !== coordinatorId) {
+              broadcastScopedSSE(prevCoordinatorId, {
+                type: 'LEAD_UNASSIGNED',
+                leadId: targetLead.id,
+                previousCoordinatorId: prevCoordinatorId,
+                reassignedTo: coordinatorId,
+                lead: updatedLead
+              });
+            }
           } else {
-            // Create customer & lead if neither exists yet in DB
+            // Lead does not exist yet; creating a new lead with initial assignment
             let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }) : null;
             if (!cust && (phone || whatsappId)) {
               const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
@@ -1853,8 +1976,18 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // Broadcast to both Admin and the assigned Coordinator in real-time
-        broadcastScopedSSE(coordinatorId, {
+        // Broadcast to new coordinator, super admin, and leads officers
+        if (coordinatorId) {
+          broadcastScopedSSE(coordinatorId, {
+            type: 'LEAD_ASSIGNED',
+            leadId: updatedLead ? updatedLead.id : leadId,
+            clientLeadId: leadId,
+            coordinatorId,
+            lead: updatedLead
+          });
+        }
+
+        broadcastScopedSSE('user-admin-1', {
           type: 'LEAD_ASSIGNED',
           leadId: updatedLead ? updatedLead.id : leadId,
           clientLeadId: leadId,
@@ -1862,7 +1995,7 @@ const server = http.createServer(async (req, res) => {
           lead: updatedLead
         });
 
-        broadcastScopedSSE('user-admin-1', {
+        broadcastScopedSSE(null, {
           type: 'LEAD_ASSIGNED',
           leadId: updatedLead ? updatedLead.id : leadId,
           clientLeadId: leadId,
@@ -1923,6 +2056,18 @@ const server = http.createServer(async (req, res) => {
 
           const actualLeadId = targetLead ? targetLead.id : leadId;
           const prevStage = targetLead?.stage || null;
+
+          if (payload.assignedTo !== undefined && payload.assignedTo !== targetLead?.assignedTo) {
+            if (authUser.role !== 'super_admin') {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                errorCode: 'ASSIGNMENT_LOCKED',
+                error: 'Forbidden: Lead assignment cannot be modified via update endpoint. Only Super Admin can change assignments.'
+              }));
+              return;
+            }
+          }
 
           const updateData = {};
           if (treatmentId !== undefined) updateData.treatmentId = treatmentId || null;
@@ -2192,6 +2337,19 @@ const server = http.createServer(async (req, res) => {
               }).catch(() => null);
             }
           } else {
+            // If lead already exists and is already assigned, reject reassignment attempt if not super_admin
+            if (savedLead.assignedTo && targetCoordinatorId && targetCoordinatorId !== savedLead.assignedTo) {
+              if (authUser?.role !== 'super_admin') {
+                res.writeHead(403, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  errorCode: 'ASSIGNMENT_LOCKED',
+                  error: 'Forbidden: Lead is already assigned to a coordinator. Only Super Admin can change or reassign assignments.'
+                }));
+                return;
+              }
+            }
+
             savedLead = await prisma.lead.update({
               where: { id: savedLead.id },
               data: {

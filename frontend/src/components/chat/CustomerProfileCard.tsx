@@ -7,7 +7,8 @@ import {
   ExternalLink,
   ChevronDown,
   UserCheck,
-  Globe
+  Globe,
+  Lock
 } from 'lucide-react';
 import { Lead, LeadStage } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -25,7 +26,9 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
     treatments, 
     users, 
     isSuperAdmin,
+    isLeadsOfficer,
     canAssignLeads, 
+    canModifyAssignment,
     assignLead, 
     updateLeadStage 
   } = useCrm();
@@ -116,19 +119,19 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
               Assigned Coordinator
             </label>
-            {canAssignLeads && (
-              <span className="text-[9px] text-gold-400 font-semibold">Change</span>
+            {canModifyAssignment(lead) && (
+              <span className="text-[9px] text-gold-400 font-semibold">{lead.assignedTo ? 'Reassign' : 'Assign'}</span>
             )}
           </div>
 
-          {canAssignLeads ? (
+          {canModifyAssignment(lead) ? (
             <div className="relative">
               <select
                 value={lead.assignedTo || ''}
                 onChange={handleCoordinatorChange}
                 className="w-full bg-slate-900 border border-slate-700/80 hover:border-teal-500 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-100 outline-none transition-colors cursor-pointer appearance-none"
               >
-                <option value="" disabled>-- Select Coordinator --</option>
+                <option value="">{lead.assignedTo ? '-- Unassign Coordinator --' : '-- Select Coordinator --'}</option>
                 {coordinators.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.fullName}
@@ -136,6 +139,21 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
                 ))}
               </select>
               <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            </div>
+          ) : isLeadsOfficer && lead.assignedTo ? (
+            <div 
+              className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs"
+              title="Assignment locked. Once assigned, only Super Admin can reassign this lead."
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                <span className="text-slate-200 font-medium truncate">
+                  {coordinator ? coordinator.fullName : 'Assigned Coordinator'}
+                </span>
+              </div>
+              <span className="flex items-center gap-1 text-[9px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-semibold shrink-0">
+                <Lock className="w-2.5 h-2.5" /> Locked
+              </span>
             </div>
           ) : (
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-900 border border-slate-800 text-xs">

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, useMemo } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import confetti from 'canvas-confetti';
 import {
   User,
@@ -135,6 +135,8 @@ interface CrmContextType {
 
   // Team Broadcast Channel
   broadcasts: TeamBroadcast[];
+  unreadBroadcastsCount: number;
+  markAllBroadcastsAsRead: () => void;
   sendBroadcast: (data: {
     title?: string;
     content: string;
@@ -251,6 +253,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
   const [broadcasts, setBroadcasts] = useState<TeamBroadcast[]>(() => getStored('rw_crm_broadcasts', []));
+  const [readBroadcastIds, setReadBroadcastIds] = useState<string[]>(() => {
+    const authId = localStorage.getItem('rw_crm_auth_user_id') || 'user-admin-1';
+    return getStored<string[]>(`rw_crm_read_broadcasts_${authId}`, []);
+  });
   
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
     const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
@@ -2238,6 +2244,38 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Staff Updated', `${cleanName} (${cleanBranch}) updated in Supabase successfully`, 'success');
   };
 
+  // Re-read readBroadcastIds whenever currentUser changes
+  useEffect(() => {
+    const authId = currentUser?.id || 'user-admin-1';
+    setReadBroadcastIds(getStored<string[]>(`rw_crm_read_broadcasts_${authId}`, []));
+  }, [currentUser?.id]);
+
+  // Compute unread broadcast count for current user
+  const unreadBroadcastsCount = useMemo(() => {
+    const isOfficerOrAdmin = currentUser?.role === 'super_admin' || currentUser?.role === 'leads_officer';
+    return broadcasts.filter(b => {
+      // Company targeting filter
+      if (!isOfficerOrAdmin && currentUser?.company) {
+        if (b.company && b.company !== 'ALL' && b.company !== currentUser.company) {
+          return false;
+        }
+      }
+      return !readBroadcastIds.includes(b.id);
+    }).length;
+  }, [broadcasts, readBroadcastIds, currentUser?.role, currentUser?.company]);
+
+  const markAllBroadcastsAsRead = useCallback(() => {
+    const authId = currentUser?.id || 'user-admin-1';
+    const allIds = broadcasts.map(b => b.id);
+    setReadBroadcastIds(prev => {
+      const merged = Array.from(new Set([...prev, ...allIds]));
+      try {
+        localStorage.setItem(`rw_crm_read_broadcasts_${authId}`, JSON.stringify(merged));
+      } catch (e) {}
+      return merged;
+    });
+  }, [broadcasts, currentUser?.id]);
+
   const sendBroadcast = async (data: {
     title?: string;
     content: string;
@@ -2277,6 +2315,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('rw_crm_broadcasts', JSON.stringify(next));
           return next;
         });
+
+        // Automatically mark author's newly published broadcast as read
+        const authId = currentUser?.id || 'user-admin-1';
+        setReadBroadcastIds(prev => {
+          const merged = Array.from(new Set([...prev, result.broadcast.id]));
+          try {
+            localStorage.setItem(`rw_crm_read_broadcasts_${authId}`, JSON.stringify(merged));
+          } catch (e) {}
+          return merged;
+        });
+
         notify('Broadcast Published', 'Team broadcast posted to all staff successfully.', 'success');
         return true;
       }
@@ -2305,6 +2354,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           localStorage.setItem('rw_crm_broadcasts', JSON.stringify(next));
           return next;
         });
+
+        const authId = currentUser?.id || 'user-admin-1';
+        setReadBroadcastIds(prev => {
+          const filtered = prev.filter(readId => readId !== id);
+          try {
+            localStorage.setItem(`rw_crm_read_broadcasts_${authId}`, JSON.stringify(filtered));
+          } catch (e) {}
+          return filtered;
+        });
+
         notify('Broadcast Removed', 'Broadcast announcement has been deleted.', 'info');
         return true;
       }
@@ -2798,6 +2857,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateCoordinator,
     deleteCoordinator,
     broadcasts,
+    unreadBroadcastsCount,
+    markAllBroadcastsAsRead,
     sendBroadcast,
     deleteBroadcast,
     clearAllData,

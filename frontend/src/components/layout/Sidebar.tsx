@@ -40,7 +40,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   isMobileOpen = false, 
   onCloseMobile 
 }) => {
-  const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, broadcasts = [] } = useCrm();
+  const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, unreadBroadcastsCount, markAllBroadcastsAsRead } = useCrm();
 
   const unassignedCount = leads.filter(l => l.stage === 'new').length;
   const myAssignedCount = leads.filter(l => l.assignedTo === currentUser.id).length;
@@ -115,8 +115,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'broadcast' as NavTab,
       label: 'Team Broadcast 📢',
       icon: Megaphone,
-      badge: broadcasts.length > 0 ? broadcasts.length : undefined,
-      badgeColor: 'bg-amber-500/20 text-amber-300 border border-amber-500/30',
+      badge: unreadBroadcastsCount > 0 ? unreadBroadcastsCount : undefined,
+      badgeColor: 'bg-amber-500 text-slate-950 font-black',
       adminOnly: false, // Visible to all team members
     }
   ];
@@ -174,6 +174,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     type="button"
                     onClick={() => {
                       setActiveTab(item.id);
+                      if (item.id === 'broadcast') {
+                        markAllBroadcastsAsRead();
+                      }
                       onCloseMobile?.();
                     }}
                     className={`w-full flex items-center justify-between px-3 py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${

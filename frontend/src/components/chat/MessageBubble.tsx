@@ -21,7 +21,9 @@ import {
   Pencil,
   Flag,
   Clock,
-  RefreshCw
+  RefreshCw,
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -411,6 +413,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             ) : (
               <div className="text-[13.5px] leading-[19px] text-[#e9edef] break-words select-text">
                 <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
+
+                {/* Location card preview if Google Maps link is present */}
+                {message.content && (message.content.includes('maps.app.goo.gl') || message.content.includes('maps.google.com') || message.content.includes('goo.gl/maps')) && (() => {
+                  const mapUrlMatch = message.content.match(/(https?:\/\/[^\s]+)/);
+                  const mapUrl = mapUrlMatch ? mapUrlMatch[0] : '';
+                  const locationName = message.content.includes(' - ') 
+                    ? message.content.split(' - ')[0].trim() 
+                    : message.content.includes('Colombo') ? 'Colombo' : message.content.includes('Maruthamunai') ? 'Maruthamunai' : 'Location';
+                  if (!mapUrl) return null;
+                  return (
+                    <a
+                      href={mapUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="mt-2 mb-1 flex items-center gap-2.5 p-2 rounded-lg bg-black/25 hover:bg-black/40 border border-[#00a884]/30 hover:border-[#00a884]/60 transition-all text-left cursor-pointer select-none group/loc"
+                    >
+                      <div className="w-8 h-8 rounded-full bg-[#00a884]/20 text-[#00a884] flex items-center justify-center shrink-0 group-hover/loc:scale-110 transition-transform">
+                        <MapPin className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-semibold text-[#e9edef] flex items-center gap-1.5">
+                          <span>{locationName}</span>
+                          <ExternalLink className="w-3 h-3 text-[#8696a0] group-hover/loc:text-white" />
+                        </div>
+                        <p className="text-[10px] text-[#00a884] truncate">Open Google Maps</p>
+                      </div>
+                    </a>
+                  );
+                })()}
                 
                 {/* Inline float-right timestamp container */}
                 <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#8696a0] font-normal">

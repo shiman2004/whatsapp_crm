@@ -242,63 +242,51 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     reader.readAsDataURL(file);
   };
 
+  // Helper to open media preview with a File or Blob
+  const openMediaPreviewWithBlob = (blob: Blob, customName?: string) => {
+    const ext = blob.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const fileName = customName || `screenshot_${timestamp}.${ext}`;
+    const previewUrl = URL.createObjectURL(blob);
+
+    setMediaPreview({
+      file: blob as File,
+      previewUrl,
+      type: 'image',
+      fileName,
+      caption: inputVal.trim()
+    });
+    setInputVal('');
+  };
+
   // Process clipboard files/items for screenshot/image pasting (Ctrl+V)
   const processClipboardData = (clipboardData: DataTransfer | null): boolean => {
     if (!clipboardData) return false;
 
-    // 1. Check items (standard for browser screenshot pasting, e.g. Win+Shift+S or PrtScn)
-    const items = clipboardData.items;
-    if (items && items.length > 0) {
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        if (item.type.startsWith('image/')) {
-          const file = item.getAsFile();
-          if (file) {
-            const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-            const namedFile = new File(
-              [file],
-              `screenshot_${timestamp}.${ext}`,
-              { type: file.type }
-            );
-            const previewUrl = URL.createObjectURL(namedFile);
-            setMediaPreview({
-              file: namedFile,
-              previewUrl,
-              type: 'image',
-              fileName: namedFile.name,
-              caption: inputVal.trim()
-            });
-            setInputVal('');
-            return true;
-          }
+    // 1. Try files first (files copied from Explorer or file manager)
+    if (clipboardData.files && clipboardData.files.length > 0) {
+      for (let i = 0; i < clipboardData.files.length; i++) {
+        const file = clipboardData.files[i];
+        if (file.type.startsWith('image/') || /\.(png|jpe?g|gif|webp|bmp|svg)$/i.test(file.name)) {
+          openMediaPreviewWithBlob(file, file.name);
+          return true;
         }
       }
     }
 
-    // 2. Check files (copied image files from clipboard / file manager)
-    const files = clipboardData.files;
-    if (files && files.length > 0) {
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        if (file.type.startsWith('image/')) {
-          const ext = file.type.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
-          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-          const namedFile = new File(
-            [file],
-            file.name && file.name !== 'image.png' ? file.name : `screenshot_${timestamp}.${ext}`,
-            { type: file.type }
-          );
-          const previewUrl = URL.createObjectURL(namedFile);
-          setMediaPreview({
-            file: namedFile,
-            previewUrl,
-            type: 'image',
-            fileName: namedFile.name,
-            caption: inputVal.trim()
-          });
-          setInputVal('');
-          return true;
+    // 2. Try items (standard for browser screenshot pasting, e.g. Win+Shift+S or PrtScn)
+    if (clipboardData.items && clipboardData.items.length > 0) {
+      for (let i = 0; i < clipboardData.items.length; i++) {
+        const item = clipboardData.items[i];
+        if (item.type.indexOf('image') !== -1 || item.kind === 'file') {
+          const blob = item.getAsFile();
+          if (blob && (blob.type.startsWith('image/') || blob.size > 0)) {
+            const name = blob instanceof File && blob.name && blob.name !== 'image.png' && blob.name !== 'blob' 
+              ? blob.name 
+              : undefined;
+            openMediaPreviewWithBlob(blob, name);
+            return true;
+          }
         }
       }
     }
@@ -306,9 +294,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     return false;
   };
 
-  // Global window paste listener: paste screenshot anywhere in active chat
+  // Global document paste listener in capture phase (guarantees catching paste anywhere in active chat)
   useEffect(() => {
     const handleGlobalPaste = (e: ClipboardEvent) => {
+      // If user is typing in another text input (e.g. search box), don't intercept
       const target = e.target as HTMLElement | null;
       if (target && target.tagName === 'INPUT' && target.getAttribute('type') !== 'file') {
         return;
@@ -318,11 +307,27 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       const handled = processClipboardData(e.clipboardData);
       if (handled) {
         e.preventDefault();
+        e.stopPropagation();
+      } else if (!handled && navigator.clipboard && typeof navigator.clipboard.read === 'function') {
+        // Fallback for secure contexts where clipboardData is restricted
+        navigator.clipboard.read().then(async (clipboardItems) => {
+          for (const item of clipboardItems) {
+            const imgType = item.types.find(t => t.startsWith('image/'));
+            if (imgType) {
+              const blob = await item.getType(imgType);
+              if (blob) {
+                openMediaPreviewWithBlob(blob);
+                break;
+              }
+            }
+          }
+        }).catch(() => {});
       }
     };
 
-    window.addEventListener('paste', handleGlobalPaste);
-    return () => window.removeEventListener('paste', handleGlobalPaste);
+    // Use capture phase so event is caught before any bubbling element can stop it
+    document.addEventListener('paste', handleGlobalPaste, true);
+    return () => document.removeEventListener('paste', handleGlobalPaste, true);
   }, [inputVal, mediaPreview]);
 
   // Escape key cancels media preview modal

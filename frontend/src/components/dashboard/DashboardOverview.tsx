@@ -15,24 +15,6 @@ export const DashboardOverview: React.FC = () => {
 
   return (
     <div className="space-y-6 flex-1 overflow-y-auto pr-1 pb-8">
-      {/* Top Executive Welcome Banner */}
-      <div className="bg-gradient-to-r from-teal-950/80 via-slate-900 to-slate-950 p-6 rounded-3xl border border-teal-500/30 shadow-xl relative overflow-hidden">
-        <div className="relative z-10 max-w-2xl space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full bg-gold-500/20 text-gold-300 border border-gold-500/30 text-xs font-semibold">
-              ⭐ Alpha Health Group Concierge Intelligence
-            </span>
-            <span className="text-xs text-slate-400">Colombo, Sri Lanka</span>
-          </div>
-          <h2 className="text-2xl font-bold text-white font-serif tracking-tight">
-            WhatsApp Lead Operations & Real-Time Performance
-          </h2>
-          <p className="text-xs text-slate-300 leading-relaxed">
-            Zero missed enquiries. Multilingual WhatsApp onboarding, AI assistant suggestions, automated Day 1-7 follow-ups with instant reply auto-cancellation.
-          </p>
-        </div>
-      </div>
-
       {/* KPI Cards */}
       <KpiCards />
 

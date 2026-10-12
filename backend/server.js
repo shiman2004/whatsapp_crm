@@ -2611,6 +2611,76 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 10c-2. REST: Update Coordinator / Staff (Super Admin Only) - Name & Branch
+  if ((req.method === 'PUT' || req.method === 'PATCH' || (req.method === 'POST' && pathname.includes('/update'))) && 
+      (pathname.startsWith('/api/coordinators') || pathname.startsWith('/api/users/'))) {
+    if (authUser.role !== 'super_admin') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can edit staff.' }));
+      return;
+    }
+
+    const urlParts = pathname.split('/');
+    const coordId = urlParts[3] || parsedUrl.query.id || parsedUrl.query.coordinatorId;
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const targetId = coordId || payload.id || payload.coordinatorId;
+
+        if (!targetId) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing coordinator ID' }));
+          return;
+        }
+
+        const updateData = {};
+        if (payload.fullName !== undefined) updateData.fullName = String(payload.fullName).trim();
+        if (payload.name !== undefined && !payload.fullName) updateData.fullName = String(payload.name).trim();
+        if (payload.branch !== undefined) updateData.branch = String(payload.branch).trim();
+
+        if (Object.keys(updateData).length === 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'No fields to update provided' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        let updatedUser = null;
+        if (prisma && getDbStatus()) {
+          updatedUser = await prisma.user.update({
+            where: { id: targetId },
+            data: updateData
+          }).catch(err => {
+            console.warn(`Prisma user update failed for ${targetId}:`, err.message);
+            return null;
+          });
+        }
+
+        console.log(`✅ [Staff Updated in Supabase] ID: ${targetId}, Name: ${updateData.fullName}, Branch: ${updateData.branch}`);
+
+        // Broadcast SSE update event to all connected clients
+        broadcastScopedSSE('user-admin-1', {
+          type: 'COORDINATOR_UPDATED',
+          coordinator: updatedUser || { id: targetId, ...updateData }
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          user: updatedUser || { id: targetId, ...updateData } 
+        }));
+      } catch (err) {
+        console.error('❌ [Update Coordinator Error]:', err.message);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10d. REST: Delete Coordinator (Super Admin Only)
   if (req.method === 'DELETE' && (pathname.startsWith('/api/coordinators') || pathname.startsWith('/api/users/'))) {
     try {

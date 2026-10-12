@@ -29,7 +29,15 @@ const MainLayout: React.FC = () => {
 
   // Protect Super Admin only tabs against direct navigation by other roles
   React.useEffect(() => {
-    if (currentUser?.role !== 'super_admin' && (activeTab === 'coordinators' || activeTab === 'audit')) {
+    const adminOnlyTabs: NavTab[] = [
+      'coordinators',
+      'audit',
+      'treatments',
+      'reports',
+      'webhook-sandbox',
+      'architecture'
+    ];
+    if (currentUser?.role !== 'super_admin' && adminOnlyTabs.includes(activeTab)) {
       setActiveTab('dashboard');
     }
   }, [currentUser?.role, activeTab]);
@@ -63,13 +71,13 @@ const MainLayout: React.FC = () => {
           {activeTab === 'dashboard' && <DashboardOverview />}
           {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
           {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
-          {activeTab === 'treatments' && <TreatmentsManager />}
+          {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
           {activeTab === 'templates' && <TemplatesManager />}
-          {activeTab === 'reports' && <AnalyticsView />}
-          {activeTab === 'audit' && <AuditLogsViewer />}
-          {activeTab === 'webhook-sandbox' && <WebhookSimulatorPlayground />}
-          {activeTab === 'architecture' && <ArchitectureBlueprint />}
+          {activeTab === 'reports' && currentUser?.role === 'super_admin' && <AnalyticsView />}
+          {activeTab === 'audit' && currentUser?.role === 'super_admin' && <AuditLogsViewer />}
+          {activeTab === 'webhook-sandbox' && currentUser?.role === 'super_admin' && <WebhookSimulatorPlayground />}
+          {activeTab === 'architecture' && currentUser?.role === 'super_admin' && <ArchitectureBlueprint />}
         </main>
       </div>
 

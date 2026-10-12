@@ -99,7 +99,7 @@ interface CrmContextType {
   replyingMessage: Message | null;
   setReplyingMessage: (msg: Message | null) => void;
   sendMessage: (leadId: string, content: string, senderType?: 'coordinator' | 'system' | 'ai', media?: any, replyTo?: { id: string; content: string; senderName: string }) => void;
-  sendWhatsAppTemplate: (leadId: string, templateId: string, params: string[]) => void;
+  sendWhatsAppTemplate: (leadId: string, templateId: string, params?: string[], retryMessageId?: string) => Promise<void>;
   retryFailedMessage: (messageId: string) => Promise<void>;
   markChatAsRead: (leadId: string) => void;
   markChatAsUnread: (leadId: string) => void;
@@ -1814,7 +1814,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Send approved WhatsApp template via Meta Cloud API
-  const sendWhatsAppTemplate = async (leadId: string, templateId: string, params: string[]) => {
+  const sendWhatsAppTemplate = async (leadId: string, templateId: string, params?: string[], retryMessageId?: string) => {
     const template = templates.find(t => t.id === templateId || t.name === templateId || t.waTemplateName === templateId);
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
@@ -1838,7 +1838,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       status: 'pending',
       createdAt: new Date().toISOString()
     };
-    setMessages(prev => [...prev, newMsg]);
+    
+    // If retrying a failed message, replace or remove the old failed message
+    if (retryMessageId) {
+      setMessages(prev => [...prev.filter(m => m.id !== retryMessageId), newMsg]);
+    } else {
+      setMessages(prev => [...prev, newMsg]);
+    }
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
@@ -1856,13 +1862,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           phone: recipientPhone,
           whatsappId: recipientWaId,
           templateName,
+          templateBody: template?.body,
           language: template?.language === 'en' ? 'en_US' : (template?.language || 'en_US'),
           parameters: effectiveParams,
           leadId: lead.id,
           customerId: lead.customerId,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
-          token: savedToken || undefined
+          token: savedToken || undefined,
+          retryMessageId: retryMessageId || undefined
         })
       });
 

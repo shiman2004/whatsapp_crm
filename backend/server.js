@@ -930,76 +930,144 @@ const server = http.createServer(async (req, res) => {
             console.error('❌ [Meta Graph API Error]:', JSON.stringify(metaData));
             const errCode = metaData.error?.code || 500;
             const rawMsg = metaData.error?.message || metaData.error?.error_user_msg || (metaData.error ? JSON.stringify(metaData.error) : 'Meta Cloud API dispatch failed');
-            const explanation = getMetaErrorExplanation(errCode, rawMsg);
 
-            // Save failed message to database so it appears with error details in CRM
-            const failedMsgId = payload.retryMessageId || `failed-${Date.now()}`;
-            if (prisma && getDbStatus() && leadId) {
-              try {
-                let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
-                if (!cust && cleanTo) {
-                  cust = await prisma.customer.findFirst({
-                    where: { OR: [{ whatsappNumber: formattedTo }, { whatsappNumber: cleanTo }, { whatsappId: cleanTo }] }
-                  }).catch(() => null);
+            // 24-hour customer care window closed error (131047) - Auto-fallback to official Meta approved template
+            if (errCode === 131047) {
+              console.log(`⚠️ [24h Window Closed] Meta error 131047 for ${cleanTo}. Attempting auto-fallback to approved Meta template...`);
+              const fallbackTplName = (resolvedCompany === 'CRAS') ? 'cras_welcome_greeting' : 'rwc_welcome_greeting';
+              let recipientName = resolvedCompany === 'CRAS' ? 'Dr. Perera' : 'Valued Client';
+              if (prisma && getDbStatus()) {
+                try {
+                  const checkCust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
+                  if (checkCust?.displayName) recipientName = checkCust.displayName;
+                } catch (e) {}
+              }
+
+              const fallbackPayload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanTo,
+                type: 'template',
+                template: {
+                  name: fallbackTplName,
+                  language: { code: 'en_US' },
+                  components: [
+                    {
+                      type: 'body',
+                      parameters: [
+                        { type: 'text', text: recipientName }
+                      ]
+                    }
+                  ]
                 }
+              };
 
-                await prisma.message.upsert({
-                  where: { id: failedMsgId },
-                  update: {
-                    status: 'failed',
-                    errorCode: errCode,
-                    errorMessage: explanation,
-                    content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : '')
-                  },
-                  create: {
-                    id: failedMsgId,
-                    leadId,
-                    customerId: cust?.id || customerId || 'temp-cust',
-                    direction: 'outbound',
-                    senderType: 'coordinator',
-                    coordinatorId: targetCoordinatorId || authUser?.id || null,
-                    content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : ''),
-                    status: 'failed',
-                    errorCode: errCode,
-                    errorMessage: explanation,
-                    timestamp: new Date()
-                  }
-                }).catch(() => {});
-              } catch (e) {}
+              console.log(`🚀 [24h Auto-Fallback] Dispatching "${fallbackTplName}" to ${cleanTo} via Phone ID ${phoneId}...`);
+              const fallbackRes = await fetch(`https://graph.facebook.com/v20.0/${phoneId}/messages`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${metaToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(fallbackPayload)
+              });
+
+              const fallbackData = await fallbackRes.json().catch(() => ({}));
+              if (fallbackRes.ok && fallbackData.messages?.[0]?.id) {
+                const fbMsgId = fallbackData.messages[0].id;
+                console.log(`✅ [24h Auto-Fallback Success] Meta template "${fallbackTplName}" dispatched! Message ID: ${fbMsgId}`);
+                
+                msgContent = fallbackTplName === 'cras_welcome_greeting'
+                  ? `Hello ${recipientName}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?`
+                  : `Hello ${recipientName}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?`;
+
+                sendResult = {
+                  success: true,
+                  messageId: fbMsgId,
+                  status: 'sent',
+                  to: cleanTo,
+                  meta: fallbackData,
+                  fallbackTemplateUsed: true,
+                  templateName: fallbackTplName
+                };
+              } else {
+                console.warn('❌ [24h Fallback Dispatch Failed]:', JSON.stringify(fallbackData));
+              }
             }
 
-            // Broadcast failed SSE status
-            broadcastScopedSSE(targetCoordinatorId || null, {
-              type: 'MESSAGE_STATUS_UPDATE',
-              messageId: failedMsgId,
-              leadId,
-              status: 'failed',
-              errorCode: errCode,
-              errorMessage: explanation,
-              recipientPhone: formattedTo,
-              timestamp: new Date().toISOString()
-            });
+            if (!sendResult) {
+              const explanation = getMetaErrorExplanation(errCode, rawMsg);
 
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              success: false,
-              status: 'failed',
-              messageId: failedMsgId,
-              errorCode: errCode,
-              error: explanation,
-              rawError: rawMsg
-            }));
-            return;
+              // Save failed message to database so it appears with error details in CRM
+              const failedMsgId = payload.retryMessageId || `failed-${Date.now()}`;
+              if (prisma && getDbStatus() && leadId) {
+                try {
+                  let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
+                  if (!cust && cleanTo) {
+                    cust = await prisma.customer.findFirst({
+                      where: { OR: [{ whatsappNumber: formattedTo }, { whatsappNumber: cleanTo }, { whatsappId: cleanTo }] }
+                    }).catch(() => null);
+                  }
+
+                  await prisma.message.upsert({
+                    where: { id: failedMsgId },
+                    update: {
+                      status: 'failed',
+                      errorCode: errCode,
+                      errorMessage: explanation,
+                      content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : '')
+                    },
+                    create: {
+                      id: failedMsgId,
+                      leadId,
+                      customerId: cust?.id || customerId || 'temp-cust',
+                      direction: 'outbound',
+                      senderType: 'coordinator',
+                      coordinatorId: targetCoordinatorId || authUser?.id || null,
+                      content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : ''),
+                      status: 'failed',
+                      errorCode: errCode,
+                      errorMessage: explanation,
+                      timestamp: new Date()
+                    }
+                  }).catch(() => {});
+                } catch (e) {}
+              }
+
+              // Broadcast failed SSE status
+              broadcastScopedSSE(targetCoordinatorId || null, {
+                type: 'MESSAGE_STATUS_UPDATE',
+                messageId: failedMsgId,
+                leadId,
+                status: 'failed',
+                errorCode: errCode,
+                errorMessage: explanation,
+                recipientPhone: formattedTo,
+                timestamp: new Date().toISOString()
+              });
+
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                status: 'failed',
+                messageId: failedMsgId,
+                errorCode: errCode,
+                error: explanation,
+                rawError: rawMsg
+              }));
+              return;
+            }
           }
 
-          const messageId = metaData.messages?.[0]?.id || `wamid-${Date.now()}`;
+          const messageId = sendResult?.messageId || metaData.messages?.[0]?.id || `wamid-${Date.now()}`;
           console.log(`✅ [Meta Graph API] Dispatched! Message ID (wamid): ${messageId}`);
           sendResult = {
             success: true,
             messageId,
             status: 'sent',
             to: cleanTo,
-            meta: metaData
+            meta: sendResult?.meta || metaData,
+            fallbackTemplateUsed: sendResult?.fallbackTemplateUsed || false
           };
 
           // Save message to Prisma database
@@ -1319,6 +1387,20 @@ const server = http.createServer(async (req, res) => {
         const messageId = metaData.messages?.[0]?.id || `wamid-${Date.now()}`;
         console.log(`✅ [Meta Send Template] Template dispatched! Message ID: ${messageId}`);
 
+        // Compute readable content to display in CRM chat
+        let renderedContent = `[Template: ${templateName}]`;
+        if (templateName === 'rwc_welcome_greeting') {
+          renderedContent = `Hello ${effectiveParams[0] || 'Valued Client'}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?`;
+        } else if (templateName === 'cras_welcome_greeting') {
+          renderedContent = `Hello ${effectiveParams[0] || 'Dr. Perera'}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?`;
+        } else if (payload.templateBody) {
+          let tb = payload.templateBody;
+          effectiveParams.forEach((p, idx) => {
+            tb = tb.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), String(p));
+          });
+          renderedContent = tb;
+        }
+
         // Persist to DB
         if (prisma && getDbStatus() && leadId) {
           try {
@@ -1330,7 +1412,7 @@ const server = http.createServer(async (req, res) => {
               where: { id: messageId },
               update: {
                 status: 'sent',
-                content: `[Template: ${templateName}]`,
+                content: renderedContent,
                 errorCode: null,
                 errorMessage: null
               },
@@ -1341,7 +1423,7 @@ const server = http.createServer(async (req, res) => {
                 direction: 'outbound',
                 senderType: 'coordinator',
                 coordinatorId: authUser?.id || null,
-                content: `[Template: ${templateName}]`,
+                content: renderedContent,
                 status: 'sent',
                 timestamp: new Date()
               }
@@ -1356,7 +1438,7 @@ const server = http.createServer(async (req, res) => {
               phone: formattedTo,
               realPhone: formattedTo,
               whatsappId: cleanTo,
-              text: `[Template: ${templateName}]`,
+              text: renderedContent,
               status: 'sent',
               direction: 'outbound',
               senderType: 'coordinator',
@@ -1372,7 +1454,10 @@ const server = http.createServer(async (req, res) => {
           success: true,
           messageId,
           status: 'sent',
-          templateName
+          to: formattedTo,
+          templateName,
+          template: templateName,
+          content: renderedContent
         }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });

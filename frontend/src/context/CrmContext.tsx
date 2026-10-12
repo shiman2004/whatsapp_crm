@@ -250,6 +250,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => Boolean(localStorage.getItem('meta_access_token')));
+  const initialLeadLoadedRef = useRef<boolean>(false);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -440,7 +441,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               : hydratedLeads.filter(l => l.assignedTo === currentUser?.id);
 
             if (prevId && allowedLeads.some(l => l.id === prevId)) return prevId;
-            return allowedLeads[0]?.id || null;
+            // Only auto-select first lead on initial boot, preserve closed chat if user closed it
+            if (!initialLeadLoadedRef.current) {
+              initialLeadLoadedRef.current = true;
+              return allowedLeads[0]?.id || null;
+            }
+            return null;
           });
         }
       }

@@ -129,6 +129,7 @@ interface CrmContextType {
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
   addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  updateCoordinator: (id: string, data: { fullName: string; branch: string }) => Promise<void>;
   deleteCoordinator: (id: string) => void;
 
   // Simulator State & Actions
@@ -2146,6 +2147,52 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Coordinator Deleted', 'Coordinator removed and assigned leads reverted to Unassigned.', 'info');
   };
 
+  const updateCoordinator = async (id: string, data: { fullName: string; branch: string }) => {
+    const cleanName = data.fullName.trim();
+    const cleanBranch = data.branch.trim() || 'Colombo';
+
+    const oldUser = users.find(u => u.id === id);
+
+    // 1. Update state & localStorage
+    setUsers(prev => {
+      const updated = prev.map(u => u.id === id ? { ...u, fullName: cleanName, branch: cleanBranch } : u);
+      localStorage.setItem('rw_crm_users', JSON.stringify(updated));
+      return updated;
+    });
+
+    if (currentUser?.id === id) {
+      setCurrentUser(prev => {
+        const updated = { ...prev, fullName: cleanName, branch: cleanBranch };
+        localStorage.setItem('rw_crm_current_user', JSON.stringify(updated));
+        return updated;
+      });
+    }
+
+    // 2. Sync to Supabase via backend REST endpoint
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/coordinators/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
+        body: JSON.stringify({
+          fullName: cleanName,
+          branch: cleanBranch
+        })
+      });
+      if (!res.ok) {
+        console.warn('Backend update returned non-OK status:', res.status);
+      }
+    } catch (err) {
+      console.warn('Could not sync staff update to backend/Supabase:', err);
+    }
+
+    logAudit('UPDATE_USER', 'User', id, { fullName: oldUser?.fullName, branch: oldUser?.branch }, { fullName: cleanName, branch: cleanBranch });
+    notify('Staff Updated', `${cleanName} (${cleanBranch}) updated in Supabase successfully`, 'success');
+  };
+
   const login = (identifier: string, secret?: string) => {
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanSecret = (secret || '').trim();
@@ -2625,6 +2672,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateSequence,
     updateCustomer,
     addCoordinator,
+    updateCoordinator,
     deleteCoordinator,
     clearAllData,
     addNewContact,

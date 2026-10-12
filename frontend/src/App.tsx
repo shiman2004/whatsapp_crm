@@ -5,6 +5,7 @@ import { Sidebar, NavTab } from './components/layout/Sidebar';
 import { ToastContainer } from './components/layout/ToastContainer';
 import { WhatsAppSimulator } from './components/simulator/WhatsAppSimulator';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
+import { AnalyticsView } from './components/analytics/AnalyticsView';
 import { LeadsView } from './components/leads/LeadsView';
 import { LeadDetailWorkspace } from './components/chat/LeadDetailWorkspace';
 import { TreatmentsManager } from './components/admin/TreatmentsManager';
@@ -65,7 +66,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'treatments' && <TreatmentsManager />}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
           {activeTab === 'templates' && <TemplatesManager />}
-          {activeTab === 'reports' && <DashboardOverview />}
+          {activeTab === 'reports' && <AnalyticsView />}
           {activeTab === 'audit' && <AuditLogsViewer />}
           {activeTab === 'webhook-sandbox' && <WebhookSimulatorPlayground />}
           {activeTab === 'architecture' && <ArchitectureBlueprint />}

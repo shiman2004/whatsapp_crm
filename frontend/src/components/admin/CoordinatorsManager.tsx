@@ -15,9 +15,11 @@ import {
   EyeOff,
   User as UserIcon,
   Briefcase,
-  Lock
+  Lock,
+  Pencil,
+  Check
 } from 'lucide-react';
-import { CompanyCode, UserRole } from '../../types';
+import { CompanyCode, UserRole, User } from '../../types';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 
 const BRANCH_OPTIONS = [
@@ -33,10 +35,16 @@ const generateRandomPin = () => {
 };
 
 export const CoordinatorsManager: React.FC = () => {
-  const { users, leads, addCoordinator, deleteCoordinator } = useCrm();
+  const { users, leads, addCoordinator, updateCoordinator, deleteCoordinator } = useCrm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<StaffFilter>('all');
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+
+  // Edit Staff State (Name & Branch only)
+  const [editingStaff, setEditingStaff] = useState<User | null>(null);
+  const [editFullName, setEditFullName] = useState('');
+  const [editBranch, setEditBranch] = useState('Colombo');
+  const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
   // Form State
   const [selectedRoleChoice, setSelectedRoleChoice] = useState<StaffRoleChoice>('coordinator_rwc');
@@ -79,6 +87,30 @@ export const CoordinatorsManager: React.FC = () => {
 
   const handleRegeneratePin = () => {
     setPin(generateRandomPin());
+  };
+
+  const handleOpenEditModal = (staff: User) => {
+    setEditingStaff(staff);
+    setEditFullName(staff.fullName || '');
+    setEditBranch(staff.branch || 'Colombo');
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStaff || !editFullName.trim()) return;
+
+    setIsSubmittingEdit(true);
+    try {
+      await updateCoordinator(editingStaff.id, {
+        fullName: editFullName.trim(),
+        branch: editBranch.trim() || 'Colombo'
+      });
+      setEditingStaff(null);
+    } catch (err) {
+      console.error('Failed to update staff member:', err);
+    } finally {
+      setIsSubmittingEdit(false);
+    }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -256,17 +288,26 @@ export const CoordinatorsManager: React.FC = () => {
                         </div>
                       </div>
                     </div>
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Are you sure you want to delete ${roleDisplay} "${staff.fullName}"?\n\nAll leads assigned will be safely unassigned.`)) {
-                          deleteCoordinator(staff.id);
-                        }
-                      }}
-                      className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
-                      title="Remove Staff Member"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <div className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => handleOpenEditModal(staff)}
+                        className="p-1.5 text-slate-400 hover:text-emerald-400 hover:bg-emerald-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Edit Staff (Name & Branch only)"
+                      >
+                        <Pencil className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (window.confirm(`Are you sure you want to delete ${roleDisplay} "${staff.fullName}"?\n\nAll leads assigned will be safely unassigned.`)) {
+                            deleteCoordinator(staff.id);
+                          }
+                        }}
+                        className="p-1.5 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors cursor-pointer"
+                        title="Remove Staff Member"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
 
                   {/* Role & Branch & Login PIN */}
@@ -544,6 +585,125 @@ export const CoordinatorsManager: React.FC = () => {
                 >
                   <UserPlus className="w-4 h-4" />
                   <span>Create Team Member</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Staff Member Modal (Name & Branch only - Syncs to Supabase) */}
+      {editingStaff && (
+        <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="bg-[#111b21] border border-slate-700/80 rounded-2xl max-w-md w-full p-6 space-y-5 shadow-2xl overflow-hidden">
+            
+            {/* Modal Header */}
+            <div className="flex items-start justify-between border-b border-slate-800/80 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600/30 to-teal-500/20 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+                  <Pencil className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-100 flex items-center gap-2">
+                    <span>Edit Staff Details</span>
+                  </h3>
+                  <p className="text-xs text-slate-400 mt-0.5">
+                    Update name and branch in Supabase
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setEditingStaff(null)} 
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Read-only Role & ID notice */}
+            <div className="bg-[#202c33]/70 p-3 rounded-xl border border-slate-800 flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2">
+                <span className="text-slate-400 text-[11px]">Role:</span>
+                <span className="font-semibold text-slate-200">
+                  {editingStaff.role === 'leads_officer' 
+                    ? 'Leads Officer' 
+                    : `Coordinator (${editingStaff.company || 'RWC'})`}
+                </span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span>Supabase Live Sync</span>
+              </div>
+            </div>
+
+            {/* Form */}
+            <form onSubmit={handleEditSubmit} className="space-y-4">
+              {/* Full Name */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                  <UserIcon className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Full Name</span>
+                  <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Rinosa"
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              {/* Branch Location */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Branch Location</span>
+                  <span className="text-rose-400">*</span>
+                </label>
+                <div className="grid grid-cols-2 gap-2 mb-2">
+                  {BRANCH_OPTIONS.map((br) => (
+                    <button
+                      key={br}
+                      type="button"
+                      onClick={() => setEditBranch(br)}
+                      className={`px-3 py-2 rounded-xl text-xs font-semibold border text-center transition-all cursor-pointer ${
+                        editBranch === br
+                          ? 'bg-emerald-950/60 text-emerald-300 border-emerald-500/50 shadow-sm'
+                          : 'bg-[#202c33]/50 text-slate-400 border-slate-800 hover:text-slate-200'
+                      }`}
+                    >
+                      {br}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="text"
+                  placeholder="Or enter custom branch name"
+                  value={editBranch}
+                  onChange={(e) => setEditBranch(e.target.value)}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-500 transition-colors"
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex items-center justify-end gap-2.5 pt-4 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingStaff(null)}
+                  className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold cursor-pointer transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!editFullName.trim() || isSubmittingEdit}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{isSubmittingEdit ? 'Saving...' : 'Save Changes'}</span>
                 </button>
               </div>
             </form>

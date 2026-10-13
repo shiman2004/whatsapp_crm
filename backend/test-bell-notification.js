@@ -78,22 +78,17 @@ function computeUnreadCountForUser(leads, user, userReadTimestamps, messages = [
       continue;
     }
 
-    if (!lead.lastCustomerMessageAt && (!latestMsg || latestMsg.direction !== 'inbound')) {
-      continue;
-    }
+    const count = lead.unreadCount || 0;
+    if (count <= 0) continue;
 
     const readTime = userReadTimestamps[lead.id] || 0;
     let latestTime = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
 
-    if (readTime > 0) {
-      if (latestTime > readTime) {
-        total += Math.max(1, lead.unreadCount || 1);
-      }
-    } else {
-      if ((lead.unreadCount || 0) > 0 || (latestMsg && latestMsg.direction === 'inbound')) {
-        total += (lead.unreadCount || 1);
-      }
+    if (readTime > 0 && latestTime > 0 && readTime >= latestTime) {
+      continue;
     }
+
+    total += count;
   }
   return total;
 }
@@ -201,6 +196,21 @@ const staffReadTimestamps = {
 const unreadAfterStaffReply = computeUnreadCountForUser(leadsAfterStaffReply, superAdmin, staffReadTimestamps, messagesAfterStaffReply);
 assert.strictEqual(unreadAfterStaffReply, 0, 'Outbound staff message/template MUST NOT trigger bell!');
 console.log(`✅ Count is ${unreadAfterStaffReply}. Bell animation does NOT show when staff sends message through CRM!`);
-console.log('✅ Outbound Message Workflow Test Passed!\n');
+// TEST 8: Historical leads loaded from database with unreadCount: 0 or undefined MUST NOT produce phantom counts
+console.log('Test 8: Historical leads from database do NOT produce phantom unread counts');
+const historicalLeads = [
+  { id: 'hist-1', company: 'RWC', unreadCount: 0, lastCustomerMessageAt: '2026-10-10T10:00:00Z' },
+  { id: 'hist-2', company: 'RWC', unreadCount: undefined, lastCustomerMessageAt: '2026-10-11T12:00:00Z' },
+  { id: 'hist-3', company: 'CRAS', unreadCount: 0, lastCustomerMessageAt: '2026-10-12T09:00:00Z' }
+];
+const historicalMessages = [
+  { leadId: 'hist-1', direction: 'inbound', senderType: 'customer', timestamp: '2026-10-10T10:00:00Z' },
+  { leadId: 'hist-2', direction: 'inbound', senderType: 'customer', timestamp: '2026-10-11T12:00:00Z' },
+  { leadId: 'hist-3', direction: 'inbound', senderType: 'customer', timestamp: '2026-10-12T09:00:00Z' }
+];
+const unreadHistorical = computeUnreadCountForUser(historicalLeads, superAdmin, {}, historicalMessages);
+assert.strictEqual(unreadHistorical, 0, 'Historical leads without unreadCount MUST evaluate to 0!');
+console.log(`✅ Count is ${unreadHistorical}. Historical database leads do NOT trigger phantom 37 unread count!`);
+console.log('✅ Historical Database Leads Test Passed!\n');
 
 console.log('🎉 ALL BLINKING BELL NOTIFICATION TESTS PASSED SUCCESSFULLY!');

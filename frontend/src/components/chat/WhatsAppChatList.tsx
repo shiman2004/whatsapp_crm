@@ -79,7 +79,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     updateLeadCompany,
     chatListFilter,
     setChatListFilter,
-    totalUnreadCountForUser
+    totalUnreadCountForUser,
+    userReadTimestamps
   } = useCrm();
 
   const [search, setSearch] = useState('');
@@ -260,17 +261,24 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
     // Filter pills
     if (activeFilter === 'unread') {
+      const count = lead.unreadCount || 0;
+      if (count <= 0) return false;
+
+      const readTime = userReadTimestamps[lead.id] || 0;
+      if (readTime > 0 && lead.lastCustomerMessageAt) {
+        const custTime = new Date(lead.lastCustomerMessageAt).getTime();
+        if (custTime > 0 && readTime >= custTime) return false;
+      }
+
       const leadMsgs = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
-      let latestMsg: Message | null = null;
       if (leadMsgs.length > 0) {
-        latestMsg = leadMsgs.reduce((latest, current) => {
+        const latestMsg = leadMsgs.reduce((latest, current) => {
           const tCur = new Date(current.createdAt || current.timestamp || current.sentAt || 0).getTime();
           const tLat = new Date(latest.createdAt || latest.timestamp || latest.sentAt || 0).getTime();
           return tCur > tLat ? current : latest;
         }, leadMsgs[0]);
+        if (latestMsg && (latestMsg.direction === 'outbound' || latestMsg.senderType !== 'customer')) return false;
       }
-      if (latestMsg && (latestMsg.direction === 'outbound' || latestMsg.senderType !== 'customer')) return false;
-      if (!lead.unreadCount || lead.unreadCount === 0) return false;
     }
     if (activeFilter === 'favourites' && !favouriteLeadIds.has(lead.id)) return false;
     if (activeFilter === 'new' && (lead.stage || 'new') !== 'new') return false;

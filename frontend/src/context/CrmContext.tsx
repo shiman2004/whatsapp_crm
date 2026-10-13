@@ -202,6 +202,7 @@ interface CrmContextType {
 
   // Blinking Bell Notification & Unread Tracking
   totalUnreadCountForUser: number;
+  userReadTimestamps: Record<string, number>;
   chatListFilter: string;
   setChatListFilter: (filter: string) => void;
   openUnreadChats: () => void;
@@ -1452,32 +1453,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         continue;
       }
 
-      // 3. A lead with NO customer messages can NEVER have unread customer messages
-      if (!lead.lastCustomerMessageAt && (!latestMsg || latestMsg.direction !== 'inbound')) {
-        continue;
-      }
-
-      const customerMsgTime = lead.lastCustomerMessageAt
-        ? new Date(lead.lastCustomerMessageAt).getTime()
-        : (latestMsg ? new Date(latestMsg.createdAt || latestMsg.timestamp || 0).getTime() : 0);
-
-      if (isNaN(customerMsgTime) || customerMsgTime <= 0) {
+      // 3. A lead without unread count cannot be unread!
+      const count = lead.unreadCount || 0;
+      if (count <= 0) {
         continue;
       }
 
       const readTime = userReadTimestamps[lead.id] || 0;
-
-      // 4. Has the user read this conversation AFTER the customer's last message?
-      if (readTime > 0) {
-        if (customerMsgTime > readTime) {
-          total += Math.max(1, lead.unreadCount || 1);
-        }
-      } else {
-        // If not read yet in this browser session, count only if unreadCount > 0 or latest message is inbound
-        if ((lead.unreadCount || 0) > 0 || (latestMsg && latestMsg.direction === 'inbound')) {
-          total += Math.max(1, lead.unreadCount || 1);
+      if (readTime > 0 && lead.lastCustomerMessageAt) {
+        const customerMsgTime = new Date(lead.lastCustomerMessageAt).getTime();
+        if (customerMsgTime > 0 && readTime >= customerMsgTime) {
+          continue;
         }
       }
+
+      total += count;
     }
     return total;
   }, [leads, currentUser, userReadTimestamps, selectedLeadId, messages]);
@@ -3291,6 +3281,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notificationSettingsOpen,
     setNotificationSettingsOpen,
     totalUnreadCountForUser,
+    userReadTimestamps,
     chatListFilter,
     setChatListFilter,
     openUnreadChats,

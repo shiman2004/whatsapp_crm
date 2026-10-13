@@ -1757,14 +1757,13 @@ const server = http.createServer(async (req, res) => {
         const messages = await prisma.message.findMany({
           where: whereClause,
           orderBy: { timestamp: 'asc' },
-          include: isSuperAdmin ? { audit: true } : undefined,
         });
 
         // Backend RBAC: Never expose audit metadata through normal staff API responses
         const sanitizedMessages = isSuperAdmin
           ? messages
           : messages.map(m => {
-              const { senderName, senderRole, messageSource, sentAt, audit, ...clean } = m;
+              const { senderName, senderRole, messageSource, sentAt, ...clean } = m;
               return clean;
             });
 
@@ -1802,8 +1801,7 @@ const server = http.createServer(async (req, res) => {
             assignedCoordinator: true,
             whatsappSession: true,
             messages: { 
-              orderBy: { timestamp: 'asc' },
-              include: isSuperAdmin ? { audit: true } : undefined
+              orderBy: { timestamp: 'asc' }
             },
             notes: true,
             stageHistories: true,
@@ -1824,7 +1822,7 @@ const server = http.createServer(async (req, res) => {
           const cleanedMessages = isSuperAdmin
             ? (l.messages || [])
             : (l.messages || []).map(m => {
-                const { senderName, senderRole, messageSource, sentAt, audit, ...clean } = m;
+                const { senderName, senderRole, messageSource, sentAt, ...clean } = m;
                 return clean;
               });
 

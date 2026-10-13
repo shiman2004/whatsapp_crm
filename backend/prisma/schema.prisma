@@ -278,7 +278,6 @@ model Message {
   customer            Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   whatsappSession     WhatsAppSession?  @relation("SessionMessages", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
   coordinator         User?             @relation("CoordinatorAuthoredMessages", fields: [coordinatorId], references: [id], onDelete: SetNull)
-  audit               MessageAudit?
 
   @@index([leadId])
   @@index([customerId])
@@ -291,21 +290,18 @@ model Message {
 // 7b. Message Sender Audit Record (Protected Super Admin Audit Trail)
 model MessageAudit {
   id              String   @id @default(uuid()) @db.VarChar(50)
-  messageId       String   @unique @db.VarChar(100)
-  leadId          String   @db.VarChar(50)
-  customerId      String?  @db.VarChar(50)
+  messageId       String   @unique @map("message_id") @db.VarChar(100)
+  leadId          String   @map("lead_id") @db.VarChar(50)
+  customerId      String?  @map("customer_id") @db.VarChar(50)
   company         String?  @db.VarChar(50)
-  whatsappNumber  String?  @db.VarChar(50)
-  senderId        String?  @db.VarChar(36)
-  senderName      String   @db.VarChar(255)
-  senderRole      String   @db.VarChar(50)
-  messageSource   String   @default("CRM User") @db.VarChar(50) // 'CRM User' | 'Automation' | 'API' | 'System'
-  deliveryStatus  String   @default("sent") @db.VarChar(50)
-  sentAt          DateTime @default(now())
-  createdAt       DateTime @default(now())
-
-  // Relations
-  message         Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  whatsappNumber  String?  @map("whatsapp_number") @db.VarChar(50)
+  senderId        String?  @map("sender_id") @db.VarChar(36)
+  senderName      String   @map("sender_name") @db.VarChar(255)
+  senderRole      String   @map("sender_role") @db.VarChar(50)
+  messageSource   String   @default("CRM User") @map("message_source") @db.VarChar(50)
+  deliveryStatus  String   @default("sent") @map("delivery_status") @db.VarChar(50)
+  sentAt          DateTime @default(now()) @map("sent_at")
+  createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([leadId])
   @@index([senderId])

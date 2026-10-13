@@ -15,7 +15,7 @@
     "build": "npm run build --prefix frontend",
     "preview": "npm run preview --prefix frontend",
     "lint": "npm run lint --prefix frontend",
-    "test": "node backend/test-meta-token-security.js && node backend/test-bell-notification.js && node backend/test-sender-audit.js && node backend/test-auth-security.js",
+    "test": "node backend/test-meta-token-security.js && node backend/test-bell-notification.js && node backend/test-sender-audit.js && node backend/test-auth-security.js && node backend/test-login-security.js",
     "start": "node backend/server.js",
     "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend"
   },

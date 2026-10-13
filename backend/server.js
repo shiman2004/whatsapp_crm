@@ -63,6 +63,134 @@ function verifyAuthToken(token) {
   }
 }
 
+// =============================================================================
+// Cryptographic Password & PIN Hashing (scrypt with Salt & Timing-Safe Verification)
+// =============================================================================
+function hashSecret(secret) {
+  if (!secret) return '';
+  const salt = crypto.randomBytes(16).toString('hex');
+  const hash = crypto.scryptSync(String(secret), salt, 64).toString('hex');
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifySecret(providedSecret, storedCredential) {
+  if (!providedSecret || !storedCredential) {
+    return { match: false, needsRehash: false };
+  }
+  const providedStr = String(providedSecret);
+  const storedStr = String(storedCredential);
+
+  if (storedStr.startsWith('scrypt:')) {
+    const parts = storedStr.split(':');
+    if (parts.length !== 3) return { match: false, needsRehash: false };
+    const salt = parts[1];
+    const expectedHash = parts[2];
+    try {
+      const computedHash = crypto.scryptSync(providedStr, salt, 64).toString('hex');
+      const expectedBuf = Buffer.from(expectedHash, 'hex');
+      const computedBuf = Buffer.from(computedHash, 'hex');
+      if (expectedBuf.length !== computedBuf.length) {
+        return { match: false, needsRehash: false };
+      }
+      const match = crypto.timingSafeEqual(computedBuf, expectedBuf);
+      return { match, needsRehash: false };
+    } catch (e) {
+      return { match: false, needsRehash: false };
+    }
+  }
+
+  // Legacy plaintext support for seamless transparent migration
+  try {
+    const pBuf = Buffer.from(providedStr);
+    const sBuf = Buffer.from(storedStr);
+    if (pBuf.length === sBuf.length && crypto.timingSafeEqual(pBuf, sBuf)) {
+      return { match: true, needsRehash: true };
+    }
+  } catch (e) {}
+
+  return { match: false, needsRehash: false };
+}
+
+// Dummy salt & hash for constant-time comparisons when account doesn't exist or is deactivated
+const DUMMY_TIMING_HASH = hashSecret('dummy_timing_protection_secret_2026');
+function dummyVerify(candidate) {
+  try {
+    verifySecret(candidate || 'dummy_secret', DUMMY_TIMING_HASH);
+  } catch (e) {}
+}
+
+// Default Pre-Hashed Credentials for Canonical Users (scrypt salted hashes)
+const DEFAULT_ADMIN_PASSWORD_HASH = hashSecret('admin');
+const DEFAULT_ADMIN_PIN_HASH = hashSecret('1234');
+const DEFAULT_STAFF_PASSWORD_HASH = hashSecret('staff');
+const DEFAULT_STAFF_PIN_HASH = hashSecret('2026');
+
+// =============================================================================
+// Progressive Abuse Protection & Rate Limiting for Login Attempts
+// =============================================================================
+const LOGIN_RATE_LIMIT = {
+  WINDOW_MS: 15 * 60 * 1000, // 15 minutes window
+  MAX_ATTEMPTS: 5,           // 5 failed attempts before lockout
+  LOCKOUT_MS: 15 * 60 * 1000  // 15 minutes lockout duration
+};
+
+const loginAttemptStore = new Map();
+
+function getClientIp(req) {
+  const xForwarded = req.headers['x-forwarded-for'];
+  if (xForwarded) {
+    return String(xForwarded).split(',')[0].trim();
+  }
+  return req.socket?.remoteAddress || '127.0.0.1';
+}
+
+function checkLoginRateLimit(ip, identifier) {
+  const now = Date.now();
+  const keys = [ip];
+  if (identifier) keys.push(`${ip}:${identifier.toLowerCase()}`);
+
+  for (const key of keys) {
+    const entry = loginAttemptStore.get(key);
+    if (entry && entry.lockedUntil && now < entry.lockedUntil) {
+      const retryAfterSeconds = Math.ceil((entry.lockedUntil - now) / 1000);
+      return { limited: true, retryAfter: Math.max(1, retryAfterSeconds) };
+    }
+  }
+  return { limited: false, retryAfter: 0 };
+}
+
+function recordLoginFailure(ip, identifier) {
+  const now = Date.now();
+  const keys = [ip];
+  if (identifier) keys.push(`${ip}:${identifier.toLowerCase()}`);
+
+  for (const key of keys) {
+    let entry = loginAttemptStore.get(key);
+    if (!entry || (now - entry.firstAttempt > LOGIN_RATE_LIMIT.WINDOW_MS)) {
+      entry = { count: 1, firstAttempt: now, lockedUntil: 0 };
+    } else {
+      entry.count += 1;
+    }
+
+    if (entry.count >= LOGIN_RATE_LIMIT.MAX_ATTEMPTS) {
+      entry.lockedUntil = now + LOGIN_RATE_LIMIT.LOCKOUT_MS;
+    }
+    loginAttemptStore.set(key, entry);
+  }
+}
+
+function recordLoginSuccess(ip, identifier) {
+  loginAttemptStore.delete(ip);
+  if (identifier) {
+    loginAttemptStore.delete(`${ip}:${identifier.toLowerCase()}`);
+  }
+}
+
+function resetLoginRateLimits() {
+  loginAttemptStore.clear();
+}
+
+
 // Multi-Client SSE Hub with Coordinator Channel Isolation
 let sseClients = [];
 
@@ -382,8 +510,8 @@ const CANONICAL_USERS = [
     fullName: 'Super Admin',
     email: 'admin@royalwellness.lk',
     branch: 'Colombo (Head Office)',
-    password: 'admin',
-    pin: '1234',
+    password: DEFAULT_ADMIN_PASSWORD_HASH,
+    pin: DEFAULT_ADMIN_PIN_HASH,
     role: 'super_admin',
     active: true
   },
@@ -392,8 +520,8 @@ const CANONICAL_USERS = [
     fullName: 'Faiha',
     email: 'faiha@royalwellness.lk',
     branch: 'Colombo',
-    password: 'staff',
-    pin: '2026',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
     role: 'coordinator',
     active: true
   },
@@ -402,8 +530,8 @@ const CANONICAL_USERS = [
     fullName: 'Hasini',
     email: 'hasini@royalwellness.lk',
     branch: 'Colombo',
-    password: 'staff',
-    pin: '2026',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
     role: 'coordinator',
     active: true
   },
@@ -412,8 +540,8 @@ const CANONICAL_USERS = [
     fullName: 'Dr. Zeenath',
     email: 'zeenath@royalwellness.lk',
     branch: 'Colombo',
-    password: 'staff',
-    pin: '2026',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
     role: 'coordinator',
     active: true
   },
@@ -422,8 +550,8 @@ const CANONICAL_USERS = [
     fullName: 'Sarah Fernando',
     email: 'sarah@royalwellness.lk',
     branch: 'Colombo',
-    password: 'staff',
-    pin: '2026',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
     role: 'leads_officer',
     active: true
   }
@@ -672,16 +800,40 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body || '{}');
         const identifier = (payload.identifier || payload.email || payload.username || '').trim().toLowerCase();
-        const secret = (payload.password || payload.pin || '').trim();
+        
+        // Extract credentials: password, pin, or secret
+        const passwordCandidate = payload.password !== undefined ? String(payload.password).trim() : '';
+        const pinCandidate = payload.pin !== undefined ? String(payload.pin).trim() : '';
+        const secretCandidate = payload.secret !== undefined ? String(payload.secret).trim() : '';
 
-        if (!identifier) {
+        const ip = getClientIp(req);
+
+        // Missing credentials check (reject empty/missing identifier or empty/missing secrets)
+        const candidates = [passwordCandidate, pinCandidate, secretCandidate].filter(Boolean);
+        if (!identifier || candidates.length === 0) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Missing identifier or email.' }));
+          res.end(JSON.stringify({ success: false, error: 'Identifier and password or PIN are required.' }));
           return;
         }
 
+        // Rate limit check
+        const rateCheck = checkLoginRateLimit(ip, identifier);
+        if (rateCheck.limited) {
+          res.writeHead(429, { 
+            'Content-Type': 'application/json',
+            'Retry-After': String(rateCheck.retryAfter)
+          });
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: 'Too many failed login attempts. Please try again later.' 
+          }));
+          return;
+        }
+
+        // Authoritative user resolution
         const prisma = getPrisma();
         let user = null;
+        let isDbUser = false;
         if (prisma && getDbStatus()) {
           try {
             user = await prisma.user.findFirst({
@@ -692,6 +844,7 @@ const server = http.createServer(async (req, res) => {
                 ]
               }
             });
+            if (user) isDbUser = true;
           } catch (e) {}
         }
 
@@ -703,30 +856,77 @@ const server = http.createServer(async (req, res) => {
           );
         }
 
+        // Generic authentication failure helper (constant response & status to prevent account enumeration)
+        const sendAuthFailure = () => {
+          recordLoginFailure(ip, identifier);
+          dummyVerify(candidates[0]); // Constant-time side-channel mitigation
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid credentials.' }));
+        };
+
+        // User not found -> generic failure
         if (!user) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid credentials: User not found.' }));
-          return;
+          return sendAuthFailure();
         }
 
+        // Deactivated account -> generic failure (do not disclose account existence or status)
         if (user.active === false) {
-          res.writeHead(401, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Account has been deactivated.' }));
-          return;
+          return sendAuthFailure();
         }
 
-        // Credential verification: password or PIN
-        const validPassword = user.password || (user.role === 'super_admin' ? 'admin' : 'staff');
-        const validPin = user.pin || (user.role === 'super_admin' ? '1234' : '2026');
+        // Credential resolution with default fallbacks
+        const expectedPassword = user.password || (user.role === 'super_admin' ? DEFAULT_ADMIN_PASSWORD_HASH : DEFAULT_STAFF_PASSWORD_HASH);
+        const expectedPin = user.pin || (user.role === 'super_admin' ? DEFAULT_ADMIN_PIN_HASH : DEFAULT_STAFF_PIN_HASH);
 
-        if (secret) {
-          const isMatch = secret === validPassword || secret === validPin;
-          if (!isMatch) {
-            res.writeHead(401, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Invalid credentials: Incorrect password or PIN.' }));
-            return;
+        // Verify candidates
+        let matched = false;
+        let matchedField = null;
+        let needsMigration = false;
+        let plainSecretUsed = '';
+
+        for (const candidate of candidates) {
+          // Check against password
+          const passResult = verifySecret(candidate, expectedPassword);
+          if (passResult.match) {
+            matched = true;
+            matchedField = 'password';
+            needsMigration = passResult.needsRehash;
+            plainSecretUsed = candidate;
+            break;
+          }
+          // Check against PIN
+          const pinResult = verifySecret(candidate, expectedPin);
+          if (pinResult.match) {
+            matched = true;
+            matchedField = 'pin';
+            needsMigration = pinResult.needsRehash;
+            plainSecretUsed = candidate;
+            break;
           }
         }
+
+        if (!matched) {
+          return sendAuthFailure();
+        }
+
+        // Safe Transparent Migration:
+        // If legacy plaintext was matched, seamlessly upgrade stored hash in database to scrypt
+        if (needsMigration && plainSecretUsed) {
+          const newHash = hashSecret(plainSecretUsed);
+          if (isDbUser && prisma && getDbStatus()) {
+            prisma.user.update({
+              where: { id: user.id },
+              data: { [matchedField]: newHash }
+            }).catch(err => {
+              console.warn(`[Auth Migration] Background hash migration failed for ${user.id}:`, err.message);
+            });
+          } else if (!isDbUser) {
+            user[matchedField] = newHash;
+          }
+        }
+
+        // Reset rate limit counters on successful authentication
+        recordLoginSuccess(ip, identifier);
 
         const token = signAuthToken({
           userId: user.id,
@@ -748,7 +948,7 @@ const server = http.createServer(async (req, res) => {
         }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
+        res.end(JSON.stringify({ success: false, error: 'Malformed request payload.' }));
       }
     });
     return;
@@ -2166,8 +2366,8 @@ const server = http.createServer(async (req, res) => {
                 fullName: name,
                 email: `${coordinatorId.replace(/[^a-z0-9]/gi, '').toLowerCase()}@royalwellness.lk`,
                 role: 'coordinator',
-                password: 'staff',
-                pin: '2026'
+                password: hashSecret('staff'),
+                pin: hashSecret('2026')
               }
             }).catch(() => null);
           }
@@ -3249,20 +3449,16 @@ const server = http.createServer(async (req, res) => {
 
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
-    const defaultCoordinators = [
-      {
-        id: 'user-admin-1',
-        fullName: 'Super Admin',
-        email: 'admin@royalwellness.lk',
-        branch: 'Colombo (Head Office)',
-        password: 'admin',
-        pin: '1234',
-        role: 'super_admin',
-        active: true,
+    const defaultCoordinators = CANONICAL_USERS.map(u => {
+      const { password, pin, ...safeUser } = u;
+      return {
+        ...safeUser,
+        branch: safeUser.branch || 'Colombo',
+        company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
         createdAt: '2026-01-01T08:00:00Z',
         activeLeadsCount: 0,
-      }
-    ];
+      };
+    });
 
     const prisma = getPrisma();
     if (req.method === 'GET') {
@@ -3272,11 +3468,14 @@ const server = http.createServer(async (req, res) => {
             orderBy: { createdAt: 'asc' }
           });
           if (users && users.length > 0) {
-            const mappedUsers = users.map(u => ({
-              ...u,
-              branch: u.branch || 'Colombo',
-              company: u.role === 'leads_officer' ? null : (u.company || 'RWC'),
-            }));
+            const mappedUsers = users.map(u => {
+              const { password, pin, ...safeUser } = u;
+              return {
+                ...safeUser,
+                branch: safeUser.branch || 'Colombo',
+                company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+              };
+            });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(mappedUsers));
             return;
@@ -3320,30 +3519,33 @@ const server = http.createServer(async (req, res) => {
               data: {
                 fullName,
                 email,
-                pin,
+                pin: hashSecret(pin),
                 phone,
                 role: role,
                 branch: branch,
                 company: company,
-                password: payload.password || 'staff'
+                password: hashSecret(payload.password || 'staff')
               }
             });
           }
 
+          const safeUserPayload = newUser ? { ...newUser } : {
+            id: payload.id || `staff-${Date.now()}`,
+            fullName,
+            email,
+            phone,
+            role,
+            branch,
+            company,
+            active: true
+          };
+          delete safeUserPayload.password;
+          delete safeUserPayload.pin;
+
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ 
             success: true, 
-            user: newUser ? { ...newUser, branch, company } : {
-              id: payload.id || `staff-${Date.now()}`,
-              fullName,
-              email,
-              pin,
-              phone,
-              role,
-              branch,
-              company,
-              active: true
-            } 
+            user: { ...safeUserPayload, branch, company } 
           }));
         } catch (err) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -4151,7 +4353,8 @@ async function autoSeedDbIfEmpty() {
   }
 }
 
-if (process.env.NODE_ENV !== 'test') {
+const isTestRunner = process.env.NODE_ENV === 'test' || (process.argv[1] && process.argv[1].includes('test'));
+if (!isTestRunner) {
   server.listen(PORT, '0.0.0.0', async () => {
     console.log(`\n👑 Royal Wellness Multi-Session WhatsApp Server running on port ${PORT}`);
     console.log(`   - Architecture: Centralized Multi-Session WhatsApp Manager`);
@@ -4179,5 +4382,12 @@ export {
   authenticateRequest,
   isPublicRoute,
   CANONICAL_USERS,
+  hashSecret,
+  verifySecret,
+  checkLoginRateLimit,
+  recordLoginFailure,
+  recordLoginSuccess,
+  resetLoginRateLimits,
+  dummyVerify,
   server
 };

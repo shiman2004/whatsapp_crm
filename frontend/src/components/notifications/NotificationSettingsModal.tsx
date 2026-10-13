@@ -13,6 +13,8 @@ import {
 import { useCrm } from '../../context/CrmContext';
 import { playWhatsAppChime } from '../../utils/soundUtils';
 
+import { requestDesktopNotificationPermission, showDesktopNativeNotification } from '../../utils/nativeNotificationUtils';
+
 interface NotificationSettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -39,25 +41,16 @@ export const NotificationSettingsModal: React.FC<NotificationSettingsModalProps>
   if (!isOpen) return null;
 
   const handleRequestNativePermission = async () => {
-    if (!('Notification' in window)) {
-      alert('This browser does not support native desktop notifications.');
-      return;
-    }
-
-    try {
-      const permission = await Notification.requestPermission();
-      setBrowserPermission(permission);
-      if (permission === 'granted') {
-        updateNotificationSettings({ nativeBrowser: true });
-        new Notification('Royal Wellness WhatsApp CRM', {
-          body: 'Native desktop notifications are now active!',
-          icon: '/favicon.png'
-        });
-      } else {
-        updateNotificationSettings({ nativeBrowser: false });
-      }
-    } catch (err) {
-      console.error('Failed to request notification permission:', err);
+    const permission = await requestDesktopNotificationPermission();
+    setBrowserPermission(permission);
+    if (permission === 'granted') {
+      updateNotificationSettings({ nativeBrowser: true });
+      showDesktopNativeNotification('Royal Wellness WhatsApp CRM', {
+        body: "Windows desktop notifications enabled! You'll receive alerts even when using other websites or apps.",
+        icon: '/logo.png'
+      });
+    } else {
+      updateNotificationSettings({ nativeBrowser: false });
     }
   };
 

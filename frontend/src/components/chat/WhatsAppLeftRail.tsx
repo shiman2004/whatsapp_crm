@@ -43,6 +43,16 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
           )}
         </button>
       </div>
+      {/* Bottom Navigation: Settings */}
+      <div className="flex flex-col items-center gap-3 w-full">
+        <button
+          onClick={() => onOpenSettings ? onOpenSettings() : null}
+          className="p-2.5 rounded-full text-[#aebac1] hover:bg-[#374248]/60 hover:text-white transition-all cursor-pointer"
+          title="Notification Settings"
+        >
+          <Settings className="w-5 h-5" />
+        </button>
+      </div>
     </aside>
   );
 };

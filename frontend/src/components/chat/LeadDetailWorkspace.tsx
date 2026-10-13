@@ -11,7 +11,7 @@ interface LeadDetailWorkspaceProps {
 }
 
 export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = () => {
-  const { selectedLead, setSelectedLeadId } = useCrm();
+  const { selectedLead, setSelectedLeadId, setNotificationSettingsOpen } = useCrm();
   const [crmPanelOpen, setCrmPanelOpen] = useState(false);
   const [activeSection, setActiveSection] = useState('chats');
 
@@ -29,7 +29,7 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = () => {
       <WhatsAppLeftRail
         activeSection={activeSection}
         setActiveSection={setActiveSection}
-        onOpenSettings={() => setCrmPanelOpen(true)}
+        onOpenSettings={() => setNotificationSettingsOpen(true)}
       />
 
       {/* 2. WhatsApp Web Chat List (Full width on mobile when no chat is selected, hidden on mobile when chat is open) */}

@@ -18,11 +18,21 @@ import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
 import { LoginScreen } from './components/auth/LoginScreen';
 
 import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
+import { NotificationContainer } from './components/notifications/NotificationContainer';
+import { NotificationSettingsModal } from './components/notifications/NotificationSettingsModal';
 
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const { currentUser, setSelectedLeadId, selectedLeadId, leads, canAssignLeads } = useCrm();
+  const { 
+    currentUser, 
+    setSelectedLeadId, 
+    selectedLeadId, 
+    leads, 
+    canAssignLeads,
+    notificationSettingsOpen,
+    setNotificationSettingsOpen 
+  } = useCrm();
 
   const unassignedCount = leads.filter(l => l.stage === 'new').length;
   const myAssignedCount = leads.filter(l => l.assignedTo === currentUser?.id).length;
@@ -142,6 +152,15 @@ const MainLayout: React.FC = () => {
 
       {/* Real-time Toasts */}
       <ToastContainer />
+
+      {/* WhatsApp Web Desktop Notification Card Popups (Bottom-Right Viewport) */}
+      <NotificationContainer onNavigateToChat={(leadId) => handleSelectLead(leadId)} />
+
+      {/* Desktop Notification Settings Modal */}
+      <NotificationSettingsModal 
+        isOpen={notificationSettingsOpen} 
+        onClose={() => setNotificationSettingsOpen(false)} 
+      />
     </div>
   );
 };

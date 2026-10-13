@@ -45,6 +45,8 @@ import {
 import { COMPANIES, getLeadCompany } from '../utils/companyUtils';
 import { API_BASE_URL } from '../config/api';
 import { aiService } from '../services/aiService';
+import { NotificationSettings, DesktopNotificationItem } from '../types/notifications';
+import { playWhatsAppChime } from '../utils/soundUtils';
 
 interface NotificationToast {
   id: string;
@@ -185,6 +187,15 @@ interface CrmContextType {
 
   // Toasts
   dismissNotification: (id: string) => void;
+
+  // Desktop Notifications
+  desktopNotifications: DesktopNotificationItem[];
+  notificationSettings: NotificationSettings;
+  dismissDesktopNotification: (id: string) => void;
+  updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
+  dispatchTestNotification: () => void;
+  notificationSettingsOpen: boolean;
+  setNotificationSettingsOpen: (open: boolean) => void;
 }
 
 const CrmContext = createContext<CrmContextType | undefined>(undefined);
@@ -276,6 +287,86 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => Boolean(localStorage.getItem('meta_access_token')));
   const initialLeadLoadedRef = useRef<boolean>(false);
+
+  // Desktop Notification Settings & Active Popups
+  const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
+    enabled: true,
+    sound: true,
+    nativeBrowser: false,
+    showPreview: true,
+    autoDismissSeconds: 8,
+  };
+
+  const [notificationSettings, setNotificationSettings] = useState<NotificationSettings>(() => {
+    return getStored<NotificationSettings>('rw_crm_notification_settings', DEFAULT_NOTIFICATION_SETTINGS);
+  });
+  const notificationSettingsRef = useRef<NotificationSettings>(notificationSettings);
+  useEffect(() => {
+    notificationSettingsRef.current = notificationSettings;
+    try {
+      localStorage.setItem('rw_crm_notification_settings', JSON.stringify(notificationSettings));
+    } catch (e) {}
+  }, [notificationSettings]);
+
+  const [desktopNotifications, setDesktopNotifications] = useState<DesktopNotificationItem[]>([]);
+  const [notificationSettingsOpen, setNotificationSettingsOpen] = useState<boolean>(false);
+
+  const dismissDesktopNotification = useCallback((id: string) => {
+    setDesktopNotifications(prev => prev.filter(n => n.id !== id));
+  }, []);
+
+  const updateNotificationSettings = useCallback((updates: Partial<NotificationSettings>) => {
+    setNotificationSettings(prev => ({ ...prev, ...updates }));
+  }, []);
+
+  const dispatchDesktopNotification = useCallback((item: DesktopNotificationItem) => {
+    setDesktopNotifications(prev => {
+      const filtered = prev.filter(n => n.leadId !== item.leadId);
+      return [item, ...filtered].slice(0, 3);
+    });
+
+    if (notificationSettingsRef.current.autoDismissSeconds > 0) {
+      setTimeout(() => {
+        setDesktopNotifications(prev => prev.filter(n => n.id !== item.id));
+      }, notificationSettingsRef.current.autoDismissSeconds * 1000);
+    }
+  }, []);
+
+  const dispatchTestNotification = useCallback(() => {
+    if (notificationSettingsRef.current.sound) {
+      playWhatsAppChime();
+    }
+    const testItem: DesktopNotificationItem = {
+      id: 'test-notif-' + Date.now(),
+      leadId: selectedLeadIdRef.current || 'lead-demo-test',
+      customerId: 'cust-demo-test',
+      contactName: 'Ameera Jasmine',
+      contactPhone: '+94 77 123 4567',
+      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      messageText: notificationSettingsRef.current.showPreview 
+        ? 'Hello! I would like to book a consultation for tomorrow morning please. 🌿' 
+        : 'New WhatsApp message',
+      timestamp: new Date().toISOString(),
+      timeDisplay: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      unreadCount: 1,
+      company: 'RWC',
+    };
+    dispatchDesktopNotification(testItem);
+
+    if (notificationSettingsRef.current.nativeBrowser && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        const notif = new Notification('Ameera Jasmine (WhatsApp)', {
+          body: testItem.messageText,
+          icon: testItem.avatarUrl || '/favicon.png'
+        });
+        notif.onclick = () => {
+          window.focus();
+          if (selectedLeadIdRef.current) setSelectedLeadId(selectedLeadIdRef.current);
+          notif.close();
+        };
+      } catch (e) {}
+    }
+  }, [dispatchDesktopNotification]);
 
   // Sync state to localStorage
   useEffect(() => {
@@ -946,6 +1037,74 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 });
               }
             });
+
+            // Trigger WhatsApp Web desktop notification & chime for incoming messages
+            if (!isOutbound) {
+              const userRole = currentUser?.role;
+              const isCoordinator = userRole === 'coordinator';
+              const isLeadAccessible = !isCoordinator || !matchedLead?.assignedTo || matchedLead?.assignedTo === currentUser?.id;
+
+              if (isLeadAccessible) {
+                const isChatActiveAndFocused = selectedLeadIdRef.current === resolvedLeadId && typeof document !== 'undefined' && document.hasFocus();
+
+                if (!isChatActiveAndFocused) {
+                  // 1. Play authentic WhatsApp Web audio chime
+                  if (notificationSettingsRef.current.sound) {
+                    playWhatsAppChime();
+                  }
+
+                  // 2. Dispatch in-app desktop notification popup card
+                  if (notificationSettingsRef.current.enabled) {
+                    let preview = text || '';
+                    if (!preview && data.media) {
+                      preview = data.media.caption || (data.media.type === 'image' ? '📷 Photo' : data.media.type === 'audio' ? '🎵 Voice note' : '📄 Document');
+                    }
+                    if (!notificationSettingsRef.current.showPreview) {
+                      preview = 'New WhatsApp message';
+                    }
+
+                    const targetLead = currentLeads.find(l => l.id === resolvedLeadId);
+                    const notifItem: DesktopNotificationItem = {
+                      id: messageId || 'notif-' + Date.now(),
+                      leadId: resolvedLeadId,
+                      customerId: resolvedCustomerId,
+                      contactName: cleanDisplayName,
+                      contactPhone: canonicalPhone || rawNumber,
+                      avatarUrl: avatarUrl || targetLead?.customer?.avatarUrl,
+                      messageText: preview,
+                      timestamp: timestamp || new Date().toISOString(),
+                      timeDisplay: new Date(timestamp || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                      unreadCount: (targetLead?.unreadCount || 0) + 1,
+                      company: (company as string) || targetLead?.company || 'RWC',
+                      mediaType: data.media?.type
+                    };
+                    dispatchDesktopNotification(notifItem);
+                  }
+
+                  // 3. Trigger native browser notification if enabled & permission granted
+                  if (notificationSettingsRef.current.nativeBrowser && 'Notification' in window && Notification.permission === 'granted') {
+                    try {
+                      let nativeBody = text || (data.media ? (data.media.type === 'image' ? 'Photo' : 'Media') : 'New message');
+                      if (!notificationSettingsRef.current.showPreview) {
+                        nativeBody = 'New WhatsApp message';
+                      }
+                      const nativeNotif = new Notification(`${cleanDisplayName} (WhatsApp)`, {
+                        body: nativeBody,
+                        icon: avatarUrl || '/favicon.png',
+                        tag: resolvedLeadId
+                      });
+                      nativeNotif.onclick = () => {
+                        window.focus();
+                        setSelectedLeadId(resolvedLeadId);
+                        nativeNotif.close();
+                      };
+                    } catch (err) {
+                      console.warn('[Native Notification] Error:', err);
+                    }
+                  }
+                }
+              }
+            }
 
             // 3. Add message with deduplication check
             setMessages(prevMsgs => {
@@ -2900,6 +3059,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setQrModalOpen,
     hasMetaConfig,
     setHasMetaConfig,
+    desktopNotifications,
+    notificationSettings,
+    dismissDesktopNotification,
+    updateNotificationSettings,
+    dispatchTestNotification,
+    notificationSettingsOpen,
+    setNotificationSettingsOpen,
   };
 
   return (

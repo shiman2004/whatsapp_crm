@@ -23,7 +23,6 @@ import { NotificationSettingsModal } from './components/notifications/Notificati
 import { DesktopNotificationBanner } from './components/notifications/DesktopNotificationBanner';
 
 const MainLayout: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const { 
     currentUser, 
@@ -32,8 +31,13 @@ const MainLayout: React.FC = () => {
     leads, 
     canAssignLeads,
     notificationSettingsOpen,
-    setNotificationSettingsOpen 
+    setNotificationSettingsOpen,
+    activeNavTab,
+    setActiveNavTab
   } = useCrm();
+
+  const activeTab = activeNavTab;
+  const setActiveTab = setActiveNavTab;
 
   const unassignedCount = leads.filter(l => l.stage === 'new').length;
   const myAssignedCount = leads.filter(l => l.assignedTo === currentUser?.id).length;

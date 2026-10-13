@@ -27,6 +27,8 @@ import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { AddContactModal } from './AddContactModal';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { formatChatListTimestamp } from '../../utils/dateUtils';
+import { isLeadAccessibleForUser } from '../../utils/permissionUtils';
+import { BlinkingBellNotification } from '../notifications/BlinkingBellNotification';
 
 interface WhatsAppChatListProps {
   onSelectLead: (leadId: string) => void;
@@ -74,12 +76,27 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     markChatAsUnread,
     deleteChat,
     clearChat,
-    updateLeadCompany
+    updateLeadCompany,
+    chatListFilter,
+    setChatListFilter,
+    totalUnreadCountForUser
   } = useCrm();
 
   const [search, setSearch] = useState('');
-  const [activeFilter, setActiveFilter] = useState<string>('all');
+  const [activeFilter, setActiveFilter] = useState<string>(() => chatListFilter || 'all');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
+
+  // Sync activeFilter with global chatListFilter from context (e.g. when bell is clicked)
+  useEffect(() => {
+    if (chatListFilter) {
+      setActiveFilter(chatListFilter);
+    }
+  }, [chatListFilter]);
+
+  const handleFilterSelect = (filter: string) => {
+    setActiveFilter(filter);
+    setChatListFilter(filter);
+  };
   
   // Context Menu State
   const [contextMenuLeadId, setContextMenuLeadId] = useState<string | null>(null);
@@ -211,8 +228,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     return latest;
   };
 
-  // Stage counts for quick badges
-  const accessibleLeads = leads.filter(l => isSuperAdmin || isLeadsOfficer || l.assignedTo === currentUser.id);
+  // Stage counts for quick badges based on role accessibility
+  const accessibleLeads = leads.filter(l => isLeadAccessibleForUser(l, currentUser));
   const totalUnreadCount = accessibleLeads.filter(l => (l.unreadCount || 0) > 0).length;
   const newCount = accessibleLeads.filter(l => (l.stage || 'new') === 'new').length;
   const assignedCount = accessibleLeads.filter(l => l.stage === 'assigned').length;
@@ -273,6 +290,14 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     const isPinnedB = pinnedLeadIds.has(b.id);
     if (isPinnedA && !isPinnedB) return -1;
     if (!isPinnedA && isPinnedB) return 1;
+
+    // Display unread conversations first when unread filter is active
+    if (activeFilter === 'unread') {
+      const isUnreadA = (a.unreadCount || 0) > 0;
+      const isUnreadB = (b.unreadCount || 0) > 0;
+      if (isUnreadA && !isUnreadB) return -1;
+      if (!isUnreadA && isUnreadB) return 1;
+    }
 
     const timeA = getLeadLatestTime(a);
     const timeB = getLeadLatestTime(b);
@@ -357,12 +382,18 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       
       {/* 1. Header (Exact WhatsApp Web Title Bar) */}
       <div className="h-14 px-4 bg-[#202c33] flex items-center justify-between shrink-0">
-        <h1 className="text-xl font-bold text-[#e9edef] tracking-tight flex items-center gap-2">
-          <span>WhatsApp</span>
-        </h1>
+        <div className="flex items-center gap-2.5 min-w-0">
+          {/* Mobile Blinking Bell (Only on small screens where LeftRail is hidden) */}
+          <div className="md:hidden shrink-0">
+            <BlinkingBellNotification variant="chat-header" />
+          </div>
+          <h1 className="text-xl font-bold text-[#e9edef] tracking-tight flex items-center gap-2 truncate">
+            <span>WhatsApp</span>
+          </h1>
+        </div>
         <button
           onClick={() => setIsAddContactOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
           title="Add New Contact"
         >
           <UserPlus className="w-4 h-4 stroke-[2.5]" />
@@ -386,7 +417,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         {/* Filter Chips row with Stages & Counts */}
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar text-xs pb-0.5">
           <button
-            onClick={() => setActiveFilter('all')}
+            onClick={() => handleFilterSelect('all')}
             className={`px-3 py-1 rounded-full text-xs font-semibold transition-all shrink-0 ${
               activeFilter === 'all'
                 ? 'bg-[#00a884]/20 text-[#00a884] font-bold'
@@ -396,9 +427,25 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             All
           </button>
 
+          {/* Unread Filter Pill */}
+          {totalUnreadCountForUser > 0 && (
+            <button
+              onClick={() => handleFilterSelect(activeFilter === 'unread' ? 'all' : 'unread')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
+                activeFilter === 'unread'
+                  ? 'bg-red-500/25 text-red-300 font-bold border-red-500/50'
+                  : 'bg-[#202c33] text-[#8696a0] border-transparent hover:bg-[#2a3942]'
+              }`}
+              title="Show unread conversations"
+            >
+              <span>Unread</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-red-500/20 text-red-300 font-bold">{totalUnreadCountForUser}</span>
+            </button>
+          )}
+
           {/* Company Filter Badges: (RWC) in Green & (CRAS) in Maroon */}
           <button
-            onClick={() => setActiveFilter('rwc')}
+            onClick={() => handleFilterSelect('rwc')}
             className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
               activeFilter === 'rwc'
                 ? 'bg-[#008000]/25 text-[#22c55e] font-bold border-[#008000]'
@@ -412,7 +459,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           </button>
 
           <button
-            onClick={() => setActiveFilter('cras')}
+            onClick={() => handleFilterSelect('cras')}
             className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
               activeFilter === 'cras'
                 ? 'bg-[#800000]/30 text-[#f87171] font-bold border-[#800000]'

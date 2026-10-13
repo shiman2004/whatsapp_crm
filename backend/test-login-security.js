@@ -335,6 +335,13 @@ server.listen(testPort, '127.0.0.1', async () => {
     // =========================================================================
     console.log('\n📦 SECTION 7: API Credential Leakage Prevention');
 
+    const coordToken = signAuthToken({
+      userId: 'user-faiha-1',
+      email: 'faiha@royalwellness.lk',
+      role: 'coordinator',
+      fullName: 'Faiha'
+    });
+
     const adminToken = signAuthToken({
       userId: 'user-admin-1',
       email: 'admin@royalwellness.lk',
@@ -342,17 +349,29 @@ server.listen(testPort, '127.0.0.1', async () => {
       fullName: 'Super Admin'
     });
 
-    const coordsRes = await fetch(`${baseUrl}/api/coordinators`, {
+    // 1. Regular coordinator must never receive other staff's PINs or passwords
+    const coordViewRes = await fetch(`${baseUrl}/api/coordinators`, {
+      headers: { 'Authorization': `Bearer ${coordToken}` }
+    });
+    assert.strictEqual(coordViewRes.status, 200);
+    const coordStaffList = await coordViewRes.json();
+    assert(Array.isArray(coordStaffList));
+    for (const staff of coordStaffList) {
+      assert.strictEqual(staff.password, undefined, `Password must not leak in staff response for ${staff.id}`);
+      assert.strictEqual(staff.pin, undefined, `PIN must not leak to coordinators for ${staff.id}`);
+    }
+
+    // 2. Super Admin never receives passwords, but receives staff PINs for clinic team management
+    const adminViewRes = await fetch(`${baseUrl}/api/coordinators`, {
       headers: { 'Authorization': `Bearer ${adminToken}` }
     });
-    assert.strictEqual(coordsRes.status, 200);
-    const coordsList = await coordsRes.json();
-    assert(Array.isArray(coordsList));
-    for (const staff of coordsList) {
-      assert.strictEqual(staff.password, undefined, `Password must not leak in staff response for ${staff.id}`);
-      assert.strictEqual(staff.pin, undefined, `PIN must not leak in staff response for ${staff.id}`);
+    assert.strictEqual(adminViewRes.status, 200);
+    const adminStaffList = await adminViewRes.json();
+    assert(Array.isArray(adminStaffList));
+    for (const staff of adminStaffList) {
+      assert.strictEqual(staff.password, undefined, `Password must never leak even to admin for ${staff.id}`);
     }
-    console.log('  ✅ 7.1 /api/coordinators response completely omits passwords and PINs');
+    console.log('  ✅ 7.1 /api/coordinators response completely protects passwords and isolates staff PINs');
 
     console.log('\n🎉 ALL LOGIN CREDENTIAL VALIDATION & SECURITY TESTS PASSED SUCCESSFULLY!\n');
     process.exit(0);

@@ -3477,10 +3477,12 @@ const server = http.createServer(async (req, res) => {
 
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
+    const isSuperAdmin = authUser && authUser.role === 'super_admin';
     const defaultCoordinators = CANONICAL_USERS.map(u => {
-      const { password, pin, ...safeUser } = u;
+      const { password, ...safeUser } = u;
       return {
         ...safeUser,
+        pin: isSuperAdmin ? (u.pin || '2026') : undefined,
         branch: safeUser.branch || 'Colombo',
         company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
         createdAt: '2026-01-01T08:00:00Z',
@@ -3497,9 +3499,10 @@ const server = http.createServer(async (req, res) => {
           });
           if (users && users.length > 0) {
             const mappedUsers = users.map(u => {
-              const { password, pin, ...safeUser } = u;
+              const { password, ...safeUser } = u;
               return {
                 ...safeUser,
+                pin: isSuperAdmin ? (u.pin || '2026') : undefined,
                 branch: safeUser.branch || 'Colombo',
                 company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
               };
@@ -3613,6 +3616,12 @@ const server = http.createServer(async (req, res) => {
         if (payload.fullName !== undefined) updateData.fullName = String(payload.fullName).trim();
         if (payload.name !== undefined && !payload.fullName) updateData.fullName = String(payload.name).trim();
         if (payload.branch !== undefined) updateData.branch = String(payload.branch).trim();
+        if (payload.pin !== undefined && String(payload.pin).trim()) {
+          updateData.pin = String(payload.pin).trim();
+        }
+        if (payload.password !== undefined && String(payload.password).trim()) {
+          updateData.password = hashSecret(String(payload.password).trim());
+        }
 
         if (Object.keys(updateData).length === 0) {
           res.writeHead(400, { 'Content-Type': 'application/json' });

@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Lead } from '../../types';
+import { Lead, Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
 import { WhatsAppAvatar } from './WhatsAppAvatar';
@@ -143,9 +143,39 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     setSelectedLeadId(null);
   };
 
-  const rawLeadMessages = messages.filter(m => 
-    m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId)
-  );
+  const rawLeadMessages: Message[] = (() => {
+    const matched = messages.filter(m => 
+      m.leadId === lead.id || 
+      (lead.customerId && m.customerId === lead.customerId) ||
+      (lead.customer?.whatsappNumber && ((m as any).to === lead.customer.whatsappNumber || (m as any).from === lead.customer.whatsappNumber)) ||
+      (lead.customer?.whatsappId && (m as any).whatsappId === lead.customer.whatsappId)
+    );
+    if (matched.length > 0) return matched;
+    if (Array.isArray((lead as any).messages) && (lead as any).messages.length > 0) {
+      return (lead as any).messages.map((m: any) => ({
+        id: m.id,
+        leadId: m.leadId || lead.id,
+        customerId: m.customerId || lead.customerId || '',
+        direction: m.direction || 'outbound',
+        senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+        senderId: m.senderId,
+        senderName: m.senderName,
+        senderRole: m.senderRole,
+        messageSource: m.messageSource,
+        sentAt: m.sentAt,
+        content: m.content || '',
+        status: m.status || 'delivered',
+        createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
+        media: m.mediaUrl ? { type: m.mediaType || 'image', url: m.mediaUrl } : m.media,
+        reactions: m.reaction ? [m.reaction] : (m.reactions || []),
+        starred: m.starred || false,
+        pinned: m.pinned || false,
+        replyTo: m.replyToId ? { id: m.replyToId, content: m.replyToContent || '', senderName: m.replyToSender || '' } : m.replyTo,
+        waMessageId: m.id
+      })) as Message[];
+    }
+    return [];
+  })();
 
   // Deduplicate and sort messages chronologically (oldest at top, newest at bottom)
   const seenMsgKeys = new Set<string>();
@@ -173,7 +203,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   // The 24h customer window strictly opens ONLY when an inbound message from the customer exists
   const lastCustomerMessageTime = latestInboundMsg
     ? new Date(latestInboundMsg.createdAt).getTime()
-    : (inboundMessages.length > 0 && lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0);
+    : (lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0);
 
   const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
 

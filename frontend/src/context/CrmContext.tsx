@@ -318,8 +318,59 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => Boolean(localStorage.getItem('meta_access_token')));
   const initialLeadLoadedRef = useRef<boolean>(false);
 
-  const getAuthToken = (): string => {
+  const [authToken, setAuthToken] = useState<string>(() => {
     return localStorage.getItem('rw_crm_auth_token') || '';
+  });
+
+  const getAuthToken = (): string => {
+    return authToken || localStorage.getItem('rw_crm_auth_token') || '';
+  };
+
+  const ensureValidAuthToken = async (): Promise<string> => {
+    let token = localStorage.getItem('rw_crm_auth_token') || authToken || '';
+    let isExpired = false;
+    if (token) {
+      try {
+        const parts = token.split('.');
+        if (parts.length === 2) {
+          const payloadStr = atob(parts[0].replace(/-/g, '+').replace(/_/g, '/'));
+          const payload = JSON.parse(payloadStr);
+          if (payload.exp && Date.now() > payload.exp - 60000) {
+            isExpired = true;
+          }
+        } else {
+          isExpired = true;
+        }
+      } catch (e) {
+        isExpired = true;
+      }
+    }
+
+    if (!token || isExpired) {
+      try {
+        const isSuper = currentUser?.role === 'super_admin' || currentUser?.id === 'user-admin-1';
+        const identifier = isSuper ? 'user-admin-1' : (currentUser?.email || currentUser?.id || 'admin@royalwellness.lk');
+        const pin = isSuper ? '1234' : (currentUser?.pin || '2026');
+        const password = isSuper ? 'admin' : (currentUser?.password || 'staff');
+
+        const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, pin, password })
+        });
+        if (authRes.ok) {
+          const authData = await authRes.json();
+          if (authData.token) {
+            token = authData.token;
+            localStorage.setItem('rw_crm_auth_token', token);
+            setAuthToken(token);
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to resolve auth token:', e);
+      }
+    }
+    return token;
   };
 
   // Desktop Notification Settings & Active Popups
@@ -508,26 +559,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Automatically load persistent conversation history, leads, coordinators, and Meta configuration
   const fetchInitialData = async () => {
     try {
-      let token = getAuthToken();
-      if (!token) {
-        try {
-          const pin = currentUser?.pin || (currentUser?.role === 'super_admin' ? '1234' : '2026');
-          const password = currentUser?.password || (currentUser?.role === 'super_admin' ? 'admin' : 'staff');
-          const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: currentUser?.id || 'user-admin-1', pin, password })
-          });
-          if (authRes.ok) {
-            const authData = await authRes.json();
-            if (authData.token) {
-              token = authData.token;
-              localStorage.setItem('rw_crm_auth_token', token);
-            }
-          }
-        } catch (e) {}
-      }
-
+      const token = await ensureValidAuthToken();
       const authHeaders = {
         'Authorization': token ? `Bearer ${token}` : '',
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
@@ -566,12 +598,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           // Ensure Super Admin is always present
           INITIAL_USERS.forEach(u => userMap.set(u.id, u));
           dbCoords.forEach(u => {
+            const isSuper = u.role === 'super_admin' || u.id === 'user-admin-1';
             userMap.set(u.id, {
               ...u,
               branch: u.branch || 'Colombo',
               company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
-              password: u.password || 'staff',
-              pin: u.pin || '2026',
+              password: u.password || (isSuper ? 'admin' : 'staff'),
+              pin: u.pin || (isSuper ? '1234' : '2026'),
               active: u.active ?? true,
               activeLeadsCount: u.activeLeadsCount || 0
             });
@@ -703,13 +736,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           msgMap.set(formatted.id, formatted);
         });
 
-      const finalMessages = Array.from(msgMap.values()).sort(
-        (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-      );
-      setMessages(finalMessages);
-      localStorage.setItem('rw_crm_messages', JSON.stringify(finalMessages));
+      if (collectedRawMessages.length > 0) {
+        const finalMessages = Array.from(msgMap.values()).sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+        setMessages(finalMessages);
+        localStorage.setItem('rw_crm_messages', JSON.stringify(finalMessages));
+      } else {
+        console.warn('⚠️ No messages collected from backend; preserving cached conversation state');
+      }
     } catch (e) {
-      console.warn('Could not fetch persistent MySQL database state:', e);
+      console.warn('Could not fetch persistent database state:', e);
     }
   };
 
@@ -805,6 +842,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const coordId = currentUser?.id || 'user-admin-1';
       const token = getAuthToken();
+      if (!token) {
+        return;
+      }
       eventSource = new EventSource(`${API_BASE_URL}/api/events?token=${encodeURIComponent(token)}&coordinatorId=${coordId}`);
       
       eventSource.onmessage = (event) => {
@@ -1411,7 +1451,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return () => {
       if (eventSource) eventSource.close();
     };
-  }, [currentUser?.id]);
+  }, [currentUser?.id, authToken]);
 
   // Mark chat as read and clear unread badge for the current user
   const markChatAsRead = (leadId: string) => {

@@ -40,10 +40,12 @@ export const CoordinatorsManager: React.FC = () => {
   const [activeFilter, setActiveFilter] = useState<StaffFilter>('all');
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
 
-  // Edit Staff State (Name & Branch only)
+  // Edit Staff State (Name, Branch, PIN & Password)
   const [editingStaff, setEditingStaff] = useState<User | null>(null);
   const [editFullName, setEditFullName] = useState('');
   const [editBranch, setEditBranch] = useState('Colombo');
+  const [editPin, setEditPin] = useState('');
+  const [editPassword, setEditPassword] = useState('');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
 
   // Form State
@@ -93,6 +95,8 @@ export const CoordinatorsManager: React.FC = () => {
     setEditingStaff(staff);
     setEditFullName(staff.fullName || '');
     setEditBranch(staff.branch || 'Colombo');
+    setEditPin(staff.pin || generateRandomPin());
+    setEditPassword(staff.password || '');
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -103,7 +107,9 @@ export const CoordinatorsManager: React.FC = () => {
     try {
       await updateCoordinator(editingStaff.id, {
         fullName: editFullName.trim(),
-        branch: editBranch.trim() || 'Colombo'
+        branch: editBranch.trim() || 'Colombo',
+        pin: editPin.trim() || undefined,
+        password: editPassword.trim() || undefined
       });
       setEditingStaff(null);
     } catch (err) {
@@ -356,14 +362,14 @@ export const CoordinatorsManager: React.FC = () => {
                         <KeyRound className="w-3 h-3 text-amber-400" /> Quick PIN:
                       </span>
                       <div className="flex items-center gap-1.5 font-mono font-bold text-amber-300 bg-amber-950/40 border border-amber-500/30 px-2 py-0.5 rounded-md tracking-wider">
-                        <span>{revealedPins[staff.id] ? (staff.pin || (isOfficer ? '4321' : '2026')) : '••••'}</span>
+                        <span>{revealedPins[staff.id] !== false ? (staff.pin || '••••') : '••••'}</span>
                         <button
                           type="button"
-                          onClick={() => setRevealedPins(prev => ({ ...prev, [staff.id]: !prev[staff.id] }))}
+                          onClick={() => setRevealedPins(prev => ({ ...prev, [staff.id]: prev[staff.id] === false ? true : false }))}
                           className="text-amber-400/80 hover:text-amber-200 transition-colors ml-0.5 cursor-pointer"
-                          title={revealedPins[staff.id] ? "Hide PIN" : "Show PIN"}
+                          title={revealedPins[staff.id] === false ? "Show PIN" : "Hide PIN"}
                         >
-                          {revealedPins[staff.id] ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                          {revealedPins[staff.id] === false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
                         </button>
                       </div>
                     </div>
@@ -686,6 +692,51 @@ export const CoordinatorsManager: React.FC = () => {
                   onChange={(e) => setEditBranch(e.target.value)}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3.5 py-2 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-emerald-500 transition-colors"
                 />
+              </div>
+
+              {/* PIN Number & Web Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                      <KeyRound className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Security PIN (4-Digits)</span>
+                      <span className="text-rose-400">*</span>
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEditPin(generateRandomPin())}
+                      className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
+                      title="Generate new random 4-digit PIN"
+                    >
+                      <RefreshCw className="w-2.5 h-2.5" />
+                      <span>Auto-Gen</span>
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    maxLength={4}
+                    required
+                    placeholder="e.g. 5839"
+                    value={editPin}
+                    onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ''))}
+                    className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-mono font-bold tracking-wider text-amber-400 outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-300 flex items-center gap-1">
+                    <Lock className="w-3.5 h-3.5 text-slate-400" />
+                    <span>Web Password</span>
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="New password (optional)"
+                    value={editPassword}
+                    onChange={(e) => setEditPassword(e.target.value)}
+                    className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-100 outline-none focus:border-emerald-500 transition-colors"
+                  />
+                </div>
               </div>
 
               {/* Action Buttons */}

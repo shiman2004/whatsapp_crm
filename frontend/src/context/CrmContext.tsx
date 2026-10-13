@@ -137,7 +137,7 @@ interface CrmContextType {
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
   addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => void;
-  updateCoordinator: (id: string, data: { fullName: string; branch: string }) => Promise<void>;
+  updateCoordinator: (id: string, data: { fullName: string; branch: string; pin?: string; password?: string }) => Promise<void>;
   deleteCoordinator: (id: string) => void;
 
   // Team Broadcast Channel
@@ -2668,22 +2668,36 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Coordinator Deleted', 'Coordinator removed and assigned leads reverted to Unassigned.', 'info');
   };
 
-  const updateCoordinator = async (id: string, data: { fullName: string; branch: string }) => {
+  const updateCoordinator = async (id: string, data: { fullName: string; branch: string; pin?: string; password?: string }) => {
     const cleanName = data.fullName.trim();
     const cleanBranch = data.branch.trim() || 'Colombo';
+    const cleanPin = data.pin ? data.pin.trim() : undefined;
+    const cleanPassword = data.password ? data.password.trim() : undefined;
 
     const oldUser = users.find(u => u.id === id);
 
     // 1. Update state & localStorage
     setUsers(prev => {
-      const updated = prev.map(u => u.id === id ? { ...u, fullName: cleanName, branch: cleanBranch } : u);
+      const updated = prev.map(u => u.id === id ? { 
+        ...u, 
+        fullName: cleanName, 
+        branch: cleanBranch,
+        pin: cleanPin || u.pin,
+        password: cleanPassword || u.password
+      } : u);
       localStorage.setItem('rw_crm_users', JSON.stringify(updated));
       return updated;
     });
 
     if (currentUser?.id === id) {
       setCurrentUser(prev => {
-        const updated = { ...prev, fullName: cleanName, branch: cleanBranch };
+        const updated = { 
+          ...prev, 
+          fullName: cleanName, 
+          branch: cleanBranch,
+          pin: cleanPin || prev.pin,
+          password: cleanPassword || prev.password
+        };
         localStorage.setItem('rw_crm_current_user', JSON.stringify(updated));
         return updated;
       });
@@ -2700,7 +2714,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         },
         body: JSON.stringify({
           fullName: cleanName,
-          branch: cleanBranch
+          branch: cleanBranch,
+          pin: cleanPin,
+          password: cleanPassword
         })
       });
       if (!res.ok) {
@@ -2710,7 +2726,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       console.warn('Could not sync staff update to backend/Supabase:', err);
     }
 
-    logAudit('UPDATE_USER', 'User', id, { fullName: oldUser?.fullName, branch: oldUser?.branch }, { fullName: cleanName, branch: cleanBranch });
+    logAudit('UPDATE_USER', 'User', id, { fullName: oldUser?.fullName, branch: oldUser?.branch }, { fullName: cleanName, branch: cleanBranch, pin: cleanPin ? '***' : undefined });
     notify('Staff Updated', `${cleanName} (${cleanBranch}) updated in Supabase successfully`, 'success');
   };
 

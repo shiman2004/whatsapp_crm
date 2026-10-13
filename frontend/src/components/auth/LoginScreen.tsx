@@ -16,10 +16,79 @@ import {
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
+// Helper to detect if Super Admin is unlocked via URL param (?admin=true, ?admin=1, ?admin, #admin, or /admin)
+const checkIsAdminAllowed = (): boolean => {
+  if (typeof window === 'undefined') return false;
+  try {
+    const url = new URL(window.location.href);
+    const adminParam = url.searchParams.get('admin');
+    const hasAdminQuery = 
+      url.searchParams.has('admin') && 
+      (adminParam === null || adminParam === '' || adminParam.toLowerCase() === 'true' || adminParam === '1' || adminParam.toLowerCase() === 'yes');
+    const hasAdminHash = window.location.hash.toLowerCase().includes('admin');
+    const hasAdminPath = window.location.pathname.toLowerCase().endsWith('/admin');
+    return Boolean(hasAdminQuery || hasAdminHash || hasAdminPath);
+  } catch {
+    return false;
+  }
+};
+
 export const LoginScreen: React.FC = () => {
   const { users, login } = useCrm() as any;
-  const [roleTab, setRoleTab] = useState<'coordinator' | 'leads_officer' | 'super_admin'>('coordinator');
+  const initialAdminAllowed = checkIsAdminAllowed();
+  const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(initialAdminAllowed);
+  const [roleTab, setRoleTab] = useState<'coordinator' | 'leads_officer' | 'super_admin'>(
+    initialAdminAllowed ? 'super_admin' : 'coordinator'
+  );
+  const [logoClickCount, setLogoClickCount] = useState<number>(0);
   const [authMode, setAuthMode] = useState<'pin' | 'password'>('pin');
+
+  // Listen for URL changes or stealth shortcut (Ctrl+Shift+A or Alt+A)
+  useEffect(() => {
+    const evaluateUrl = () => {
+      if (checkIsAdminAllowed()) {
+        setIsAdminUnlocked(true);
+        setRoleTab('super_admin');
+      }
+    };
+
+    window.addEventListener('popstate', evaluateUrl);
+    window.addEventListener('hashchange', evaluateUrl);
+
+    const handleShortcut = (e: KeyboardEvent) => {
+      if ((e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) || (e.altKey && (e.key === 'A' || e.key === 'a'))) {
+        e.preventDefault();
+        setIsAdminUnlocked(prev => {
+          const next = !prev;
+          if (next) {
+            setRoleTab('super_admin');
+          } else if (roleTab === 'super_admin') {
+            setRoleTab('coordinator');
+          }
+          return next;
+        });
+      }
+    };
+
+    window.addEventListener('keydown', handleShortcut);
+    return () => {
+      window.removeEventListener('popstate', evaluateUrl);
+      window.removeEventListener('hashchange', evaluateUrl);
+      window.removeEventListener('keydown', handleShortcut);
+    };
+  }, [roleTab]);
+
+  const handleLogoClick = () => {
+    setLogoClickCount(prev => {
+      const next = prev + 1;
+      if (next >= 3) {
+        setIsAdminUnlocked(true);
+        setRoleTab('super_admin');
+        return 0;
+      }
+      return next;
+    });
+  };
   
   // Coordinator selection / typing
   const coordinatorsList = users.filter((u: any) => u.role === 'coordinator');
@@ -153,7 +222,11 @@ export const LoginScreen: React.FC = () => {
         
         {/* Brand Header */}
         <div className="text-center space-y-2">
-          <div className="w-16 h-16 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-xl overflow-hidden ring-1 ring-slate-700/50">
+          <div 
+            onClick={handleLogoClick}
+            className="w-16 h-16 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-xl overflow-hidden ring-1 ring-slate-700/50 cursor-pointer transition-transform active:scale-95"
+            title="Alpha Health Group"
+          >
             <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
           </div>
           <div>
@@ -166,8 +239,8 @@ export const LoginScreen: React.FC = () => {
           </div>
         </div>
 
-        {/* 3 Role Selector Tabs: Coordinator vs Leads Manager vs Super Admin */}
-        <div className="grid grid-cols-3 gap-1.5 bg-[#202c33] p-1.5 rounded-xl border border-slate-800">
+        {/* Role Selector Tabs: Coordinator vs Leads Manager (Super Admin unlocked via ?admin=true) */}
+        <div className={`grid ${isAdminUnlocked ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 bg-[#202c33] p-1.5 rounded-xl border border-slate-800`}>
           <button
             type="button"
             onClick={() => setRoleTab('coordinator')}
@@ -192,18 +265,20 @@ export const LoginScreen: React.FC = () => {
             <UserCheck className="w-3.5 h-3.5" />
             <span>Leads Manager</span>
           </button>
-          <button
-            type="button"
-            onClick={() => setRoleTab('super_admin')}
-            className={`py-2 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-              roleTab === 'super_admin'
-                ? 'bg-[#00a884] text-black shadow-md'
-                : 'text-[#8696a0] hover:text-white'
-            }`}
-          >
-            <Crown className="w-3.5 h-3.5" />
-            <span>Super Admin</span>
-          </button>
+          {isAdminUnlocked && (
+            <button
+              type="button"
+              onClick={() => setRoleTab('super_admin')}
+              className={`py-2 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
+                roleTab === 'super_admin'
+                  ? 'bg-[#00a884] text-black shadow-md'
+                  : 'text-[#8696a0] hover:text-white'
+              }`}
+            >
+              <Crown className="w-3.5 h-3.5" />
+              <span>Super Admin</span>
+            </button>
+          )}
         </div>
 
         {/* Account Identifier Selector / Input */}

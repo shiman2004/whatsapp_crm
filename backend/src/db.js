@@ -76,6 +76,34 @@ export const checkDbConnection = async () => {
     `).catch(() => null);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON public.team_broadcasts(created_at DESC);`).catch(() => null);
 
+    // Ensure message_audits table exists for permanent Super Admin sender audit trail
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.message_audits (
+        id VARCHAR(50) PRIMARY KEY,
+        message_id VARCHAR(100) UNIQUE NOT NULL,
+        lead_id VARCHAR(50) NOT NULL,
+        customer_id VARCHAR(50),
+        company VARCHAR(50),
+        whatsapp_number VARCHAR(50),
+        sender_id VARCHAR(36),
+        sender_name VARCHAR(255) NOT NULL,
+        sender_role VARCHAR(50) NOT NULL,
+        message_source VARCHAR(50) DEFAULT 'CRM User',
+        delivery_status VARCHAR(50) DEFAULT 'sent',
+        sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_message_audits_lead ON public.message_audits(lead_id);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_message_audits_sender ON public.message_audits(sender_id);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_message_audits_sent ON public.message_audits(sent_at DESC);`).catch(() => null);
+
+    // Ensure messages table has sender audit columns
+    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "senderName" VARCHAR(255);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "senderRole" VARCHAR(50);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "messageSource" VARCHAR(50) DEFAULT 'CRM User';`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "sentAt" TIMESTAMP WITH TIME ZONE DEFAULT NOW();`).catch(() => null);
+
     // Ensure LeadStage enum has all required values in Postgres
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'new';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'assigned';`).catch(() => null);

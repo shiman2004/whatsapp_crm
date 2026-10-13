@@ -623,6 +623,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             customerId: m.customerId,
             direction: m.direction,
             senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+            senderId: m.senderId || m.audit?.senderId,
+            senderName: m.senderName || m.audit?.senderName,
+            senderRole: m.senderRole || m.audit?.senderRole,
+            messageSource: m.messageSource || m.audit?.messageSource,
+            sentAt: m.sentAt || m.audit?.sentAt,
             content: m.content || '',
             status: m.status || 'delivered',
             createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
@@ -1156,6 +1161,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     status: 'sent',
                     leadId: resolvedLeadId || updated[optIndex].leadId,
                     customerId: resolvedCustomerId || updated[optIndex].customerId,
+                    senderId: data.senderId || updated[optIndex].senderId,
+                    senderName: data.senderName || updated[optIndex].senderName,
+                    senderRole: data.senderRole || updated[optIndex].senderRole,
+                    messageSource: data.messageSource || updated[optIndex].messageSource,
+                    sentAt: data.sentAt || updated[optIndex].sentAt,
                     media: data.media ? {
                       type: data.media.type || 'image',
                       url: data.media.url,
@@ -1183,6 +1193,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 customerId: resolvedCustomerId,
                 direction: isOutbound ? 'outbound' : 'inbound',
                 senderType: senderType || (isOutbound ? 'coordinator' : 'customer'),
+                senderId: data.senderId,
+                senderName: data.senderName,
+                senderRole: data.senderRole,
+                messageSource: data.messageSource,
+                sentAt: data.sentAt || (isOutbound ? (timestamp || new Date().toISOString()) : undefined),
                 content: cleanContent,
                 media: data.media ? {
                   type: data.media.type || 'image',
@@ -1778,12 +1793,24 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     const tempMsgId = 'msg-' + Date.now();
+    const nowUtc = new Date().toISOString();
+    const isSystemOrAi = senderType === 'system' || senderType === 'ai';
+    const auditSenderId = currentUser?.id;
+    const auditSenderName = isSystemOrAi ? 'System / Automation' : currentUser?.fullName;
+    const auditSenderRole = isSystemOrAi ? 'System' : (currentUser?.roleTitle || currentUser?.role);
+    const auditSource = isSystemOrAi ? 'Automation' : 'CRM User';
+
     const newMsg: Message = {
       id: tempMsgId,
       leadId,
       customerId: lead.customerId,
       direction: 'outbound',
       senderType,
+      senderId: auditSenderId,
+      senderName: auditSenderName,
+      senderRole: auditSenderRole,
+      messageSource: auditSource,
+      sentAt: nowUtc,
       content,
       media,
       replyTo: replyTo || (replyingMessage ? {
@@ -1795,7 +1822,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       } : undefined),
       waMessageId: undefined,
       status: 'pending',
-      createdAt: new Date().toISOString(),
+      createdAt: nowUtc,
     };
 
     setMessages(prev => [...prev, newMsg]);
@@ -1827,6 +1854,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           media: media || undefined,
           leadId: lead.id,
           customerId: lead.customerId,
+          senderId: auditSenderId,
+          senderName: auditSenderName,
+          senderRole: auditSenderRole,
+          messageSource: auditSource,
+          sentAt: nowUtc,
           token: savedToken || undefined,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701')
@@ -2020,15 +2052,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     const tempId = 'tpl-' + Date.now();
+    const nowUtc = new Date().toISOString();
+    const auditSenderId = currentUser?.id;
+    const auditSenderName = currentUser?.fullName;
+    const auditSenderRole = currentUser?.roleTitle || currentUser?.role;
+    const auditSource = 'CRM User';
+
     const newMsg: Message = {
       id: tempId,
       leadId,
       customerId: lead.customerId,
       direction: 'outbound',
       senderType: 'coordinator',
+      senderId: auditSenderId,
+      senderName: auditSenderName,
+      senderRole: auditSenderRole,
+      messageSource: auditSource,
+      sentAt: nowUtc,
       content: body,
       status: 'pending',
-      createdAt: new Date().toISOString()
+      createdAt: nowUtc
     };
     
     // If retrying a failed message, replace or remove the old failed message
@@ -2059,6 +2102,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           parameters: effectiveParams,
           leadId: lead.id,
           customerId: lead.customerId,
+          senderId: auditSenderId,
+          senderName: auditSenderName,
+          senderRole: auditSenderRole,
+          messageSource: auditSource,
+          sentAt: nowUtc,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
           token: savedToken || undefined,

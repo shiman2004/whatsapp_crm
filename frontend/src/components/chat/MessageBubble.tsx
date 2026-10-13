@@ -28,6 +28,7 @@ import {
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { API_BASE_URL } from '../../config/api';
+import { getMessageSenderAuditText } from '../../utils/auditUtils';
 import { MessageInfoModal } from './MessageInfoModal';
 import { ForwardMessageModal } from './ForwardMessageModal';
 import { MessageMetaAiModal } from './MessageMetaAiModal';
@@ -249,13 +250,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     });
   };
 
+  const isSuperAdmin = currentUser?.role === 'super_admin';
+  const auditDisplayText = isSuperAdmin && isOutbound ? getMessageSenderAuditText(message) : null;
+
   return (
     <>
-      <div 
-        className={`flex items-center gap-1.5 my-1 group relative z-10 ${
-          isOutbound ? 'justify-end' : 'justify-start'
-        } ${menuOpen || showReactionPicker ? 'z-40' : ''}`}
-      >
+      <div className={`flex flex-col ${isOutbound ? 'items-end' : 'items-start'} my-1`}>
+        <div 
+          className={`flex items-center gap-1.5 group relative z-10 ${
+            isOutbound ? 'justify-end' : 'justify-start'
+          } ${menuOpen || showReactionPicker ? 'z-40' : ''}`}
+        >
         {/* Outbound Hover Emoji Trigger (Appears to the LEFT of outbound bubble) */}
         {isOutbound && (
           <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 relative">
@@ -601,6 +606,17 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             >
               <span>{message.reactions[0]}</span>
             </div>
+          </div>
+        )}
+        </div>
+
+        {/* Super Admin ONLY: Message Sender Identification & Audit Trail */}
+        {isSuperAdmin && isOutbound && auditDisplayText && (
+          <div 
+            className="text-[11px] font-medium tracking-tight text-[#ef4444] text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
+            title={`Internal Audit: ${auditDisplayText}`}
+          >
+            {auditDisplayText}
           </div>
         )}
       </div>

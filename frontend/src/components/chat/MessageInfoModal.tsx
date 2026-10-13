@@ -11,6 +11,8 @@ import {
   Info
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
+import { useCrm } from '../../context/CrmContext';
+import { formatSriLankaDateTime, formatSenderRole } from '../../utils/auditUtils';
 
 interface MessageInfoModalProps {
   isOpen: boolean;
@@ -25,6 +27,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
   message,
   lead
 }) => {
+  const { currentUser } = useCrm();
   if (!isOpen || !message) return null;
 
   const isOutbound = message.direction === 'outbound';
@@ -121,6 +124,32 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
               <span className="shrink-0">Message ID</span>
               <span className="text-[10px] font-mono text-slate-500 truncate max-w-[200px]">{message.waMessageId || message.id}</span>
             </div>
+
+            {/* Super Admin ONLY: Internal Message Sender Audit */}
+            {currentUser?.role === 'super_admin' && isOutbound && (message.senderName || message.senderRole) && (
+              <div className="pt-2.5 mt-2 border-t border-slate-800/80 space-y-2 text-[11px]">
+                <div className="flex items-center justify-between text-rose-400 font-semibold text-[10.5px] uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Sender Audit Trail</span>
+                  <span className="text-[9.5px] text-rose-500/80 font-normal lowercase bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">super admin only</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Sent by (Staff Name)</span>
+                  <span className="text-slate-100 font-medium">{message.senderName || 'Staff'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Sender Role</span>
+                  <span className="text-slate-100 font-medium">{formatSenderRole(message.senderRole)}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Message Source</span>
+                  <span className="text-slate-100 font-medium">{message.messageSource || 'CRM User'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Sent Date & Time (Sri Lanka)</span>
+                  <span className="text-rose-400 font-medium font-mono">{formatSriLankaDateTime(message.sentAt || message.createdAt)}</span>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

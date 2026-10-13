@@ -52,10 +52,14 @@ export const LoginScreen: React.FC = () => {
   const [logoClickCount, setLogoClickCount] = useState<number>(0);
   const [authMode, setAuthMode] = useState<'pin' | 'password'>('pin');
 
-  // Filtered staff groups
-  const rwcCoordinators = users.filter((u: any) => u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
-  const crasCoordinators = users.filter((u: any) => u.role === 'coordinator' && u.company === 'CRAS');
-  const leadsOfficers = users.filter((u: any) => u.role === 'leads_officer');
+  // Filtered staff groups — also exclude deleted users persisted in localStorage
+  const _deletedIds: string[] = (() => {
+    try { return JSON.parse(localStorage.getItem('rw_crm_deleted_users') || '[]'); } catch { return []; }
+  })();
+  const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false;
+  const rwcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
+  const crasCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'CRAS');
+  const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
 
   const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
   const [passwordInput, setPasswordInput] = useState<string>('staff');

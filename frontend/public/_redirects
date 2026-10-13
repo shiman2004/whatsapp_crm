@@ -1,0 +1,3 @@
+/api/* https://royal-wellness-backend.onrender.com/api/:splat 200!
+/webhook https://royal-wellness-backend.onrender.com/api/webhook 200!
+/* /index.html 200

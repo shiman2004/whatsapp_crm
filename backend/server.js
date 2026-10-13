@@ -3476,17 +3476,25 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 12. Meta WhatsApp Cloud API Webhook Handlers
-  if (pathname === '/api/webhook') {
+  if (
+    pathname === '/api/webhook' || 
+    pathname === '/webhook' || 
+    pathname === '/api/meta/webhook' || 
+    pathname === '/meta/webhook'
+  ) {
     if (req.method === 'GET') {
       const mode = parsedUrl.query['hub.mode'];
       const token = parsedUrl.query['hub.verify_token'];
       const challenge = parsedUrl.query['hub.challenge'];
       const VERIFY_TOKEN = process.env.META_VERIFY_TOKEN || 'royal_wellness_token_2026';
 
+      console.log(`🔍 [Meta Webhook Verification] Mode: ${mode}, Token provided: ${token ? 'YES' : 'NO'}`);
       if (mode === 'subscribe' && token === VERIFY_TOKEN) {
+        console.log('✅ [Meta Webhook Verification] Verified successfully!');
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end(challenge);
       } else {
+        console.warn('⚠️ [Meta Webhook Verification] Token mismatch or invalid mode.');
         res.writeHead(403, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: 'Forbidden. Invalid verification token.' }));
       }
@@ -3498,7 +3506,8 @@ const server = http.createServer(async (req, res) => {
       req.on('data', chunk => { body += chunk; });
       req.on('end', async () => {
         try {
-          const payload = JSON.parse(body);
+          const payload = JSON.parse(body || '{}');
+          console.log(`📩 [Meta Webhook POST] Payload received on ${pathname}:`, JSON.stringify(payload).slice(0, 300));
           if (payload.object === 'whatsapp_business_account' && Array.isArray(payload.entry)) {
             for (const entry of payload.entry) {
               for (const change of entry.changes || []) {
@@ -3509,172 +3518,190 @@ const server = http.createServer(async (req, res) => {
                   const incomingDisplayPhone = metadata?.display_phone_number;
                   const companyInfo = resolveCompany(incomingPhoneId, incomingDisplayPhone);
 
-                  const contact = val.contacts?.[0];
-                  const message = val.messages?.[0];
+                  // Process all incoming messages in the payload
+                  const incomingMessages = Array.isArray(val.messages) ? val.messages : [];
+                  for (const message of incomingMessages) {
+                    const contact = val.contacts?.find(c => c.wa_id === message.from) || val.contacts?.[0];
+                    const phone = contact?.wa_id || message.from;
+                    const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
+                    const msgType = message.type || 'text';
+                    const messageId = message.id;
 
-                    if (message) {
-                      const phone = contact?.wa_id || message.from;
-                      const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
-                      const msgType = message.type || 'text';
-                      const messageId = message.id;
+                    let mediaType = null;
+                    let mediaUrl = null;
+                    let mediaFileName = null;
+                    let text = message.text?.body || 
+                      message.button?.text || 
+                      message.interactive?.button_reply?.title || 
+                      message.interactive?.list_reply?.title || 
+                      '';
 
-                      let mediaType = null;
-                      let mediaUrl = null;
-                      let mediaFileName = null;
-                      let text = message.text?.body || message.button?.text || '';
+                    const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
 
-                      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+                    if (['image', 'audio', 'voice', 'video', 'document'].includes(msgType)) {
+                      mediaType = msgType === 'voice' ? 'audio' : msgType;
+                      const mediaObj = message.image || message.audio || message.voice || message.video || message.document;
+                      const mediaId = mediaObj?.id;
+                      const mimeType = mediaObj?.mime_type || '';
+                      mediaFileName = mediaObj?.filename || null;
 
-                      if (['image', 'audio', 'voice', 'video', 'document'].includes(msgType)) {
-                        mediaType = msgType === 'voice' ? 'audio' : msgType;
-                        const mediaObj = message.image || message.audio || message.voice || message.video || message.document;
-                        const mediaId = mediaObj?.id;
-                        const mimeType = mediaObj?.mime_type || '';
-                        mediaFileName = mediaObj?.filename || null;
-
-                        if (mediaObj?.caption) {
-                          text = mediaObj.caption;
-                        } else if (!text) {
-                          text = mediaFileName || (mediaType === 'audio' ? 'Voice note' : `[${mediaType.toUpperCase()}]`);
-                        }
-
-                        if (mediaId && metaToken) {
-                          mediaUrl = await downloadMetaMedia(mediaId, metaToken, mimeType, mediaFileName);
-                        }
+                      if (mediaObj?.caption) {
+                        text = mediaObj.caption;
+                      } else if (!text) {
+                        text = mediaFileName || (mediaType === 'audio' ? 'Voice note' : `[${mediaType.toUpperCase()}]`);
                       }
 
-                      if (!text && !mediaType) {
-                        text = '[Message]';
+                      if (mediaId && metaToken) {
+                        mediaUrl = await downloadMetaMedia(mediaId, metaToken, mimeType, mediaFileName);
                       }
-
-                      let savedLeadId = null;
-                      let savedCustomerId = null;
-                      let cust = null;
-                      let lead = null;
-
-                      // Persist to Supabase / PostgreSQL database
-                      const prisma = getPrisma();
-                      if (prisma && getDbStatus() && phone) {
-                        try {
-                          const cleanDigits = String(phone).replace(/[^0-9]/g, '');
-                          const canonicalPhone = cleanDigits.startsWith('+') ? cleanDigits : `+${cleanDigits}`;
-
-                          // 1. Find or create Customer
-                          cust = await prisma.customer.findFirst({
-                            where: {
-                              OR: [
-                                { whatsappNumber: canonicalPhone },
-                                { whatsappNumber: cleanDigits },
-                                { whatsappId: cleanDigits },
-                                { whatsappId: phone }
-                              ]
-                            }
-                          });
-
-                          if (!cust) {
-                            cust = await prisma.customer.create({
-                              data: {
-                                whatsappNumber: canonicalPhone,
-                                whatsappId: cleanDigits,
-                                displayName: name || canonicalPhone,
-                                preferredLanguage: 'en'
-                              }
-                            });
-                          } else if (name && name !== canonicalPhone && name !== cleanDigits && (!cust.displayName || cust.displayName.startsWith('+'))) {
-                            cust = await prisma.customer.update({
-                              where: { id: cust.id },
-                              data: { displayName: name }
-                            }).catch(() => cust);
-                          }
-
-                          savedCustomerId = cust?.id || null;
-
-                          // 2. Find or create Lead (tagged with company in source column: RWC or CRAS)
-                          lead = await prisma.lead.findFirst({
-                            where: { customerId: cust.id },
-                            orderBy: { updatedAt: 'desc' }
-                          });
-
-                          if (!lead) {
-                            const firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
-                            const firstTrt = await prisma.treatment.findFirst().catch(() => null);
-
-                            lead = await prisma.lead.create({
-                              data: {
-                                customerId: cust.id,
-                                categoryId: firstCat?.id || null,
-                                treatmentId: firstTrt?.id || null,
-                                stage: 'new',
-                                source: companyInfo.code,
-                                language: 'en',
-                                lastCustomerMessageAt: new Date()
-                              }
-                            });
-                          } else {
-                            await prisma.lead.update({
-                              where: { id: lead.id },
-                              data: {
-                                source: companyInfo.code,
-                                lastCustomerMessageAt: new Date(),
-                                updatedAt: new Date()
-                              }
-                            }).catch(() => {});
-                          }
-
-                          savedLeadId = lead?.id || null;
-
-                          // 3. Save Message to DB with Media Details & Company
-                          await prisma.message.upsert({
-                            where: { id: messageId },
-                            update: {
-                              content: text,
-                              mediaType: mediaType || undefined,
-                              mediaUrl: mediaUrl || undefined,
-                              status: 'delivered'
-                            },
-                            create: {
-                              id: messageId,
-                              leadId: lead.id,
-                              customerId: cust.id,
-                              direction: 'inbound',
-                              senderType: 'customer',
-                              content: text,
-                              status: 'delivered',
-                              mediaType: mediaType || null,
-                              mediaUrl: mediaUrl || null,
-                              timestamp: new Date()
-                            }
-                          });
-                          console.log(`✅ [Meta Webhook] Inbound message saved to DB [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Customer ${cust.id}`);
-                        } catch (e) {
-                          console.error('❌ [DB Error saving inbound Meta message]:', e);
-                        }
-                      }
-
-                      // 4. Broadcast SSE with Company Tags (RWC / CRAS)
-                      broadcastScopedSSE(null, {
-                        type: 'INBOUND_WHATSAPP_MESSAGE',
-                        phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
-                        whatsappId: phone,
-                        realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
-                        name,
-                        text,
-                        media: mediaType ? {
-                          type: mediaType,
-                          url: mediaUrl,
-                          fileName: mediaFileName || (mediaType === 'audio' ? 'Voice Note' : 'Attachment')
-                        } : null,
-                        messageId,
-                        leadId: savedLeadId,
-                        customerId: savedCustomerId,
-                        company: companyInfo.code,
-                        companyTag: companyInfo.tag,
-                        companyColor: companyInfo.colorHex,
-                        companyPhoneNumberId: companyInfo.phoneId,
-                        companyPhoneNumber: companyInfo.phoneNumber,
-                        timestamp: new Date().toISOString()
-                      });
                     }
+
+                    if (!text && !mediaType) {
+                      text = '[Message]';
+                    }
+
+                    let savedLeadId = null;
+                    let savedCustomerId = null;
+                    let cust = null;
+                    let lead = null;
+
+                    // Persist to Supabase / PostgreSQL database
+                    const prisma = getPrisma();
+                    if (prisma && getDbStatus() && phone) {
+                      try {
+                        const rawClean = String(phone).replace(/[^0-9]/g, '');
+                        const canonicalPhone = rawClean.startsWith('+') ? rawClean : `+${rawClean}`;
+                        const localClean = rawClean.startsWith('94') ? '0' + rawClean.slice(2) : rawClean;
+                        const formattedWithSpaces = rawClean.startsWith('94')
+                          ? `+94 ${rawClean.slice(2, 4)} ${rawClean.slice(4, 7)} ${rawClean.slice(7)}`
+                          : canonicalPhone;
+
+                        // 1. Find or create Customer
+                        cust = await prisma.customer.findFirst({
+                          where: {
+                            OR: [
+                              { whatsappNumber: canonicalPhone },
+                              { whatsappNumber: rawClean },
+                              { whatsappNumber: formattedWithSpaces },
+                              { whatsappNumber: localClean },
+                              { whatsappNumber: { contains: rawClean.slice(-9) } },
+                              { whatsappId: rawClean },
+                              { whatsappId: phone },
+                              { phoneNumber: { contains: rawClean.slice(-9) } }
+                            ]
+                          }
+                        });
+
+                        if (!cust) {
+                          cust = await prisma.customer.create({
+                            data: {
+                              whatsappNumber: canonicalPhone,
+                              whatsappId: rawClean,
+                              displayName: name || canonicalPhone,
+                              preferredLanguage: 'en'
+                            }
+                          });
+                        } else if (name && name !== canonicalPhone && name !== rawClean && (!cust.displayName || cust.displayName.startsWith('+'))) {
+                          cust = await prisma.customer.update({
+                            where: { id: cust.id },
+                            data: { displayName: name }
+                          }).catch(() => cust);
+                        }
+
+                        savedCustomerId = cust?.id || null;
+
+                        // 2. Find or create Lead (tagged with company: RWC or CRAS)
+                        lead = await prisma.lead.findFirst({
+                          where: {
+                            OR: [
+                              { customerId: cust.id },
+                              { customer: { whatsappNumber: { contains: rawClean.slice(-9) } } }
+                            ]
+                          },
+                          orderBy: { updatedAt: 'desc' }
+                        });
+
+                        if (!lead) {
+                          const firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
+                          const firstTrt = await prisma.treatment.findFirst().catch(() => null);
+
+                          lead = await prisma.lead.create({
+                            data: {
+                              customerId: cust.id,
+                              categoryId: firstCat?.id || null,
+                              treatmentId: firstTrt?.id || null,
+                              stage: 'new',
+                              source: companyInfo.code,
+                              language: 'en',
+                              lastCustomerMessageAt: new Date()
+                            }
+                          });
+                        } else {
+                          await prisma.lead.update({
+                            where: { id: lead.id },
+                            data: {
+                              source: companyInfo.code,
+                              lastCustomerMessageAt: new Date(),
+                              updatedAt: new Date()
+                            }
+                          }).catch(() => {});
+                        }
+
+                        savedLeadId = lead?.id || null;
+
+                        // 3. Save Message to DB with Media Details & Company
+                        await prisma.message.upsert({
+                          where: { id: messageId },
+                          update: {
+                            content: text,
+                            mediaType: mediaType || undefined,
+                            mediaUrl: mediaUrl || undefined,
+                            status: 'delivered'
+                          },
+                          create: {
+                            id: messageId,
+                            leadId: lead.id,
+                            customerId: cust.id,
+                            direction: 'inbound',
+                            senderType: 'customer',
+                            content: text,
+                            status: 'delivered',
+                            mediaType: mediaType || null,
+                            mediaUrl: mediaUrl || null,
+                            timestamp: new Date()
+                          }
+                        });
+                        console.log(`✅ [Meta Webhook] Inbound message saved to DB [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Customer ${cust.id}`);
+                      } catch (e) {
+                        console.error('❌ [DB Error saving inbound Meta message]:', e);
+                      }
+                    }
+
+                    // 4. Broadcast SSE with Company Tags (RWC / CRAS)
+                    broadcastScopedSSE(lead?.assignedTo || null, {
+                      type: 'INBOUND_WHATSAPP_MESSAGE',
+                      phone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
+                      whatsappId: phone,
+                      realPhone: phone ? (phone.startsWith('+') ? phone : `+${phone}`) : '',
+                      name,
+                      text,
+                      media: mediaType ? {
+                        type: mediaType,
+                        url: mediaUrl,
+                        fileName: mediaFileName || (mediaType === 'audio' ? 'Voice Note' : 'Attachment')
+                      } : null,
+                      messageId,
+                      leadId: savedLeadId,
+                      customerId: savedCustomerId,
+                      coordinatorId: lead?.assignedTo || null,
+                      company: companyInfo.code,
+                      companyTag: companyInfo.tag,
+                      companyColor: companyInfo.colorHex,
+                      companyPhoneNumberId: companyInfo.phoneId,
+                      companyPhoneNumber: companyInfo.phoneNumber,
+                      timestamp: new Date().toISOString()
+                    });
+                  }
 
                   // 12b. Handle Outbound Message Status Tracking (sent, delivered, read, failed)
                   if (Array.isArray(val.statuses) && val.statuses.length > 0) {

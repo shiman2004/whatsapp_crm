@@ -160,45 +160,48 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
             {/* Dropdown Menu */}
             {userDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-56 bg-[#111b21] border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 space-y-1.5">
-                <div className="px-3 py-2 border-b border-slate-800">
+              <div className="absolute right-0 mt-2 w-64 bg-[#111b21] border border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 flex flex-col">
+                <div className="px-3 py-2 border-b border-slate-800 shrink-0">
                   <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
                   <p className="text-[11px] text-slate-400 font-mono truncate">{currentUser?.email}</p>
                 </div>
 
-                {/* Switch Profile Section - ONLY for Super Admin */}
+                {/* Switch Profile Section - Scrollable for clean compact view */}
                 {isSuperAdmin && (
-                  <div className="space-y-0.5">
-                    <label className="text-[10px] font-bold text-slate-500 px-3 uppercase tracking-wider block pt-1">
+                  <div className="py-1">
+                    <label className="text-[10px] font-bold text-slate-500 px-3 uppercase tracking-wider block py-1">
                       Switch Profile (Admin View)
                     </label>
-                    {users.map((u: any) => (
-                      <button
-                        key={u.id}
-                        onClick={() => {
-                          setCurrentUser(u);
-                          setUserDropdownOpen(false);
-                        }}
-                        className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all ${
-                          currentUser?.id === u.id 
-                            ? 'bg-emerald-950/60 text-emerald-300 font-bold' 
-                            : 'text-slate-300 hover:bg-[#202c33] hover:text-white'
-                        }`}
-                      >
-                        <span className="truncate">{u.fullName}</span>
-                        {currentUser?.id === u.id && <span className="text-[10px] text-emerald-400 font-bold">Active</span>}
-                      </button>
-                    ))}
+                    <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-transparent">
+                      {users.map((u: any) => (
+                        <button
+                          key={u.id}
+                          onClick={() => {
+                            setCurrentUser(u);
+                            setUserDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all cursor-pointer ${
+                            currentUser?.id === u.id 
+                              ? 'bg-emerald-950/60 text-emerald-300 font-bold' 
+                              : 'text-slate-300 hover:bg-[#202c33] hover:text-white'
+                          }`}
+                        >
+                          <span className="truncate">{u.fullName}</span>
+                          {currentUser?.id === u.id && <span className="text-[10px] text-emerald-400 font-bold shrink-0 ml-1.5">Active</span>}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 )}
 
-                <div className="pt-1 border-t border-slate-800">
+                {/* Log Out Button Pinned Directly Under It */}
+                <div className="pt-1.5 border-t border-slate-800 shrink-0 mt-1">
                   <button
                     onClick={() => {
                       setUserDropdownOpen(false);
                       logout();
                     }}
-                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-950/40 hover:text-rose-300 flex items-center gap-2 transition-all"
+                    className="w-full text-left px-3 py-2 rounded-xl text-xs font-semibold text-rose-400 hover:bg-rose-950/50 hover:text-rose-300 flex items-center gap-2 transition-all cursor-pointer"
                   >
                     <LogOut className="w-3.5 h-3.5" />
                     <span>Lock & Log Out</span>

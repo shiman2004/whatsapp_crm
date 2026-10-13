@@ -117,9 +117,14 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
   const payload = `data: ${JSON.stringify(data)}\n\n`;
   sseClients.forEach(client => {
     try {
-      // Super Admin and Leads Officer receive all events; Coordinators receive ONLY their own scoped events
+      // Super Admin and Leads Officer receive all events
       const hasFullVisibility = client.userRole === 'super_admin' || client.userRole === 'leads_officer';
-      const isTargetCoordinator = !targetCoordinatorId || client.coordinatorId === targetCoordinatorId;
+      
+      // For message events, Coordinators receive ONLY events for leads specifically assigned to them
+      const isMessageEvent = data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE';
+      const isTargetCoordinator = isMessageEvent 
+        ? Boolean(targetCoordinatorId && client.coordinatorId === targetCoordinatorId)
+        : (!targetCoordinatorId || client.coordinatorId === targetCoordinatorId);
 
       if (hasFullVisibility || isTargetCoordinator) {
         client.res.write(payload);

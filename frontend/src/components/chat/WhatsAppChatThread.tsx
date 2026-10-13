@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
+import { getDayKey, formatChatDateDivider } from '../../utils/dateUtils';
 
 interface WhatsAppChatThreadProps {
   lead: Lead;
@@ -146,17 +147,19 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId)
   );
 
-  // Deduplicate messages
+  // Deduplicate and sort messages chronologically (oldest at top, newest at bottom)
   const seenMsgKeys = new Set<string>();
-  const leadMessages = rawLeadMessages.filter(m => {
-    // Filter out empty messages
-    if ((!m.content || m.content.trim().length === 0) && !m.media) return false;
-    const timeBucket = Math.floor(new Date(m.createdAt).getTime() / 2000);
-    const key = m.waMessageId || m.id || `${m.direction}-${m.content}-${timeBucket}`;
-    if (seenMsgKeys.has(key)) return false;
-    seenMsgKeys.add(key);
-    return true;
-  });
+  const leadMessages = rawLeadMessages
+    .filter(m => {
+      // Filter out empty messages
+      if ((!m.content || m.content.trim().length === 0) && !m.media) return false;
+      const timeBucket = Math.floor(new Date(m.createdAt).getTime() / 2000);
+      const key = m.waMessageId || m.id || `${m.direction}-${m.content}-${timeBucket}`;
+      if (seenMsgKeys.has(key)) return false;
+      seenMsgKeys.add(key);
+      return true;
+    })
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
   const displayName = lead.customer?.displayName || 'WhatsApp Contact';
   const rawPhone = lead.customer?.whatsappNumber || '';
@@ -177,6 +180,19 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   const filteredMessages = searchQuery.trim()
     ? leadMessages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
     : leadMessages;
+
+  // Unread messages divider index matching WhatsApp Web (Screenshot 1)
+  const unreadThresholdIndex = (() => {
+    if (!lead.unreadCount || lead.unreadCount <= 0) return -1;
+    let count = lead.unreadCount;
+    for (let i = filteredMessages.length - 1; i >= 0; i--) {
+      if (filteredMessages[i].direction === 'inbound') {
+        count--;
+        if (count === 0) return i;
+      }
+    }
+    return -1;
+  })();
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -386,26 +402,42 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           <span>Messages are end-to-end encrypted. No one outside of this chat can read or listen to them.</span>
         </div>
 
-        {/* Date Divider: Today */}
-        <div className="flex justify-center my-3">
-          <span className="bg-[#182229] border border-slate-800/80 text-[#8696a0] text-[10px] font-semibold tracking-wider px-3 py-1 rounded-lg uppercase shadow-sm">
-            Today
-          </span>
-        </div>
-
-        {/* Message Bubbles */}
+        {/* Message Bubbles with Dynamic WhatsApp Date Dividers ("Today", "Yesterday", etc.) */}
         {filteredMessages.length === 0 ? (
           <div className="text-center text-[#8696a0] text-xs py-8">
             <p>No messages in this chat yet</p>
           </div>
         ) : (
-          filteredMessages.map((msg) => (
-            <MessageBubble
-              key={msg.id}
-              message={msg}
-              lead={lead}
-            />
-          ))
+          filteredMessages.map((msg, index) => {
+            const dayKey = getDayKey(msg.createdAt);
+            const prevDayKey = index > 0 ? getDayKey(filteredMessages[index - 1].createdAt) : null;
+            const isNewDay = dayKey !== 'invalid' && dayKey !== prevDayKey;
+            const dateDividerLabel = isNewDay ? formatChatDateDivider(msg.createdAt) : null;
+            const showUnreadDivider = unreadThresholdIndex === index;
+
+            return (
+              <React.Fragment key={msg.id || `${msg.createdAt}-${index}`}>
+                {dateDividerLabel && (
+                  <div className="flex justify-center my-3 select-none">
+                    <span className="bg-[#182229] border border-slate-800/80 text-[#8696a0] text-[11px] font-medium px-3.5 py-1 rounded-lg shadow-sm">
+                      {dateDividerLabel}
+                    </span>
+                  </div>
+                )}
+                {showUnreadDivider && (
+                  <div className="flex justify-center my-3 select-none">
+                    <span className="bg-[#182229] border border-slate-800/80 text-[#8696a0] text-[11px] font-medium px-3.5 py-1 rounded-lg shadow-sm">
+                      {lead.unreadCount} unread message{(lead.unreadCount || 0) > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                )}
+                <MessageBubble
+                  message={msg}
+                  lead={lead}
+                />
+              </React.Fragment>
+            );
+          })
         )}
 
         <div ref={messagesEndRef} />

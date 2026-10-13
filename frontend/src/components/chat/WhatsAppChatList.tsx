@@ -26,6 +26,7 @@ import { Lead } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { AddContactModal } from './AddContactModal';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
+import { formatChatListTimestamp } from '../../utils/dateUtils';
 
 interface WhatsAppChatListProps {
   onSelectLead: (leadId: string) => void;
@@ -587,15 +588,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             const isLocked = lockedLeadIds.has(lead.id);
             const appliedLabels = (leadLabels[lead.id] || []).map(id => PRESET_LABELS.find(p => p.id === id)).filter(Boolean);
 
-            // Format timestamp matching WhatsApp Web: "12:27", "Sunday", "Yesterday"
+            // Format timestamp matching WhatsApp Web: "12:27", "Yesterday", "Sun", "10/10/26"
             const latestTimeMs = getLeadLatestTime(lead);
             const msgDate = latestTimeMs > 0 ? new Date(latestTimeMs) : new Date(lead.updatedAt || lead.createdAt);
-            const isToday = new Date().toDateString() === msgDate.toDateString();
-            const timeDisplay = isNaN(msgDate.getTime())
-              ? ''
-              : (isToday 
-                  ? msgDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-                  : msgDate.toLocaleDateString([], { weekday: 'short' }));
+            const timeDisplay = formatChatListTimestamp(msgDate);
 
             const displayName = lead.customer?.displayName || formatWhatsAppDisplay(lead.customer?.whatsappNumber || '');
             

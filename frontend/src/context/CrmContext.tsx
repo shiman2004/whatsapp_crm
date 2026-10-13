@@ -1062,8 +1062,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             // Trigger WhatsApp Web desktop notification & chime for incoming messages
             if (!isOutbound) {
               const userRole = currentUser?.role;
-              const isCoordinator = userRole === 'coordinator';
-              const isLeadAccessible = !isCoordinator || !matchedLead?.assignedTo || matchedLead?.assignedTo === currentUser?.id;
+              const isSuperAdminOrOfficer = userRole === 'super_admin' || userRole === 'leads_officer';
+              const isAssignedToMe = Boolean(
+                (matchedLead?.assignedTo && matchedLead.assignedTo === currentUser?.id) ||
+                (data.coordinatorId && data.coordinatorId === currentUser?.id)
+              );
+              // Super Admin & Leads Officers receive all alerts; Coordinators receive ONLY for their assigned clients
+              const isLeadAccessible = isSuperAdminOrOfficer || isAssignedToMe;
 
               if (isLeadAccessible) {
                 const isChatActiveAndFocused = selectedLeadIdRef.current === resolvedLeadId && typeof document !== 'undefined' && document.hasFocus();

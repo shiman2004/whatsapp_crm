@@ -24,6 +24,7 @@ export interface User {
   branch?: string;
   company?: CompanyCode;
   role: UserRole;
+  roleTitle?: string; // Display title, e.g. 'Super Admin', 'Sales Officer', 'Clinic Manager'
   treatmentCategoryId?: string;
   language?: LanguageCode;
   avatar?: string;
@@ -121,6 +122,28 @@ export interface Message {
     content: string;
     senderName: string;
   };
+  // Internal Sender Audit Trail (Super Admin Visibility)
+  senderId?: string;
+  senderName?: string;
+  senderRole?: string;
+  messageSource?: 'CRM User' | 'Automation' | 'API' | 'System';
+  sentAt?: string;
+}
+
+export interface MessageAudit {
+  id: string;
+  messageId: string;
+  leadId: string;
+  customerId?: string;
+  company?: string;
+  whatsappNumber?: string;
+  senderId?: string;
+  senderName: string;
+  senderRole: string;
+  messageSource: 'CRM User' | 'Automation' | 'API' | 'System';
+  deliveryStatus: string;
+  sentAt: string;
+  createdAt: string;
 }
 
 export interface TreatmentCategory {

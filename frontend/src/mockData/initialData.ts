@@ -16,14 +16,54 @@ import {
 export const INITIAL_USERS: User[] = [
   {
     id: 'user-admin-1',
-    fullName: 'Super Admin',
+    fullName: 'Jahan',
     email: 'admin@royalwellness.lk',
     branch: 'Colombo (Head Office)',
     password: 'admin',
     pin: '1234',
     role: 'super_admin',
+    roleTitle: 'Super Admin',
     active: true,
     createdAt: '2026-01-01T08:00:00Z',
+    activeLeadsCount: 0,
+  },
+  {
+    id: 'user-faiha-1',
+    fullName: 'Faiha',
+    email: 'faiha@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'coordinator',
+    roleTitle: 'Sales Officer',
+    active: true,
+    createdAt: '2026-01-02T08:00:00Z',
+    activeLeadsCount: 0,
+  },
+  {
+    id: 'user-hasini-1',
+    fullName: 'Hasini',
+    email: 'hasini@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'coordinator',
+    roleTitle: 'Sales Officer',
+    active: true,
+    createdAt: '2026-01-03T08:00:00Z',
+    activeLeadsCount: 0,
+  },
+  {
+    id: 'user-zeenath-1',
+    fullName: 'Dr. Zeenath',
+    email: 'zeenath@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'coordinator',
+    roleTitle: 'Clinic Manager',
+    active: true,
+    createdAt: '2026-01-04T08:00:00Z',
     activeLeadsCount: 0,
   }
 ];
@@ -247,12 +287,136 @@ export const INITIAL_SEQUENCES: FollowupSequence[] = [
   }
 ];
 
-// Clean Real Production State — Ready for live incoming Meta WhatsApp customer inquiries
-export const INITIAL_CUSTOMERS: Customer[] = [];
+export const INITIAL_CUSTOMERS: Customer[] = [
+  {
+    id: 'cust-shakir-1',
+    whatsappNumber: '+94757062163',
+    whatsappId: '94757062163',
+    phoneNumber: '+94 75 706 2163',
+    displayName: 'shakirmum7356',
+    preferredLanguage: 'ta',
+    createdAt: '2026-10-12T15:30:00Z',
+  }
+];
 
-export const INITIAL_LEADS: Lead[] = [];
+export const INITIAL_LEADS: Lead[] = [
+  {
+    id: 'lead-shakir-1',
+    serialNumber: 'RWC-199',
+    customerId: 'cust-shakir-1',
+    categoryId: 'cat-hair-care',
+    treatmentId: 'trt-htp',
+    assignedTo: 'user-hasini-1',
+    assignedById: 'user-admin-1',
+    assignedByName: 'Jahan',
+    assignedAt: '2026-10-12T16:10:00Z',
+    stage: 'contacted',
+    source: 'RWC',
+    company: 'RWC',
+    companyTag: 'RWC',
+    companyColor: '#00a884',
+    language: 'ta',
+    notesCount: 0,
+    unreadCount: 0,
+    createdAt: '2026-10-12T15:30:00Z',
+    updatedAt: '2026-10-12T16:48:00Z',
+    lastCustomerMessageAt: '2026-10-12T16:42:00Z',
+    customer: INITIAL_CUSTOMERS[0]
+  }
+];
 
-export const INITIAL_MESSAGES: Message[] = [];
+export const INITIAL_MESSAGES: Message[] = [
+  {
+    id: 'msg-audit-demo-1',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'inbound',
+    senderType: 'customer',
+    content: 'Hair translation சிகிச்சை தொடர்பான மேலதிக தகவல்களை அறிய விரும்புகிறேன்.',
+    status: 'delivered',
+    createdAt: '2026-10-12T15:56:00Z'
+  },
+  {
+    id: 'msg-audit-demo-2',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'outbound',
+    senderType: 'coordinator',
+    senderId: 'user-admin-1',
+    senderName: 'Jahan',
+    senderRole: 'Super Admin',
+    messageSource: 'CRM User',
+    sentAt: '2026-10-12T16:36:00Z',
+    content: 'முழு மாற்று அறுவை சிகிச்சை (Hair Transplant Surgery) என்பது உங்கள் தலையின் தகவல்மை பக்கவாட்டில் உள்ள ஆரோக்கியமான முடி துணையைத் (Hair Follicles) எடுத்து, முடி குறைந்த அல்லது வடுக்கை விழுந்த பகுதியில் நடும் ஒரு மருத்துவ சிகிச்சை முறையாகும்.',
+    status: 'read',
+    createdAt: '2026-10-12T16:36:00Z'
+  },
+  {
+    id: 'msg-audit-demo-3',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'inbound',
+    senderType: 'customer',
+    content: 'இந்த சிகிச்சையின் செலவு எவ்வளவு?',
+    status: 'delivered',
+    createdAt: '2026-10-12T16:38:00Z'
+  },
+  {
+    id: 'msg-audit-demo-4',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'outbound',
+    senderType: 'coordinator',
+    senderId: 'user-faiha-1',
+    senderName: 'Faiha',
+    senderRole: 'Sales Officer',
+    messageSource: 'CRM User',
+    sentAt: '2026-10-12T16:40:00Z',
+    content: 'சிகிச்சை வகை, தேவையான கிராப்ட் அளவு மற்றும் மருத்துவர் மதிப்பீட்டுடன் அடிப்படையில் கட்டணம் மாறுபடும். உங்கள் சுகதிக்கேற்ற நேரத்தில் எமது ஒருங்கிணைப்பாளர் உங்களை தொடர்புகொண்டு முழு விவரங்களை வழங்குவார்.',
+    status: 'read',
+    createdAt: '2026-10-12T16:40:00Z'
+  },
+  {
+    id: 'msg-audit-demo-5',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'inbound',
+    senderType: 'customer',
+    content: 'சரி, நாளை காலை 10 மணிக்கு பேசலாமா?',
+    status: 'delivered',
+    createdAt: '2026-10-12T16:42:00Z'
+  },
+  {
+    id: 'msg-audit-demo-6',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'outbound',
+    senderType: 'coordinator',
+    senderId: 'user-hasini-1',
+    senderName: 'Hasini',
+    senderRole: 'Sales Officer',
+    messageSource: 'CRM User',
+    sentAt: '2026-10-12T16:43:00Z',
+    content: 'ஆம், நிச்சயமாக. நான் உங்கள் 10 மணிக்கு தொடர்புகிறோம். நன்றி!',
+    status: 'read',
+    createdAt: '2026-10-12T16:43:00Z'
+  },
+  {
+    id: 'msg-audit-demo-7',
+    leadId: 'lead-shakir-1',
+    customerId: 'cust-shakir-1',
+    direction: 'outbound',
+    senderType: 'coordinator',
+    senderId: 'user-zeenath-1',
+    senderName: 'Dr. Zeenath',
+    senderRole: 'Clinic Manager',
+    messageSource: 'CRM User',
+    sentAt: '2026-10-12T16:48:00Z',
+    content: 'உங்களுக்கு மேலும் ஏதேனும் தகவல்கள் தேவையாயின் தயவு செய்து தெரிவிக்கவும். 😊',
+    status: 'read',
+    createdAt: '2026-10-12T16:48:00Z'
+  }
+];
 
 export const INITIAL_FOLLOWUPS: Followup[] = [];
 

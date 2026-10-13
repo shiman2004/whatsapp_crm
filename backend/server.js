@@ -112,13 +112,14 @@ setInterval(() => {
 /**
  * Isolated SSE Dispatcher
  * Guarantees Coordinator A NEVER receives events belonging to Coordinator B
+ * Strictly enforces Super Admin ONLY visibility for message sender audit trail
  */
 function broadcastScopedSSE(targetCoordinatorId, data) {
-  const payload = `data: ${JSON.stringify(data)}\n\n`;
   sseClients.forEach(client => {
     try {
+      const isSuperAdmin = client.userRole === 'super_admin';
       // Super Admin and Leads Officer receive all events
-      const hasFullVisibility = client.userRole === 'super_admin' || client.userRole === 'leads_officer';
+      const hasFullVisibility = isSuperAdmin || client.userRole === 'leads_officer';
       
       // For message events, Coordinators receive ONLY events for leads specifically assigned to them
       const isMessageEvent = data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE';
@@ -127,7 +128,13 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
         : (!targetCoordinatorId || client.coordinatorId === targetCoordinatorId);
 
       if (hasFullVisibility || isTargetCoordinator) {
-        client.res.write(payload);
+        let clientData = data;
+        // Strictly sanitize sender audit metadata for non-Super-Admins
+        if (!isSuperAdmin && isMessageEvent) {
+          const { senderName, senderRole, messageSource, sentAt, audit, ...stripped } = data;
+          clientData = stripped;
+        }
+        client.res.write(`data: ${JSON.stringify(clientData)}\n\n`);
       }
     } catch (e) {}
   });
@@ -1005,6 +1012,12 @@ const server = http.createServer(async (req, res) => {
 
               // Save failed message to database so it appears with error details in CRM
               const failedMsgId = payload.retryMessageId || `failed-${Date.now()}`;
+              const actualSenderId = authUser?.id || payload.senderId || null;
+              const actualSenderName = authUser?.fullName || payload.senderName || 'Staff';
+              const actualSenderRole = authUser?.role === 'super_admin' ? 'Super Admin' : (authUser?.roleTitle || payload.senderRole || (authUser?.role === 'leads_officer' ? 'Sales Officer' : 'Sales Officer'));
+              const actualSource = payload.messageSource || (authUser ? 'CRM User' : 'System');
+              const sentAtUtc = new Date();
+
               if (prisma && getDbStatus() && leadId) {
                 try {
                   let cust = customerId ? await prisma.customer.findUnique({ where: { id: customerId } }).catch(() => null) : null;
@@ -1020,7 +1033,11 @@ const server = http.createServer(async (req, res) => {
                       status: 'failed',
                       errorCode: errCode,
                       errorMessage: explanation,
-                      content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : '')
+                      content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : ''),
+                      senderName: actualSenderName,
+                      senderRole: actualSenderRole,
+                      messageSource: actualSource,
+                      sentAt: sentAtUtc
                     },
                     create: {
                       id: failedMsgId,
@@ -1029,13 +1046,43 @@ const server = http.createServer(async (req, res) => {
                       direction: 'outbound',
                       senderType: 'coordinator',
                       coordinatorId: targetCoordinatorId || authUser?.id || null,
+                      senderName: actualSenderName,
+                      senderRole: actualSenderRole,
+                      messageSource: actualSource,
+                      sentAt: sentAtUtc,
                       content: msgContent || (media ? `[${media.type?.toUpperCase()}]` : ''),
                       status: 'failed',
                       errorCode: errCode,
                       errorMessage: explanation,
-                      timestamp: new Date()
+                      timestamp: sentAtUtc
                     }
                   }).catch(() => {});
+
+                  // Save protected message audit record for failed delivery attempt
+                  await prisma.messageAudit.upsert({
+                    where: { messageId: failedMsgId },
+                    update: {
+                      deliveryStatus: 'failed',
+                      senderId: actualSenderId,
+                      senderName: actualSenderName,
+                      senderRole: actualSenderRole,
+                      messageSource: actualSource,
+                      sentAt: sentAtUtc
+                    },
+                    create: {
+                      messageId: failedMsgId,
+                      leadId,
+                      customerId: cust?.id || customerId || 'temp-cust',
+                      company: resolvedCompany || 'RWC',
+                      whatsappNumber: formattedTo,
+                      senderId: actualSenderId,
+                      senderName: actualSenderName,
+                      senderRole: actualSenderRole,
+                      messageSource: actualSource,
+                      deliveryStatus: 'failed',
+                      sentAt: sentAtUtc
+                    }
+                  }).catch(err => console.warn('[MessageAudit Failed Log Warning]:', err.message));
                 } catch (e) {}
               }
 
@@ -1048,7 +1095,12 @@ const server = http.createServer(async (req, res) => {
                 errorCode: errCode,
                 errorMessage: explanation,
                 recipientPhone: formattedTo,
-                timestamp: new Date().toISOString()
+                senderId: actualSenderId,
+                senderName: actualSenderName,
+                senderRole: actualSenderRole,
+                messageSource: actualSource,
+                sentAt: sentAtUtc.toISOString(),
+                timestamp: sentAtUtc.toISOString()
               });
 
               res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1138,11 +1190,21 @@ const server = http.createServer(async (req, res) => {
                   await prisma.message.delete({ where: { id: payload.retryMessageId } }).catch(() => {});
                 }
 
+                const actualSenderId = authUser?.id || payload.senderId || null;
+                const actualSenderName = authUser?.fullName || payload.senderName || 'Staff';
+                const actualSenderRole = authUser?.role === 'super_admin' ? 'Super Admin' : (authUser?.roleTitle || payload.senderRole || (authUser?.role === 'leads_officer' ? 'Sales Officer' : 'Sales Officer'));
+                const actualSource = payload.messageSource || (authUser ? 'CRM User' : 'System');
+                const sentAtUtc = new Date();
+
                 await prisma.message.upsert({
                   where: { id: messageId },
                   update: {
                     status: 'sent',
                     content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
+                    senderName: actualSenderName,
+                    senderRole: actualSenderRole,
+                    messageSource: actualSource,
+                    sentAt: sentAtUtc,
                     mediaType: media ? media.type : null,
                     mediaUrl: savedMediaUrl || null,
                     errorCode: null,
@@ -1156,14 +1218,44 @@ const server = http.createServer(async (req, res) => {
                     coordinatorId: validCoordinatorId,
                     direction: 'outbound',
                     senderType: 'coordinator',
+                    senderName: actualSenderName,
+                    senderRole: actualSenderRole,
+                    messageSource: actualSource,
+                    sentAt: sentAtUtc,
                     content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
                     status: 'sent',
-                    timestamp: new Date(),
+                    timestamp: sentAtUtc,
                     mediaType: media ? media.type : null,
                     mediaUrl: savedMediaUrl || null,
                   }
                 });
-                console.log(`✅ [Meta Send] Outbound message ${messageId} saved to database for Lead ${lead.id}`);
+                console.log(`✅ [Meta Send] Outbound message ${messageId} saved to database for Lead ${lead.id} with Sender Audit: ${actualSenderName} (${actualSenderRole})`);
+
+                // Save permanent protected message audit record for Super Admin
+                await prisma.messageAudit.upsert({
+                  where: { messageId },
+                  update: {
+                    deliveryStatus: 'sent',
+                    senderId: actualSenderId,
+                    senderName: actualSenderName,
+                    senderRole: actualSenderRole,
+                    messageSource: actualSource,
+                    sentAt: sentAtUtc
+                  },
+                  create: {
+                    messageId,
+                    leadId: lead.id,
+                    customerId: cust.id,
+                    company: resolvedCompany || lead.source || 'RWC',
+                    whatsappNumber: formattedTo,
+                    senderId: actualSenderId,
+                    senderName: actualSenderName,
+                    senderRole: actualSenderRole,
+                    messageSource: actualSource,
+                    deliveryStatus: 'sent',
+                    sentAt: sentAtUtc
+                  }
+                }).catch(err => console.warn('[MessageAudit Log Warning]:', err.message));
 
                 // Real-time Screen Sync across all Super Admins & Assigned Coordinators
                 broadcastScopedSSE(targetCoordinatorId || null, {
@@ -1184,7 +1276,12 @@ const server = http.createServer(async (req, res) => {
                   status: 'sent',
                   direction: 'outbound',
                   senderType: 'coordinator',
-                  timestamp: new Date().toISOString(),
+                  senderId: actualSenderId,
+                  senderName: actualSenderName,
+                  senderRole: actualSenderRole,
+                  messageSource: actualSource,
+                  sentAt: sentAtUtc.toISOString(),
+                  timestamp: sentAtUtc.toISOString(),
                   source: 'live'
                 });
               }
@@ -1340,6 +1437,12 @@ const server = http.createServer(async (req, res) => {
           const explanation = getMetaErrorExplanation(errCode, rawMsg);
 
           const failedMsgId = retryMessageId || `failed-${Date.now()}`;
+          const actualSenderId = authUser?.id || payload.senderId || null;
+          const actualSenderName = authUser?.fullName || payload.senderName || 'Staff';
+          const actualSenderRole = authUser?.role === 'super_admin' ? 'Super Admin' : (authUser?.roleTitle || payload.senderRole || (authUser?.role === 'leads_officer' ? 'Sales Officer' : 'Sales Officer'));
+          const actualSource = payload.messageSource || (authUser ? 'CRM User' : 'System');
+          const sentAtUtc = new Date();
+
           if (prisma && getDbStatus() && leadId) {
             try {
               await prisma.message.upsert({
@@ -1348,7 +1451,11 @@ const server = http.createServer(async (req, res) => {
                   status: 'failed',
                   errorCode: errCode,
                   errorMessage: explanation,
-                  content: `[Template: ${templateName}]`
+                  content: `[Template: ${templateName}]`,
+                  senderName: actualSenderName,
+                  senderRole: actualSenderRole,
+                  messageSource: actualSource,
+                  sentAt: sentAtUtc
                 },
                 create: {
                   id: failedMsgId,
@@ -1357,13 +1464,42 @@ const server = http.createServer(async (req, res) => {
                   direction: 'outbound',
                   senderType: 'coordinator',
                   coordinatorId: authUser?.id || null,
+                  senderName: actualSenderName,
+                  senderRole: actualSenderRole,
+                  messageSource: actualSource,
+                  sentAt: sentAtUtc,
                   content: `[Template: ${templateName}]`,
                   status: 'failed',
                   errorCode: errCode,
                   errorMessage: explanation,
-                  timestamp: new Date()
+                  timestamp: sentAtUtc
                 }
               }).catch(() => {});
+
+              await prisma.messageAudit.upsert({
+                where: { messageId: failedMsgId },
+                update: {
+                  deliveryStatus: 'failed',
+                  senderId: actualSenderId,
+                  senderName: actualSenderName,
+                  senderRole: actualSenderRole,
+                  messageSource: actualSource,
+                  sentAt: sentAtUtc
+                },
+                create: {
+                  messageId: failedMsgId,
+                  leadId,
+                  customerId: customerId || 'temp-cust',
+                  company: resolvedCompany || 'RWC',
+                  whatsappNumber: formattedTo,
+                  senderId: actualSenderId,
+                  senderName: actualSenderName,
+                  senderRole: actualSenderRole,
+                  messageSource: actualSource,
+                  deliveryStatus: 'failed',
+                  sentAt: sentAtUtc
+                }
+              }).catch(err => console.warn('[MessageAudit Failed Template Log Warning]:', err.message));
             } catch (e) {}
           }
 
@@ -1375,7 +1511,12 @@ const server = http.createServer(async (req, res) => {
             errorCode: errCode,
             errorMessage: explanation,
             recipientPhone: formattedTo,
-            timestamp: new Date().toISOString()
+            senderId: actualSenderId,
+            senderName: actualSenderName,
+            senderRole: actualSenderRole,
+            messageSource: actualSource,
+            sentAt: sentAtUtc.toISOString(),
+            timestamp: sentAtUtc.toISOString()
           });
 
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -1413,11 +1554,21 @@ const server = http.createServer(async (req, res) => {
               await prisma.message.delete({ where: { id: retryMessageId } }).catch(() => {});
             }
 
+            const actualSenderId = authUser?.id || payload.senderId || null;
+            const actualSenderName = authUser?.fullName || payload.senderName || 'Staff';
+            const actualSenderRole = authUser?.role === 'super_admin' ? 'Super Admin' : (authUser?.roleTitle || payload.senderRole || (authUser?.role === 'leads_officer' ? 'Sales Officer' : 'Sales Officer'));
+            const actualSource = payload.messageSource || (authUser ? 'CRM User' : 'System');
+            const sentAtUtc = new Date();
+
             await prisma.message.upsert({
               where: { id: messageId },
               update: {
                 status: 'sent',
                 content: renderedContent,
+                senderName: actualSenderName,
+                senderRole: actualSenderRole,
+                messageSource: actualSource,
+                sentAt: sentAtUtc,
                 errorCode: null,
                 errorMessage: null
               },
@@ -1428,11 +1579,41 @@ const server = http.createServer(async (req, res) => {
                 direction: 'outbound',
                 senderType: 'coordinator',
                 coordinatorId: authUser?.id || null,
+                senderName: actualSenderName,
+                senderRole: actualSenderRole,
+                messageSource: actualSource,
+                sentAt: sentAtUtc,
                 content: renderedContent,
                 status: 'sent',
-                timestamp: new Date()
+                timestamp: sentAtUtc
               }
             });
+
+            // Save permanent protected message audit record for Super Admin
+            await prisma.messageAudit.upsert({
+              where: { messageId },
+              update: {
+                deliveryStatus: 'sent',
+                senderId: actualSenderId,
+                senderName: actualSenderName,
+                senderRole: actualSenderRole,
+                messageSource: actualSource,
+                sentAt: sentAtUtc
+              },
+              create: {
+                messageId,
+                leadId,
+                customerId: customerId || 'temp-cust',
+                company: resolvedCompany || 'RWC',
+                whatsappNumber: formattedTo,
+                senderId: actualSenderId,
+                senderName: actualSenderName,
+                senderRole: actualSenderRole,
+                messageSource: actualSource,
+                deliveryStatus: 'sent',
+                sentAt: sentAtUtc
+              }
+            }).catch(err => console.warn('[MessageAudit Template Log Warning]:', err.message));
 
             // Broadcast outbound message to UI
             broadcastScopedSSE(null, {
@@ -1447,7 +1628,12 @@ const server = http.createServer(async (req, res) => {
               status: 'sent',
               direction: 'outbound',
               senderType: 'coordinator',
-              timestamp: new Date().toISOString()
+              senderId: actualSenderId,
+              senderName: actualSenderName,
+              senderRole: actualSenderRole,
+              messageSource: actualSource,
+              sentAt: sentAtUtc.toISOString(),
+              timestamp: sentAtUtc.toISOString()
             });
           } catch (dbE) {
             console.warn('[DB Error saving template msg]:', dbE.message);
@@ -1567,12 +1753,23 @@ const server = http.createServer(async (req, res) => {
           };
         }
 
+        const isSuperAdmin = authUser?.role === 'super_admin';
         const messages = await prisma.message.findMany({
           where: whereClause,
           orderBy: { timestamp: 'asc' },
+          include: isSuperAdmin ? { audit: true } : undefined,
         });
+
+        // Backend RBAC: Never expose audit metadata through normal staff API responses
+        const sanitizedMessages = isSuperAdmin
+          ? messages
+          : messages.map(m => {
+              const { senderName, senderRole, messageSource, sentAt, audit, ...clean } = m;
+              return clean;
+            });
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(messages));
+        res.end(JSON.stringify(sanitizedMessages));
         return;
       } catch (e) {
         console.error('Error fetching messages from DB:', e);
@@ -1589,6 +1786,7 @@ const server = http.createServer(async (req, res) => {
     if (prisma && getDbStatus()) {
       try {
         const whereClause = {};
+        const isSuperAdmin = authUser?.role === 'super_admin';
         
         // Coordinators can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
         if (authUser.role === 'coordinator') {
@@ -1603,7 +1801,10 @@ const server = http.createServer(async (req, res) => {
             treatment: true,
             assignedCoordinator: true,
             whatsappSession: true,
-            messages: { orderBy: { timestamp: 'asc' } },
+            messages: { 
+              orderBy: { timestamp: 'asc' },
+              include: isSuperAdmin ? { audit: true } : undefined
+            },
             notes: true,
             stageHistories: true,
             assignmentHistories: { orderBy: { assignedAt: 'desc' } },
@@ -1618,8 +1819,18 @@ const server = http.createServer(async (req, res) => {
           const lastInbound = inboundMsgs.length > 0
             ? inboundMsgs[inboundMsgs.length - 1].timestamp
             : null;
+
+          // Backend RBAC: Never expose audit metadata through normal staff API responses
+          const cleanedMessages = isSuperAdmin
+            ? (l.messages || [])
+            : (l.messages || []).map(m => {
+                const { senderName, senderRole, messageSource, sentAt, audit, ...clean } = m;
+                return clean;
+              });
+
           return {
             ...l,
+            messages: cleanedMessages,
             lastCustomerMessageAt: lastInbound ? new Date(lastInbound).toISOString() : null,
             company: comp.code,
             companyTag: comp.tag,
@@ -2517,6 +2728,12 @@ const server = http.createServer(async (req, res) => {
               }
             }
 
+            const actualSenderId = authUser?.id || null;
+            const actualSenderName = authUser?.fullName || 'Staff';
+            const actualSenderRole = authUser?.role === 'super_admin' ? 'Super Admin' : (authUser?.roleTitle || (authUser?.role === 'leads_officer' ? 'Sales Officer' : 'Sales Officer'));
+            const actualSource = 'CRM User';
+            const sentAtUtc = new Date();
+
             savedMessage = await prisma.message.create({
               data: {
                 id: metaMessageId || `msg-${Date.now()}`,
@@ -2525,13 +2742,35 @@ const server = http.createServer(async (req, res) => {
                 direction: 'outbound',
                 senderType: 'coordinator',
                 coordinatorId: targetCoordinatorId || authUser?.id || null,
+                senderName: actualSenderName,
+                senderRole: actualSenderRole,
+                messageSource: actualSource,
+                sentAt: sentAtUtc,
                 content: msgContent,
                 status: dispatchSuccess ? 'sent' : 'failed',
                 errorCode: dispatchErrorCode || null,
                 errorMessage: dispatchErrorMessage || null,
-                timestamp: new Date()
+                timestamp: sentAtUtc
               }
             }).catch(() => null);
+
+            if (savedMessage) {
+              await prisma.messageAudit.create({
+                data: {
+                  messageId: savedMessage.id,
+                  leadId: savedLead.id,
+                  customerId: savedCustomer.id,
+                  company: (targetCompany || savedLead.source || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC',
+                  whatsappNumber: canonicalPhone,
+                  senderId: actualSenderId,
+                  senderName: actualSenderName,
+                  senderRole: actualSenderRole,
+                  messageSource: actualSource,
+                  deliveryStatus: dispatchSuccess ? 'sent' : 'failed',
+                  sentAt: sentAtUtc
+                }
+              }).catch(() => null);
+            }
 
             // Broadcast real-time outbound SSE with truthful status
             broadcastScopedSSE(targetCoordinatorId || null, {
@@ -2549,7 +2788,12 @@ const server = http.createServer(async (req, res) => {
               errorMessage: dispatchErrorMessage || null,
               direction: 'outbound',
               senderType: 'coordinator',
-              timestamp: new Date().toISOString(),
+              senderId: actualSenderId,
+              senderName: actualSenderName,
+              senderRole: actualSenderRole,
+              messageSource: actualSource,
+              sentAt: sentAtUtc.toISOString(),
+              timestamp: sentAtUtc.toISOString(),
               source: 'live'
             });
           }

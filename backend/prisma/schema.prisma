@@ -268,12 +268,17 @@ model Message {
   mediaType           String?           @db.VarChar(50)
   errorCode           Int?
   errorMessage        String?           @db.Text
+  senderName          String?           @db.VarChar(255)
+  senderRole          String?           @db.VarChar(50)
+  messageSource       String?           @default("CRM User") @db.VarChar(50) // 'CRM User' | 'Automation' | 'API' | 'System'
+  sentAt              DateTime?         @default(now())
 
   // Relations
   lead                Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
   customer            Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
   whatsappSession     WhatsAppSession?  @relation("SessionMessages", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
   coordinator         User?             @relation("CoordinatorAuthoredMessages", fields: [coordinatorId], references: [id], onDelete: SetNull)
+  audit               MessageAudit?
 
   @@index([leadId])
   @@index([customerId])
@@ -281,6 +286,31 @@ model Message {
   @@index([coordinatorId])
   @@index([timestamp])
   @@map("messages")
+}
+
+// 7b. Message Sender Audit Record (Protected Super Admin Audit Trail)
+model MessageAudit {
+  id              String   @id @default(uuid()) @db.VarChar(50)
+  messageId       String   @unique @db.VarChar(100)
+  leadId          String   @db.VarChar(50)
+  customerId      String?  @db.VarChar(50)
+  company         String?  @db.VarChar(50)
+  whatsappNumber  String?  @db.VarChar(50)
+  senderId        String?  @db.VarChar(36)
+  senderName      String   @db.VarChar(255)
+  senderRole      String   @db.VarChar(50)
+  messageSource   String   @default("CRM User") @db.VarChar(50) // 'CRM User' | 'Automation' | 'API' | 'System'
+  deliveryStatus  String   @default("sent") @db.VarChar(50)
+  sentAt          DateTime @default(now())
+  createdAt       DateTime @default(now())
+
+  // Relations
+  message         Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([senderId])
+  @@index([sentAt])
+  @@map("message_audits")
 }
 
 // 8. Automated Follow-up Tasks (BullMQ / Cron)

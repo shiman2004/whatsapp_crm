@@ -564,6 +564,9 @@ const CANONICAL_USERS = [
   }
 ];
 
+// Set of permanently deleted staff IDs to ensure they never reappear on reload
+const DELETED_USER_IDS = new Set();
+
 /**
  * Helper: Resolve and Authenticate CRM User from request.
  * Enforces strict cryptographic validation, expiration checks, and database verification.
@@ -3485,35 +3488,40 @@ const server = http.createServer(async (req, res) => {
   // 10c. REST: Get/Create Coordinators
   if (pathname === '/api/coordinators') {
     const isSuperAdmin = authUser && authUser.role === 'super_admin';
-    const defaultCoordinators = CANONICAL_USERS.map(u => {
-      const { password, ...safeUser } = u;
-      return {
-        ...safeUser,
-        pin: isSuperAdmin ? (u.pin || '2026') : undefined,
-        branch: safeUser.branch || 'Colombo',
-        company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
-        createdAt: '2026-01-01T08:00:00Z',
-        activeLeadsCount: 0,
-      };
-    });
+    const defaultCoordinators = CANONICAL_USERS
+      .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
+      .map(u => {
+        const { password, ...safeUser } = u;
+        return {
+          ...safeUser,
+          pin: isSuperAdmin ? (u.pin || '2026') : undefined,
+          branch: safeUser.branch || 'Colombo',
+          company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+          createdAt: '2026-01-01T08:00:00Z',
+          activeLeadsCount: 0,
+        };
+      });
 
     const prisma = getPrisma();
     if (req.method === 'GET') {
       if (prisma && getDbStatus()) {
         try {
           const users = await prisma.user.findMany({
+            where: { active: true },
             orderBy: { createdAt: 'asc' }
           });
           if (users && users.length > 0) {
-            const mappedUsers = users.map(u => {
-              const { password, ...safeUser } = u;
-              return {
-                ...safeUser,
-                pin: isSuperAdmin ? (u.pin || '2026') : undefined,
-                branch: safeUser.branch || 'Colombo',
-                company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
-              };
-            });
+            const mappedUsers = users
+              .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
+              .map(u => {
+                const { password, ...safeUser } = u;
+                return {
+                  ...safeUser,
+                  pin: isSuperAdmin ? (u.pin || '2026') : undefined,
+                  branch: safeUser.branch || 'Colombo',
+                  company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+                };
+              });
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify(mappedUsers));
             return;
@@ -3679,15 +3687,24 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // Extract ID from URL path or query
-      const urlParts = pathname.split('/');
-      const coordId = urlParts[3] || parsedUrl.query.id || parsedUrl.query.coordinatorId;
+      // Extract ID from URL path or query safely
+      const cleanParts = pathname.split('/').filter(Boolean);
+      const coordId = (cleanParts.length >= 3 ? cleanParts[cleanParts.length - 1] : null) || parsedUrl.query.id || parsedUrl.query.coordinatorId;
 
       if (!coordId) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: 'Missing coordinator ID' }));
         return;
       }
+
+      if (coordId === 'user-admin-1') {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Super Admin cannot be deleted.' }));
+        return;
+      }
+
+      // Track in memory so deleted coordinator is never returned on subsequent queries
+      DELETED_USER_IDS.add(coordId);
 
       const prisma = getPrisma();
       if (prisma && getDbStatus()) {
@@ -3702,10 +3719,18 @@ const server = http.createServer(async (req, res) => {
           where: { coordinatorId: coordId }
         }).catch(() => {});
 
-        // 3. Delete user record
-        await prisma.user.deleteMany({
-          where: { id: coordId }
-        }).catch(e => console.warn('Could not delete user in DB:', e.message));
+        // 3. Delete user record with graceful soft-delete fallback if foreign key constraints exist
+        try {
+          await prisma.user.deleteMany({
+            where: { id: coordId }
+          });
+        } catch (delErr) {
+          console.warn('[Staff Delete] Hard delete blocked by relations, marking inactive:', delErr.message);
+          await prisma.user.updateMany({
+            where: { id: coordId },
+            data: { active: false }
+          }).catch(() => {});
+        }
       }
 
       // 4. Broadcast SSE deletion event to all connected clients

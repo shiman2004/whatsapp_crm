@@ -20,6 +20,7 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
 import { NotificationContainer } from './components/notifications/NotificationContainer';
 import { NotificationSettingsModal } from './components/notifications/NotificationSettingsModal';
+import { DesktopNotificationBanner } from './components/notifications/DesktopNotificationBanner';
 
 const MainLayout: React.FC = () => {
   const [activeTab, setActiveTab] = useState<NavTab>('dashboard');
@@ -64,6 +65,9 @@ const MainLayout: React.FC = () => {
       <Header 
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)} 
       />
+
+      {/* WhatsApp Web Desktop Notification Permission Banner (shown if not yet granted) */}
+      <DesktopNotificationBanner />
 
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">

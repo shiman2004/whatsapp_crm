@@ -47,6 +47,7 @@ import { API_BASE_URL } from '../config/api';
 import { aiService } from '../services/aiService';
 import { NotificationSettings, DesktopNotificationItem } from '../types/notifications';
 import { playWhatsAppChime } from '../utils/soundUtils';
+import { registerNotificationServiceWorker, showDesktopNativeNotification } from '../utils/nativeNotificationUtils';
 
 interface NotificationToast {
   id: string;
@@ -292,7 +293,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     enabled: true,
     sound: true,
-    nativeBrowser: false,
+    nativeBrowser: true, // Enabled by default so Windows desktop alerts fire when browser allows
     showPreview: true,
     autoDismissSeconds: 8,
   };
@@ -307,6 +308,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('rw_crm_notification_settings', JSON.stringify(notificationSettings));
     } catch (e) {}
   }, [notificationSettings]);
+
+  // Register Service Worker for reliable Windows Action Center notifications in background tabs
+  useEffect(() => {
+    registerNotificationServiceWorker();
+
+    const handleSwMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'NAVIGATE_TO_LEAD' && event.data?.leadId) {
+        setSelectedLeadId(event.data.leadId);
+      }
+    };
+
+    if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+    }
+    return () => {
+      if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+        navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+      }
+    };
+  }, []);
 
   const [desktopNotifications, setDesktopNotifications] = useState<DesktopNotificationItem[]>([]);
   const [notificationSettingsOpen, setNotificationSettingsOpen] = useState<boolean>(false);
@@ -354,17 +375,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dispatchDesktopNotification(testItem);
 
     if (notificationSettingsRef.current.nativeBrowser && 'Notification' in window && Notification.permission === 'granted') {
-      try {
-        const notif = new Notification('Ameera Jasmine (WhatsApp)', {
-          body: testItem.messageText,
-          icon: testItem.avatarUrl || '/favicon.png'
-        });
-        notif.onclick = () => {
+      showDesktopNativeNotification('Ameera Jasmine (WhatsApp)', {
+        body: testItem.messageText,
+        icon: testItem.avatarUrl || '/logo.png',
+        badge: '/favicon.png',
+        leadId: testItem.leadId,
+        tag: 'test-notification',
+        onClick: () => {
           window.focus();
           if (selectedLeadIdRef.current) setSelectedLeadId(selectedLeadIdRef.current);
-          notif.close();
-        };
-      } catch (e) {}
+        }
+      });
     }
   }, [dispatchDesktopNotification]);
 
@@ -1081,26 +1102,23 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     dispatchDesktopNotification(notifItem);
                   }
 
-                  // 3. Trigger native browser notification if enabled & permission granted
+                  // 3. Trigger native Windows / macOS desktop notification (Runs over other websites & background tabs)
                   if (notificationSettingsRef.current.nativeBrowser && 'Notification' in window && Notification.permission === 'granted') {
-                    try {
-                      let nativeBody = text || (data.media ? (data.media.type === 'image' ? 'Photo' : 'Media') : 'New message');
-                      if (!notificationSettingsRef.current.showPreview) {
-                        nativeBody = 'New WhatsApp message';
-                      }
-                      const nativeNotif = new Notification(`${cleanDisplayName} (WhatsApp)`, {
-                        body: nativeBody,
-                        icon: avatarUrl || '/favicon.png',
-                        tag: resolvedLeadId
-                      });
-                      nativeNotif.onclick = () => {
+                    let nativeBody = text || (data.media ? (data.media.type === 'image' ? '📷 Photo' : '📁 Media') : 'New WhatsApp message');
+                    if (!notificationSettingsRef.current.showPreview) {
+                      nativeBody = 'New WhatsApp message';
+                    }
+                    showDesktopNativeNotification(`${cleanDisplayName} (WhatsApp)`, {
+                      body: nativeBody,
+                      icon: avatarUrl || '/logo.png',
+                      badge: '/favicon.png',
+                      leadId: resolvedLeadId,
+                      tag: resolvedLeadId,
+                      onClick: () => {
                         window.focus();
                         setSelectedLeadId(resolvedLeadId);
-                        nativeNotif.close();
-                      };
-                    } catch (err) {
-                      console.warn('[Native Notification] Error:', err);
-                    }
+                      }
+                    });
                   }
                 }
               }

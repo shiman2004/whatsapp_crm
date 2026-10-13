@@ -595,10 +595,23 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (coordsRes && coordsRes.ok) {
         const dbCoords: any[] = await coordsRes.json().catch(() => []);
         if (Array.isArray(dbCoords)) {
+          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const userMap = new Map<string, User>();
+          
           // Ensure Super Admin is always present
-          INITIAL_USERS.forEach(u => userMap.set(u.id, u));
+          const superAdmin = INITIAL_USERS.find(u => u.role === 'super_admin') || INITIAL_USERS[0];
+          userMap.set(superAdmin.id, superAdmin);
+
+          // Add initial users only if they have not been deleted
+          INITIAL_USERS.forEach(u => {
+            if (!deletedUserIds.includes(u.id)) {
+              userMap.set(u.id, u);
+            }
+          });
+
+          // Add backend coordinators only if active and not marked deleted
           dbCoords.forEach(u => {
+            if (deletedUserIds.includes(u.id) || u.active === false) return;
             const isSuper = u.role === 'super_admin' || u.id === 'user-admin-1';
             userMap.set(u.id, {
               ...u,
@@ -611,7 +624,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               activeLeadsCount: u.activeLeadsCount || 0
             });
           });
-          const updatedUsers = Array.from(userMap.values());
+
+          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
           setUsers(updatedUsers);
           localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
         }
@@ -963,7 +977,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               if (!deletedIds.includes(deletedCoordId)) {
                 localStorage.setItem('rw_crm_deleted_users', JSON.stringify([...deletedIds, deletedCoordId]));
               }
-              setUsers(prev => prev.filter(u => u.id !== deletedCoordId));
+              setUsers(prev => {
+                const filtered = prev.filter(u => u.id !== deletedCoordId);
+                localStorage.setItem('rw_crm_users', JSON.stringify(filtered));
+                return filtered;
+              });
               setLeads(prev => prev.map(l => {
                 if (l.assignedTo === deletedCoordId) {
                   return {
@@ -2617,15 +2635,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered successfully`, 'success');
   };
 
-  const deleteCoordinator = (id: string) => {
-    // 1. Record deleted coordinator ID
+  const deleteCoordinator = async (id: string) => {
+    // 0. Super Admin protection
+    if (id === 'user-admin-1') {
+      notify('Action Forbidden', 'Super Admin cannot be deleted.', 'warning');
+      return;
+    }
+
+    // 1. Record deleted coordinator ID immediately in localStorage
     const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
     if (!deletedUserIds.includes(id)) {
       const updatedDeleted = [...deletedUserIds, id];
       localStorage.setItem('rw_crm_deleted_users', JSON.stringify(updatedDeleted));
     }
 
-    // 2. Remove coordinator from state & localStorage
+    // 2. Remove coordinator from state & localStorage immediately
     setUsers(prev => {
       const updated = prev.filter(u => u.id !== id);
       localStorage.setItem('rw_crm_users', JSON.stringify(updated));
@@ -2658,16 +2682,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // 5. Notify backend to permanently remove coordinator & unassign database records
-    fetch(`${API_BASE_URL}/api/coordinators/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
-      }
-    }).catch(err => console.warn('Could not sync coordinator deletion to backend:', err));
+    try {
+      await fetch(`${API_BASE_URL}/api/coordinators/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        }
+      });
+    } catch (err) {
+      console.warn('Could not sync coordinator deletion to backend:', err);
+    }
 
     logAudit('DELETE_USER', 'User', id, null, null);
-    notify('Coordinator Deleted', 'Coordinator removed and assigned leads reverted to Unassigned.', 'info');
+    notify('Staff Removed', 'Team member removed and assigned leads reverted to Unassigned.', 'info');
   };
 
   const updateCoordinator = async (id: string, data: { fullName: string; branch: string; pin?: string; password?: string }) => {

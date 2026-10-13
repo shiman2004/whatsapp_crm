@@ -56,3 +56,25 @@ export const getLeadCompany = (lead?: Partial<Lead> | { company?: string; source
   
   return COMPANIES.RWC;
 };
+
+/**
+ * Returns the official title for staff coordinators based on their company:
+ * - RWC -> "Patient Coordinator"
+ * - CRAS -> "Education Counsellor"
+ */
+export const getCoordinatorRoleLabel = (company?: string | null): string => {
+  if (company === 'CRAS') {
+    return 'Education Counsellor';
+  }
+  return 'Patient Coordinator';
+};
+
+/**
+ * Returns the assignment header label based on company
+ */
+export const getAssignedStaffLabel = (company?: string | null): string => {
+  if (company === 'CRAS') {
+    return 'Assigned Education Counsellor';
+  }
+  return 'Assigned Patient Coordinator';
+};

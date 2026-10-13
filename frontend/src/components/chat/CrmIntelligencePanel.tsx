@@ -432,11 +432,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           </div>
         </div>
 
-        {/* Coordinator Assignment */}
+        {/* Coordinator / Education Counsellor Assignment */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Assigned Coordinator
+              Assigned {lead.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'}
             </label>
             {isLeadsOfficer && lead.assignedTo && (
               <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
@@ -453,11 +453,16 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 className="w-full bg-[#111b21] border border-slate-700/80 hover:border-teal-500 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-300 outline-none transition-colors cursor-pointer appearance-none"
               >
                 <option value="">
-                  {coordinators.length > 0 ? '-- Assign to Coordinator --' : '-- No Coordinators Added (Add in Coordinators Tab) --'}
+                  {coordinators.length > 0 
+                    ? (lead.company === 'CRAS' ? '-- Assign to Education Counsellor --' : '-- Assign to Patient Coordinator --')
+                    : '-- No Staff Added --'}
                 </option>
-                {coordinators.map((c) => (
+                {coordinators
+                  .filter(c => !lead.company || c.company === lead.company)
+                  .concat(coordinators.filter(c => lead.company && c.company !== lead.company))
+                  .map((c) => (
                   <option key={c.id} value={c.id} className="bg-slate-900">
-                    {c.fullName}
+                    {c.fullName} ({c.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
                   </option>
                 ))}
               </select>

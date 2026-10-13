@@ -117,7 +117,7 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
-              Assigned Coordinator
+              Assigned {lead.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'}
             </label>
             {canModifyAssignment(lead) && (
               <span className="text-[9px] text-gold-400 font-semibold">{lead.assignedTo ? 'Reassign' : 'Assign'}</span>
@@ -131,10 +131,10 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
                 onChange={handleCoordinatorChange}
                 className="w-full bg-slate-900 border border-slate-700/80 hover:border-teal-500 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-100 outline-none transition-colors cursor-pointer appearance-none"
               >
-                <option value="">{lead.assignedTo ? '-- Unassign Coordinator --' : '-- Select Coordinator --'}</option>
+                <option value="">{lead.assignedTo ? (lead.company === 'CRAS' ? '-- Unassign Education Counsellor --' : '-- Unassign Patient Coordinator --') : (lead.company === 'CRAS' ? '-- Select Education Counsellor --' : '-- Select Patient Coordinator --')}</option>
                 {coordinators.map((c) => (
                   <option key={c.id} value={c.id}>
-                    {c.fullName}
+                    {c.fullName} ({c.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
                   </option>
                 ))}
               </select>

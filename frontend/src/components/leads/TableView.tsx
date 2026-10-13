@@ -33,7 +33,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
               <th className="py-3 px-4">Language</th>
               <th className="py-3 px-4">Treatment / Course</th>
               <th className="py-3 px-4">Stage</th>
-              <th className="py-3 px-4">Assigned Coordinator</th>
+              <th className="py-3 px-4">Assigned Staff</th>
               <th className="py-3 px-4">Inquiry Time</th>
               <th className="py-3 px-4 text-right">Action</th>
             </tr>
@@ -120,10 +120,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
                           onChange={(e) => assignLead(lead.id, e.target.value)}
                           className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
                         >
-                          <option value="">{lead.assignedTo ? '-- Unassign Coordinator --' : '-- Assign Coordinator --'}</option>
+                          <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCras ? '-- Assign Education Counsellor --' : '-- Assign Patient Coordinator --')}</option>
                           {coordinators.map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.fullName}
+                              {c.fullName} ({c.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
                             </option>
                           ))}
                         </select>

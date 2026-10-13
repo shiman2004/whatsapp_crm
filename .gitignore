@@ -41,6 +41,9 @@ media_*
 !frontend/public/logo.png
 !frontend/public/logo.jpg
 !frontend/public/favicon.png
+!frontend/public/cras-logo.png
+!frontend/public/cras-logo.jpg
+!frontend/public/rwc-logo.png
 !frontend/src/assets/logo.png
 *.mp4
 *.ogg

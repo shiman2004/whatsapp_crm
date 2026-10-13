@@ -161,7 +161,7 @@ export const CoordinatorsManager: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-100 font-serif">Staff & Team Management</h2>
           <p className="text-xs text-slate-400">
-            Manage Leads Officers and Coordinators (RWC & CRAS), assign branch locations, and generate access PINs.
+            Manage Leads Officers, Patient Coordinators (RWC), and Education Counsellors (CRAS), assign branch locations, and generate access PINs.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -213,7 +213,7 @@ export const CoordinatorsManager: React.FC = () => {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#008000]" />
-            <span>Coordinators (RWC) ({rwcCoordinators.length})</span>
+            <span>Patient Coordinators (RWC) ({rwcCoordinators.length})</span>
           </button>
 
           <button
@@ -226,7 +226,7 @@ export const CoordinatorsManager: React.FC = () => {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#800000]" />
-            <span>Coordinators (CRAS) ({crasCoordinators.length})</span>
+            <span>Education Counsellors (CRAS) ({crasCoordinators.length})</span>
           </button>
         </div>
       </div>
@@ -262,8 +262,8 @@ export const CoordinatorsManager: React.FC = () => {
             const roleDisplay = isOfficer 
               ? 'Leads Officer' 
               : isCras 
-              ? 'Coordinator (CRAS)' 
-              : 'Coordinator (RWC)';
+              ? 'Education Counsellor' 
+              : 'Patient Coordinator';
 
             return (
               <div
@@ -459,13 +459,13 @@ export const CoordinatorsManager: React.FC = () => {
                     className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
                   >
                     <option value="coordinator_rwc" className="bg-[#111b21] text-white">
-                      Coordinator (RWC)
+                      Patient Coordinator (RWC)
                     </option>
                     <option value="coordinator_cras" className="bg-[#111b21] text-white">
-                      Coordinator (CRAS)
+                      Education Counsellor (CRAS)
                     </option>
                     <option value="leads_officer" className="bg-[#111b21] text-white">
-                      Leads Officers
+                      Leads Officer (Common)
                     </option>
                   </select>
                 </div>
@@ -634,7 +634,7 @@ export const CoordinatorsManager: React.FC = () => {
                 <span className="font-semibold text-slate-200">
                   {editingStaff.role === 'leads_officer' 
                     ? 'Leads Officer' 
-                    : `Coordinator (${editingStaff.company || 'RWC'})`}
+                    : (editingStaff.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">

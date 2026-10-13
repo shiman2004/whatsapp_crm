@@ -141,8 +141,8 @@ export const DashboardOverview: React.FC = () => {
               <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
                 <span>
                   {activeCompany === 'CRAS' 
-                    ? 'Ceylon Royal Aesthetic Academy — Coordinator Dashboard' 
-                    : 'Royal Wellness Center — Coordinator Clinic Dashboard'}
+                    ? 'College of Royal Aesthetic — Education Counsellor Dashboard' 
+                    : 'Royal Wellness Center — Patient Coordinator Clinic Dashboard'}
                 </span>
               </h2>
               <p className="text-[11px] text-slate-400">

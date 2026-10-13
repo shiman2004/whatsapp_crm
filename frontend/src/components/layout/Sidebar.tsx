@@ -210,7 +210,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="min-w-0 flex-1 truncate">
               <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
               <p className="text-[10px] text-emerald-400 truncate">
-                {currentUser?.role === 'super_admin' ? 'Super Admin' : (currentUser?.role === 'leads_officer' ? 'Leads Officer' : 'Coordinator')}
+                {currentUser?.role === 'super_admin' 
+                  ? 'Super Admin' 
+                  : (currentUser?.role === 'leads_officer' 
+                    ? 'Leads Officer' 
+                    : (currentUser?.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'))}
               </p>
             </div>
           </div>

@@ -59,10 +59,29 @@ function isLeadAccessibleForUser(lead, user) {
 }
 
 // Helper to compute unread count for user
-function computeUnreadCountForUser(leads, user, userReadTimestamps) {
+function computeUnreadCountForUser(leads, user, userReadTimestamps, messages = []) {
   const accessibleLeads = leads.filter(l => isLeadAccessibleForUser(l, user));
   let total = 0;
   for (const lead of accessibleLeads) {
+    const leadMsgs = messages.filter(m => m.leadId === lead.id);
+    let latestMsg = null;
+    if (leadMsgs.length > 0) {
+      latestMsg = leadMsgs.reduce((latest, current) => {
+        const tCur = new Date(current.createdAt || current.timestamp || 0).getTime();
+        const tLat = new Date(latest.createdAt || latest.timestamp || 0).getTime();
+        return tCur > tLat ? current : latest;
+      }, leadMsgs[0]);
+    }
+
+    // STRICT: Outbound reply from staff means conversation is answered and NOT unread
+    if (latestMsg && (latestMsg.direction === 'outbound' || latestMsg.senderType !== 'customer')) {
+      continue;
+    }
+
+    if (!lead.lastCustomerMessageAt && (!latestMsg || latestMsg.direction !== 'inbound')) {
+      continue;
+    }
+
     const readTime = userReadTimestamps[lead.id] || 0;
     let latestTime = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
 
@@ -71,7 +90,7 @@ function computeUnreadCountForUser(leads, user, userReadTimestamps) {
         total += Math.max(1, lead.unreadCount || 1);
       }
     } else {
-      if ((lead.unreadCount || 0) > 0) {
+      if ((lead.unreadCount || 0) > 0 || (latestMsg && latestMsg.direction === 'inbound')) {
         total += (lead.unreadCount || 1);
       }
     }
@@ -163,5 +182,25 @@ const unreadAfterNewMsg = computeUnreadCountForUser(leadsAfterNewMessage, superA
 assert.strictEqual(unreadAfterNewMsg, 1, 'New message triggers unread count 1 again!');
 console.log(`✅ Count is ${unreadAfterNewMsg}. Bell animation immediately reactivates and glows red!`);
 console.log('✅ New Message Trigger Passed!\n');
+
+// TEST 7: Staff sends message / template through CRM (Outbound Message Workflow)
+console.log('Test 7: Staff sends message or template through CRM');
+const messagesAfterStaffReply = [
+  { leadId: 'lead-1', direction: 'inbound', senderType: 'customer', timestamp: '2026-10-13T11:00:00Z' },
+  { leadId: 'lead-1', direction: 'outbound', senderType: 'coordinator', timestamp: '2026-10-13T11:02:00Z' }
+];
+const lead1AfterStaffReply = {
+  ...lead1Updated,
+  unreadCount: 0 // Outbound reply clears unreadCount
+};
+const leadsAfterStaffReply = [lead1AfterStaffReply, lead2, lead3];
+const staffReadTimestamps = {
+  ...allReadTimestamps,
+  'lead-1': new Date('2026-10-13T11:02:00Z').getTime()
+};
+const unreadAfterStaffReply = computeUnreadCountForUser(leadsAfterStaffReply, superAdmin, staffReadTimestamps, messagesAfterStaffReply);
+assert.strictEqual(unreadAfterStaffReply, 0, 'Outbound staff message/template MUST NOT trigger bell!');
+console.log(`✅ Count is ${unreadAfterStaffReply}. Bell animation does NOT show when staff sends message through CRM!`);
+console.log('✅ Outbound Message Workflow Test Passed!\n');
 
 console.log('🎉 ALL BLINKING BELL NOTIFICATION TESTS PASSED SUCCESSFULLY!');

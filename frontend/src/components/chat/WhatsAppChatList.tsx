@@ -22,7 +22,7 @@ import {
   Check,
   Tag
 } from 'lucide-react';
-import { Lead } from '../../types';
+import { Lead, Message } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { AddContactModal } from './AddContactModal';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
@@ -259,7 +259,19 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     if (activeFilter === 'cras' && lead.company !== 'CRAS' && lead.source?.toUpperCase() !== 'CRAS') return false;
 
     // Filter pills
-    if (activeFilter === 'unread' && (!lead.unreadCount || lead.unreadCount === 0)) return false;
+    if (activeFilter === 'unread') {
+      const leadMsgs = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
+      let latestMsg: Message | null = null;
+      if (leadMsgs.length > 0) {
+        latestMsg = leadMsgs.reduce((latest, current) => {
+          const tCur = new Date(current.createdAt || current.timestamp || current.sentAt || 0).getTime();
+          const tLat = new Date(latest.createdAt || latest.timestamp || latest.sentAt || 0).getTime();
+          return tCur > tLat ? current : latest;
+        }, leadMsgs[0]);
+      }
+      if (latestMsg && (latestMsg.direction === 'outbound' || latestMsg.senderType !== 'customer')) return false;
+      if (!lead.unreadCount || lead.unreadCount === 0) return false;
+    }
     if (activeFilter === 'favourites' && !favouriteLeadIds.has(lead.id)) return false;
     if (activeFilter === 'new' && (lead.stage || 'new') !== 'new') return false;
     if (activeFilter === 'assigned' && lead.stage !== 'assigned') return false;
@@ -579,8 +591,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             }`}
           >
             <span>Unread</span>
-            {totalUnreadCount > 0 && (
-              <span className="text-[10px] font-bold opacity-80">{totalUnreadCount}</span>
+            {totalUnreadCountForUser > 0 && (
+              <span className="text-[10px] font-bold opacity-80">{totalUnreadCountForUser}</span>
             )}
           </button>
 
@@ -711,7 +723,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     </div>
 
                     <span className={`text-[10px] font-mono shrink-0 ${
-                      (lead.unreadCount || 0) > 0 ? 'text-[#00a884] font-bold' : 'text-[#8696a0]'
+                      (lead.unreadCount || 0) > 0 && lastMsg?.direction === 'inbound' ? 'text-[#00a884] font-bold' : 'text-[#8696a0]'
                     }`}>
                       {timeDisplay}
                     </span>
@@ -751,7 +763,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     {/* Right Indicators: Pin / Unread Badge */}
                     <div className="flex items-center gap-1 shrink-0">
                       {isPinned && <Pin className="w-3 h-3 text-[#8696a0] fill-current" />}
-                      {(lead.unreadCount || 0) > 0 && (
+                      {(lead.unreadCount || 0) > 0 && lastMsg?.direction === 'inbound' && (
                         <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#00a884] text-black font-bold text-[10px] flex items-center justify-center shadow">
                           {lead.unreadCount}
                         </span>

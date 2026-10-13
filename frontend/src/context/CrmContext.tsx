@@ -1052,7 +1052,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   language: 'en',
                   notesCount: 0,
                   unreadCount: isOutbound ? 0 : 1,
-                  lastCustomerMessageAt: timestamp || new Date().toISOString(),
+                  lastCustomerMessageAt: isOutbound ? (undefined as any) : (timestamp || new Date().toISOString()),
                   createdAt: timestamp || new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
                 };
@@ -1083,7 +1083,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       companyPhoneNumberId: companyPhoneNumberId || l.companyPhoneNumberId || compConfig.phoneId,
                       companyPhoneNumber: companyPhoneNumber || l.companyPhoneNumber || compConfig.phone,
                       unreadCount: isOutbound ? 0 : (isCurrentlyActive ? 0 : (l.unreadCount || 0) + 1),
-                      lastCustomerMessageAt: timestamp || new Date().toISOString(),
+                      lastCustomerMessageAt: isOutbound ? l.lastCustomerMessageAt : (timestamp || new Date().toISOString()),
                       updatedAt: new Date().toISOString() 
                     };
                   }
@@ -1091,6 +1091,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 });
               }
             });
+
+            // If an outbound message arrived for this lead, mark chat as read immediately
+            if (isOutbound && resolvedLeadId) {
+              const now = Date.now();
+              setUserReadTimestamps(prev => {
+                const next = { ...prev, [resolvedLeadId]: now };
+                if (currentUser?.id) {
+                  try {
+                    localStorage.setItem(`rw_crm_read_leads_${currentUser.id}`, JSON.stringify(next));
+                  } catch (e) {}
+                }
+                return next;
+              });
+            }
 
             // Trigger WhatsApp Web desktop notification & chime for incoming messages
             if (!isOutbound) {
@@ -1404,32 +1418,69 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Compute total unread messages for current user across accessible conversations
+  // STRICT RULE: Only messages sent by CUSTOMERS (inbound) can ever be unread!
+  // Any conversation where the latest message is Outbound / Staff reply is by definition READ.
   const totalUnreadCountForUser = useMemo(() => {
     if (!currentUser) return 0;
     const accessibleLeads = leads.filter(l => isLeadAccessibleForUser(l, currentUser));
 
     let total = 0;
     for (const lead of accessibleLeads) {
-      const readTime = userReadTimestamps[lead.id] || 0;
-      let latestTime = 0;
-      if (lead.lastCustomerMessageAt) {
-        latestTime = new Date(lead.lastCustomerMessageAt).getTime();
-      } else if (lead.updatedAt) {
-        latestTime = new Date(lead.updatedAt).getTime();
+      // 1. If currently selected/active in chat, user is viewing it -> 0 unread
+      if (selectedLeadId === lead.id) {
+        continue;
       }
 
+      // 2. Check all messages for this lead
+      const leadMsgs = messages.filter(m => 
+        m.leadId === lead.id || 
+        (lead.customerId && m.customerId === lead.customerId)
+      );
+
+      let latestMsg: Message | null = null;
+      if (leadMsgs.length > 0) {
+        latestMsg = leadMsgs.reduce((latest, current) => {
+          const tCur = new Date(current.createdAt || current.timestamp || current.sentAt || 0).getTime();
+          const tLat = new Date(latest.createdAt || latest.timestamp || latest.sentAt || 0).getTime();
+          return tCur > tLat ? current : latest;
+        }, leadMsgs[0]);
+      }
+
+      // If the latest message in this chat was sent by staff (outbound / coordinator / system / ai),
+      // then staff has already responded or initiated! It CANNOT be unread!
+      if (latestMsg && (latestMsg.direction === 'outbound' || latestMsg.senderType !== 'customer')) {
+        continue;
+      }
+
+      // 3. A lead with NO customer messages can NEVER have unread customer messages
+      if (!lead.lastCustomerMessageAt && (!latestMsg || latestMsg.direction !== 'inbound')) {
+        continue;
+      }
+
+      const customerMsgTime = lead.lastCustomerMessageAt
+        ? new Date(lead.lastCustomerMessageAt).getTime()
+        : (latestMsg ? new Date(latestMsg.createdAt || latestMsg.timestamp || 0).getTime() : 0);
+
+      if (isNaN(customerMsgTime) || customerMsgTime <= 0) {
+        continue;
+      }
+
+      const readTime = userReadTimestamps[lead.id] || 0;
+
+      // 4. Has the user read this conversation AFTER the customer's last message?
       if (readTime > 0) {
-        if (latestTime > readTime) {
+        if (customerMsgTime > readTime) {
           total += Math.max(1, lead.unreadCount || 1);
         }
       } else {
-        if ((lead.unreadCount || 0) > 0) {
-          total += (lead.unreadCount || 1);
+        // If not read yet in this browser session, count only if unreadCount > 0 or latest message is inbound
+        if ((lead.unreadCount || 0) > 0 || (latestMsg && latestMsg.direction === 'inbound')) {
+          total += Math.max(1, lead.unreadCount || 1);
         }
       }
     }
     return total;
-  }, [leads, currentUser, userReadTimestamps]);
+  }, [leads, currentUser, userReadTimestamps, selectedLeadId, messages]);
 
   // Open unread WhatsApp chats list (bell click function)
   const openUnreadChats = useCallback(() => {
@@ -1926,6 +1977,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     setMessages(prev => [...prev, newMsg]);
     setReplyingMessage(null); // Clear replying state after sending
+    markChatAsRead(leadId); // Immediately mark read so outgoing messages never trigger unread bell state
 
     // Auto-advance stage if New or Assigned -> Contacted
     if (lead.stage === 'new' || lead.stage === 'assigned') {
@@ -2179,6 +2231,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       setMessages(prev => [...prev, newMsg]);
     }
+    markChatAsRead(leadId); // Immediately mark read so outgoing templates never trigger unread bell state
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
@@ -2255,6 +2308,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // Set status to pending immediately
     setMessages(prev => prev.map(m => m.id === failedMessageId ? { ...m, status: 'pending', errorMessage: undefined } : m));
+    markChatAsRead(msg.leadId);
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;

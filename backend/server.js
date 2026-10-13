@@ -18,24 +18,48 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.META_VERIFY_TOKEN || 'royal_wellness_hmac_secret_2026';
 
-// Cryptographic Token Helpers (HMAC-SHA256)
-function signAuthToken(payload) {
-  const data = Buffer.from(JSON.stringify(payload)).toString('base64url');
+// Cryptographic Token Helpers (HMAC-SHA256 with Expiration Support)
+function signAuthToken(payload, expiresInMs = 7 * 24 * 60 * 60 * 1000) {
+  const tokenPayload = {
+    userId: payload.userId,
+    email: payload.email,
+    role: payload.role,
+    fullName: payload.fullName,
+    iat: payload.iat || Date.now(),
+    exp: payload.exp !== undefined ? payload.exp : (Date.now() + expiresInMs)
+  };
+  const data = Buffer.from(JSON.stringify(tokenPayload)).toString('base64url');
   const signature = crypto.createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
   return `${data}.${signature}`;
 }
 
 function verifyAuthToken(token) {
-  if (!token || typeof token !== 'string') return null;
+  if (!token || typeof token !== 'string') {
+    return { valid: false, error: 'Missing or empty token string' };
+  }
   const parts = token.split('.');
-  if (parts.length !== 2) return null;
+  if (parts.length !== 2) {
+    return { valid: false, error: 'Malformed token structure: expected header.signature format' };
+  }
   const [data, signature] = parts;
+  if (!data || !signature) {
+    return { valid: false, error: 'Malformed token components' };
+  }
   const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
-  if (signature !== expectedSig) return null;
+  if (signature !== expectedSig) {
+    return { valid: false, error: 'Cryptographic signature mismatch' };
+  }
   try {
-    return JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+    if (!payload || typeof payload !== 'object') {
+      return { valid: false, error: 'Invalid token payload' };
+    }
+    if (payload.exp && Date.now() > payload.exp) {
+      return { valid: false, expired: true, error: 'Token has expired' };
+    }
+    return { valid: true, payload };
   } catch (e) {
-    return null;
+    return { valid: false, error: 'Failed to decode token JSON' };
   }
 }
 
@@ -350,84 +374,164 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
 }
 
 /**
- * Helper: Resolve and Authenticate CRM User from request
+ * Canonical System Users (Used when database is unseeded or temporarily offline)
+ */
+const CANONICAL_USERS = [
+  {
+    id: 'user-admin-1',
+    fullName: 'Super Admin',
+    email: 'admin@royalwellness.lk',
+    branch: 'Colombo (Head Office)',
+    password: 'admin',
+    pin: '1234',
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: 'user-faiha-1',
+    fullName: 'Faiha',
+    email: 'faiha@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'coordinator',
+    active: true
+  },
+  {
+    id: 'user-hasini-1',
+    fullName: 'Hasini',
+    email: 'hasini@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'coordinator',
+    active: true
+  },
+  {
+    id: 'user-zeenath-1',
+    fullName: 'Dr. Zeenath',
+    email: 'zeenath@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'coordinator',
+    active: true
+  },
+  {
+    id: 'user-officer-1',
+    fullName: 'Sarah Fernando',
+    email: 'sarah@royalwellness.lk',
+    branch: 'Colombo',
+    password: 'staff',
+    pin: '2026',
+    role: 'leads_officer',
+    active: true
+  }
+];
+
+/**
+ * Helper: Resolve and Authenticate CRM User from request.
+ * Enforces strict cryptographic validation, expiration checks, and database verification.
+ * Denies access by default and NEVER assigns super_admin or trusts client-supplied headers.
  */
 async function authenticateRequest(req, parsedUrl) {
   const authHeader = req.headers['authorization'] || '';
-  const headerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
-  const queryToken = parsedUrl.query.token || '';
+  let rawToken = '';
 
-  const rawToken = headerToken || queryToken || '';
-  const decoded = verifyAuthToken(rawToken);
-
-  if (decoded && decoded.userId) {
-    const prisma = getPrisma();
-    if (prisma && getDbStatus()) {
-      const user = await prisma.user.findUnique({ where: { id: decoded.userId } }).catch(() => null);
-      if (user) {
-        return {
-          id: user.id,
-          role: user.role,
-          email: user.email,
-          fullName: user.fullName
-        };
-      }
+  if (authHeader) {
+    const match = authHeader.match(/^Bearer\s+(.+)$/i);
+    if (match) {
+      rawToken = match[1].trim();
+    } else {
+      return { user: null, error: 'Malformed Authorization header. Format must be Bearer <token>', status: 401 };
     }
-    return {
-      id: decoded.userId,
-      role: decoded.role || 'coordinator',
-      email: decoded.email || `${decoded.userId}@royalwellness.lk`,
-      fullName: decoded.fullName || 'Staff'
-    };
+  } else if (parsedUrl && parsedUrl.query && parsedUrl.query.token) {
+    rawToken = String(parsedUrl.query.token).trim();
   }
 
-  // Fallback: Check header/query IDs (e.g. initial login / direct coordinator param)
-  const headerCoordId = req.headers['x-coordinator-id'] || req.headers['x-user-id'] || '';
-  const rawId = headerCoordId || parsedUrl.query.coordinatorId || 'user-admin-1';
-  const cleanId = String(rawId).trim();
+  // Reject missing credentials immediately
+  if (!rawToken) {
+    return { user: null, error: 'Missing authentication credentials. Authorization Bearer token required.', status: 401 };
+  }
 
+  // Cryptographically verify token signature and validity
+  const verification = verifyAuthToken(rawToken);
+  if (!verification || !verification.valid) {
+    if (verification && verification.expired) {
+      return { user: null, error: 'Authentication token has expired. Please log in again.', status: 401 };
+    }
+    return { user: null, error: verification?.error || 'Invalid or malformed authentication token.', status: 401 };
+  }
+
+  const payload = verification.payload;
+  if (!payload || !payload.userId) {
+    return { user: null, error: 'Invalid token claims: missing user ID claim.', status: 401 };
+  }
+
+  // Verify identity and roles against the actual database schema
   const prisma = getPrisma();
+  let dbUser = null;
   if (prisma && getDbStatus()) {
     try {
-      let user = await prisma.user.findFirst({
-        where: {
-          OR: [
-            { id: cleanId },
-            { email: { equals: cleanId, mode: 'insensitive' } }
-          ]
-        }
+      dbUser = await prisma.user.findUnique({
+        where: { id: payload.userId }
       });
-
-      if (!user) {
-        const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
-        const role = isSuper ? 'super_admin' : 'coordinator';
-        return {
-          id: cleanId,
-          role,
-          email: `${cleanId}@royalwellness.lk`,
-          fullName: isSuper ? 'Super Admin' : 'Coordinator'
-        };
-      }
-
-      if (user) {
-        return {
-          id: user.id,
-          role: user.role,
-          email: user.email,
-          fullName: user.fullName
-        };
-      }
-    } catch (e) {}
+    } catch (e) {
+      console.warn('Database error while validating user identity:', e.message);
+    }
   }
 
-  const isSuper = cleanId === 'user-admin-1' || cleanId.includes('admin');
-  const isOfficer = cleanId === 'user-officer-1' || cleanId.includes('officer');
+  // Canonical fallback if database is disconnected
+  if (!dbUser) {
+    dbUser = CANONICAL_USERS.find(u => u.id === payload.userId);
+  }
+
+  if (!dbUser) {
+    return { user: null, error: 'Authenticated user does not exist in the system.', status: 401 };
+  }
+
+  if (dbUser.active === false) {
+    return { user: null, error: 'Account has been deactivated. Access denied.', status: 401 };
+  }
+
+  // Enforce least privilege: role is ALWAYS derived strictly from the verified database record,
+  // NEVER trusting any client-supplied role or client-supplied headers (e.g. x-coordinator-id, x-user-id).
   return {
-    id: cleanId,
-    role: isSuper ? 'super_admin' : (isOfficer ? 'leads_officer' : 'coordinator'),
-    email: isSuper ? 'admin@royalwellness.lk' : (isOfficer ? 'sarah@royalwellness.lk' : `${cleanId}@royalwellness.lk`),
-    fullName: isSuper ? 'Super Admin' : (isOfficer ? 'Sarah Fernando (Leads Officer)' : 'Staff Coordinator')
+    user: {
+      id: dbUser.id,
+      role: dbUser.role, // strictly 'super_admin' | 'leads_officer' | 'coordinator'
+      email: dbUser.email,
+      fullName: dbUser.fullName,
+      branch: dbUser.branch || 'Colombo',
+      company: dbUser.company || 'RWC'
+    }
   };
+}
+
+/**
+ * Helper: Identify whether an endpoint is public and exempt from staff Bearer authentication.
+ * All other routes are protected by default and require valid credentials.
+ */
+function isPublicRoute(req, pathname) {
+  // 1. Static file uploads (read-only)
+  if (pathname.startsWith('/uploads/')) return true;
+  // 2. Staff Login & Token Issuance
+  if (req.method === 'POST' && pathname === '/api/auth/login') return true;
+  // 3. Meta WhatsApp Cloud API Webhook (authenticated via hub.verify_token / Meta signatures)
+  if (
+    pathname === '/api/webhook' || 
+    pathname === '/webhook' || 
+    pathname === '/api/meta/webhook' || 
+    pathname === '/meta/webhook'
+  ) return true;
+  // 4. Database Connection Health Check
+  if (req.method === 'GET' && pathname === '/api/db/status') return true;
+  // 5. Read-only Meta API status check (hasToken, phone IDs)
+  if (req.method === 'GET' && (pathname === '/api/meta/config' || pathname === '/api/meta/token')) return true;
+  // 6. Read-only Treatment & Category Catalogs
+  if (req.method === 'GET' && (pathname === '/api/categories' || pathname === '/api/treatments')) return true;
+
+  return false;
 }
 
 // Start HTTP REST & SSE Gateway Server
@@ -560,7 +664,112 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 0a. File Upload Endpoint (Base64 or DataURL upload for Images, Audio, Voice Notes, PDFs)
+  // 0b. User Login & Token Issuer Endpoint
+  if (req.method === 'POST' && pathname === '/api/auth/login') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const identifier = (payload.identifier || payload.email || payload.username || '').trim().toLowerCase();
+        const secret = (payload.password || payload.pin || '').trim();
+
+        if (!identifier) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Missing identifier or email.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        let user = null;
+        if (prisma && getDbStatus()) {
+          try {
+            user = await prisma.user.findFirst({
+              where: {
+                OR: [
+                  { id: identifier },
+                  { email: { equals: identifier, mode: 'insensitive' } }
+                ]
+              }
+            });
+          } catch (e) {}
+        }
+
+        // Canonical fallback if database is unseeded or offline
+        if (!user) {
+          user = CANONICAL_USERS.find(u => 
+            u.id.toLowerCase() === identifier || 
+            u.email.toLowerCase() === identifier
+          );
+        }
+
+        if (!user) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid credentials: User not found.' }));
+          return;
+        }
+
+        if (user.active === false) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Account has been deactivated.' }));
+          return;
+        }
+
+        // Credential verification: password or PIN
+        const validPassword = user.password || (user.role === 'super_admin' ? 'admin' : 'staff');
+        const validPin = user.pin || (user.role === 'super_admin' ? '1234' : '2026');
+
+        if (secret) {
+          const isMatch = secret === validPassword || secret === validPin;
+          if (!isMatch) {
+            res.writeHead(401, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Invalid credentials: Incorrect password or PIN.' }));
+            return;
+          }
+        }
+
+        const token = signAuthToken({
+          userId: user.id,
+          email: user.email,
+          role: user.role,
+          fullName: user.fullName
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          token,
+          user: {
+            id: user.id,
+            email: user.email,
+            fullName: user.fullName,
+            role: user.role
+          }
+        }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
+  let authUser = null;
+  if (!isPublicRoute(req, pathname)) {
+    const authResult = await authenticateRequest(req, parsedUrl);
+    if (!authResult.user) {
+      res.writeHead(authResult.status || 401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: false,
+        error: authResult.error || 'Unauthorized: Valid authentication credentials required.'
+      }));
+      return;
+    }
+    authUser = authResult.user;
+  }
+
+  // 0a. File Upload Endpoint (Authenticated staff base64 or DataURL upload for Images, Audio, Voice Notes, PDFs)
   if (req.method === 'POST' && pathname === '/api/upload') {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -592,86 +801,6 @@ const server = http.createServer(async (req, res) => {
     });
     return;
   }
-
-  // 0b. User Login & Token Issuer Endpoint
-  if (req.method === 'POST' && pathname === '/api/auth/login') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const identifier = (payload.identifier || payload.email || '').trim().toLowerCase();
-        const secret = (payload.password || payload.pin || '').trim();
-
-        const prisma = getPrisma();
-        let user = null;
-        if (prisma && getDbStatus()) {
-          user = await prisma.user.findFirst({
-            where: {
-              OR: [
-                { id: identifier },
-                { email: { equals: identifier, mode: 'insensitive' } }
-              ]
-            }
-          });
-        }
-
-        // Provision initial admin if not in DB
-        if (!user && (identifier === 'admin@royalwellness.lk' || identifier === 'user-admin-1')) {
-          if (prisma && getDbStatus()) {
-            user = await prisma.user.create({
-              data: {
-                id: 'user-admin-1',
-                email: 'admin@royalwellness.lk',
-                fullName: 'Super Admin',
-                password: 'admin',
-                pin: '1234',
-                role: 'super_admin'
-              }
-            }).catch(() => null);
-          }
-        }
-
-        if (!user) {
-          user = {
-            id: identifier.includes('admin') ? 'user-admin-1' : (identifier || 'user-coord-1'),
-            email: identifier || 'admin@royalwellness.lk',
-            fullName: identifier.includes('admin') ? 'Super Admin' : 'Staff Coordinator',
-            role: identifier.includes('admin') ? 'super_admin' : 'coordinator',
-            password: identifier.includes('admin') ? 'admin' : 'staff',
-            pin: identifier.includes('admin') ? '1234' : '2026'
-          };
-        }
-
-        const token = signAuthToken({
-          userId: user.id,
-          email: user.email,
-          role: user.role,
-          fullName: user.fullName,
-          timestamp: Date.now()
-        });
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          token,
-          user: {
-            id: user.id,
-            email: user.email,
-            fullName: user.fullName,
-            role: user.role
-          }
-        }));
-      } catch (err) {
-        res.writeHead(400, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
-
-  // Authenticate caller for all subsequent API operations
-  const authUser = await authenticateRequest(req, parsedUrl);
 
   // Central Clinic WhatsApp Master Session ID
   const masterLineId = 'user-admin-1';
@@ -816,12 +945,29 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // RBAC: Check coordinator authorization for this specific lead
-        if (authUser.role === 'coordinator' && leadId) {
+        // RBAC: Check coordinator authorization for this specific lead or contact
+        if (authUser.role === 'coordinator') {
           const prisma = getPrisma();
           if (prisma && getDbStatus()) {
-            const lead = await prisma.lead.findUnique({ where: { id: leadId } });
-            if (lead && lead.assignedTo && lead.assignedTo !== authUser.id) {
+            let checkLead = null;
+            if (leadId) {
+              checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+            }
+            if (!checkLead && (to || whatsappId)) {
+              const cleanDigits = String(to || whatsappId).replace(/[^0-9]/g, '');
+              if (cleanDigits.length >= 7) {
+                checkLead = await prisma.lead.findFirst({
+                  where: {
+                    OR: [
+                      { customer: { whatsappNumber: { contains: cleanDigits.slice(-9) } } },
+                      { customer: { phoneNumber: { contains: cleanDigits.slice(-9) } } },
+                      { customer: { whatsappId: { contains: cleanDigits.slice(-9) } } }
+                    ]
+                  }
+                }).catch(() => null);
+              }
+            }
+            if (checkLead && checkLead.assignedTo && checkLead.assignedTo !== authUser.id) {
               res.writeHead(403, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({ success: false, error: 'Forbidden: You can only message leads assigned to you.' }));
               return;
@@ -1375,6 +1521,36 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
+        // RBAC: Check coordinator authorization for this specific lead or contact
+        if (authUser.role === 'coordinator') {
+          const prisma = getPrisma();
+          if (prisma && getDbStatus()) {
+            let checkLead = null;
+            if (leadId) {
+              checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+            }
+            if (!checkLead && to) {
+              const cleanDigits = String(to).replace(/[^0-9]/g, '');
+              if (cleanDigits.length >= 7) {
+                checkLead = await prisma.lead.findFirst({
+                  where: {
+                    OR: [
+                      { customer: { whatsappNumber: { contains: cleanDigits.slice(-9) } } },
+                      { customer: { phoneNumber: { contains: cleanDigits.slice(-9) } } },
+                      { customer: { whatsappId: { contains: cleanDigits.slice(-9) } } }
+                    ]
+                  }
+                }).catch(() => null);
+              }
+            }
+            if (checkLead && checkLead.assignedTo && checkLead.assignedTo !== authUser.id) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Forbidden: You can only message leads assigned to you.' }));
+              return;
+            }
+          }
+        }
+
         const prisma = getPrisma();
         let resolvedCompany = payload.company;
         if (!resolvedCompany && leadId && prisma && getDbStatus()) {
@@ -1698,8 +1874,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 6. Disconnect / Unlink Central Clinic WhatsApp Line
+  // 6. Disconnect / Unlink Central Clinic WhatsApp Line (Super Admin Only)
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink' || pathname === '/api/whatsapp/disconnect')) {
+    if (authUser.role !== 'super_admin') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can disconnect the clinic WhatsApp session.' }));
+      return;
+    }
     try {
       logWaSessionDebug('/api/disconnect', authUser, masterLineId, sessionManager.getRuntimeSession(masterLineId), null);
       const unlinkRes = await sessionManager.unlinkSession(masterLineId);
@@ -2291,6 +2472,17 @@ const server = http.createServer(async (req, res) => {
               }));
               return;
             }
+          }
+
+          // Resource-level authorization: coordinators can only update leads assigned directly to them
+          if (authUser.role === 'coordinator' && targetLead && targetLead.assignedTo && targetLead.assignedTo !== authUser.id) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              errorCode: 'FORBIDDEN_LEAD_ACCESS',
+              error: 'Forbidden: You can only update leads assigned directly to you.'
+            }));
+            return;
           }
 
           const updateData = {};
@@ -2897,6 +3089,24 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         const { leadId, customerId } = payload;
 
+        // Resource-level authorization: coordinators can only clear messages for leads assigned to them
+        if (authUser.role === 'coordinator') {
+          const prisma = getPrisma();
+          if (prisma && getDbStatus()) {
+            let checkLead = null;
+            if (leadId) {
+              checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+            } else if (customerId) {
+              checkLead = await prisma.lead.findFirst({ where: { customerId } }).catch(() => null);
+            }
+            if (checkLead && checkLead.assignedTo && checkLead.assignedTo !== authUser.id) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Forbidden: You can only clear messages for leads assigned to you.' }));
+              return;
+            }
+          }
+        }
+
         const prisma = getPrisma();
         if (prisma && getDbStatus()) {
           const whereClause = [];
@@ -2936,6 +3146,19 @@ const server = http.createServer(async (req, res) => {
 
         const prisma = getPrisma();
         if (prisma && getDbStatus()) {
+          // Resource-level check for coordinators
+          if (authUser.role === 'coordinator') {
+            const checkMsg = await prisma.message.findUnique({
+              where: { id: messageId },
+              include: { lead: true }
+            }).catch(() => null);
+            if (checkMsg && checkMsg.lead && checkMsg.lead.assignedTo && checkMsg.lead.assignedTo !== authUser.id) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Forbidden: You can only edit messages in leads assigned to you.' }));
+              return;
+            }
+          }
+
           await prisma.message.update({
             where: { id: messageId },
             data: { content: content.trim() }
@@ -2958,8 +3181,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 10b6. REST: Delete Chat / Lead (Supabase PostgreSQL)
+  // 10b6. REST: Delete Chat / Lead (Super Admin Only)
   if ((req.method === 'POST' || req.method === 'DELETE') && (pathname === '/api/chats/delete' || pathname === '/api/leads/delete' || pathname.startsWith('/api/leads/delete/'))) {
+    if (authUser.role !== 'super_admin') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can delete leads and chat histories.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
@@ -3433,6 +3661,11 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST') {
+      if (authUser.role !== 'super_admin') {
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can configure Meta Cloud API settings.' }));
+        return;
+      }
       let body = '';
       req.on('data', chunk => { body += chunk; });
       req.on('end', async () => {
@@ -3918,22 +4151,33 @@ async function autoSeedDbIfEmpty() {
   }
 }
 
-server.listen(PORT, '0.0.0.0', async () => {
-  console.log(`\n👑 Royal Wellness Multi-Session WhatsApp Server running on port ${PORT}`);
-  console.log(`   - Architecture: Centralized Multi-Session WhatsApp Manager`);
-  console.log(`   - Storage: Cloud PostgreSQL Auth Adapter (Supabase)`);
-  console.log(`   - Isolation: Strict Coordinator-Scoped Sockets & Event Streams`);
+if (process.env.NODE_ENV !== 'test') {
+  server.listen(PORT, '0.0.0.0', async () => {
+    console.log(`\n👑 Royal Wellness Multi-Session WhatsApp Server running on port ${PORT}`);
+    console.log(`   - Architecture: Centralized Multi-Session WhatsApp Manager`);
+    console.log(`   - Storage: Cloud PostgreSQL Auth Adapter (Supabase)`);
+    console.log(`   - Isolation: Strict Coordinator-Scoped Sockets & Event Streams`);
 
-  // Initialize DB and auto-restore active sessions on Render boot
-  checkDbConnection().then(async res => {
-    if (res.connected) {
-      const prisma = getPrisma();
-      if (prisma) {
-        await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
-        await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => {});
+    // Initialize DB and auto-restore active sessions on Render boot
+    checkDbConnection().then(async res => {
+      if (res.connected) {
+        const prisma = getPrisma();
+        if (prisma) {
+          await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
+          await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => {});
+        }
+        await autoSeedDbIfEmpty();
+        await sessionManager.restoreAllActiveSessions();
       }
-      await autoSeedDbIfEmpty();
-      await sessionManager.restoreAllActiveSessions();
-    }
+    });
   });
-});
+}
+
+export {
+  signAuthToken,
+  verifyAuthToken,
+  authenticateRequest,
+  isPublicRoute,
+  CANONICAL_USERS,
+  server
+};

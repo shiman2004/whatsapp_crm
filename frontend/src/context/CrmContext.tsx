@@ -318,6 +318,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => Boolean(localStorage.getItem('meta_access_token')));
   const initialLeadLoadedRef = useRef<boolean>(false);
 
+  const getAuthToken = (): string => {
+    return localStorage.getItem('rw_crm_auth_token') || '';
+  };
+
   // Desktop Notification Settings & Active Popups
   const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
     enabled: true,
@@ -504,8 +508,28 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Automatically load persistent conversation history, leads, coordinators, and Meta configuration
   const fetchInitialData = async () => {
     try {
+      let token = getAuthToken();
+      if (!token) {
+        try {
+          const pin = currentUser?.pin || (currentUser?.role === 'super_admin' ? '1234' : '2026');
+          const password = currentUser?.password || (currentUser?.role === 'super_admin' ? 'admin' : 'staff');
+          const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: currentUser?.id || 'user-admin-1', pin, password })
+          });
+          if (authRes.ok) {
+            const authData = await authRes.json();
+            if (authData.token) {
+              token = authData.token;
+              localStorage.setItem('rw_crm_auth_token', token);
+            }
+          }
+        } catch (e) {}
+      }
+
       const authHeaders = {
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': token ? `Bearer ${token}` : '',
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
@@ -696,10 +720,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Fetch this coordinator's specific WhatsApp line status
     const fetchMyStatus = async () => {
       try {
-        const token = localStorage.getItem('rw_crm_auth_token') || currentUser?.id || 'user-admin-1';
+        const token = getAuthToken();
         const res = await fetch(`${API_BASE_URL}/api/status?coordinatorId=${currentUser.id}`, {
           headers: {
-            'Authorization': `Bearer ${token}`,
+            'Authorization': token ? `Bearer ${token}` : '',
             'x-coordinator-id': currentUser.id
           }
         });
@@ -780,7 +804,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const coordId = currentUser?.id || 'user-admin-1';
-      eventSource = new EventSource(`${API_BASE_URL}/api/events?token=${coordId}&coordinatorId=${coordId}`);
+      const token = getAuthToken();
+      eventSource = new EventSource(`${API_BASE_URL}/api/events?token=${encodeURIComponent(token)}&coordinatorId=${coordId}`);
       
       eventSource.onmessage = (event) => {
         try {
@@ -1556,7 +1581,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'x-coordinator-id': currentUser?.id || 'user-admin-1',
           'x-user-id': currentUser?.id || 'user-admin-1'
         },
@@ -1677,7 +1702,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
@@ -1730,7 +1755,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
@@ -1786,7 +1811,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
@@ -1831,7 +1856,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
@@ -1880,7 +1905,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
@@ -1987,7 +2012,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
@@ -2100,7 +2125,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await fetch(`${API_BASE_URL}/api/messages/edit`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
         body: JSON.stringify({ messageId, content: newContent.trim() })
       });
     } catch (e) {
@@ -2134,7 +2162,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await fetch(`${API_BASE_URL}/api/chats/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
         body: JSON.stringify({
           leadId: targetLead.id,
           customerId: targetLead.customerId,
@@ -2158,7 +2189,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       await fetch(`${API_BASE_URL}/api/chats/clear`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`
+        },
         body: JSON.stringify({
           leadId: targetLead.id,
           customerId: targetLead.customerId,
@@ -2235,7 +2269,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           to: recipientPhone,
@@ -2312,7 +2346,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`
+          'Authorization': `Bearer ${getAuthToken()}`
         },
         body: JSON.stringify({
           to: recipientPhone,
@@ -2467,7 +2501,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
@@ -2519,7 +2553,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
@@ -2585,7 +2619,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetch(`${API_BASE_URL}/api/coordinators/${id}`, {
       method: 'DELETE',
       headers: {
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       }
     }).catch(err => console.warn('Could not sync coordinator deletion to backend:', err));
@@ -2621,7 +2655,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+          'Authorization': `Bearer ${getAuthToken()}`,
           'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
@@ -2802,6 +2836,24 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
+    // Obtain cryptographically signed HMAC token from backend
+    fetch(`${API_BASE_URL}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        identifier: matchedUser.id,
+        pin: cleanSecret || userPin,
+        password: cleanSecret || userPassword
+      })
+    })
+      .then(res => res.json())
+      .then(data => {
+        if (data.token) {
+          localStorage.setItem('rw_crm_auth_token', data.token);
+        }
+      })
+      .catch(() => {});
+
     setCurrentUser(matchedUser);
     setIsAuthenticated(true);
     localStorage.setItem('rw_crm_auth_user_id', matchedUser.id);
@@ -2813,6 +2865,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const logout = () => {
     setIsAuthenticated(false);
     localStorage.removeItem('rw_crm_auth_user_id');
+    localStorage.removeItem('rw_crm_auth_token');
     logAudit('USER_LOGOUT', 'User', currentUser.id, null, null);
     notify('Signed Out', 'You have securely signed out of the CRM session.', 'info');
   };
@@ -2850,7 +2903,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
 
     // Also purge MySQL backend storage
-    fetch(`${API_BASE_URL}/api/clear-db`, { method: 'POST' }).catch(() => {});
+    fetch(`${API_BASE_URL}/api/clear-db`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${getAuthToken()}` }
+    }).catch(() => {});
 
     setNotifications(prev => [
       {
@@ -3080,7 +3136,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try {
       const authHeaders = {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+        'Authorization': `Bearer ${getAuthToken()}`,
         'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 

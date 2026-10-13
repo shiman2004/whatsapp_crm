@@ -171,9 +171,13 @@ export const TeamBroadcastView: React.FC = () => {
       // If attached media is base64, optionally upload via /api/upload
       if (mediaDataUrl && mediaDataUrl.startsWith('data:')) {
         try {
+          const token = localStorage.getItem('rw_crm_auth_token') || '';
           const uploadRes = await fetch(`${API_BASE_URL}/api/upload`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': token ? `Bearer ${token}` : ''
+            },
             body: JSON.stringify({
               dataUrl: mediaDataUrl,
               type: mediaType,

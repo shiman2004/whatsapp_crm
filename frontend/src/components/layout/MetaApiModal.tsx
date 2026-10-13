@@ -53,11 +53,14 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   const handleSaveToken = async () => {
     const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '').replace(/["']/g, '');
     setAccessToken(cleanToken);
-    localStorage.setItem('meta_access_token', cleanToken);
+    const authToken = localStorage.getItem('rw_crm_auth_token') || '';
     try {
       await fetch(`${API_BASE_URL}/api/meta/config`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authToken ? `Bearer ${authToken}` : ''
+        },
         body: JSON.stringify({
           accessToken: cleanToken,
           phoneNumberId,

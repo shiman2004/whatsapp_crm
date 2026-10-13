@@ -28,9 +28,10 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  const token = localStorage.getItem('rw_crm_auth_token') || '';
   const authHeaders = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${currentUser?.id || 'user-admin-1'}`,
+    'Authorization': token ? `Bearer ${token}` : '',
     'x-coordinator-id': currentUser?.id || 'user-admin-1'
   };
 

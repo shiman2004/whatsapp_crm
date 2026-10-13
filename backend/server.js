@@ -11,6 +11,9 @@ import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, del
 import { convertAudioToWhatsAppOggOpus } from './src/audioConverter.js';
 
 dotenv.config();
+if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
+  dotenv.config({ path: path.join(process.cwd(), 'backend', '.env') });
+}
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.META_VERIFY_TOKEN || 'royal_wellness_hmac_secret_2026';
@@ -39,14 +42,21 @@ function verifyAuthToken(token) {
 // Multi-Client SSE Hub with Coordinator Channel Isolation
 let sseClients = [];
 
-// Meta Cloud API Shared Server Configuration (Persists token across all staff sessions)
+// Meta Cloud API Shared Server Configuration (Loaded securely from environment variables)
 let metaConfig = {
-  accessToken: process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || 'EAAPKSYZBDcu8BSv6YCceNu36eSytOR06TXco721oZAWjnpOaFQkeZA5lOhln4a980PlEfSo1AQKa6bRZAH9kjdtOe2RAPEqJGJgCEbWZAxoMdHMHvlrHDDvaKqY3XVu30vHPZBLdBgdHoDeJDB7qRYJl9r0R2cFcNlhqj3At5zp6QTZAWzwohz7JR3c6QuQf2VRMAZDZD',
-  phoneNumberId: process.env.META_PHONE_NUMBER_ID || '1358157244046701',
-  phoneNumberIdRwc: process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701',
-  phoneNumberIdCras: process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705',
-  wabaId: process.env.META_WABA_ID || '2332922997481634'
+  accessToken: (process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim(),
+  phoneNumberId: (process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim(),
+  phoneNumberIdRwc: (process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim(),
+  phoneNumberIdCras: (process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim(),
+  wabaId: (process.env.META_WABA_ID || '2332922997481634').trim()
 };
+
+// Validate Meta Cloud API secret configuration without exposing or printing value
+if (metaConfig.accessToken) {
+  console.log('🔒 [Security] Meta Graph API access token loaded from environment.');
+} else {
+  console.warn('⚠️ [Security Warning] META_ACCESS_TOKEN is not set in environment variables. Meta Cloud API dispatches will require token injection.');
+}
 
 /**
  * Validate & normalize phone numbers to international E.164 standard
@@ -3415,8 +3425,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({
-        hasToken: Boolean(metaConfig.accessToken),
-        accessToken: metaConfig.accessToken || '',
+        hasToken: Boolean(metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN),
         phoneNumberId: metaConfig.phoneNumberId,
         wabaId: metaConfig.wabaId
       }));
@@ -3433,7 +3442,7 @@ const server = http.createServer(async (req, res) => {
           if (payload.phoneNumberId) metaConfig.phoneNumberId = String(payload.phoneNumberId).trim();
           if (payload.wabaId) metaConfig.wabaId = String(payload.wabaId).trim();
 
-          console.log(`🔑 [Meta Config Updated] Phone ID: ${metaConfig.phoneNumberId}, Token Length: ${metaConfig.accessToken.length}`);
+          console.log(`🔑 [Meta Config Updated] Phone ID: ${metaConfig.phoneNumberId}, Token configured: ${Boolean(metaConfig.accessToken)}`);
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({

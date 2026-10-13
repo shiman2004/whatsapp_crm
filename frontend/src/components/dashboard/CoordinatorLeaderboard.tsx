@@ -40,7 +40,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
       <div className="flex items-center justify-between">
         <div>
           <h3 className="text-sm font-bold text-slate-100 flex items-center gap-1.5">
-            <Award className="w-4 h-4 text-gold-400" /> Coordinator Workload & Conversion Performance
+            <Award className="w-4 h-4 text-gold-400" /> Staff Workload & Conversion Performance (Patient Coordinators & Education Counsellors)
           </h3>
           <p className="text-xs text-slate-400">Response SLA tracking and consultation booking outcomes</p>
         </div>
@@ -49,7 +49,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
       <div className="space-y-3">
         {stats.length === 0 ? (
           <div className="p-6 text-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
-            No coordinators registered for this company portfolio yet.
+            No staff members registered for this company portfolio yet.
           </div>
         ) : (
           stats.map((item, idx) => (

@@ -101,11 +101,11 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
               onChange={(e) => setSelectedCoordinator(e.target.value)}
               className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer"
             >
-              <option value="all" className="bg-slate-900">All Coordinators</option>
+              <option value="all" className="bg-slate-900">All Staff (Coordinators & Counsellors)</option>
               <option value="unassigned" className="bg-slate-900">⚠️ Unassigned Only</option>
               {coordinators.map((u) => (
                 <option key={u.id} value={u.id} className="bg-slate-900">
-                  {u.fullName}
+                  {u.fullName} ({u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
                 </option>
               ))}
             </select>

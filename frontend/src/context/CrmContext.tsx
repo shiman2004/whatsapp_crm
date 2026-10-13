@@ -248,6 +248,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       ...u,
       branch: u.branch || 'Colombo',
       company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
+      roleTitle: u.role === 'super_admin' ? 'Super Admin' : (u.role === 'leads_officer' ? 'Leads Officer' : (u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')),
     }));
   });
 
@@ -603,6 +604,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...u,
               branch: u.branch || 'Colombo',
               company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
+              roleTitle: u.role === 'super_admin' ? 'Super Admin' : (u.role === 'leads_officer' ? 'Leads Officer' : (u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')),
               password: u.password || (isSuper ? 'admin' : 'staff'),
               pin: u.pin || (isSuper ? '1234' : '2026'),
               active: u.active ?? true,

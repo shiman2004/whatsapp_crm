@@ -12,7 +12,11 @@ import {
   CheckCircle2,
   AlertCircle,
   QrCode,
-  Users
+  Users,
+  ArrowLeft,
+  ChevronRight,
+  Building2,
+  GraduationCap
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -33,22 +37,44 @@ const checkIsAdminAllowed = (): boolean => {
   }
 };
 
+export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'leads_officer' | 'super_admin';
+
 export const LoginScreen: React.FC = () => {
   const { users, login } = useCrm() as any;
   const initialAdminAllowed = checkIsAdminAllowed();
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(initialAdminAllowed);
-  const [roleTab, setRoleTab] = useState<'coordinator' | 'leads_officer' | 'super_admin'>(
-    initialAdminAllowed ? 'super_admin' : 'coordinator'
+  
+  // Navigation: If admin param is present in URL, open super_admin directly; otherwise start at portal selection
+  const [portalView, setPortalView] = useState<PortalView>(
+    initialAdminAllowed ? 'super_admin' : 'portal_select'
   );
+  
   const [logoClickCount, setLogoClickCount] = useState<number>(0);
   const [authMode, setAuthMode] = useState<'pin' | 'password'>('pin');
+
+  // Filtered staff groups
+  const rwcCoordinators = users.filter((u: any) => u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
+  const crasCoordinators = users.filter((u: any) => u.role === 'coordinator' && u.company === 'CRAS');
+  const leadsOfficers = users.filter((u: any) => u.role === 'leads_officer');
+
+  const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
+  const [passwordInput, setPasswordInput] = useState<string>('staff');
+  const [showPassword, setShowPassword] = useState(false);
+
+  // PIN Mode State
+  const [pinDigits, setPinDigits] = useState<string[]>([]);
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
+
+  // Feedback
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Listen for URL changes or stealth shortcut (Ctrl+Shift+A or Alt+A)
   useEffect(() => {
     const evaluateUrl = () => {
       if (checkIsAdminAllowed()) {
         setIsAdminUnlocked(true);
-        setRoleTab('super_admin');
+        setPortalView('super_admin');
       }
     };
 
@@ -61,9 +87,9 @@ export const LoginScreen: React.FC = () => {
         setIsAdminUnlocked(prev => {
           const next = !prev;
           if (next) {
-            setRoleTab('super_admin');
-          } else if (roleTab === 'super_admin') {
-            setRoleTab('coordinator');
+            setPortalView('super_admin');
+          } else if (portalView === 'super_admin') {
+            setPortalView('portal_select');
           }
           return next;
         });
@@ -76,54 +102,42 @@ export const LoginScreen: React.FC = () => {
       window.removeEventListener('hashchange', evaluateUrl);
       window.removeEventListener('keydown', handleShortcut);
     };
-  }, [roleTab]);
+  }, [portalView]);
 
   const handleLogoClick = () => {
     setLogoClickCount(prev => {
       const next = prev + 1;
       if (next >= 3) {
         setIsAdminUnlocked(true);
-        setRoleTab('super_admin');
+        setPortalView('super_admin');
         return 0;
       }
       return next;
     });
   };
-  
-  // Coordinator selection / typing
-  const coordinatorsList = users.filter((u: any) => u.role === 'coordinator');
-  const leadsOfficersList = users.filter((u: any) => u.role === 'leads_officer');
-  
-  const [identifierInput, setIdentifierInput] = useState<string>('shenali@royalwellness.lk');
-  const [passwordInput, setPasswordInput] = useState<string>('staff');
-  const [showPassword, setShowPassword] = useState(false);
-  
-  // PIN Mode State
-  const [pinDigits, setPinDigits] = useState<string[]>([]);
-  const [pressedKey, setPressedKey] = useState<string | null>(null);
-  
-  // Feedback
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Sync default identifier based on role tab
+  // Sync default identifier based on active portal view
   useEffect(() => {
     setPinDigits([]);
     setErrorMsg(null);
 
-    if (roleTab === 'super_admin') {
+    if (portalView === 'super_admin') {
       setIdentifierInput('admin@royalwellness.lk');
       setPasswordInput('admin');
-    } else if (roleTab === 'leads_officer') {
-      const officer = leadsOfficersList[0];
-      setIdentifierInput(officer ? officer.email : 'sarah@royalwellness.lk');
+    } else if (portalView === 'rwc') {
+      const firstRwc = rwcCoordinators[0];
+      setIdentifierInput(firstRwc ? firstRwc.email : 'faiha@royalwellness.lk');
       setPasswordInput('staff');
-    } else {
-      const firstCoord = coordinatorsList[0];
-      setIdentifierInput(firstCoord ? firstCoord.email : 'shenali@royalwellness.lk');
+    } else if (portalView === 'cras') {
+      const firstCras = crasCoordinators[0];
+      setIdentifierInput(firstCras ? firstCras.email : 'zeenath@royalwellness.lk');
+      setPasswordInput('staff');
+    } else if (portalView === 'leads_officer') {
+      const firstOfficer = leadsOfficers[0];
+      setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('staff');
     }
-  }, [roleTab, coordinatorsList.length, leadsOfficersList.length]);
+  }, [portalView, rwcCoordinators.length, crasCoordinators.length, leadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
@@ -185,7 +199,7 @@ export const LoginScreen: React.FC = () => {
 
   // Physical Keyboard Listener (Captures 0-9, Numpad 0-9, Backspace, Delete, Escape)
   useEffect(() => {
-    if (authMode !== 'pin' || isSubmitting) return;
+    if (portalView === 'portal_select' || authMode !== 'pin' || isSubmitting) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -209,279 +223,509 @@ export const LoginScreen: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [authMode, isSubmitting, handlePinKey, handleBackspace, handleClearPin]);
+  }, [portalView, authMode, isSubmitting, handlePinKey, handleBackspace, handleClearPin]);
+
+  // Portal configuration metadata
+  const getPortalMeta = () => {
+    switch (portalView) {
+      case 'rwc':
+        return {
+          title: 'Royal Wellness Center',
+          subtitle: 'Patient Coordinator Portal',
+          accountLabel: 'Patient Coordinator Account',
+          logoSrc: '/rwc-logo.png',
+          accentColor: '#008000',
+          badgeText: 'RWC Clinic',
+          badgeClass: 'bg-emerald-950 text-emerald-400 border-emerald-800/60',
+          focusBorderClass: 'focus:border-[#008000]',
+          activeKeyClass: 'bg-[#008000]/40 border-[#008000] ring-[#008000]/60'
+        };
+      case 'cras':
+        return {
+          title: 'College of Royal Aesthetic',
+          subtitle: 'Education Counsellor Portal',
+          accountLabel: 'Education Counsellor Account',
+          logoSrc: '/cras-logo.png',
+          accentColor: '#800000',
+          badgeText: 'CRAS Academy',
+          badgeClass: 'bg-rose-950 text-rose-300 border-rose-800/60',
+          focusBorderClass: 'focus:border-rose-600',
+          activeKeyClass: 'bg-rose-900/50 border-rose-500 ring-rose-500/60'
+        };
+      case 'leads_officer':
+        return {
+          title: 'Central Leads Intake',
+          subtitle: 'Leads Officers (Cross-Company: RWC + CRAS)',
+          accountLabel: 'Leads Officer Account',
+          logoSrc: '/logo.png',
+          accentColor: '#6366f1',
+          badgeText: 'Common for Both Brands',
+          badgeClass: 'bg-indigo-950 text-indigo-300 border-indigo-800/60',
+          focusBorderClass: 'focus:border-indigo-500',
+          activeKeyClass: 'bg-indigo-900/50 border-indigo-500 ring-indigo-500/60'
+        };
+      case 'super_admin':
+        return {
+          title: 'Alpha Health Group',
+          subtitle: 'Super Admin Gateway',
+          accountLabel: 'Super Admin Account',
+          logoSrc: '/logo.png',
+          accentColor: '#00a884',
+          badgeText: 'Executive Control',
+          badgeClass: 'bg-amber-950/80 text-amber-300 border-amber-700/60',
+          focusBorderClass: 'focus:border-[#00a884]',
+          activeKeyClass: 'bg-[#00a884]/40 border-[#00a884] ring-[#00a884]/60'
+        };
+      default:
+        return {
+          title: 'Alpha Health Group',
+          subtitle: 'Centralized Gateway',
+          accountLabel: 'Account',
+          logoSrc: '/logo.png',
+          accentColor: '#00a884',
+          badgeText: '',
+          badgeClass: '',
+          focusBorderClass: 'focus:border-[#00a884]',
+          activeKeyClass: 'bg-[#00a884]/40 border-[#00a884] ring-[#00a884]/60'
+        };
+    }
+  };
+
+  const currentMeta = getPortalMeta();
 
   return (
     <div className="min-h-screen w-full bg-[#0b141a] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
       {/* Background Ambience */}
-      <div className="absolute top-0 left-0 right-0 h-44 bg-[#00a884] pointer-events-none opacity-90" />
+      <div 
+        className="absolute top-0 left-0 right-0 h-44 pointer-events-none opacity-90 transition-colors duration-500"
+        style={{
+          backgroundColor: portalView === 'cras' 
+            ? '#800000' 
+            : portalView === 'rwc' 
+            ? '#008000' 
+            : portalView === 'leads_officer'
+            ? '#4338ca'
+            : '#00a884'
+        }}
+      />
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0b141a]/80 to-[#0b141a] pointer-events-none" />
 
       {/* Main Login Card */}
-      <div className="w-full max-w-md bg-[#111b21] border border-slate-800 rounded-2xl p-7 shadow-2xl relative z-10 space-y-5">
+      <div className="w-full max-w-md bg-[#111b21] border border-slate-800 rounded-2xl p-7 shadow-2xl relative z-10 space-y-5 animate-in fade-in zoom-in-95 duration-200">
         
-        {/* Brand Header */}
-        <div className="text-center space-y-2">
-          <div 
-            onClick={handleLogoClick}
-            className="w-16 h-16 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-xl overflow-hidden ring-1 ring-slate-700/50 cursor-pointer transition-transform active:scale-95"
-            title="Alpha Health Group"
-          >
-            <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-white tracking-wide">
-              Alpha Health Group
-            </h1>
-            <p className="text-xs text-[#8696a0]">
-              Centralized WhatsApp Healthcare & Clinical Gateway
-            </p>
-          </div>
-        </div>
-
-        {/* Role Selector Tabs: Coordinator vs Leads Manager (Super Admin unlocked via ?admin=true) */}
-        <div className={`grid ${isAdminUnlocked ? 'grid-cols-3' : 'grid-cols-2'} gap-1.5 bg-[#202c33] p-1.5 rounded-xl border border-slate-800`}>
-          <button
-            type="button"
-            onClick={() => setRoleTab('coordinator')}
-            className={`py-2 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-              roleTab === 'coordinator'
-                ? 'bg-[#00a884] text-black shadow-md'
-                : 'text-[#8696a0] hover:text-white'
-            }`}
-          >
-            <Users className="w-3.5 h-3.5" />
-            <span>Coordinator</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleTab('leads_officer')}
-            className={`py-2 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-              roleTab === 'leads_officer'
-                ? 'bg-[#00a884] text-black shadow-md'
-                : 'text-[#8696a0] hover:text-white'
-            }`}
-          >
-            <UserCheck className="w-3.5 h-3.5" />
-            <span>Leads Manager</span>
-          </button>
-          {isAdminUnlocked && (
-            <button
-              type="button"
-              onClick={() => setRoleTab('super_admin')}
-              className={`py-2 text-[11px] font-bold rounded-lg flex items-center justify-center gap-1.5 transition-all ${
-                roleTab === 'super_admin'
-                  ? 'bg-[#00a884] text-black shadow-md'
-                  : 'text-[#8696a0] hover:text-white'
-              }`}
-            >
-              <Crown className="w-3.5 h-3.5" />
-              <span>Super Admin</span>
-            </button>
-          )}
-        </div>
-
-        {/* Account Identifier Selector / Input */}
-        <div className="space-y-1.5">
-          <label className="text-[11px] font-semibold text-[#8696a0] uppercase tracking-wider block">
-            {roleTab === 'coordinator' ? 'Coordinator Account' : (roleTab === 'leads_officer' ? 'Leads Manager Account' : 'Super Admin Account')}
-          </label>
-          
-          {roleTab === 'coordinator' && coordinatorsList.length > 0 ? (
-            <select
-              value={identifierInput}
-              onChange={(e) => {
-                setIdentifierInput(e.target.value);
-                setPinDigits([]);
-                setErrorMsg(null);
-              }}
-              className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-semibold text-white outline-none focus:border-[#00a884] transition-colors cursor-pointer"
-            >
-              {coordinatorsList.map((c: any) => (
-                <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                  {c.fullName} ({c.company || 'RWC'}) — {c.email}
-                </option>
-              ))}
-            </select>
-          ) : roleTab === 'leads_officer' && leadsOfficersList.length > 0 ? (
-            <select
-              value={identifierInput}
-              onChange={(e) => {
-                setIdentifierInput(e.target.value);
-                setPinDigits([]);
-                setErrorMsg(null);
-              }}
-              className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-semibold text-white outline-none focus:border-[#00a884] transition-colors cursor-pointer"
-            >
-              {leadsOfficersList.map((o: any) => (
-                <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
-                  {o.fullName} — {o.email}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <div className="relative">
-              <input
-                type="text"
-                value={identifierInput}
-                onChange={(e) => {
-                  setIdentifierInput(e.target.value);
-                  setPinDigits([]);
-                  setErrorMsg(null);
-                }}
-                placeholder={roleTab === 'super_admin' ? 'admin@royalwellness.lk' : 'sarah@royalwellness.lk'}
-                className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs font-semibold text-white outline-none focus:border-[#00a884] transition-colors"
-              />
-            </div>
-          )}
-        </div>
-
-        {/* Auth Mode Switch: PIN vs Password */}
-        <div className="flex items-center justify-between pt-1">
-          <span className="text-[11px] text-[#8696a0] font-medium">
-            Authentication Method:
-          </span>
-          <div className="flex items-center gap-1 text-xs">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('pin');
-                setPinDigits([]);
-                setErrorMsg(null);
-              }}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                authMode === 'pin' ? 'bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40' : 'text-[#8696a0] hover:text-white'
-              }`}
-            >
-              PIN Pad
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('password');
-                setErrorMsg(null);
-              }}
-              className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                authMode === 'password' ? 'bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/40' : 'text-[#8696a0] hover:text-white'
-              }`}
-            >
-              Password
-            </button>
-          </div>
-        </div>
-
-        {/* Error Feedback */}
-        {errorMsg && (
-          <div className="p-2.5 bg-rose-950/50 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
-            <span>{errorMsg}</span>
-          </div>
-        )}
-
-        {/* Password Form Mode */}
-        {authMode === 'password' ? (
-          <form onSubmit={handlePasswordSubmit} className="space-y-3 pt-2">
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-                Account Password
-              </label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={passwordInput}
-                  onChange={(e) => setPasswordInput(e.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-[#00a884]"
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
+        {/* ========================================================================= */}
+        {/* VIEW 1: PORTAL SELECTION (Option 2 Workplace Grid)                       */}
+        {/* ========================================================================= */}
+        {portalView === 'portal_select' ? (
+          <div className="space-y-5">
+            {/* Brand Header */}
+            <div className="text-center space-y-2">
+              <div 
+                onClick={handleLogoClick}
+                className="w-16 h-16 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-xl overflow-hidden ring-1 ring-slate-700/50 cursor-pointer transition-transform active:scale-95"
+                title="Alpha Health Group"
+              >
+                <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
+              </div>
+              <div>
+                <h1 className="text-xl font-bold text-white tracking-wide">
+                  Alpha Health Group
+                </h1>
+                <p className="text-xs text-[#8696a0]">
+                  Centralized WhatsApp Healthcare & Clinical Gateway
+                </p>
+              </div>
+              <div className="pt-1.5">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300 bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700/60 inline-block shadow-inner">
+                  Select Workplace Portal
+                </span>
               </div>
             </div>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="w-full py-2.5 bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50"
-            >
-              {isSubmitting ? 'Verifying...' : 'Sign In to CRM'}
-            </button>
-          </form>
+
+            {/* Portal Cards List */}
+            <div className="space-y-3 pt-1">
+              
+              {/* 1. Royal Wellness Center (RWC) Card */}
+              <button
+                type="button"
+                onClick={() => setPortalView('rwc')}
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#12221c] hover:to-[#172e25] border border-emerald-900/50 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+              >
+                <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-emerald-500/30 group-hover:ring-emerald-400 group-hover:scale-105 transition-all">
+                  <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                      Royal Wellness Center
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
+                      RWC
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-emerald-400 mt-0.5">
+                    Patient Coordinators
+                  </p>
+                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
+                    Clinical patient care, treatments & consultations
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+              </button>
+
+              {/* 2. College of Royal Aesthetic (CRAS) Card */}
+              <button
+                type="button"
+                onClick={() => setPortalView('cras')}
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#241316] hover:to-[#2e181c] border border-rose-900/50 hover:border-rose-500/70 shadow-lg hover:shadow-rose-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+              >
+                <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-rose-500/30 group-hover:ring-rose-400 group-hover:scale-105 transition-all">
+                  <img src="/cras-logo.png" alt="College of Royal Aesthetic" className="w-full h-full object-contain" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white group-hover:text-rose-300 transition-colors">
+                      College of Royal Aesthetic
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800/60">
+                      CRAS
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-rose-400 mt-0.5">
+                    Education Counsellors
+                  </p>
+                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
+                    Diploma courses, student enrollments & aesthetics
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+              </button>
+
+              {/* 3. Central Leads Management Card (Common for every lead officer) */}
+              <button
+                type="button"
+                onClick={() => setPortalView('leads_officer')}
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#151a2b] hover:to-[#1a2137] border border-indigo-900/50 hover:border-indigo-500/70 shadow-lg hover:shadow-indigo-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+              >
+                <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-indigo-950 to-[#202c33] border border-indigo-500/40 flex items-center justify-center shadow-md shrink-0 group-hover:border-indigo-400 group-hover:scale-105 transition-all text-indigo-400">
+                  <ShieldCheck className="w-7 h-7" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
+                      Central Leads Intake
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">
+                      Common
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-indigo-300 mt-0.5">
+                    Leads Officers (Both Companies)
+                  </p>
+                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
+                    Cross-company unified triage & assignment (RWC + CRAS)
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+              </button>
+
+              {/* 4. Super Admin (Discreetly rendered when unlocked via ?admin=true or shortcut) */}
+              {isAdminUnlocked && (
+                <button
+                  type="button"
+                  onClick={() => setPortalView('super_admin')}
+                  className="w-full p-3 rounded-2xl bg-gradient-to-r from-amber-950/40 to-[#111b21] hover:to-amber-950/60 border border-amber-600/50 hover:border-amber-400 shadow-md transition-all text-left flex items-center gap-3 group cursor-pointer"
+                >
+                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
+                    <Crown className="w-5 h-5 text-amber-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <span className="text-xs font-bold text-amber-300 block">
+                      Super Admin Gateway
+                    </span>
+                    <span className="text-[10px] text-[#8696a0] block truncate">
+                      Executive access & system administration
+                    </span>
+                  </div>
+                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
+                </button>
+              )}
+
+            </div>
+          </div>
         ) : (
-          /* PIN Entry Mode with Keypad */
-          <div className="space-y-3.5">
-            <div className="text-center space-y-1">
-              <p className="text-xs text-[#d1d7db] font-medium">
-                Enter PIN for <span className="text-[#00a884] font-bold">{activeUser?.fullName || identifierInput}</span>
-              </p>
-              <div className="flex justify-center items-center gap-3 py-1.5">
-                {[0, 1, 2, 3].map((idx) => {
-                  const filled = pinDigits.length > idx;
-                  return (
-                    <div
-                      key={idx}
-                      className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
-                        filled 
-                          ? 'bg-[#00a884] border-[#00a884] scale-110 shadow-lg shadow-[#00a884]/40' 
-                          : 'bg-[#202c33] border-slate-700'
-                      }`}
-                    />
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-[#8696a0] font-sans">
-                Type with keyboard or tap keypad
-              </p>
+          /* ========================================================================= */
+          /* VIEW 2: SPECIFIC PORTAL LOGIN SCREEN                                      */
+          /* ========================================================================= */
+          <div className="space-y-4">
+            
+            {/* Top Navigation Row: Back Button */}
+            <div className="flex items-center justify-between pb-1 border-b border-slate-800/60">
+              <button
+                type="button"
+                onClick={() => setPortalView('portal_select')}
+                className="text-xs font-semibold text-slate-400 hover:text-white flex items-center gap-1.5 transition-colors cursor-pointer py-1 px-2 rounded-lg hover:bg-slate-800"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>Switch Portal</span>
+              </button>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${currentMeta.badgeClass}`}>
+                {currentMeta.badgeText}
+              </span>
             </div>
 
-            {/* Keypad */}
-            <div className="grid grid-cols-3 gap-2 max-w-[260px] mx-auto">
-              {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
-                <button
-                  key={digit}
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={() => handlePinKey(digit)}
-                  className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
-                    pressedKey === digit ? 'bg-[#00a884]/40 border-[#00a884] scale-95 ring-2 ring-[#00a884]/60 text-white' : ''
-                  }`}
+            {/* Portal Specific Brand Header */}
+            <div className="text-center space-y-2">
+              <div 
+                className="w-16 h-16 rounded-2xl bg-white p-1.5 flex items-center justify-center mx-auto shadow-xl overflow-hidden ring-1 ring-slate-700/50"
+              >
+                <img 
+                  src={currentMeta.logoSrc} 
+                  alt={currentMeta.title} 
+                  className="w-full h-full object-contain" 
+                />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold text-white tracking-wide">
+                  {currentMeta.title}
+                </h2>
+                <p 
+                  className="text-xs font-semibold"
+                  style={{ color: currentMeta.accentColor }}
                 >
-                  {digit}
-                </button>
-              ))}
-              <button
-                type="button"
-                onClick={handleClearPin}
-                className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
-                  pressedKey === 'clear' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
-                }`}
-              >
-                Clear
-              </button>
-              <button
-                type="button"
-                disabled={isSubmitting}
-                onClick={() => handlePinKey('0')}
-                className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
-                  pressedKey === '0' ? 'bg-[#00a884]/40 border-[#00a884] scale-95 ring-2 ring-[#00a884]/60 text-white' : ''
-                }`}
-              >
-                0
-              </button>
-              <button
-                type="button"
-                onClick={handleBackspace}
-                className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
-                  pressedKey === 'backspace' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
-                }`}
-              >
-                ⌫
-              </button>
+                  {currentMeta.subtitle}
+                </p>
+              </div>
             </div>
+
+            {/* Account Identifier Selector / Input */}
+            <div className="space-y-1.5 pt-1">
+              <label className="text-[11px] font-semibold text-[#8696a0] uppercase tracking-wider block">
+                {currentMeta.accountLabel}
+              </label>
+              
+              {portalView === 'rwc' && rwcCoordinators.length > 0 ? (
+                <select
+                  value={identifierInput}
+                  onChange={(e) => {
+                    setIdentifierInput(e.target.value);
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-emerald-500 transition-colors cursor-pointer"
+                >
+                  {rwcCoordinators.map((c: any) => (
+                    <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
+                      {c.fullName} — Patient Coordinator ({c.branch || 'Colombo'})
+                    </option>
+                  ))}
+                </select>
+              ) : portalView === 'cras' && crasCoordinators.length > 0 ? (
+                <select
+                  value={identifierInput}
+                  onChange={(e) => {
+                    setIdentifierInput(e.target.value);
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-rose-600 transition-colors cursor-pointer"
+                >
+                  {crasCoordinators.map((c: any) => (
+                    <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
+                      {c.fullName} — Education Counsellor ({c.branch || 'Colombo'})
+                    </option>
+                  ))}
+                </select>
+              ) : portalView === 'leads_officer' && leadsOfficers.length > 0 ? (
+                <select
+                  value={identifierInput}
+                  onChange={(e) => {
+                    setIdentifierInput(e.target.value);
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-indigo-500 transition-colors cursor-pointer"
+                >
+                  {leadsOfficers.map((o: any) => (
+                    <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
+                      {o.fullName} — Leads Officer (Common / Both Brands)
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={identifierInput}
+                    onChange={(e) => {
+                      setIdentifierInput(e.target.value);
+                      setPinDigits([]);
+                      setErrorMsg(null);
+                    }}
+                    placeholder={portalView === 'super_admin' ? 'admin@royalwellness.lk' : 'staff@royalwellness.lk'}
+                    className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#00a884] transition-colors"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Auth Mode Switch: PIN vs Password */}
+            <div className="flex items-center justify-between pt-1">
+              <span className="text-[11px] text-[#8696a0] font-medium">
+                Authentication Method:
+              </span>
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('pin');
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    authMode === 'pin' 
+                      ? 'bg-slate-700 text-white shadow-xs' 
+                      : 'text-[#8696a0] hover:text-white'
+                  }`}
+                  style={authMode === 'pin' ? { backgroundColor: `${currentMeta.accentColor}33`, color: currentMeta.accentColor } : {}}
+                >
+                  PIN Pad
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthMode('password');
+                    setErrorMsg(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    authMode === 'password' 
+                      ? 'bg-slate-700 text-white shadow-xs' 
+                      : 'text-[#8696a0] hover:text-white'
+                  }`}
+                  style={authMode === 'password' ? { backgroundColor: `${currentMeta.accentColor}33`, color: currentMeta.accentColor } : {}}
+                >
+                  Password
+                </button>
+              </div>
+            </div>
+
+            {/* Error Feedback */}
+            {errorMsg && (
+              <div className="p-2.5 bg-rose-950/50 border border-rose-500/40 rounded-xl text-rose-300 text-xs flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            {/* Password Form Mode */}
+            {authMode === 'password' ? (
+              <form onSubmit={handlePasswordSubmit} className="space-y-3 pt-1">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+                    Account Password
+                  </label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      placeholder="Enter your password"
+                      className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2 text-xs text-white placeholder-slate-500 outline-none transition-colors"
+                      style={{ borderColor: undefined }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white cursor-pointer"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+                <button
+                  type="submit"
+                  disabled={isSubmitting}
+                  style={{ backgroundColor: currentMeta.accentColor }}
+                  className="w-full py-2.5 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
+                >
+                  {isSubmitting ? 'Verifying...' : `Sign In to ${currentMeta.title}`}
+                </button>
+              </form>
+            ) : (
+              /* PIN Entry Mode with Keypad */
+              <div className="space-y-3">
+                <div className="text-center space-y-1">
+                  <p className="text-xs text-[#d1d7db] font-medium">
+                    Enter PIN for <span className="font-bold text-white">{activeUser?.fullName || identifierInput}</span>
+                  </p>
+                  <div className="flex justify-center items-center gap-3 py-1">
+                    {[0, 1, 2, 3].map((idx) => {
+                      const filled = pinDigits.length > idx;
+                      return (
+                        <div
+                          key={idx}
+                          style={filled ? { backgroundColor: currentMeta.accentColor, borderColor: currentMeta.accentColor } : {}}
+                          className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
+                            filled 
+                              ? 'scale-110 shadow-lg' 
+                              : 'bg-[#202c33] border-slate-700'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                  <p className="text-[11px] text-[#8696a0] font-sans">
+                    Type with keyboard or tap keypad
+                  </p>
+                </div>
+
+                {/* Keypad */}
+                <div className="grid grid-cols-3 gap-2 max-w-[260px] mx-auto">
+                  {['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      disabled={isSubmitting}
+                      onClick={() => handlePinKey(digit)}
+                      className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                        pressedKey === digit ? 'bg-slate-600 scale-95 ring-2 ring-white/60 text-white' : ''
+                      }`}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handleClearPin}
+                    className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
+                      pressedKey === 'clear' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
+                    }`}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmitting}
+                    onClick={() => handlePinKey('0')}
+                    className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                      pressedKey === '0' ? 'bg-slate-600 scale-95 ring-2 ring-white/60 text-white' : ''
+                    }`}
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleBackspace}
+                    className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
+                      pressedKey === 'backspace' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
+                    }`}
+                  >
+                    ⌫
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

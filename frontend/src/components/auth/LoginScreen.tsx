@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Crown, 
   Lock, 
@@ -31,6 +31,7 @@ export const LoginScreen: React.FC = () => {
   
   // PIN Mode State
   const [pinDigits, setPinDigits] = useState<string[]>([]);
+  const [pressedKey, setPressedKey] = useState<string | null>(null);
   
   // Feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -75,14 +76,16 @@ export const LoginScreen: React.FC = () => {
     }, 250);
   };
 
-  const handlePinKey = (digit: string) => {
+  const handlePinKey = useCallback((digit: string) => {
     setErrorMsg(null);
-    if (pinDigits.length < 4) {
-      const newDigits = [...pinDigits, digit];
-      setPinDigits(newDigits);
+    setPressedKey(digit);
+    setTimeout(() => setPressedKey(null), 150);
 
-      if (newDigits.length === 4) {
-        const fullPin = newDigits.join('');
+    setPinDigits(prev => {
+      if (prev.length >= 4) return prev;
+      const next = [...prev, digit];
+      if (next.length === 4) {
+        const fullPin = next.join('');
         setIsSubmitting(true);
         setTimeout(() => {
           const res = login(identifierInput.trim(), fullPin);
@@ -91,20 +94,53 @@ export const LoginScreen: React.FC = () => {
             setPinDigits([]);
           }
           setIsSubmitting(false);
-        }, 250);
+        }, 200);
       }
-    }
-  };
+      return next;
+    });
+  }, [identifierInput, login]);
 
-  const handleClearPin = () => {
+  const handleClearPin = useCallback(() => {
     setErrorMsg(null);
+    setPressedKey('clear');
+    setTimeout(() => setPressedKey(null), 150);
     setPinDigits([]);
-  };
+  }, []);
 
-  const handleBackspace = () => {
+  const handleBackspace = useCallback(() => {
     setErrorMsg(null);
+    setPressedKey('backspace');
+    setTimeout(() => setPressedKey(null), 150);
     setPinDigits(prev => prev.slice(0, -1));
-  };
+  }, []);
+
+  // Physical Keyboard Listener (Captures 0-9, Numpad 0-9, Backspace, Delete, Escape)
+  useEffect(() => {
+    if (authMode !== 'pin' || isSubmitting) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement;
+      if (target && (target.tagName === 'SELECT' || target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+        return;
+      }
+
+      if (/^[0-9]$/.test(e.key)) {
+        e.preventDefault();
+        handlePinKey(e.key);
+      } else if (e.key === 'Backspace') {
+        e.preventDefault();
+        handleBackspace();
+      } else if (e.key === 'Escape' || e.key === 'Delete' || e.key.toLowerCase() === 'c') {
+        e.preventDefault();
+        handleClearPin();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [authMode, isSubmitting, handlePinKey, handleBackspace, handleClearPin]);
 
   return (
     <div className="min-h-screen w-full bg-[#0b141a] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
@@ -322,6 +358,9 @@ export const LoginScreen: React.FC = () => {
                   );
                 })}
               </div>
+              <p className="text-[11px] text-[#8696a0] font-sans">
+                Type with keyboard or tap keypad
+              </p>
             </div>
 
             {/* Keypad */}
@@ -332,7 +371,9 @@ export const LoginScreen: React.FC = () => {
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => handlePinKey(digit)}
-                  className="h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center"
+                  className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                    pressedKey === digit ? 'bg-[#00a884]/40 border-[#00a884] scale-95 ring-2 ring-[#00a884]/60 text-white' : ''
+                  }`}
                 >
                   {digit}
                 </button>
@@ -340,7 +381,9 @@ export const LoginScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={handleClearPin}
-                className="h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center"
+                className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
+                  pressedKey === 'clear' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
+                }`}
               >
                 Clear
               </button>
@@ -348,14 +391,18 @@ export const LoginScreen: React.FC = () => {
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => handlePinKey('0')}
-                className="h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center"
+                className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                  pressedKey === '0' ? 'bg-[#00a884]/40 border-[#00a884] scale-95 ring-2 ring-[#00a884]/60 text-white' : ''
+                }`}
               >
                 0
               </button>
               <button
                 type="button"
                 onClick={handleBackspace}
-                className="h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center"
+                className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
+                  pressedKey === 'backspace' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
+                }`}
               >
                 ⌫
               </button>

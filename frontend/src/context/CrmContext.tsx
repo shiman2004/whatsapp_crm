@@ -48,6 +48,8 @@ import { aiService } from '../services/aiService';
 import { NotificationSettings, DesktopNotificationItem } from '../types/notifications';
 import { playWhatsAppChime } from '../utils/soundUtils';
 import { registerNotificationServiceWorker, showDesktopNativeNotification } from '../utils/nativeNotificationUtils';
+import { isLeadAccessibleForUser } from '../utils/permissionUtils';
+import { NavTab } from '../components/layout/Sidebar';
 
 interface NotificationToast {
   id: string;
@@ -197,6 +199,14 @@ interface CrmContextType {
   dispatchTestNotification: () => void;
   notificationSettingsOpen: boolean;
   setNotificationSettingsOpen: (open: boolean) => void;
+
+  // Blinking Bell Notification & Unread Tracking
+  totalUnreadCountForUser: number;
+  chatListFilter: string;
+  setChatListFilter: (filter: string) => void;
+  openUnreadChats: () => void;
+  activeNavTab: NavTab;
+  setActiveNavTab: (tab: NavTab) => void;
 }
 
 const CrmContext = createContext<CrmContextType | undefined>(undefined);
@@ -271,6 +281,24 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const authId = localStorage.getItem('rw_crm_auth_user_id') || 'user-admin-1';
     return getStored<string[]>(`rw_crm_read_broadcasts_${authId}`, []);
   });
+
+  // Navigation & Chat list filter state
+  const [activeNavTab, setActiveNavTab] = useState<NavTab>('dashboard');
+  const [chatListFilter, setChatListFilter] = useState<string>('all');
+
+  // Track per-user conversation read timestamps
+  const [userReadTimestamps, setUserReadTimestamps] = useState<Record<string, number>>(() => {
+    const authId = currentUser?.id || localStorage.getItem('rw_crm_auth_user_id') || 'user-admin-1';
+    return getStored<Record<string, number>>(`rw_crm_read_leads_${authId}`, {});
+  });
+
+  // Re-sync read timestamps when switching user accounts
+  useEffect(() => {
+    if (currentUser?.id) {
+      const stored = getStored<Record<string, number>>(`rw_crm_read_leads_${currentUser.id}`, {});
+      setUserReadTimestamps(stored);
+    }
+  }, [currentUser?.id]);
   
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
     const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
@@ -1066,16 +1094,30 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // Trigger WhatsApp Web desktop notification & chime for incoming messages
             if (!isOutbound) {
-              const userRole = currentUser?.role;
-              const isSuperAdminOrOfficer = userRole === 'super_admin' || userRole === 'leads_officer';
-              const isAssignedToMe = Boolean(
-                (matchedLead?.assignedTo && matchedLead.assignedTo === currentUser?.id) ||
-                (data.coordinatorId && data.coordinatorId === currentUser?.id)
-              );
-              // Super Admin & Leads Officers receive all alerts; Coordinators receive ONLY for their assigned clients
-              const isLeadAccessible = isSuperAdminOrOfficer || isAssignedToMe;
+              const targetLeadObj = matchedLead || {
+                id: resolvedLeadId,
+                company: (company as CompanyCode) || 'RWC',
+                assignedTo: data.coordinatorId,
+                stage: 'new',
+                unreadCount: 1
+              } as Lead;
+
+              // Check role-based accessibility for current user
+              const isLeadAccessible = isLeadAccessibleForUser(targetLeadObj, currentUser);
 
               if (isLeadAccessible) {
+                // Invalidate any read timestamp for this lead so it immediately registers as unread
+                setUserReadTimestamps(prev => {
+                  const next = { ...prev };
+                  delete next[resolvedLeadId];
+                  if (currentUser?.id) {
+                    try {
+                      localStorage.setItem(`rw_crm_read_leads_${currentUser.id}`, JSON.stringify(next));
+                    } catch (e) {}
+                  }
+                  return next;
+                });
+
                 const isChatActiveAndFocused = selectedLeadIdRef.current === resolvedLeadId && typeof document !== 'undefined' && document.hasFocus();
 
                 if (!isChatActiveAndFocused) {
@@ -1328,16 +1370,73 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     };
   }, [currentUser?.id]);
 
-  // Mark chat as read and clear unread badge
+  // Mark chat as read and clear unread badge for the current user
   const markChatAsRead = (leadId: string) => {
+    const now = Date.now();
+    setUserReadTimestamps(prev => {
+      const next = { ...prev, [leadId]: now };
+      if (currentUser?.id) {
+        try {
+          localStorage.setItem(`rw_crm_read_leads_${currentUser.id}`, JSON.stringify(next));
+        } catch (e) {}
+      }
+      return next;
+    });
+
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: 0 } : l));
     setMessages(prev => prev.map(m => m.leadId === leadId ? { ...m, status: 'read' } : m));
   };
 
-  // Mark chat as unread (sets unread indicator)
+  // Mark chat as unread (sets unread indicator for current user)
   const markChatAsUnread = (leadId: string) => {
-    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: (l.unreadCount && l.unreadCount > 0) ? l.unreadCount : 1 } : l));
+    setUserReadTimestamps(prev => {
+      const next = { ...prev };
+      delete next[leadId];
+      if (currentUser?.id) {
+        try {
+          localStorage.setItem(`rw_crm_read_leads_${currentUser.id}`, JSON.stringify(next));
+        } catch (e) {}
+      }
+      return next;
+    });
+
+    setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: Math.max(1, (l.unreadCount && l.unreadCount > 0) ? l.unreadCount : 1) } : l));
   };
+
+  // Compute total unread messages for current user across accessible conversations
+  const totalUnreadCountForUser = useMemo(() => {
+    if (!currentUser) return 0;
+    const accessibleLeads = leads.filter(l => isLeadAccessibleForUser(l, currentUser));
+
+    let total = 0;
+    for (const lead of accessibleLeads) {
+      const readTime = userReadTimestamps[lead.id] || 0;
+      let latestTime = 0;
+      if (lead.lastCustomerMessageAt) {
+        latestTime = new Date(lead.lastCustomerMessageAt).getTime();
+      } else if (lead.updatedAt) {
+        latestTime = new Date(lead.updatedAt).getTime();
+      }
+
+      if (readTime > 0) {
+        if (latestTime > readTime) {
+          total += Math.max(1, lead.unreadCount || 1);
+        }
+      } else {
+        if ((lead.unreadCount || 0) > 0) {
+          total += (lead.unreadCount || 1);
+        }
+      }
+    }
+    return total;
+  }, [leads, currentUser, userReadTimestamps]);
+
+  // Open unread WhatsApp chats list (bell click function)
+  const openUnreadChats = useCallback(() => {
+    setActiveNavTab('chat');
+    setChatListFilter('unread');
+    setSelectedLeadId(null);
+  }, []);
 
   // Auto-mark active chat as read on load or change
   useEffect(() => {
@@ -3137,6 +3236,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     dispatchTestNotification,
     notificationSettingsOpen,
     setNotificationSettingsOpen,
+    totalUnreadCountForUser,
+    chatListFilter,
+    setChatListFilter,
+    openUnreadChats,
+    activeNavTab,
+    setActiveNavTab,
   };
 
   return (

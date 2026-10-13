@@ -158,3 +158,35 @@
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
 }
+
+/* Blinking Bell Glowing Red Pulse Animations */
+@keyframes bell-glow-pulse {
+  0%, 100% {
+    box-shadow: 0 0 10px 2px rgba(239, 68, 68, 0.65), 0 0 22px 5px rgba(220, 38, 38, 0.4);
+    border-color: rgba(239, 68, 68, 0.9);
+    transform: scale(1);
+  }
+  50% {
+    box-shadow: 0 0 22px 6px rgba(239, 68, 68, 0.95), 0 0 38px 10px rgba(220, 38, 38, 0.6);
+    border-color: rgba(254, 202, 202, 1);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes bell-ring-wiggle {
+  0%, 100% { transform: rotate(0deg); }
+  15% { transform: rotate(14deg); }
+  30% { transform: rotate(-12deg); }
+  45% { transform: rotate(10deg); }
+  60% { transform: rotate(-8deg); }
+  75% { transform: rotate(4deg); }
+}
+
+.bell-glowing-active {
+  animation: bell-glow-pulse 1.3s ease-in-out infinite;
+}
+
+.bell-icon-wiggle {
+  animation: bell-ring-wiggle 1.3s ease-in-out infinite;
+  transform-origin: top center;
+}

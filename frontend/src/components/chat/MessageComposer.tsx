@@ -824,7 +824,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                   e.preventDefault();
                 }
               }}
-              placeholder={whatsappStatus === 'connected' || localStorage.getItem('meta_access_token') ? 'Type a message' : 'Please link your WhatsApp or configure Meta API to send messages...'}
+              placeholder={whatsappStatus === 'connected' || hasMetaConfig || localStorage.getItem('meta_access_token') ? 'Type a message' : 'Please link your WhatsApp or configure Meta API to send messages...'}
               className="w-full bg-transparent text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
             />
           </div>

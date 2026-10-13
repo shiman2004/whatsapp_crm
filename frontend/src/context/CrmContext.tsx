@@ -527,9 +527,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (metaRes && metaRes.ok) {
         const metaData = await metaRes.json().catch(() => null);
-        if (metaData && metaData.accessToken) {
-          localStorage.setItem('meta_access_token', metaData.accessToken);
+        if (metaData && (metaData.hasToken || metaData.accessToken)) {
           setHasMetaConfig(true);
+          if (metaData.accessToken) {
+            localStorage.setItem('meta_access_token', metaData.accessToken);
+          }
         }
       }
 
@@ -712,17 +714,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     fetchMyStatus();
 
-    // Sync Meta API token from backend if not present in local storage
-    if (!localStorage.getItem('meta_access_token')) {
-      fetch(`${API_BASE_URL}/api/meta/config`)
-        .then(res => res.json())
-        .then(data => {
-          if (data.accessToken) {
-            localStorage.setItem('meta_access_token', data.accessToken);
-          }
-        })
-        .catch(() => {});
-    }
+    // Sync Meta API status from backend
+    fetch(`${API_BASE_URL}/api/meta/config`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.hasToken || data.accessToken) {
+          setHasMetaConfig(true);
+        }
+        if (data.accessToken) {
+          localStorage.setItem('meta_access_token', data.accessToken);
+        }
+      })
+      .catch(() => {});
   }, [currentUser?.id]);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
@@ -1925,7 +1928,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!lead) return;
 
     // Enforce WhatsApp connection requirement for CRM sending (Supports Linked Device OR Meta Cloud API)
-    const hasMetaToken = !!localStorage.getItem('meta_access_token');
+    const hasMetaToken = hasMetaConfig || !!localStorage.getItem('meta_access_token');
     if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected' && !hasMetaToken) {
       notify('WhatsApp Disconnected', 'Please link your WhatsApp or configure Meta API first to send messages.', 'warning');
       setQrModalOpen(true);

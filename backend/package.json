@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
+    "test": "node test-meta-token-security.js && node test-bell-notification.js && node test-sender-audit.js",
     "build": "prisma generate",
     "postinstall": "prisma generate",
     "webhook": "node webhook-standalone.js",

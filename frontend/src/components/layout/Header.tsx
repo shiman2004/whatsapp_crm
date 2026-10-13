@@ -9,7 +9,8 @@ import {
   Trash2, 
   LogOut, 
   ChevronDown,
-  Menu
+  Menu,
+  Bell
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { MetaApiModal } from './MetaApiModal';
@@ -31,7 +32,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
     clearAllData, 
     whatsappStatus, 
     qrModalOpen, 
-    setQrModalOpen 
+    setQrModalOpen,
+    notificationSettings,
+    setNotificationSettingsOpen
   } = useCrm() as any;
 
   const [metaModalOpen, setMetaModalOpen] = useState(false);
@@ -128,6 +131,21 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
             <Radio className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
             <span className="hidden sm:inline">Meta API</span>
             <span className="sm:hidden text-[11px]">API</span>
+          </button>
+
+          {/* Desktop Notifications Toggle & Settings */}
+          <button
+            type="button"
+            onClick={() => setNotificationSettingsOpen(true)}
+            title="Desktop Notification Preferences"
+            className={`px-2 sm:px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 sm:gap-1.5 transition-all shadow-xs cursor-pointer border ${
+              notificationSettings?.enabled
+                ? 'bg-emerald-950/50 border-emerald-500/40 text-emerald-300 hover:bg-emerald-900/60'
+                : 'bg-slate-800/60 border-slate-700/60 text-slate-400 hover:text-white'
+            }`}
+          >
+            <Bell className={`w-3.5 h-3.5 shrink-0 ${notificationSettings?.enabled ? 'text-emerald-400' : 'text-slate-400'}`} />
+            <span className="hidden md:inline">Alerts</span>
           </button>
 
           {/* Authenticated User Profile Badge & Dropdown */}

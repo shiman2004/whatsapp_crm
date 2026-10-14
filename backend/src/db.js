@@ -109,31 +109,6 @@ export const checkDbConnection = async () => {
     await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS message_source VARCHAR(50) DEFAULT 'CRM User';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS sent_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`).catch(() => null);
 
-    // Delete for Everyone columns in messages
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "isDeleted" BOOLEAN DEFAULT FALSE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "deletedForEveryone" BOOLEAN DEFAULT FALSE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "originalContent" TEXT;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "deletedByUserId" VARCHAR(36);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "deletedByName" VARCHAR(255);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "deletedByRole" VARCHAR(50);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "deletedAt" TIMESTAMP WITH TIME ZONE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS deleted_for_everyone BOOLEAN DEFAULT FALSE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS original_content TEXT;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS deleted_by_user_id VARCHAR(36);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS deleted_by_name VARCHAR(255);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS deleted_by_role VARCHAR(50);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`).catch(() => null);
-
-    // Delete for Everyone columns in message_audits
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS is_deleted BOOLEAN DEFAULT FALSE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS deleted_for_everyone BOOLEAN DEFAULT FALSE;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS original_content TEXT;`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS deleted_by_user_id VARCHAR(36);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS deleted_by_name VARCHAR(255);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS deleted_by_role VARCHAR(50);`).catch(() => null);
-    await prisma.$executeRawUnsafe(`ALTER TABLE "message_audits" ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;`).catch(() => null);
-
     // Ensure LeadStage enum has all required values in Postgres
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'new';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'assigned';`).catch(() => null);

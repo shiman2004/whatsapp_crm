@@ -114,7 +114,6 @@ interface CrmContextType {
   starMessage: (messageId: string) => void;
   pinMessage: (messageId: string) => void;
   deleteMessage: (messageId: string) => void;
-  deleteForEveryone: (messageId: string) => Promise<{ success: boolean; error?: string }>;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   reportMessage: (messageId: string) => void;
   forwardMessage: (messageId: string, targetLeadId: string) => void;
@@ -1063,25 +1062,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const { messageId, content } = data;
             if (messageId && content) {
               setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content, edited: true } : m));
-            }
-            return;
-          }
-
-          if (data.type === 'MESSAGE_DELETED_FOR_EVERYONE') {
-            const { messageId, content, mediaUrl, isDeleted, deletedForEveryone, originalContent, deletedByName, deletedByRole, deletedByUserId, deletedAt } = data;
-            if (messageId) {
-              setMessages(prev => prev.map(m => m.id === messageId ? {
-                ...m,
-                content: content || 'This message was deleted.',
-                media: mediaUrl ? m.media : undefined,
-                isDeleted: true,
-                deletedForEveryone: true,
-                originalContent,
-                deletedByName,
-                deletedByRole,
-                deletedByUserId,
-                deletedAt
-              } : m));
             }
             return;
           }
@@ -2256,47 +2236,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteMessage = (messageId: string) => {
     setMessages(prev => prev.filter(m => m.id !== messageId));
     notify('Message Deleted 🗑️', 'Message removed from chat', 'warning');
-  };
-
-  // Delete message for everyone across WhatsApp and connected CRM clients
-  const deleteForEveryone = async (messageId: string): Promise<{ success: boolean; error?: string }> => {
-    try {
-      const res = await fetch(`${API_BASE_URL}/api/messages/delete-for-everyone`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${getAuthToken()}`
-        },
-        body: JSON.stringify({ messageId })
-      });
-      const data = await res.json().catch(() => ({ success: false, error: 'Network response error' }));
-      if (!res.ok || !data.success) {
-        const errorMsg = data.error || 'Failed to delete message for everyone';
-        notify('Deletion Failed', errorMsg, 'warning');
-        return { success: false, error: errorMsg };
-      }
-
-      // Optimistically update message in local state
-      setMessages(prev => prev.map(m => m.id === messageId ? {
-        ...m,
-        isDeleted: true,
-        deletedForEveryone: true,
-        originalContent: currentUser?.role === 'super_admin' ? (m.originalContent || m.content) : undefined,
-        content: 'This message was deleted.',
-        media: undefined,
-        deletedByName: currentUser?.fullName || 'Staff',
-        deletedByRole: currentUser?.role || 'coordinator',
-        deletedAt: new Date().toISOString()
-      } : m));
-
-      const notice = data.whatsappRevoked ? 'Deleted for everyone on WhatsApp & CRM' : 'This message was deleted for everyone';
-      notify('Message Deleted 🚫', notice, 'success');
-      return { success: true };
-    } catch (err: any) {
-      const errorMsg = err.message || 'Network error deleting message';
-      notify('Deletion Error', errorMsg, 'warning');
-      return { success: false, error: errorMsg };
-    }
   };
 
   // Edit message
@@ -3535,7 +3474,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     starMessage,
     pinMessage,
     deleteMessage,
-    deleteForEveryone,
     editMessage,
     reportMessage,
     forwardMessage,

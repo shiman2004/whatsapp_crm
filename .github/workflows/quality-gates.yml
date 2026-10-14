@@ -141,6 +141,7 @@ jobs:
           node test-sender-audit.js
           node test-auth-security.js
           node test-login-security.js
+          node test-delete-for-everyone.js
         env:
           # Stub values - tests import server.js which reads process.env.
           # These are non-secret CI placeholders, not real credentials.

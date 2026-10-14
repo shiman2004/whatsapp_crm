@@ -850,6 +850,8 @@ class WhatsAppSessionManager {
     } catch (err) {
       console.warn('[SessionManager] Error during session restoration:', err.message);
     }
+  }
+
   /**
    * Delete a message for everyone via connected WhatsApp Baileys socket.
    * Sends the official WhatsApp protocol revocation: { delete: key }

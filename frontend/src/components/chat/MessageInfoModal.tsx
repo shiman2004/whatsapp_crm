@@ -128,9 +128,9 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
             {/* Super Admin ONLY: Internal Message Sender Audit */}
             {currentUser?.role === 'super_admin' && isOutbound && (message.senderName || message.senderRole) && (
               <div className="pt-2.5 mt-2 border-t border-slate-800/80 space-y-2 text-[11px]">
-                <div className="flex items-center justify-between text-rose-400 font-semibold text-[10.5px] uppercase tracking-wider">
+                <div className="flex items-center justify-between text-yellow-400 font-semibold text-[10.5px] uppercase tracking-wider">
                   <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Sender Audit Trail</span>
-                  <span className="text-[9.5px] text-rose-500/80 font-normal lowercase bg-rose-500/10 px-1.5 py-0.5 rounded border border-rose-500/20">super admin only</span>
+                  <span className="text-[9.5px] text-yellow-400/90 font-normal lowercase bg-yellow-500/10 px-1.5 py-0.5 rounded border border-yellow-500/20">super admin only</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Sent by (Staff Name)</span>
@@ -146,7 +146,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Sent Date & Time (Sri Lanka)</span>
-                  <span className="text-rose-400 font-medium font-mono">{formatSriLankaDateTime(message.sentAt || message.createdAt)}</span>
+                  <span className="text-yellow-400 font-medium font-mono">{formatSriLankaDateTime(message.sentAt || message.createdAt)}</span>
                 </div>
               </div>
             )}

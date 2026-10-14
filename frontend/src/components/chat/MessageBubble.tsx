@@ -613,7 +613,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
         {/* Super Admin ONLY: Message Sender Identification & Audit Trail */}
         {isSuperAdmin && isOutbound && auditDisplayText && (
           <div 
-            className="text-[11px] font-medium tracking-tight text-[#ef4444] text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
+            className="text-[11px] font-medium tracking-tight text-yellow-400 text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
             title={`Internal Audit: ${auditDisplayText}`}
           >
             {auditDisplayText}

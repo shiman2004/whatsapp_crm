@@ -55,15 +55,40 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
 
         {/* Message Preview Bubble */}
         <div className="p-4 bg-[#0b141a]/90 border-b border-slate-800">
-          <div className={`p-3 rounded-xl text-xs leading-relaxed max-w-sm ${
-            isOutbound ? 'bg-[#005c4b] text-slate-100 ml-auto' : 'bg-[#202c33] text-slate-100 mr-auto'
-          }`}>
-            <p className="whitespace-pre-line break-words text-[13px]">{message.content}</p>
-            <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-300 font-mono">
-              <span>{createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              {isOutbound && <CheckCheck className="w-3.5 h-3.5 text-sky-400" />}
+          {message.isDeleted || message.deletedForEveryone ? (
+            currentUser?.role === 'super_admin' ? (
+              <div className="p-3.5 rounded-xl text-xs leading-relaxed max-w-sm bg-[#251013] border-2 border-red-500/70 text-slate-100 ml-auto space-y-2">
+                <div className="flex items-center justify-between gap-2 border-b border-red-500/30 pb-1">
+                  <span className="text-[10px] font-bold text-red-400 uppercase tracking-wider">
+                    DELETED MESSAGE
+                  </span>
+                  <span className="text-[10px] text-red-400/90 font-medium italic">Deleted for everyone</span>
+                </div>
+                <div className="bg-red-950/60 p-2 rounded border border-red-500/30 text-red-100 text-[12.5px]">
+                  <div className="text-[9.5px] font-bold text-red-400 uppercase mb-0.5">Original message content:</div>
+                  <p className="whitespace-pre-line break-words">{message.originalContent || message.content}</p>
+                </div>
+                <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-red-400/70 font-mono">
+                  <span>{createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl text-xs leading-relaxed max-w-sm bg-[#182229] border border-slate-700/60 text-slate-400 italic ml-auto flex items-center gap-2">
+                <span>🚫</span>
+                <span>This message was deleted.</span>
+              </div>
+            )
+          ) : (
+            <div className={`p-3 rounded-xl text-xs leading-relaxed max-w-sm ${
+              isOutbound ? 'bg-[#005c4b] text-slate-100 ml-auto' : 'bg-[#202c33] text-slate-100 mr-auto'
+            }`}>
+              <p className="whitespace-pre-line break-words text-[13px]">{message.content}</p>
+              <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-300 font-mono">
+                <span>{createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                {isOutbound && <CheckCheck className="w-3.5 h-3.5 text-sky-400" />}
+              </div>
             </div>
-          </div>
+          )}
         </div>
 
         {/* Delivery & Read Receipts */}
@@ -147,6 +172,30 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
                 <div className="flex items-center justify-between">
                   <span className="text-slate-400">Sent Date & Time (Sri Lanka)</span>
                   <span className="text-yellow-400 font-medium font-mono">{formatSriLankaDateTime(message.sentAt || message.createdAt)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Super Admin ONLY: Deletion Audit Trail */}
+            {currentUser?.role === 'super_admin' && (message.isDeleted || message.deletedForEveryone) && (
+              <div className="pt-2.5 mt-2 border-t border-red-500/30 space-y-2 text-[11px] bg-red-950/20 p-2.5 rounded-lg border border-red-500/30">
+                <div className="flex items-center justify-between text-red-400 font-semibold text-[10.5px] uppercase tracking-wider">
+                  <span className="flex items-center gap-1.5"><ShieldCheck className="w-3.5 h-3.5" /> Deletion Audit Trail</span>
+                  <span className="text-[9.5px] text-red-300 font-normal lowercase bg-red-500/20 px-1.5 py-0.5 rounded border border-red-500/30">super admin only</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Deleted by</span>
+                  <span className="text-red-200 font-semibold">{message.deletedByName || 'Staff'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Staff Role</span>
+                  <span className="text-red-200 font-medium">{formatSenderRole(message.deletedByRole || 'coordinator')}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-slate-400">Deletion Date & Time</span>
+                  <span className="text-red-400 font-mono font-medium">
+                    {message.deletedAt ? formatSriLankaDateTime(message.deletedAt) : 'Unknown'}
+                  </span>
                 </div>
               </div>
             )}

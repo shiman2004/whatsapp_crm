@@ -850,6 +850,40 @@ class WhatsAppSessionManager {
     } catch (err) {
       console.warn('[SessionManager] Error during session restoration:', err.message);
     }
+  /**
+   * Delete a message for everyone via connected WhatsApp Baileys socket.
+   * Sends the official WhatsApp protocol revocation: { delete: key }
+   */
+  async deleteMessageForEveryone(coordinatorId, { messageId, to, whatsappId }) {
+    const sessionCtx = this.sessions.get(coordinatorId) || this.sessions.get('user-admin-1');
+    if (!sessionCtx || !sessionCtx.sock || sessionCtx.status !== 'connected') {
+      throw new Error('No connected WhatsApp line available to revoke message.');
+    }
+
+    const cleanPhone = (to || '').replace(/[^0-9]/g, '');
+    const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+    let targetJid = null;
+    if (to && to.includes('@')) targetJid = to;
+    else if (cleanWaId && cleanWaId.length >= 13) targetJid = `${cleanWaId}@lid`;
+    else if (cleanPhone && cleanPhone.length <= 12) targetJid = `${cleanPhone}@s.whatsapp.net`;
+    else if (cleanWaId && cleanWaId.length <= 12) targetJid = `${cleanWaId}@s.whatsapp.net`;
+    else if (cleanPhone && cleanPhone.length >= 13) targetJid = `${cleanPhone}@lid`;
+
+    if (!targetJid) {
+      throw new Error('Could not resolve recipient WhatsApp JID for message deletion.');
+    }
+
+    console.log(`🗑️ [SessionManager] Revoking message [${messageId}] for everyone on target: ${targetJid}`);
+    
+    // Baileys official deletion protocol
+    const key = {
+      remoteJid: targetJid,
+      fromMe: true,
+      id: messageId
+    };
+
+    const res = await sessionCtx.sock.sendMessage(targetJid, { delete: key });
+    return res;
   }
 }
 

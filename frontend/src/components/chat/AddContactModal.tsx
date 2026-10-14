@@ -32,11 +32,15 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     currentUser
   } = useCrm();
 
+  const isCrasUser = currentUser?.company === 'CRAS';
+  const crasDefaultCat = categories.find(c => c.id === 'cat-cras-courses' || c.name.toLowerCase().includes('cras') || c.name.toLowerCase().includes('course'));
+  const rwcDefaultCat = categories.find(c => c.id !== 'cat-cras-courses' && !c.name.toLowerCase().includes('cras')) || categories[0];
+
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [company, setCompany] = useState<CompanyCode>('RWC');
-  const [categoryId, setCategoryId] = useState(categories[0]?.id || 'cat-hair-care');
-  const [treatmentId, setTreatmentId] = useState(treatments[0]?.id || 'trt-hair-prp');
+  const [company, setCompany] = useState<CompanyCode>(isCrasUser ? 'CRAS' : 'RWC');
+  const [categoryId, setCategoryId] = useState(isCrasUser ? (crasDefaultCat?.id || 'cat-cras-courses') : (rwcDefaultCat?.id || 'cat-hair-care'));
+  const [treatmentId, setTreatmentId] = useState(isCrasUser ? 'crs-adi' : (treatments[0]?.id || 'trt-hair-prp'));
   const [language, setLanguage] = useState<'en' | 'si' | 'ta'>('en');
   const [assignedTo, setAssignedTo] = useState<string>(isSuperAdmin || isLeadsOfficer ? '' : currentUser.id);
   const [initialMessage, setInitialMessage] = useState('');
@@ -50,22 +54,36 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     setCompany(newComp);
     if (newComp === 'CRAS') {
       const crasCat = categories.find(c => c.id === 'cat-cras-courses' || c.name.toLowerCase().includes('cras') || c.name.toLowerCase().includes('course'));
-      if (crasCat) {
-        setCategoryId(crasCat.id);
-        const firstTrt = treatments.find(t => t.categoryId === crasCat.id);
-        if (firstTrt) setTreatmentId(firstTrt.id);
+      const catId = crasCat?.id || 'cat-cras-courses';
+      setCategoryId(catId);
+      const firstTrt = treatments.find(t => t.categoryId === catId || (t as any).company === 'CRAS' || t.id.startsWith('crs-'));
+      setTreatmentId(firstTrt?.id || 'crs-adi');
+
+      // Clear coordinator if assigned user is not CRAS
+      if (assignedTo) {
+        const currentCoord = users.find(u => u.id === assignedTo);
+        if (currentCoord && currentCoord.company && currentCoord.company !== 'CRAS') {
+          setAssignedTo('');
+        }
       }
-      if (sendInitial || initialMessage.includes('Royal Wellness')) {
+      if (sendInitial || !initialMessage || initialMessage.includes('Royal Wellness')) {
         setInitialMessage('Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka (CRAS)! How can we assist you today?');
       }
     } else {
       const rwcCat = categories.find(c => c.id !== 'cat-cras-courses' && !c.name.toLowerCase().includes('cras')) || categories[0];
-      if (rwcCat) {
-        setCategoryId(rwcCat.id);
-        const firstTrt = treatments.find(t => t.categoryId === rwcCat.id);
-        if (firstTrt) setTreatmentId(firstTrt.id);
+      const catId = rwcCat?.id || 'cat-hair-care';
+      setCategoryId(catId);
+      const firstTrt = treatments.find(t => t.categoryId === catId && (t as any).company !== 'CRAS');
+      setTreatmentId(firstTrt?.id || treatments[0]?.id || 'trt-hair-prp');
+
+      // Clear coordinator if assigned user is CRAS
+      if (assignedTo) {
+        const currentCoord = users.find(u => u.id === assignedTo);
+        if (currentCoord && currentCoord.company === 'CRAS') {
+          setAssignedTo('');
+        }
       }
-      if (sendInitial || initialMessage.includes('College of Royal Aesthetic')) {
+      if (sendInitial || !initialMessage || initialMessage.includes('College of Royal Aesthetic')) {
         setInitialMessage('Hi, thank you for reaching out to Royal Wellness Center! How can we assist you today?');
       }
     }
@@ -78,12 +96,16 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     return c.id !== 'cat-cras-courses' && !c.name.toLowerCase().includes('cras');
   });
 
-  const availableCategories = filteredCategories.length > 0 ? filteredCategories : categories;
+  const availableCategories: Array<{ id: string; name: string }> = filteredCategories.length > 0 
+    ? filteredCategories 
+    : (company === 'CRAS' 
+        ? [{ id: 'cat-cras-courses', name: 'CRAS Academic Programs' }] 
+        : categories);
 
   const filteredTreatments = treatments.filter(t => {
     if (categoryId) return t.categoryId === categoryId;
-    if (company === 'CRAS') return (t as any).company === 'CRAS' || t.categoryId === 'cat-cras-courses';
-    return (t as any).company !== 'CRAS' && t.categoryId !== 'cat-cras-courses';
+    if (company === 'CRAS') return (t as any).company === 'CRAS' || t.categoryId === 'cat-cras-courses' || t.id.startsWith('crs-');
+    return (t as any).company !== 'CRAS' && t.categoryId !== 'cat-cras-courses' && !t.id.startsWith('crs-');
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -98,12 +120,15 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
 
     setLoading(true);
     try {
+      const finalCatId = categoryId || (company === 'CRAS' ? 'cat-cras-courses' : undefined);
+      const finalTrtId = treatmentId || (company === 'CRAS' ? 'crs-adi' : undefined);
+
       const res = await addNewContact({
         name: name.trim(),
         phone: phone.trim(),
         company,
-        categoryId,
-        treatmentId,
+        categoryId: finalCatId,
+        treatmentId: finalTrtId,
         language,
         assignedTo: assignedTo || undefined,
         initialMessage: sendInitial && initialMessage.trim() ? initialMessage.trim() : undefined
@@ -306,7 +331,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
               <div>
                 <label className="block text-xs font-semibold text-[#aebac1] mb-1.5 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-[#00a884]" />
-                  <span>Assign Coordinator</span>
+                  <span>Assign {company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'}</span>
                 </label>
                 <select
                   value={assignedTo}
@@ -316,11 +341,13 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
                   <option value="" className="bg-[#111b21] text-[#8696a0]">
                     -- Unassigned (Pool) --
                   </option>
-                  {users.filter(u => u.role === 'coordinator').map((u) => (
-                    <option key={u.id} value={u.id} className="bg-[#111b21] text-[#d1d7db]">
-                      {u.fullName} {u.company ? `(${u.company})` : ''} {u.branch ? `(${u.branch})` : ''}
-                    </option>
-                  ))}
+                  {users
+                    .filter(u => u.role === 'coordinator' && (company === 'CRAS' ? u.company === 'CRAS' : (u.company === 'RWC' || !u.company)))
+                    .map((u) => (
+                      <option key={u.id} value={u.id} className="bg-[#111b21] text-[#d1d7db]">
+                        {u.fullName} {u.company ? `(${u.company})` : ''} {u.branch ? `(${u.branch})` : ''}
+                      </option>
+                    ))}
                 </select>
               </div>
             )}

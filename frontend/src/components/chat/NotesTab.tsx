@@ -33,6 +33,12 @@ export const NotesTab: React.FC<NotesTabProps> = ({ lead }) => {
           rows={3}
           value={noteText}
           onChange={(e) => setNoteText(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+              e.preventDefault();
+              handleAddNote(e);
+            }
+          }}
           placeholder={isCras 
             ? "Add academic background, course requirements, or tuition fee quotes..." 
             : "Add clinical observations, consultant availability, or price quotes..."}
@@ -40,7 +46,10 @@ export const NotesTab: React.FC<NotesTabProps> = ({ lead }) => {
             isCras ? 'focus:border-rose-500' : 'focus:border-teal-500'
           }`}
         />
-        <div className="flex justify-end">
+        <div className="flex items-center justify-between pt-0.5">
+          <span className="text-[10px] text-slate-500 font-mono">
+            Press <kbd className="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-400">Ctrl</kbd> + <kbd className="px-1 py-0.5 bg-slate-800 rounded border border-slate-700 text-slate-400">Enter</kbd> to save
+          </span>
           <button
             type="submit"
             disabled={!noteText.trim()}

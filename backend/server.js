@@ -2252,7 +2252,7 @@ const server = http.createServer(async (req, res) => {
           const inboundMsgs = (l.messages || []).filter(m => m.direction === 'inbound');
           const lastInbound = inboundMsgs.length > 0
             ? inboundMsgs[inboundMsgs.length - 1].timestamp
-            : null;
+            : (l.lastCustomerMessageAt ? l.lastCustomerMessageAt : null);
 
           // Backend RBAC: Never expose audit metadata through normal staff API responses
           const cleanedMessages = isSuperAdmin
@@ -2265,7 +2265,7 @@ const server = http.createServer(async (req, res) => {
           return {
             ...l,
             messages: cleanedMessages,
-            lastCustomerMessageAt: lastInbound ? new Date(lastInbound).toISOString() : null,
+            lastCustomerMessageAt: lastInbound ? new Date(lastInbound).toISOString() : (l.lastCustomerMessageAt ? new Date(l.lastCustomerMessageAt).toISOString() : null),
             company: comp.code,
             companyTag: comp.tag,
             companyColor: comp.colorHex,
@@ -2736,6 +2736,9 @@ const server = http.createServer(async (req, res) => {
           if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
           if (stage !== undefined) updateData.stage = stage;
           if (language !== undefined) updateData.language = language;
+          if (payload.lastCustomerMessageAt !== undefined) {
+            updateData.lastCustomerMessageAt = payload.lastCustomerMessageAt ? new Date(payload.lastCustomerMessageAt) : null;
+          }
           if (payload.company !== undefined || payload.source !== undefined) {
             const companyCode = (payload.company || payload.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
             updateData.source = companyCode;

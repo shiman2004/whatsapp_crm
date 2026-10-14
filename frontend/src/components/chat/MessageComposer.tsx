@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
+import { getLatestCustomerMessageTime } from '../../utils/window24hUtils';
 import { WhatsAppVoiceRecorder } from '../../utils/audioRecorder';
 import { AddContactModal } from './AddContactModal';
 
@@ -344,14 +345,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   }, [mediaPreview]);
 
   const leadMessages = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
-  const inboundMessages = leadMessages.filter(m => m.direction === 'inbound');
-  const latestInboundMsg = inboundMessages.length > 0
-    ? inboundMessages.reduce((latest, m) => new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest)
-    : null;
-
-  const lastCustomerMessageTime = latestInboundMsg
-    ? new Date(latestInboundMsg.createdAt).getTime()
-    : (inboundMessages.length > 0 && lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0);
+  const lastCustomerMessageTime = getLatestCustomerMessageTime(lead, leadMessages);
   const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
 
   const handleSendText = (e?: React.FormEvent) => {

@@ -24,6 +24,7 @@ import {
   Lock
 } from 'lucide-react';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
+import { WhatsApp24hWindowInfo } from './WhatsApp24hWindowInfo';
 
 import { 
   formatWhatsAppDisplay, 
@@ -42,6 +43,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     users, 
     leads,
     treatments,
+    messages,
     canAssignLeads, 
     canModifyAssignment,
     isSuperAdmin,
@@ -53,6 +55,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     updateLeadCompany,
     updateCustomer
   } = useCrm();
+
+  const leadMessages = (messages || []).filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
 
   const [activeTab, setActiveTab] = useState<'notes' | 'followups' | 'history'>('notes');
   const [isEditingPhone, setIsEditingPhone] = useState(false);
@@ -201,7 +205,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   });
 
   return (
-    <div className="w-full sm:w-85 md:w-80 shrink-0 border-l border-slate-800 bg-[#111b21] flex flex-col h-full overflow-hidden select-none fixed md:static inset-y-0 right-0 z-40 md:z-auto shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
+    <div className="w-full sm:w-96 md:w-96 shrink-0 border-l border-slate-800 bg-[#111b21] flex flex-col h-full overflow-hidden select-none fixed md:static inset-y-0 right-0 z-40 md:z-auto shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
       {/* Header */}
       <div className="h-14 px-4 bg-[#202c33] border-b border-slate-800 flex items-center justify-between shrink-0">
         <h3 className="font-bold text-xs text-slate-100 flex items-center gap-1.5">
@@ -216,8 +220,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       </div>
 
       {/* Top Routing & Stage Controls */}
-      <div className="p-3 bg-[#202c33]/40 border-b border-slate-800 space-y-2.5">
+      <div className="p-3 bg-[#202c33]/40 border-b border-slate-800 space-y-2.5 overflow-y-auto">
         
+        {/* WhatsApp 24-Hour Window Container matching screenshot */}
+        <WhatsApp24hWindowInfo lead={lead} messages={leadMessages} />
+
         {/* Contact WhatsApp Card with Phone and Editable Name */}
         <div className="bg-[#111b21] p-3 rounded-xl border border-slate-800 space-y-2.5 shadow-sm">
           

@@ -1,40 +1,42 @@
-import React from 'react';
-import { Clock, ShieldCheck, AlertCircle } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { 
+  getWindowStatus, 
+  formatWindowCountdown 
+} from '../../utils/window24hUtils';
 
 interface SessionWindowBadgeProps {
   lastCustomerMessageAt?: string;
 }
 
 export const SessionWindowBadge: React.FC<SessionWindowBadgeProps> = ({ lastCustomerMessageAt }) => {
-  if (!lastCustomerMessageAt) {
-    return (
-      <span 
-        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/40 text-amber-300 text-[10px] font-semibold shrink-0 whitespace-nowrap shadow-sm"
-        title="New contact or no customer reply received yet. Approved WhatsApp template required."
-      >
-        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
-        <span>Window Closed (Template Req.)</span>
-      </span>
-    );
-  }
+  const [now, setNow] = useState<number>(Date.now());
 
-  const lastMsgTime = new Date(lastCustomerMessageAt).getTime();
-  const now = Date.now();
-  const diffHours = (now - lastMsgTime) / (1000 * 60 * 60);
-  const remainingHours = Math.max(0, 24 - diffHours);
-  const isOpen = remainingHours > 0;
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const lastMsgTime = lastCustomerMessageAt ? new Date(lastCustomerMessageAt).getTime() : 0;
+  const hasCustomerMessage = lastMsgTime > 0 && !isNaN(lastMsgTime);
+  const expiresAt = hasCustomerMessage ? lastMsgTime + (24 * 60 * 60 * 1000) : 0;
+  const remainingMs = expiresAt > 0 ? Math.max(0, expiresAt - now) : 0;
+
+  const statusInfo = getWindowStatus(remainingMs, hasCustomerMessage);
+  const countdownText = formatWindowCountdown(remainingMs);
 
   return (
     <span 
-      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0 border whitespace-nowrap ${
-        isOpen
-          ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300'
-          : 'bg-rose-500/15 border-rose-500/40 text-rose-300'
-      }`}
-      title={isOpen ? 'Meta 24h Session Window open' : 'Session window closed (>24h since customer reply)'}
+      className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold shrink-0 border whitespace-nowrap shadow-sm ${statusInfo.badgeBg} ${statusInfo.badgeBorder} ${statusInfo.textColor}`}
+      title={`WhatsApp 24-Hour Window: ${statusInfo.label} (${countdownText})`}
     >
-      <span className={`w-1.5 h-1.5 rounded-full ${isOpen ? 'bg-emerald-400 animate-pulse' : 'bg-rose-400'}`}></span>
-      <span>{isOpen ? `24h Active (${remainingHours.toFixed(0)}h)` : 'Window Closed (Template Req.)'}</span>
+      <span className={`w-1.5 h-1.5 rounded-full ${statusInfo.dotColor}`} />
+      <span>{statusInfo.label}</span>
+      {hasCustomerMessage && remainingMs > 0 && (
+        <>
+          <span className="opacity-50">•</span>
+          <span className="font-mono font-bold tracking-tight">{countdownText}</span>
+        </>
+      )}
     </span>
   );
 };

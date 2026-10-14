@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { getPrisma, checkDbConnection, getDbStatus } from './src/db.js';
+import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
 import { resolveCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
@@ -1221,8 +1221,8 @@ const server = http.createServer(async (req, res) => {
 
         let sendResult = null;
 
-        // If Meta Cloud API token is supplied or configured on server, dispatch directly to Meta Graph API; otherwise use Baileys socket
-        const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        // If Meta Cloud API token is configured on server or supplied, dispatch directly to Meta Graph API; otherwise use Baileys socket
+        const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || payload.token || process.env.META_TOKEN || '').trim();
         
         // 1. Phone validation in international format
         const norm = normalizeE164(to || whatsappId);
@@ -1803,7 +1803,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         const phoneId = (payload.phoneNumberId || (resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId)) || '1358157244046701').trim();
-        const metaToken = (payload.token || metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || payload.token || process.env.META_TOKEN || '').trim();
 
         if (!metaToken) {
           res.writeHead(500, { 'Content-Type': 'application/json' });
@@ -3942,11 +3942,44 @@ const server = http.createServer(async (req, res) => {
       req.on('end', async () => {
         try {
           const payload = JSON.parse(body || '{}');
-          if (payload.accessToken !== undefined) metaConfig.accessToken = String(payload.accessToken || '').trim();
-          if (payload.phoneNumberId) metaConfig.phoneNumberId = String(payload.phoneNumberId).trim();
-          if (payload.wabaId) metaConfig.wabaId = String(payload.wabaId).trim();
+          if (payload.accessToken !== undefined) {
+            const cleanToken = String(payload.accessToken || '').trim();
+            metaConfig.accessToken = cleanToken;
+            process.env.META_ACCESS_TOKEN = cleanToken;
+            await setSystemSetting('META_ACCESS_TOKEN', cleanToken).catch(() => {});
+
+            // Update .env file if available locally
+            try {
+              const envPath = fs.existsSync('backend/.env') ? path.resolve('backend/.env') : (fs.existsSync('.env') ? path.resolve('.env') : null);
+              if (envPath) {
+                let envContent = fs.readFileSync(envPath, 'utf8');
+                if (/META_ACCESS_TOKEN=.*/.test(envContent)) {
+                  envContent = envContent.replace(/META_ACCESS_TOKEN=.*/g, `META_ACCESS_TOKEN=${cleanToken}`);
+                } else {
+                  envContent += `\nMETA_ACCESS_TOKEN=${cleanToken}\n`;
+                }
+                fs.writeFileSync(envPath, envContent, 'utf8');
+              }
+            } catch (e) {}
+          }
+          if (payload.phoneNumberId) {
+            metaConfig.phoneNumberId = String(payload.phoneNumberId).trim();
+            await setSystemSetting('META_PHONE_NUMBER_ID', metaConfig.phoneNumberId).catch(() => {});
+          }
+          if (payload.wabaId) {
+            metaConfig.wabaId = String(payload.wabaId).trim();
+            await setSystemSetting('META_WABA_ID', metaConfig.wabaId).catch(() => {});
+          }
 
           console.log(`🔑 [Meta Config Updated] Phone ID: ${metaConfig.phoneNumberId}, Token configured: ${Boolean(metaConfig.accessToken)}`);
+
+          // Broadcast to all active staff connections via SSE so every staff interface syncs immediately
+          broadcastScopedSSE(null, {
+            type: 'META_CONFIG_UPDATED',
+            hasToken: Boolean(metaConfig.accessToken),
+            phoneNumberId: metaConfig.phoneNumberId,
+            wabaId: metaConfig.wabaId
+          });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({
@@ -4438,6 +4471,19 @@ if (!isTestRunner) {
           await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
           await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => {});
         }
+        // Load persistent Meta Cloud API configuration from system_settings
+        const savedMetaToken = await getSystemSetting('META_ACCESS_TOKEN');
+        if (savedMetaToken && savedMetaToken.trim()) {
+          metaConfig.accessToken = savedMetaToken.trim();
+          console.log('🔒 [Security] Meta Graph API access token loaded from persistent system settings.');
+        } else if (metaConfig.accessToken) {
+          await setSystemSetting('META_ACCESS_TOKEN', metaConfig.accessToken).catch(() => {});
+        }
+        const savedPhoneId = await getSystemSetting('META_PHONE_NUMBER_ID');
+        if (savedPhoneId && savedPhoneId.trim()) metaConfig.phoneNumberId = savedPhoneId.trim();
+        const savedWabaId = await getSystemSetting('META_WABA_ID');
+        if (savedWabaId && savedWabaId.trim()) metaConfig.wabaId = savedWabaId.trim();
+
         await autoSeedDbIfEmpty();
         await sessionManager.restoreAllActiveSessions();
       }

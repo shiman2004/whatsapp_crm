@@ -121,6 +121,15 @@ export const checkDbConnection = async () => {
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'interested';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'follow_up';`).catch(() => null);
 
+    // Ensure system_settings table exists for persistent global configuration (Meta Cloud API token, etc.)
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.system_settings (
+        key VARCHAR(100) PRIMARY KEY,
+        value TEXT NOT NULL,
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+
     return { connected: true, message: 'Supabase Postgres Connected' };
   } catch (err) {
     isDbConnected = false;
@@ -130,3 +139,30 @@ export const checkDbConnection = async () => {
 };
 
 export const getDbStatus = () => isDbConnected;
+
+export const getSystemSetting = async (key) => {
+  const prisma = getPrisma();
+  if (!prisma || !isDbConnected) return null;
+  try {
+    const rows = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = $1 LIMIT 1;`, key);
+    return rows && rows.length > 0 ? rows[0].value : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+export const setSystemSetting = async (key, value) => {
+  const prisma = getPrisma();
+  if (!prisma || !isDbConnected) return false;
+  try {
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.system_settings (key, value, updated_at)
+      VALUES ($1, $2, NOW())
+      ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = NOW();
+    `, key, value);
+    return true;
+  } catch (e) {
+    console.warn(`Failed to persist system setting "${key}":`, e.message);
+    return false;
+  }
+};

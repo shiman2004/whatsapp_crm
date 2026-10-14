@@ -23,6 +23,8 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   const [phoneNumberId, setPhoneNumberId] = useState('1358157244046701');
   const [wabaId, setWabaId] = useState('2332922997481634');
   const [accessToken, setAccessToken] = useState(() => localStorage.getItem('meta_access_token') || '');
+  const [hasServerToken, setHasServerToken] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [showToken, setShowToken] = useState(false);
   const [testNumber, setTestNumber] = useState('');
   const [testMessage, setTestMessage] = useState('Hello from Royal Wellness Center! 🌿 Your consultation is confirmed.');
@@ -37,6 +39,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
       fetch(`${API_BASE_URL}/api/meta/config`)
         .then(res => res.json())
         .then(data => {
+          if (data.hasToken) setHasServerToken(true);
           if (data.accessToken && !localStorage.getItem('meta_access_token')) {
             setAccessToken(data.accessToken);
             localStorage.setItem('meta_access_token', data.accessToken);
@@ -53,9 +56,13 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   const handleSaveToken = async () => {
     const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '').replace(/["']/g, '');
     setAccessToken(cleanToken);
+    if (cleanToken) {
+      localStorage.setItem('meta_access_token', cleanToken);
+    }
+    setIsSaving(true);
     const authToken = localStorage.getItem('rw_crm_auth_token') || '';
     try {
-      await fetch(`${API_BASE_URL}/api/meta/config`, {
+      const res = await fetch(`${API_BASE_URL}/api/meta/config`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -67,8 +74,18 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
           wabaId
         })
       });
-    } catch (e) {}
-    if (notify) notify('Settings Saved', 'Meta Access Token saved to local and server configuration', 'success');
+      if (res.ok) {
+        setHasServerToken(Boolean(cleanToken));
+        if (notify) notify('Settings Saved', 'Meta Access Token saved and activated globally for all staff members.', 'success');
+      } else {
+        const err = await res.json().catch(() => ({}));
+        if (notify) notify('Save Error', err.error || 'Failed to update Meta configuration', 'warning');
+      }
+    } catch (e) {
+      if (notify) notify('Settings Saved', 'Meta Access Token saved locally in browser', 'info');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleCopy = (text: string, field: string) => {
@@ -220,7 +237,10 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
           <div className="space-y-1.5 text-xs">
             <label className="text-slate-300 font-medium flex items-center justify-between">
               <span>Meta Access Token (from Step 1)</span>
-              <span className="text-[10px] text-slate-400">Saved locally in browser</span>
+              <span className="text-[10px] text-emerald-400 font-medium flex items-center gap-1">
+                <CheckCircle2 className="w-3 h-3 text-emerald-400" />
+                Global: Active for all staff
+              </span>
             </label>
             <div className="flex gap-2">
               <div className="relative flex-1">
@@ -228,7 +248,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
                   type={showToken ? "text" : "password"}
                   value={accessToken}
                   onChange={(e) => setAccessToken(e.target.value)}
-                  placeholder="Paste the generated Access Token here..."
+                  placeholder={hasServerToken ? "Token configured on server. Paste new token to update..." : "Paste the generated Access Token here..."}
                   className="w-full px-3 py-2 pr-9 bg-[#202c33] border border-slate-700 rounded-xl text-slate-200 text-xs focus:border-emerald-500 outline-none font-mono"
                 />
                 <button
@@ -241,12 +261,17 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
                 </button>
               </div>
               <button
+                type="button"
                 onClick={handleSaveToken}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-slate-950 font-bold rounded-xl text-xs transition-all shrink-0"
+                disabled={isSaving}
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-slate-950 font-bold rounded-xl text-xs transition-all shrink-0 cursor-pointer"
               >
-                Save
+                {isSaving ? 'Saving...' : 'Save for All Staff'}
               </button>
             </div>
+            <p className="text-[11px] text-slate-400 pt-0.5">
+              🛡️ Stored securely on the server and automatically synchronized for all coordinators and staff. Individual staff do not need to configure anything.
+            </p>
           </div>
 
           {/* Live Test Outbound Sender */}

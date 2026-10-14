@@ -124,12 +124,22 @@ export interface Message {
     senderName: string;
   };
   // Internal Sender Audit Trail (Super Admin Visibility)
+  coordinatorId?: string;
   senderId?: string;
   senderName?: string;
   senderRole?: string;
   messageSource?: 'CRM User' | 'Automation' | 'API' | 'System';
   sentAt?: string;
   timestamp?: string;
+
+  // Delete for Everyone Audit Metadata (Super Admin Visibility)
+  isDeleted?: boolean;
+  deletedForEveryone?: boolean;
+  originalContent?: string;
+  deletedByUserId?: string;
+  deletedByName?: string;
+  deletedByRole?: string;
+  deletedAt?: string;
 }
 
 export interface MessageAudit {
@@ -145,6 +155,13 @@ export interface MessageAudit {
   messageSource: 'CRM User' | 'Automation' | 'API' | 'System';
   deliveryStatus: string;
   sentAt: string;
+  isDeleted?: boolean;
+  deletedForEveryone?: boolean;
+  originalContent?: string;
+  deletedByUserId?: string;
+  deletedByName?: string;
+  deletedByRole?: string;
+  deletedAt?: string;
   createdAt: string;
 }
 

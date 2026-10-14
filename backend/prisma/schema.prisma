@@ -273,6 +273,13 @@ model Message {
   senderRole          String?           @db.VarChar(50)
   messageSource       String?           @default("CRM User") @db.VarChar(50) // 'CRM User' | 'Automation' | 'API' | 'System'
   sentAt              DateTime?         @default(now())
+  isDeleted           Boolean           @default(false)
+  deletedForEveryone  Boolean           @default(false)
+  originalContent     String?           @db.Text
+  deletedByUserId     String?           @db.VarChar(36)
+  deletedByName       String?           @db.VarChar(255)
+  deletedByRole       String?           @db.VarChar(50)
+  deletedAt           DateTime?
 
   // Relations
   lead                Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -302,6 +309,13 @@ model MessageAudit {
   messageSource   String   @default("CRM User") @map("message_source") @db.VarChar(50)
   deliveryStatus  String   @default("sent") @map("delivery_status") @db.VarChar(50)
   sentAt          DateTime @default(now()) @map("sent_at")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  deletedForEveryone Boolean @default(false) @map("deleted_for_everyone")
+  originalContent String?  @map("original_content") @db.Text
+  deletedByUserId String?  @map("deleted_by_user_id") @db.VarChar(36)
+  deletedByName   String?  @map("deleted_by_name") @db.VarChar(255)
+  deletedByRole   String?  @map("deleted_by_role") @db.VarChar(50)
+  deletedAt       DateTime? @map("deleted_at")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([leadId])

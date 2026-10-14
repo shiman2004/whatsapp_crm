@@ -88,8 +88,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   const dropdownRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
 
+  const isCras = lead.company === 'CRAS';
+
   const coordinator = users.find(u => u.id === lead.assignedTo);
   const coordinators = users.filter(u => u.role === 'coordinator');
+  const relevantCoordinators = coordinators.filter(c => isCras ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company));
 
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
@@ -143,8 +146,6 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     }
     setIsEditingName(false);
   };
-
-  const isCras = lead.company === 'CRAS';
 
   const handleSelectTreatment = (trt: Treatment | null) => {
     if (!trt) {
@@ -209,8 +210,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       {/* Header */}
       <div className="h-14 px-4 bg-[#202c33] border-b border-slate-800 flex items-center justify-between shrink-0">
         <h3 className="font-bold text-xs text-slate-100 flex items-center gap-1.5">
-          <User className="w-3.5 h-3.5 text-whatsapp" />
-          <span>Patient Details & Routing</span>
+          <User className={`w-3.5 h-3.5 ${isCras ? 'text-rose-400' : 'text-whatsapp'}`} />
+          <span>{isCras ? 'Student Details & Routing' : 'Patient Details & Routing'}</span>
         </h3>
         {onClose && (
           <button onClick={onClose} className="text-slate-400 hover:text-white p-1">
@@ -314,11 +315,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           {/* Divider between Phone and Name */}
           <div className="border-t border-slate-800/80" />
 
-          {/* Patient Name Row with Edit Name Option */}
+          {/* Patient/Student Name Row with Edit Name Option */}
           <div>
             <div className="flex items-center justify-between mb-1">
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-                <User className="w-3 h-3 text-teal-400" /> Patient Name
+                <User className={`w-3 h-3 ${isCras ? 'text-rose-400' : 'text-teal-400'}`} /> {isCras ? 'Student Name' : 'Patient Name'}
               </span>
               {!isEditingName ? (
                 <button
@@ -326,7 +327,9 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                     setNameInput(displayName);
                     setIsEditingName(true);
                   }}
-                  className="text-[10px] text-teal-400 hover:text-teal-300 flex items-center gap-0.5 font-semibold px-1.5 py-0.5 rounded bg-[#202c33] border border-slate-700"
+                  className={`text-[10px] flex items-center gap-0.5 font-semibold px-1.5 py-0.5 rounded bg-[#202c33] border border-slate-700 ${
+                    isCras ? 'text-rose-400 hover:text-rose-300' : 'text-teal-400 hover:text-teal-300'
+                  }`}
                 >
                   <Edit2 className="w-2.5 h-2.5" />
                   <span>Edit Name</span>
@@ -348,19 +351,23 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   type="text"
                   value={nameInput}
                   onChange={(e) => setNameInput(e.target.value)}
-                  placeholder="Enter patient full name..."
-                  className="flex-1 bg-[#202c33] border border-teal-500 rounded-lg px-2.5 py-1 text-xs text-slate-100 outline-none font-semibold"
+                  placeholder={isCras ? 'Enter student full name...' : 'Enter patient full name...'}
+                  className={`flex-1 bg-[#202c33] border rounded-lg px-2.5 py-1 text-xs text-slate-100 outline-none font-semibold ${
+                    isCras ? 'border-rose-500' : 'border-teal-500'
+                  }`}
                   autoFocus
                 />
                 <button
                   onClick={handleSaveName}
-                  className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg transition-colors"
+                  className={`px-2.5 py-1 text-white text-xs font-bold rounded-lg transition-colors ${
+                    isCras ? 'bg-rose-600 hover:bg-rose-500' : 'bg-emerald-600 hover:bg-emerald-500'
+                  }`}
                 >
                   Save
                 </button>
               </div>
             ) : (
-              <p className="text-xs font-semibold text-teal-100 tracking-wide truncate">
+              <p className={`text-xs font-semibold tracking-wide truncate ${isCras ? 'text-rose-100' : 'text-teal-100'}`}>
                 {displayName}
               </p>
             )}
@@ -368,11 +375,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
         </div>
 
-        {/* Patient Preferred Language (Showcases customer language selection right above Assigned Coordinator) */}
+        {/* Patient/Student Preferred Language */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Globe className="w-3 h-3 text-sky-400" /> Patient Preferred Language
+              <Globe className={`w-3 h-3 ${isCras ? 'text-rose-400' : 'text-sky-400'}`} /> {isCras ? 'Student Preferred Language' : 'Patient Preferred Language'}
             </label>
             <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-500/15 text-sky-300 border border-sky-500/30 uppercase tracking-wider">
               {currentLang.toUpperCase()}
@@ -403,47 +410,47 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           </div>
         </div>
 
-        {/* Company / Institution Affiliation */}
+        {/* Company / Institution Affiliation (Fixed / Locked to Incoming WhatsApp Line) */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
-              <Building2 className="w-3 h-3 text-emerald-400" /> Center / Company
+              <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-400' : 'text-emerald-400'}`} /> {isCras ? 'Institution / College' : 'Center / Company'}
             </label>
-            <CompanyTagBadge lead={lead} size="sm" showFullName={false} />
+            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${
+              isCras ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+            }`}>
+              <Lock className="w-2.5 h-2.5" /> {isCras ? '(CRAS) Locked Line' : '(RWC) Locked Line'}
+            </span>
           </div>
-          <div className="grid grid-cols-2 gap-1.5">
-            <button
-              type="button"
-              onClick={() => updateLeadCompany(lead.id, 'RWC')}
-              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                (lead.company || 'RWC') === 'RWC'
-                  ? 'bg-[#008000]/25 border-[#008000] text-emerald-300 shadow-sm ring-1 ring-[#008000]/40'
-                  : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-[#008000]" />
-              <span>(RWC) Royal Wellness</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => updateLeadCompany(lead.id, 'CRAS')}
-              className={`py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 border ${
-                lead.company === 'CRAS'
-                  ? 'bg-[#800000]/30 border-[#800000] text-rose-300 shadow-sm ring-1 ring-[#800000]/40'
-                  : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
-              }`}
-            >
-              <span className="w-2 h-2 rounded-full bg-[#800000]" />
-              <span>(CRAS) Royal Aesthetic</span>
-            </button>
-          </div>
+
+          {isCras ? (
+            <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#800000]/25 border-[#800000]/70 text-rose-300 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#800000] shadow-sm" />
+                <span>(CRAS) College of Royal Aesthetic Studies</span>
+              </div>
+              <span className="text-[10px] font-mono font-medium text-rose-400/90 bg-rose-950/70 px-2 py-0.5 rounded border border-rose-800/60">
+                +94 77 340 5330
+              </span>
+            </div>
+          ) : (
+            <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#008000]/20 border-[#008000]/70 text-emerald-300 shadow-sm">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-[#008000] shadow-sm" />
+                <span>(RWC) Royal Wellness Center</span>
+              </div>
+              <span className="text-[10px] font-mono font-medium text-emerald-400/90 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/60">
+                +94 77 733 4455
+              </span>
+            </div>
+          )}
         </div>
 
-        {/* Coordinator / Education Counsellor Assignment */}
+        {/* Coordinator / Education Counsellor Assignment (Filtered Strictly by Company) */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Assigned {lead.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'}
+              Assigned {isCras ? 'Education Counsellor' : 'Patient Coordinator'}
             </label>
             {isLeadsOfficer && lead.assignedTo && (
               <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
@@ -455,21 +462,22 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           {canModifyAssignment(lead) ? (
             <div className="relative">
               <select
-                value={coordinators.some(c => c.id === lead.assignedTo) ? (lead.assignedTo || '') : ''}
+                value={relevantCoordinators.some(c => c.id === lead.assignedTo) ? (lead.assignedTo || '') : ''}
                 onChange={(e) => assignLead(lead.id, e.target.value)}
-                className="w-full bg-[#111b21] border border-slate-700/80 hover:border-teal-500 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-teal-300 outline-none transition-colors cursor-pointer appearance-none"
+                className={`w-full bg-[#111b21] border rounded-lg px-2.5 py-1.5 text-xs font-semibold outline-none transition-colors cursor-pointer appearance-none ${
+                  isCras 
+                    ? 'border-rose-500/40 hover:border-rose-400 text-rose-300' 
+                    : 'border-slate-700/80 hover:border-teal-500 text-teal-300'
+                }`}
               >
                 <option value="">
-                  {coordinators.length > 0 
-                    ? (lead.company === 'CRAS' ? '-- Assign to Education Counsellor --' : '-- Assign to Patient Coordinator --')
-                    : '-- No Staff Added --'}
+                  {relevantCoordinators.length > 0 
+                    ? (isCras ? '-- Assign to Education Counsellor --' : '-- Assign to Patient Coordinator --')
+                    : (isCras ? '-- No Education Counsellors Found --' : '-- No Patient Coordinators Found --')}
                 </option>
-                {coordinators
-                  .filter(c => !lead.company || c.company === lead.company)
-                  .concat(coordinators.filter(c => lead.company && c.company !== lead.company))
-                  .map((c) => (
+                {relevantCoordinators.map((c) => (
                   <option key={c.id} value={c.id} className="bg-slate-900">
-                    {c.fullName} ({c.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
+                    {c.fullName} ({isCras ? 'Education Counsellor' : 'Patient Coordinator'})
                   </option>
                 ))}
               </select>
@@ -478,9 +486,9 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           ) : (
             <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-[#111b21] border border-slate-800 text-xs">
               <div className="flex items-center gap-2">
-                <UserCheck className="w-3.5 h-3.5 text-teal-400" />
+                <UserCheck className={`w-3.5 h-3.5 ${isCras ? 'text-rose-400' : 'text-teal-400'}`} />
                 <span className="text-slate-200 font-medium">
-                  {coordinator ? coordinator.fullName : 'Unassigned'}
+                  {coordinator ? `${coordinator.fullName} (${isCras ? 'Education Counsellor' : 'Patient Coordinator'})` : 'Unassigned'}
                 </span>
               </div>
               {lead.assignedTo && isLeadsOfficer && (
@@ -637,13 +645,15 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
         {/* Lead Stage Selector */}
         <div className="space-y-1">
           <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-            Lead Stage
+            {isCras ? 'Applicant / Inquiry Stage' : 'Lead Stage'}
           </label>
           <div className="relative">
             <select
               value={lead.stage}
               onChange={(e) => updateLeadStage(lead.id, e.target.value as LeadStage)}
-              className="w-full bg-[#111b21] border border-slate-700/80 hover:border-teal-500 rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-100 outline-none transition-colors cursor-pointer appearance-none"
+              className={`w-full bg-[#111b21] border rounded-lg px-2.5 py-1.5 text-xs font-semibold text-slate-100 outline-none transition-colors cursor-pointer appearance-none ${
+                isCras ? 'border-rose-500/40 hover:border-rose-400' : 'border-slate-700/80 hover:border-teal-500'
+              }`}
             >
               <option value="new">🟡 New Inquiry</option>
               <option value="assigned">🔵 Assigned</option>
@@ -651,7 +661,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <option value="potential">🟣 Potential</option>
               <option value="under_discussion">💬 Under Discussion</option>
               <option value="not_relevant">⚪ Not Relevant Inquiry</option>
-              <option value="converted">🎉 Converted (Closed Won)</option>
+              <option value="converted">🎉 {isCras ? 'Enrolled (Closed Won)' : 'Converted (Closed Won)'}</option>
               <option value="lost">🔴 Lost</option>
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />

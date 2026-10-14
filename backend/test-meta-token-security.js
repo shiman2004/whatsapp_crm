@@ -5,9 +5,11 @@ import path from 'path';
 
 console.log('🔒 Starting Meta Graph API Token Security Test Suite...\n');
 
-// 1. Static Scan: Verify no hardcoded Meta access token in backend/server.js
-const serverJsPath = path.resolve('backend/server.js');
-assert(fs.existsSync(serverJsPath), 'backend/server.js must exist');
+// 1. Static Scan: Verify no hardcoded Meta access token in server.js
+const serverJsPath = fs.existsSync('backend/server.js')
+  ? path.resolve('backend/server.js')
+  : path.resolve('server.js');
+assert(fs.existsSync(serverJsPath), 'backend/server.js or server.js must exist');
 const serverJsContent = fs.readFileSync(serverJsPath, 'utf8');
 
 // Regex to detect Meta access tokens (EAAP... or EAA...)
@@ -22,8 +24,10 @@ assert.strictEqual(
 console.log('✅ Test 1 Passed: No hardcoded Meta live tokens (EAAP...) found in backend/server.js');
 
 // 2. Scan: Verify .env.example contains placeholder only and no real secrets
-const envExamplePath = path.resolve('backend/.env.example');
-assert(fs.existsSync(envExamplePath), 'backend/.env.example must exist');
+const envExamplePath = fs.existsSync('backend/.env.example')
+  ? path.resolve('backend/.env.example')
+  : path.resolve('.env.example');
+assert(fs.existsSync(envExamplePath), 'backend/.env.example or .env.example must exist');
 const envExampleContent = fs.readFileSync(envExamplePath, 'utf8');
 
 const exampleMatches = envExampleContent.match(metaLiveTokenRegex) || [];

@@ -2289,7 +2289,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deletedAt: new Date().toISOString()
       } : m));
 
-      notify('Message Deleted 🚫', 'This message was deleted for everyone', 'success');
+      const notice = data.whatsappRevoked ? 'Deleted for everyone on WhatsApp & CRM' : 'This message was deleted for everyone';
+      notify('Message Deleted 🚫', notice, 'success');
       return { success: true };
     } catch (err: any) {
       const errorMsg = err.message || 'Network error deleting message';

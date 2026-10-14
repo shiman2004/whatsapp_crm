@@ -187,4 +187,12 @@ assert.strictEqual(adminPayload.isDeleted, true);
 assert.strictEqual(adminPayload.deletedForEveryone, true);
 console.log('✅ Pass: Super Admin receives original message content, Deleted by, Date, and Time for red display.');
 
-console.log('\n🎉 ALL 10 TESTS PASSED SUCCESSFULLY! Delete for Everyone permissions and security verified.\n');
+console.log('\n--- Test Group 4: WhatsApp Session Manager Socket State Tests ---');
+import { sessionManager } from './src/sessionManager.js';
+assert.strictEqual(typeof sessionManager.isCoordinatorConnected, 'function', 'isCoordinatorConnected must be a function on sessionManager');
+assert.strictEqual(typeof sessionManager.hasAnyConnectedSession, 'function', 'hasAnyConnectedSession must be a function on sessionManager');
+assert.strictEqual(sessionManager.isCoordinatorConnected('non-existent-coordinator'), false, 'Non-existent coordinator must return false without throwing');
+assert.strictEqual(sessionManager.hasAnyConnectedSession(), false, 'Offline session manager returns false without throwing');
+console.log('✅ Pass: SessionManager connection queries execute safely without throwing TypeErrors.');
+
+console.log('\n🎉 ALL 12 TESTS PASSED SUCCESSFULLY! Delete for Everyone permissions and security verified.\n');

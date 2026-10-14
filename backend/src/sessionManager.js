@@ -887,6 +887,24 @@ class WhatsAppSessionManager {
     const res = await sessionCtx.sock.sendMessage(targetJid, { delete: key });
     return res;
   }
+
+  /**
+   * Check if a coordinator or fallback master line has an active connected Baileys session
+   */
+  isCoordinatorConnected(coordinatorId) {
+    const sessionCtx = this.sessions.get(coordinatorId);
+    return Boolean(sessionCtx && sessionCtx.sock && sessionCtx.status === 'connected');
+  }
+
+  /**
+   * Check if any WhatsApp Baileys session is currently connected
+   */
+  hasAnyConnectedSession() {
+    for (const ctx of this.sessions.values()) {
+      if (ctx && ctx.sock && ctx.status === 'connected') return true;
+    }
+    return false;
+  }
 }
 
 export const sessionManager = new WhatsAppSessionManager();

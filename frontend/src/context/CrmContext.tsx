@@ -316,7 +316,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
-  const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => Boolean(localStorage.getItem('meta_access_token')));
+  const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => 
+    Boolean(localStorage.getItem('meta_access_token') || localStorage.getItem('rw_has_meta_config') === 'true')
+  );
   const initialLeadLoadedRef = useRef<boolean>(false);
 
   const [authToken, setAuthToken] = useState<string>(() => {
@@ -586,9 +588,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const metaData = await metaRes.json().catch(() => null);
         if (metaData && (metaData.hasToken || metaData.accessToken)) {
           setHasMetaConfig(true);
-          if (metaData.accessToken) {
-            localStorage.setItem('meta_access_token', metaData.accessToken);
-          }
+          localStorage.setItem('rw_has_meta_config', 'true');
+        } else {
+          setHasMetaConfig(false);
+          localStorage.setItem('rw_has_meta_config', 'false');
         }
       }
 
@@ -797,9 +800,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       .then(data => {
         if (data.hasToken || data.accessToken) {
           setHasMetaConfig(true);
+          localStorage.setItem('rw_has_meta_config', 'true');
+        } else {
+          setHasMetaConfig(false);
+          localStorage.setItem('rw_has_meta_config', 'false');
         }
-        if (data.accessToken) {
-          localStorage.setItem('meta_access_token', data.accessToken);
+        if (currentUser?.role !== 'super_admin') {
+          localStorage.removeItem('meta_access_token');
         }
       })
       .catch(() => {});
@@ -870,6 +877,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           if (data.type === 'CONNECTION_STATUS') {
             if (data.status) {
               setWhatsappStatus(data.status);
+            }
+            return;
+          }
+
+          if (data.type === 'META_CONFIG_UPDATED') {
+            const hasToken = Boolean(data.hasToken);
+            setHasMetaConfig(hasToken);
+            localStorage.setItem('rw_has_meta_config', String(hasToken));
+            if (currentUser?.role !== 'super_admin') {
+              localStorage.removeItem('meta_access_token');
             }
             return;
           }
@@ -2065,7 +2082,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Dispatch to WhatsApp bridge (Supports both linked QR session & Meta API)
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const savedToken = localStorage.getItem('meta_access_token');
+    const isSuperAdmin = currentUser?.role === 'super_admin';
+    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
     
     if ((recipientPhone || recipientWaId) && !leadId.startsWith('lead-sim')) {
       fetch(`${API_BASE_URL}/api/send-message`, {
@@ -2322,7 +2340,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const savedToken = localStorage.getItem('meta_access_token');
+    const isSuperAdmin = currentUser?.role === 'super_admin';
+    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/send-template`, {
@@ -2399,7 +2418,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const savedToken = localStorage.getItem('meta_access_token');
+    const isSuperAdmin = currentUser?.role === 'super_admin';
+    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/send-message`, {

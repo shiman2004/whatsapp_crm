@@ -291,22 +291,10 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
 
       if (hasFullVisibility || isTargetCoordinator) {
         let clientData = data;
-        // Strictly sanitize sender audit metadata and deleted message content for non-Super-Admins
-        if (!isSuperAdmin) {
-          if (isMessageEvent) {
-            const { senderName, senderRole, messageSource, sentAt, audit, ...stripped } = clientData;
-            clientData = stripped;
-          }
-          if (data.type === 'MESSAGE_DELETED_FOR_EVERYONE' || data.isDeleted) {
-            const { originalContent, deletedByName, deletedByRole, deletedByUserId, deletedAt, ...stripped } = clientData;
-            clientData = {
-              ...stripped,
-              content: 'This message was deleted.',
-              mediaUrl: null,
-              isDeleted: true,
-              deletedForEveryone: true
-            };
-          }
+        // Strictly sanitize sender audit metadata for non-Super-Admins
+        if (!isSuperAdmin && isMessageEvent) {
+          const { senderName, senderRole, messageSource, sentAt, audit, ...stripped } = data;
+          clientData = stripped;
         }
         client.res.write(`data: ${JSON.stringify(clientData)}\n\n`);
       }
@@ -2207,21 +2195,11 @@ const server = http.createServer(async (req, res) => {
           orderBy: { timestamp: 'asc' },
         });
 
-        // Backend RBAC: Never expose audit metadata or deleted message content through normal staff API responses
+        // Backend RBAC: Never expose audit metadata through normal staff API responses
         const sanitizedMessages = isSuperAdmin
           ? messages
           : messages.map(m => {
               const { senderName, senderRole, messageSource, sentAt, ...clean } = m;
-              if (clean.isDeleted || clean.deletedForEveryone) {
-                const { originalContent, deletedByName, deletedByRole, deletedByUserId, deletedAt, ...deletedClean } = clean;
-                return {
-                  ...deletedClean,
-                  content: 'This message was deleted.',
-                  mediaUrl: null,
-                  isDeleted: true,
-                  deletedForEveryone: true
-                };
-              }
               return clean;
             });
 
@@ -2276,21 +2254,11 @@ const server = http.createServer(async (req, res) => {
             ? inboundMsgs[inboundMsgs.length - 1].timestamp
             : (l.lastCustomerMessageAt ? l.lastCustomerMessageAt : null);
 
-          // Backend RBAC: Never expose audit metadata or deleted message content through normal staff API responses
+          // Backend RBAC: Never expose audit metadata through normal staff API responses
           const cleanedMessages = isSuperAdmin
             ? (l.messages || [])
             : (l.messages || []).map(m => {
                 const { senderName, senderRole, messageSource, sentAt, ...clean } = m;
-                if (clean.isDeleted || clean.deletedForEveryone) {
-                  const { originalContent, deletedByName, deletedByRole, deletedByUserId, deletedAt, ...deletedClean } = clean;
-                  return {
-                    ...deletedClean,
-                    content: 'This message was deleted.',
-                    mediaUrl: null,
-                    isDeleted: true,
-                    deletedForEveryone: true
-                  };
-                }
                 return clean;
               });
 
@@ -3403,182 +3371,6 @@ const server = http.createServer(async (req, res) => {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true, message: 'Chat messages cleared successfully.' }));
       } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
-
-  // 10b5c. REST: Delete Message for Everyone (WhatsApp Baileys & Supabase RBAC)
-  if (req.method === 'POST' && pathname === '/api/messages/delete-for-everyone') {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const { messageId } = payload;
-        if (!messageId) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'messageId is required' }));
-          return;
-        }
-
-        const prisma = getPrisma();
-        if (!prisma || !getDbStatus()) {
-          res.writeHead(503, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Database service is currently unavailable.' }));
-          return;
-        }
-
-        const msg = await prisma.message.findUnique({
-          where: { id: messageId },
-          include: { lead: true, customer: true }
-        });
-
-        if (!msg) {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Message not found' }));
-          return;
-        }
-
-        if (msg.isDeleted || msg.deletedForEveryone) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Message has already been deleted.' }));
-          return;
-        }
-
-        // Only outbound messages can be deleted by staff
-        if (msg.direction !== 'outbound') {
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Forbidden: Only outbound messages can be deleted for everyone.' }));
-          return;
-        }
-
-        // Ownership enforcement: Staff can delete ONLY their own messages. Super Admin can also delete.
-        const isAuthor = (msg.coordinatorId && msg.coordinatorId === authUser.id) ||
-                         (msg.senderId && msg.senderId === authUser.id) ||
-                         (msg.senderName && authUser.fullName && msg.senderName.trim().toLowerCase() === authUser.fullName.trim().toLowerCase());
-        const isSuperAdmin = authUser.role === 'super_admin';
-
-        if (!isAuthor && !isSuperAdmin) {
-          res.writeHead(403, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Forbidden: Staff can delete only their own messages.' }));
-          return;
-        }
-
-        // WhatsApp integration check:
-        // If Baileys session is active, revoke the message directly on WhatsApp.
-        // If Meta Cloud API is used or Baileys is offline, proceed with CRM-wide deletion for everyone.
-        const targetCoordinatorId = msg.coordinatorId || msg.lead?.assignedTo || authUser.id || 'user-admin-1';
-        const recipientPhone = msg.customer?.phone || msg.lead?.phone || msg.customer?.whatsappId || msg.lead?.whatsappId;
-
-        const hasBaileys = (typeof sessionManager.isCoordinatorConnected === 'function' &&
-                           (sessionManager.isCoordinatorConnected(targetCoordinatorId) || sessionManager.isCoordinatorConnected('user-admin-1'))) || false;
-
-        let whatsappRevoked = false;
-        let whatsappNotice = null;
-
-        if (hasBaileys) {
-          try {
-            await sessionManager.deleteMessageForEveryone(targetCoordinatorId, {
-              messageId: msg.id,
-              to: recipientPhone,
-              whatsappId: msg.customer?.whatsappId || msg.lead?.whatsappId
-            });
-            whatsappRevoked = true;
-          } catch (waErr) {
-            console.warn('⚠️ [WhatsApp Revoke Notice]:', waErr.message);
-            whatsappNotice = waErr.message;
-          }
-        }
-
-        // Update database securely in Supabase PostgreSQL
-        const now = new Date();
-        const originalContent = msg.content;
-        const deletedByName = authUser.fullName || authUser.email || 'Staff';
-        const deletedByRole = authUser.role;
-        const deletedByUserId = authUser.id;
-
-        await prisma.message.update({
-          where: { id: messageId },
-          data: {
-            isDeleted: true,
-            deletedForEveryone: true,
-            originalContent: originalContent,
-            content: 'This message was deleted.',
-            mediaUrl: null,
-            deletedByUserId,
-            deletedByName,
-            deletedByRole,
-            deletedAt: now
-          }
-        });
-
-        // Upsert messageAudit record
-        await prisma.messageAudit.upsert({
-          where: { messageId },
-          update: {
-            isDeleted: true,
-            deletedForEveryone: true,
-            originalContent,
-            deletedByUserId,
-            deletedByName,
-            deletedByRole,
-            deletedAt: now
-          },
-          create: {
-            messageId,
-            leadId: msg.leadId,
-            customerId: msg.customerId,
-            senderId: msg.coordinatorId || authUser.id,
-            senderName: msg.senderName || deletedByName,
-            senderRole: msg.senderRole || deletedByRole,
-            messageSource: msg.messageSource || 'CRM User',
-            deliveryStatus: 'deleted',
-            sentAt: msg.sentAt || msg.timestamp || now,
-            isDeleted: true,
-            deletedForEveryone: true,
-            originalContent,
-            deletedByUserId,
-            deletedByName,
-            deletedByRole,
-            deletedAt: now
-          }
-        }).catch(e => console.warn('[MessageAudit Upsert Warning]:', e.message));
-
-        // Real-time SSE dispatch to all connected clients
-        broadcastScopedSSE(msg.coordinatorId, {
-          type: 'MESSAGE_DELETED_FOR_EVERYONE',
-          messageId: msg.id,
-          leadId: msg.leadId,
-          customerId: msg.customerId,
-          isDeleted: true,
-          deletedForEveryone: true,
-          content: 'This message was deleted.',
-          mediaUrl: null,
-          originalContent,
-          deletedByName,
-          deletedByRole,
-          deletedByUserId,
-          deletedAt: now.toISOString()
-        });
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          success: true,
-          message: 'Message deleted for everyone successfully.',
-          whatsappRevoked,
-          notice: whatsappNotice,
-          data: {
-            messageId: msg.id,
-            isDeleted: true,
-            deletedForEveryone: true,
-            whatsappRevoked
-          }
-        }));
-      } catch (err) {
-        console.error('❌ [Delete For Everyone Error]:', err);
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
       }

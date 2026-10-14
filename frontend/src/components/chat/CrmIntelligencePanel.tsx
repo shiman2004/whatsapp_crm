@@ -89,6 +89,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isCras = lead.company === 'CRAS';
+  const canChangeCompany = isSuperAdmin || isLeadsOfficer;
 
   const coordinator = users.find(u => u.id === lead.assignedTo);
   const coordinators = users.filter(u => u.role === 'coordinator');
@@ -410,39 +411,103 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           </div>
         </div>
 
-        {/* Company / Institution Affiliation (Fixed / Locked to Incoming WhatsApp Line) */}
-        <div className="space-y-1">
+        {/* Company / Institution Affiliation (Switchable for Super Admin & Leads Officer) */}
+        <div className="space-y-1.5">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
               <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-400' : 'text-emerald-400'}`} /> {isCras ? 'Institution / College' : 'Center / Company'}
             </label>
-            <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${
-              isCras ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
-            }`}>
-              <Lock className="w-2.5 h-2.5" /> {isCras ? '(CRAS) Locked Line' : '(RWC) Locked Line'}
-            </span>
+            {canChangeCompany ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border bg-amber-500/15 text-amber-300 border-amber-500/30">
+                <Edit2 className="w-2.5 h-2.5" /> Change Company
+              </span>
+            ) : (
+              <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${
+                isCras ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+              }`}>
+                <Lock className="w-2.5 h-2.5" /> {isCras ? '(CRAS) Locked Line' : '(RWC) Locked Line'}
+              </span>
+            )}
           </div>
 
-          {isCras ? (
-            <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#800000]/25 border-[#800000]/70 text-rose-300 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#800000] shadow-sm" />
-                <span>(CRAS) College of Royal Aesthetic Studies</span>
-              </div>
-              <span className="text-[10px] font-mono font-medium text-rose-400/90 bg-rose-950/70 px-2 py-0.5 rounded border border-rose-800/60">
-                +94 77 340 5330
-              </span>
+          {canChangeCompany ? (
+            /* Interactive Company Switcher for Super Admin and Leads Officer */
+            <div className="grid grid-cols-2 gap-2">
+              {/* RWC Selection Card */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (lead.company !== 'RWC') {
+                    updateLeadCompany(lead.id, 'RWC');
+                  }
+                }}
+                className={`py-2 px-2.5 rounded-xl text-left border transition-all flex flex-col gap-1 ${
+                  !isCras
+                    ? 'bg-[#008000]/25 border-[#008000] text-emerald-200 ring-2 ring-emerald-500/40 shadow-md'
+                    : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold flex items-center gap-1.5 text-emerald-300">
+                    <span className="w-2 h-2 rounded-full bg-[#008000]" />
+                    (RWC) Wellness
+                  </span>
+                  {!isCras && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                </div>
+                <span className="text-[9.5px] font-mono text-emerald-400/80">
+                  +94 77 733 4455
+                </span>
+              </button>
+
+              {/* CRAS Selection Card */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (lead.company !== 'CRAS') {
+                    updateLeadCompany(lead.id, 'CRAS');
+                  }
+                }}
+                className={`py-2 px-2.5 rounded-xl text-left border transition-all flex flex-col gap-1 ${
+                  isCras
+                    ? 'bg-[#800000]/30 border-[#800000] text-rose-200 ring-2 ring-rose-500/40 shadow-md'
+                    : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-extrabold flex items-center gap-1.5 text-rose-300">
+                    <span className="w-2 h-2 rounded-full bg-[#800000]" />
+                    (CRAS) College
+                  </span>
+                  {isCras && <Check className="w-3.5 h-3.5 text-rose-400" />}
+                </div>
+                <span className="text-[9.5px] font-mono text-rose-400/80">
+                  +94 77 340 5330
+                </span>
+              </button>
             </div>
           ) : (
-            <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#008000]/20 border-[#008000]/70 text-emerald-300 shadow-sm">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-[#008000] shadow-sm" />
-                <span>(RWC) Royal Wellness Center</span>
+            /* Read-only Locked View for Coordinators */
+            isCras ? (
+              <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#800000]/25 border-[#800000]/70 text-rose-300 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#800000] shadow-sm" />
+                  <span>(CRAS) College of Royal Aesthetic Studies</span>
+                </div>
+                <span className="text-[10px] font-mono font-medium text-rose-400/90 bg-rose-950/70 px-2 py-0.5 rounded border border-rose-800/60">
+                  +94 77 340 5330
+                </span>
               </div>
-              <span className="text-[10px] font-mono font-medium text-emerald-400/90 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/60">
-                +94 77 733 4455
-              </span>
-            </div>
+            ) : (
+              <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#008000]/20 border-[#008000]/70 text-emerald-300 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#008000] shadow-sm" />
+                  <span>(RWC) Royal Wellness Center</span>
+                </div>
+                <span className="text-[10px] font-mono font-medium text-emerald-400/90 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/60">
+                  +94 77 733 4455
+                </span>
+              </div>
+            )
           )}
         </div>
 

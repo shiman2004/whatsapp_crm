@@ -2247,7 +2247,15 @@ const server = http.createServer(async (req, res) => {
         });
 
         const enrichedLeads = leads.map(l => {
-          const isCras = (l.source || '').toUpperCase() === 'CRAS' || (l.whatsappSessionId || '').toUpperCase() === 'CRAS';
+          let compCode = 'RWC';
+          if (l.company) {
+            compCode = l.company.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          } else if (l.source) {
+            compCode = l.source.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          } else if (l.whatsappSessionId) {
+            compCode = l.whatsappSessionId.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          }
+          const isCras = compCode === 'CRAS';
           const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
           const inboundMsgs = (l.messages || []).filter(m => m.direction === 'inbound');
           const lastInbound = inboundMsgs.length > 0
@@ -2686,7 +2694,10 @@ const server = http.createServer(async (req, res) => {
           // Robust Lead Resolution
           let targetLead = null;
           if (leadId) {
-            targetLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+            targetLead = await prisma.lead.findUnique({ 
+              where: { id: leadId },
+              include: { assignedCoordinator: true }
+            }).catch(() => null);
           }
 
           if (!targetLead && (customerId || phone || whatsappId)) {
@@ -2700,6 +2711,7 @@ const server = http.createServer(async (req, res) => {
                   ...(cleanWaId ? [{ customer: { whatsappId: cleanWaId } }] : [])
                 ]
               },
+              include: { assignedCoordinator: true },
               orderBy: { updatedAt: 'desc' }
             }).catch(() => null);
           }
@@ -2708,12 +2720,12 @@ const server = http.createServer(async (req, res) => {
           const prevStage = targetLead?.stage || null;
 
           if (payload.assignedTo !== undefined && payload.assignedTo !== targetLead?.assignedTo) {
-            if (authUser.role !== 'super_admin') {
+            if (authUser.role !== 'super_admin' && authUser.role !== 'leads_officer') {
               res.writeHead(403, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
                 success: false,
                 errorCode: 'ASSIGNMENT_LOCKED',
-                error: 'Forbidden: Lead assignment cannot be modified via update endpoint. Only Super Admin can change assignments.'
+                error: 'Forbidden: Lead assignment cannot be modified via update endpoint. Only Super Admin and Leads Officer can change assignments.'
               }));
               return;
             }
@@ -2730,6 +2742,20 @@ const server = http.createServer(async (req, res) => {
             return;
           }
 
+          // Company change authorization: Only Super Admin and Leads Officer can change company
+          if (payload.company !== undefined || payload.source !== undefined) {
+            const isAuthorized = authUser.role === 'super_admin' || authUser.role === 'leads_officer';
+            if (!isAuthorized) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                errorCode: 'FORBIDDEN_COMPANY_CHANGE',
+                error: 'Forbidden: Only Super Admin and Leads Officer can change the company affiliation.'
+              }));
+              return;
+            }
+          }
+
           const updateData = {};
           if (treatmentId !== undefined) updateData.treatmentId = treatmentId || null;
           if (categoryId !== undefined) updateData.categoryId = categoryId || null;
@@ -2741,7 +2767,29 @@ const server = http.createServer(async (req, res) => {
           }
           if (payload.company !== undefined || payload.source !== undefined) {
             const companyCode = (payload.company || payload.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+            updateData.company = companyCode;
             updateData.source = companyCode;
+            updateData.whatsappSessionId = companyCode;
+
+            // When company changes, reset treatment/course and unassign coordinator if they belong to another company
+            const prevCompany = (targetLead?.company || targetLead?.source || targetLead?.whatsappSessionId || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+            if (prevCompany !== companyCode) {
+              updateData.treatmentId = null;
+              updateData.categoryId = null;
+              updateData.serialNumber = null;
+
+              // If coordinator belongs to opposite company, unassign so proper company staff can be assigned
+              if (targetLead?.assignedCoordinator) {
+                const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
+                if (coordComp !== companyCode) {
+                  updateData.assignedTo = null;
+                  updateData.assignedById = null;
+                  updateData.assignedByName = null;
+                  updateData.assignedAt = null;
+                  updateData.stage = 'new';
+                }
+              }
+            }
           }
           updateData.updatedAt = new Date();
 
@@ -2777,8 +2825,15 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => {});
           }
 
-          const compCode = (updated.source || updated.whatsappSessionId || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          const compConfig = COMPANIES[compCode];
+          let compCode = 'RWC';
+          if (updated.company) {
+            compCode = updated.company.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          } else if (updated.source) {
+            compCode = updated.source.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          } else if (updated.whatsappSessionId) {
+            compCode = updated.whatsappSessionId.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          }
+          const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
           const enrichedLead = {
             ...updated,
             company: compCode,

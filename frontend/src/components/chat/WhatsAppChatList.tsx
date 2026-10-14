@@ -943,40 +943,43 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
           <div className="h-px bg-slate-700/60 my-1" />
 
-          {/* Company Switcher */}
-          <div className="wa-context-item justify-between group/comp py-1.5">
-            <span className="text-[11px] text-[#8696a0]">Company:</span>
-            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-              <button
-                onClick={() => {
-                  if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'RWC');
-                  setContextMenuLeadId(null);
-                }}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
-                  (activeContextMenuLead?.company || 'RWC') === 'RWC'
-                    ? 'bg-[#008000] text-white border-[#008000]'
-                    : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
-                }`}
-              >
-                (RWC)
-              </button>
-              <button
-                onClick={() => {
-                  if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'CRAS');
-                  setContextMenuLeadId(null);
-                }}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
-                  activeContextMenuLead?.company === 'CRAS'
-                    ? 'bg-[#800000] text-white border-[#800000]'
-                    : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
-                }`}
-              >
-                (CRAS)
-              </button>
-            </div>
-          </div>
-
-          <div className="h-px bg-slate-700/60 my-1" />
+          {/* Company Switcher (Super Admin & Leads Officer ONLY) */}
+          {(isSuperAdmin || isLeadsOfficer) && (
+            <>
+              <div className="wa-context-item justify-between group/comp py-1.5">
+                <span className="text-[11px] text-[#8696a0]">Company:</span>
+                <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    onClick={() => {
+                      if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'RWC');
+                      setContextMenuLeadId(null);
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                      (activeContextMenuLead?.company || 'RWC') === 'RWC'
+                        ? 'bg-[#008000] text-white border-[#008000]'
+                        : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
+                    }`}
+                  >
+                    (RWC)
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'CRAS');
+                      setContextMenuLeadId(null);
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                      activeContextMenuLead?.company === 'CRAS'
+                        ? 'bg-[#800000] text-white border-[#800000]'
+                        : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
+                    }`}
+                  >
+                    (CRAS)
+                  </button>
+                </div>
+              </div>
+              <div className="h-px bg-slate-700/60 my-1" />
+            </>
+          )}
 
           {/* 7. Clear chat */}
           <div 

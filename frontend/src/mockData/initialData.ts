@@ -264,28 +264,22 @@ export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [
   },
   {
     id: 'tpl-rwc-si',
-    name: '🌿 Royal Wellness Center (Sinhala)',
+    name: '🌿 Royal Wellness Center (Sinhala – Meta Approved)',
     language: 'si',
     waTemplateName: 'rwc_welcome_greeting_si',
-    category: 'UTILITY',
-    body: `*🌿 Royal Wellness Center වෙතින් උණුසුම් සුබපැතුම්!*
-සාදරයෙන් පිළිගනිමු, අප හා සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි.
-මම _ජහාන් (Jahan)_, අපගේ ප්‍රතිකාර, සේවාවන් සහ වේලාවන් වෙන්කරවා ගැනීම් සම්බන්ධයෙන් ඔබට සහාය වීමට මම සතුටු වෙමි.
-💬 අද දින මම ඔබට කෙසේ සහාය විය හැකිද?`,
-    variables: [],
+    category: 'MARKETING',
+    body: `ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?`,
+    variables: ['Valued Client'],
     approved: true,
   },
   {
     id: 'tpl-rwc-ta',
-    name: '🌿 Royal Wellness Center (Tamil)',
+    name: '🌿 Royal Wellness Center (Tamil – Meta Approved)',
     language: 'ta',
     waTemplateName: 'rwc_welcome_greeting_ta',
-    category: 'UTILITY',
-    body: `*🌿 Royal Wellness Center-ன் அன்பான நல்வாழ்த்துகள்!*
-வரவேற்கிறோம், எங்களைத் தொடர்பு கொண்டதற்கு நன்றி.
-நான் _ஜஹான் (Jahan)_, எங்களின் சிகிச்சைகள், சேவைகள் மற்றும் முன்பதிவுகள் தொடர்பாக உங்களுக்கு உதவுவதில் மகிழ்ச்சியடைகிறேன்.
-💬 இன்று நான் உங்களுக்கு எவ்வாறு உதவ முடியும்?`,
-    variables: [],
+    category: 'MARKETING',
+    body: `வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?`,
+    variables: ['Valued Client'],
     approved: true,
   }
 ];

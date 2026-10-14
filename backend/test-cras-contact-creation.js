@@ -82,7 +82,6 @@ function simulateContactCreation(payload, authUser, existingDatabase = { custome
       customerId: cust.id,
       company: targetCompany,
       source: targetCompany,
-      whatsappSessionId: targetCompany,
       categoryId: resolvedCatId,
       treatmentId: resolvedTrtId,
       assignedTo: targetCoordinatorId,
@@ -98,13 +97,12 @@ function simulateContactCreation(payload, authUser, existingDatabase = { custome
   } else {
     lead.company = targetCompany;
     lead.source = targetCompany;
-    lead.whatsappSessionId = targetCompany;
     lead.categoryId = resolvedCatId;
     lead.treatmentId = resolvedTrtId;
     lead.assignedTo = targetCoordinatorId !== undefined ? targetCoordinatorId : lead.assignedTo;
-    lead.companyTag = compConfig.tag;
-    lead.companyColor = compConfig.colorHex;
-    lead.companyPhoneNumberId = compConfig.phoneId;
+    lead.companyTag = compConfig.tag,
+    lead.companyColor = compConfig.colorHex,
+    lead.companyPhoneNumberId = compConfig.phoneId,
     lead.companyPhoneNumber = compConfig.phone;
   }
 
@@ -139,7 +137,6 @@ const crasResult = simulateContactCreation({
 
 assert.strictEqual(crasResult.lead.company, 'CRAS', 'CRAS lead must have company = CRAS');
 assert.strictEqual(crasResult.lead.source, 'CRAS', 'CRAS lead must have source = CRAS');
-assert.strictEqual(crasResult.lead.whatsappSessionId, 'CRAS', 'CRAS lead must have whatsappSessionId = CRAS');
 assert.strictEqual(crasResult.lead.categoryId, 'cat-cras-courses', 'CRAS category must default to CRAS Academic Programs');
 assert.strictEqual(crasResult.lead.treatmentId, 'crs-adi', 'CRAS treatment must default to CRAS course');
 assert.strictEqual(crasResult.dispatchedPhoneId, '1378201582041705', 'CRAS dispatch must use CRAS Meta Phone Number ID');

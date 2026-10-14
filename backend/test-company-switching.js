@@ -25,8 +25,7 @@ function switchLeadCompany(targetLead, newCompany, authUser, allUsers = []) {
   const updateData = {
     ...targetLead,
     company: newCompany,
-    source: newCompany,
-    whatsappSessionId: newCompany
+    source: newCompany
   };
 
   if (isChangingCompany) {
@@ -105,8 +104,7 @@ const updatedLead = crasToRwcResult.lead;
 // 2.1 Company and source updated to RWC
 assert.strictEqual(updatedLead.company, 'RWC');
 assert.strictEqual(updatedLead.source, 'RWC');
-assert.strictEqual(updatedLead.whatsappSessionId, 'RWC');
-console.log('✅ Pass 2.1: Lead company, source, and session updated to RWC.');
+console.log('✅ Pass 2.1: Lead company and source updated to RWC.');
 
 // 2.2 Course type reset to null
 assert.strictEqual(updatedLead.treatmentId, null);

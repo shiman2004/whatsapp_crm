@@ -2769,7 +2769,6 @@ const server = http.createServer(async (req, res) => {
             const companyCode = (payload.company || payload.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
             updateData.company = companyCode;
             updateData.source = companyCode;
-            updateData.whatsappSessionId = companyCode;
 
             // When company changes, reset treatment/course and unassign coordinator if they belong to another company
             const prevCompany = (targetLead?.company || targetLead?.source || targetLead?.whatsappSessionId || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
@@ -3107,8 +3106,7 @@ const server = http.createServer(async (req, res) => {
               customerId: savedCustomer.id,
               OR: [
                 { company: targetCompany },
-                { source: targetCompany },
-                { whatsappSessionId: targetCompany }
+                { source: targetCompany }
               ]
             },
             orderBy: { updatedAt: 'desc' }
@@ -3135,7 +3133,6 @@ const server = http.createServer(async (req, res) => {
                 customerId: savedCustomer.id,
                 company: targetCompany,
                 source: targetCompany,
-                whatsappSessionId: targetCompany,
                 categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                 stage: leadStage,
@@ -3188,7 +3185,6 @@ const server = http.createServer(async (req, res) => {
               data: {
                 company: targetCompany,
                 source: targetCompany,
-                whatsappSessionId: targetCompany,
                 categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : savedLead.categoryId),
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : savedLead.treatmentId),
                 assignedTo: targetCoordinatorId !== undefined ? targetCoordinatorId : savedLead.assignedTo,
@@ -4421,7 +4417,6 @@ const server = http.createServer(async (req, res) => {
                               stage: 'new',
                               company: companyInfo.code,
                               source: companyInfo.code,
-                              whatsappSessionId: companyInfo.code,
                               language: 'en',
                               lastCustomerMessageAt: new Date()
                             }
@@ -4432,7 +4427,6 @@ const server = http.createServer(async (req, res) => {
                             data: {
                               company: companyInfo.code,
                               source: companyInfo.code,
-                              whatsappSessionId: companyInfo.code,
                               lastCustomerMessageAt: new Date(),
                               updatedAt: new Date()
                             }

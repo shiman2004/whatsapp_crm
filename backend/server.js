@@ -1798,7 +1798,7 @@ const server = http.createServer(async (req, res) => {
 
         if (templateName === 'cras_welcome_greeting') {
           resolvedCompany = 'CRAS';
-        } else if (templateName === 'rwc_welcome_greeting') {
+        } else if (templateName.startsWith('rwc_welcome_greeting')) {
           resolvedCompany = 'RWC';
         }
 
@@ -1815,14 +1815,19 @@ const server = http.createServer(async (req, res) => {
         const formattedTo = norm.canonical;
 
         let effectiveLanguage = language;
-        if (effectiveLanguage === 'ta' || effectiveLanguage === 'tamil') {
+        if (templateName === 'rwc_welcome_greeting_ta' || effectiveLanguage === 'ta' || effectiveLanguage === 'tamil') {
           effectiveLanguage = 'ta';
-        } else if (templateName === 'rwc_welcome_greeting' || templateName === 'cras_welcome_greeting' || effectiveLanguage === 'en' || effectiveLanguage === 'si') {
+        } else if (
+          templateName.startsWith('rwc_welcome_greeting') || 
+          templateName === 'cras_welcome_greeting' || 
+          effectiveLanguage === 'en' || 
+          effectiveLanguage === 'si'
+        ) {
           effectiveLanguage = 'en_US';
         }
 
         let effectiveParams = Array.isArray(parameters) ? [...parameters] : [];
-        if (templateName === 'rwc_welcome_greeting') {
+        if (templateName.startsWith('rwc_welcome_greeting')) {
           effectiveParams = [effectiveParams[0] || 'Valued Client'];
         } else if (templateName === 'cras_welcome_greeting') {
           effectiveParams = [effectiveParams[0] || 'Dr. Perera'];

@@ -17,6 +17,7 @@ const STAGES: LeadStage[] = [
   'potential',
   'under_discussion',
   'not_relevant',
+  'not_eligible',
   'converted',
   'lost'
 ];

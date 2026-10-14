@@ -239,6 +239,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const discussionCount = accessibleLeads.filter(l => l.stage === 'under_discussion' || (l.stage as any) === 'follow_up').length;
   const convertedCount = accessibleLeads.filter(l => l.stage === 'converted').length;
   const lostCount = accessibleLeads.filter(l => l.stage === 'lost').length;
+  const notEligibleCount = accessibleLeads.filter(l => l.stage === 'not_eligible').length;
   const archivedCount = accessibleLeads.filter(l => archivedLeadIds.has(l.id)).length;
   const rwcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && ((l.company || 'RWC') === 'RWC' || l.source?.toUpperCase() === 'RWC')).length;
   const crasCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && (l.company === 'CRAS' || l.source?.toUpperCase() === 'CRAS')).length;
@@ -288,6 +289,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     if (activeFilter === 'under_discussion' && lead.stage !== 'under_discussion' && (lead.stage as any) !== 'follow_up') return false;
     if (activeFilter === 'converted' && lead.stage !== 'converted') return false;
     if (activeFilter === 'lost' && lead.stage !== 'lost') return false;
+    if (activeFilter === 'not_eligible' && lead.stage !== 'not_eligible') return false;
 
     // Search query
     if (search.trim()) {
@@ -587,6 +589,20 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             >
               <span>Lost</span>
               <span className="text-[10px] font-mono px-1 rounded bg-red-500/20 text-red-300">{lostCount}</span>
+            </button>
+          )}
+
+          {notEligibleCount > 0 && (
+            <button
+              onClick={() => setActiveFilter('not_eligible')}
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+                activeFilter === 'not_eligible'
+                  ? 'bg-zinc-500/25 text-zinc-300 font-bold border border-zinc-500/40'
+                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+              }`}
+            >
+              <span>Not Eligible</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-zinc-500/20 text-zinc-300">{notEligibleCount}</span>
             </button>
           )}
 

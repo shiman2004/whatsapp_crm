@@ -224,8 +224,9 @@ export const INITIAL_TREATMENTS: Treatment[] = [
   { id: 'trt-led', code: 'LED', categoryId: 'cat-skin-care', name: 'LED Light Therapy', nameI18n: { en: 'LED Light Therapy', si: 'LED ආලෝක ප්‍රතිකාරය', ta: 'LED ஒளி சிகிச்சை' }, active: true },
 
   // --- CRAS ACADEMIC COURSES ---
+  { id: 'crs-fam', code: 'FAM', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Fellowship in Aesthetic Medicine', nameI18n: { en: 'Fellowship in Aesthetic Medicine', si: 'Fellowship in Aesthetic Medicine', ta: 'Fellowship in Aesthetic Medicine' }, active: true },
+  { id: 'crs-fac', code: 'FAC', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Fellowship in Aesthetic Cosmetology', nameI18n: { en: 'Fellowship in Aesthetic Cosmetology', si: 'Fellowship in Aesthetic Cosmetology', ta: 'Fellowship in Aesthetic Cosmetology' }, active: true },
   { id: 'crs-adi', code: 'ADI', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Advanced Injectables', nameI18n: { en: 'Advanced Injectables', si: 'Advanced Injectables', ta: 'Advanced Injectables' }, active: true },
-  { id: 'crs-fac', code: 'FAC', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Facial Injectables', nameI18n: { en: 'Facial Injectables', si: 'Facial Injectables', ta: 'Facial Injectables' }, active: true },
   { id: 'crs-lac', code: 'LAC', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Laser & Aesthetic Cosmetology', nameI18n: { en: 'Laser & Aesthetic Cosmetology', si: 'Laser & Aesthetic Cosmetology', ta: 'Laser & Aesthetic Cosmetology' }, active: true },
   { id: 'crs-aco', code: 'ACO', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Aesthetic Cosmetology', nameI18n: { en: 'Aesthetic Cosmetology', si: 'Aesthetic Cosmetology', ta: 'Aesthetic Cosmetology' }, active: true },
   { id: 'crs-htr', code: 'HTR', categoryId: 'cat-cras-courses', company: 'CRAS', name: 'Hair Transplantation & Restoration', nameI18n: { en: 'Hair Transplantation & Restoration', si: 'Hair Transplantation & Restoration', ta: 'Hair Transplantation & Restoration' }, active: true },

@@ -2000,6 +2000,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     // When switching company, if lead currently has a treatment/course assigned, reset so coordinator picks from the new catalog
     const shouldResetTreatment = isChangingCompany && Boolean(targetLead.treatmentId);
+    const assignedCoord = users.find(u => u.id === targetLead.assignedTo);
+    const isCrossCompanyCoord = isChangingCompany && Boolean(assignedCoord && assignedCoord.company && assignedCoord.company !== company);
 
     setLeads(prev => prev.map(l => {
       if (l.id === leadId) {
@@ -2015,6 +2017,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             treatmentId: undefined,
             categoryId: undefined,
             serialNumber: undefined
+          } : {}),
+          ...(isCrossCompanyCoord ? {
+            assignedTo: undefined,
+            assignedCoordinator: undefined,
+            assignedById: undefined,
+            assignedByName: undefined,
+            assignedAt: undefined,
+            stage: 'new' as LeadStage
           } : {}),
           updatedAt: new Date().toISOString()
         };
@@ -2037,11 +2047,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           treatmentId: null,
           categoryId: null,
           serialNumber: null
+        } : {}),
+        ...(isCrossCompanyCoord ? {
+          assignedTo: null,
+          assignedById: null,
+          assignedByName: null,
+          assignedAt: null,
+          stage: 'new'
         } : {})
       })
     }).catch(err => console.error('Failed to sync company update:', err));
 
-    notify('Company Updated', `Contact assigned to ${compConfig.name} ${compConfig.tag}`, 'success');
+    notify('Company Updated', `Inquiry assigned to ${compConfig.name} (${compConfig.tag})`, 'success');
   };
 
   // Add internal note

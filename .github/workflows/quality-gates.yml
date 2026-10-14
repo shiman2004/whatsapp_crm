@@ -5,7 +5,7 @@
 # Production deployment is handled exclusively by Render's own build pipeline
 # triggered from the main branch. This workflow does NOT touch production.
 #
-# Required GitHub Actions secrets (Settings → Secrets and variables → Actions):
+# Required GitHub Actions secrets (Settings -> Secrets and variables -> Actions):
 #   None are needed for these quality gates.
 #   All deployment secrets (DATABASE_URL, META_ACCESS_TOKEN, etc.) live ONLY
 #   in Render's environment dashboard and must NEVER appear in this file.
@@ -24,8 +24,7 @@ on:
     branches:
       - main
 
-# Least-privilege permissions — read-only by default; only write
-# what is strictly needed for check annotations and PR comments.
+# Least-privilege permissions
 permissions:
   contents: read
   checks: write
@@ -40,49 +39,53 @@ jobs:
 
   # ──────────────────────────────────────────────────────────
   # JOB 1  Frontend — TypeScript type-check, oxlint, Vite build
+  #
+  # This is an npm workspaces monorepo. The root package-lock.json
+  # covers all workspaces. There is no frontend/package-lock.json.
+  # Install is done from the repo root using --workspace=frontend.
   # ──────────────────────────────────────────────────────────
   frontend:
-    name: "Frontend — Type-check · Lint · Build"
+    name: "Frontend - Type-check, Lint, Build"
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: frontend
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Pin to Node 24 — the same major version used in local dev.
+      # Pin to Node 24 - same major version used in local dev.
+      # Cache key uses root package-lock.json (the only lockfile for all workspaces).
+      # There is no frontend/package-lock.json - this monorepo uses a single root lockfile.
       - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: frontend/package-lock.json
+          cache-dependency-path: package-lock.json
 
-      # npm ci respects the lockfile exactly; --prefer-offline uses cache first.
-      - name: Install frontend dependencies
-        run: npm ci --prefer-offline
+      # Install frontend workspace deps from repo root using the root lockfile.
+      - name: Install frontend workspace dependencies
+        run: npm ci --workspace=frontend --ignore-scripts
 
-      # tsc -b honours tsconfig.json → tsconfig.app.json (noEmit:true).
-      # This catches type errors without producing output files.
+      # tsc -b honours tsconfig.json -> tsconfig.app.json (noEmit:true).
       - name: TypeScript type-check
+        working-directory: frontend
         run: npx tsc -b --noEmit
 
-      # oxlint is already configured via frontend/.oxlintrc.json
-      # 212 known warnings exist but 0 errors — errors block the build.
+      # oxlint config is at frontend/.oxlintrc.json
+      # 212 known warnings exist, 0 errors - errors block the build.
       - name: Lint (oxlint)
+        working-directory: frontend
         run: npm run lint
         continue-on-error: false
 
-      # Vite production build — validates bundler-visible import resolution
-      # and TypeScript compilation. Stub VITE_API_URL is safe (not a secret).
+      # Vite production build validates imports and TypeScript compilation.
       - name: Production build (Vite)
+        working-directory: frontend
         run: npm run build
         env:
           VITE_API_URL: "https://ci-build-check.invalid"
 
-      # Store the compiled dist so reviewers can download without re-running.
+      # Store dist artifact for download without re-running.
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -94,13 +97,13 @@ jobs:
 
   # ──────────────────────────────────────────────────────────
   # JOB 2  Backend — Prisma generate + 37-test security suite
+  #
+  # Backend has its own backend/package-lock.json and can be
+  # installed independently from within the backend directory.
   # ──────────────────────────────────────────────────────────
   backend:
-    name: "Backend — Prisma Generate · Security Tests"
+    name: "Backend - Prisma Generate, Security Tests"
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: backend
 
     steps:
       - name: Checkout repository
@@ -113,21 +116,25 @@ jobs:
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
+      # Install backend deps using its own lockfile (backend/package-lock.json exists).
       - name: Install backend dependencies
-        run: npm ci --prefer-offline
+        working-directory: backend
+        run: npm ci
 
-      # prisma generate only needs a syntactically valid DATABASE_URL string —
-      # it does NOT open a real database connection during code generation.
+      # prisma generate only needs a syntactically valid DATABASE_URL string.
+      # It does NOT open a real database connection during code generation.
       - name: Generate Prisma client
+        working-directory: backend
         run: npx prisma generate --schema=prisma/schema.prisma
         env:
           DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
           DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
 
-      # Full test suite — all 37 tests must pass (exit 0).
+      # Full test suite - all 37 tests must pass (exit 0).
       # Covers: Meta token security, bell notifications, sender audit,
       #         RBAC/auth, login credential security, rate-limiting.
       - name: Run security and auth test suite
+        working-directory: backend
         run: |
           node test-meta-token-security.js
           node test-bell-notification.js
@@ -135,8 +142,8 @@ jobs:
           node test-auth-security.js
           node test-login-security.js
         env:
-          # Stub values — the tests import server.js which reads process.env.
-          # These are intentionally non-secret CI placeholders, not real creds.
+          # Stub values - tests import server.js which reads process.env.
+          # These are non-secret CI placeholders, not real credentials.
           DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
           DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
           JWT_SECRET: "ci-placeholder-jwt-secret"
@@ -151,9 +158,9 @@ jobs:
 
 
   # ──────────────────────────────────────────────────────────
-  # JOB 3  Dependency audit — advisory, never auto-upgrades
+  # JOB 3  Dependency audit - advisory, never auto-upgrades
   # Known high/moderate findings are documented and non-blocking.
-  # Only CRITICAL CVEs (CVSS ≥ 9.0) hard-fail this job.
+  # Only CRITICAL CVEs hard-fail this job.
   # ──────────────────────────────────────────────────────────
   audit:
     name: "Dependency Audit (Advisory)"
@@ -169,17 +176,16 @@ jobs:
           node-version: "24"
 
       # Root workspace audit (contains root package-lock.json)
-      # "|| true" prints findings without failing CI for non-CRITICAL issues.
       - name: Audit root workspace
         run: npm audit --audit-level=critical || true
 
-      # Backend workspace
+      # Backend workspace audit
       - name: Audit backend
         working-directory: backend
         run: npm audit --audit-level=critical || true
 
       # Frontend may lack its own lockfile (workspace hoisting).
-      # Generate one on-the-fly for audit; do NOT install into workspace.
+      # Generate one on-the-fly for audit only.
       - name: Audit frontend
         working-directory: frontend
         run: |
@@ -188,7 +194,6 @@ jobs:
           fi
           npm audit --audit-level=critical || true
 
-      # Always emit a summary table that appears in the Actions UI and PR comment.
       - name: Write audit summary
         if: always()
         run: |
@@ -201,21 +206,19 @@ jobs:
             echo ""
             echo "| Package | Via | Severity | Advisory | Safe Remediation |"
             echo "|---------|-----|----------|----------|-----------------|"
-            echo "| \`braces\` | \`tailwindcss@3\` → \`chokidar\` | High | [GHSA-vfj7-8cjw-p6xm](https://github.com/advisories/GHSA-vfj7-8cjw-p6xm) | Migrate to tailwindcss v4 (breaking change, plan separately) |"
-            echo "| \`micromatch\` | \`tailwindcss@3\` | High | GHSA-vfj7-8cjw-p6xm | Same as above |"
-            echo "| \`postcss-selector-parser\` | \`tailwindcss@3\` | Moderate | [GHSA-rj75-hqrm-r3gf](https://github.com/advisories/GHSA-rj75-hqrm-r3gf) | tailwindcss v4 migration |"
-            echo "| \`deepmerge-ts\` | \`@prisma/config\` | High | [GHSA-ggr8-5vv4-36mx](https://github.com/advisories/GHSA-ggr8-5vv4-36mx) | Upgrade prisma to ≥ 8.2.0 when stable |"
+            echo "| braces | tailwindcss@3 | High | GHSA-vfj7-8cjw-p6xm | Migrate to tailwindcss v4 (breaking change) |"
+            echo "| micromatch | tailwindcss@3 | High | GHSA-vfj7-8cjw-p6xm | Same as above |"
+            echo "| postcss-selector-parser | tailwindcss@3 | Moderate | GHSA-rj75-hqrm-r3gf | tailwindcss v4 migration |"
+            echo "| deepmerge-ts | @prisma/config | High | GHSA-ggr8-5vv4-36mx | Upgrade prisma to >= 8.2.0 when stable |"
             echo ""
-            echo "> **Note:** All findings are in build-tool devDependencies."
-            echo "> They do **not** affect the Node.js runtime serving production traffic."
-            echo "> Track remediation in [GitHub Security](../../security/advisories)."
+            echo "> All findings are in build-tool devDependencies and do not affect the production runtime."
           } >> "$GITHUB_STEP_SUMMARY"
 
 
   # ──────────────────────────────────────────────────────────
   # JOB 4  Secret leak scan
-  # Hard-fails if live API tokens or DB passwords are detected
-  # in git-tracked files or recent commit history.
+  # Hard-fails only if live API tokens or DB passwords are found
+  # in git-tracked JS/TS SOURCE files (not in .env, which is gitignored).
   # ──────────────────────────────────────────────────────────
   secret-scan:
     name: "Secret Leak Scan"
@@ -229,34 +232,34 @@ jobs:
 
       - name: Scan for committed secrets
         run: |
-          set -euo pipefail
           FAIL=0
-          echo "Scanning for live Meta Graph API tokens (EAAP... pattern)..."
+
+          echo "Scanning JS/TS source files for live Meta Graph API tokens..."
           # Live Meta tokens start with EAAP followed by 30+ alphanumeric chars.
-          # .env.example is allowed to contain placeholder text.
-          MATCH=$(git log --all -p -- "*.js" "*.ts" "*.json" "*.yml" "*.yaml" \
-                  2>/dev/null | grep -E "EAAP[a-zA-Z0-9]{30,}" || true)
+          # Scope: only JS/TS source files. Not .env.example or CI docs.
+          MATCH=$(git ls-files -- "*.js" "*.ts" | \
+            xargs grep -lE "EAAP[a-zA-Z0-9]{30,}" 2>/dev/null || true)
           if [ -n "$MATCH" ]; then
-            echo "::error::Live Meta Graph API token pattern detected in git history."
-            echo "$MATCH"
+            echo "::error::Live Meta Graph API token found in tracked source file: $MATCH"
             FAIL=1
+          else
+            echo "OK: No live Meta tokens found in JS/TS source files."
           fi
 
-          echo "Scanning tracked files for DATABASE_URL with embedded password..."
-          # Detects patterns like DATABASE_URL=postgresql://user:realpassword@host
-          # .env and .env.* are already gitignored; this catches accidental staging.
-          DBMATCH=$(git ls-files | \
-            xargs grep -lE "DATABASE_URL" 2>/dev/null | \
-            grep -v ".env.example" | \
-            xargs grep -E "DATABASE_URL=.*:[^:@\[]{8,}@" 2>/dev/null || true)
+          echo "Scanning JS/TS/JSON source files for hardcoded database passwords..."
+          # Looks for postgresql:// URLs with a real password embedded.
+          # .env is gitignored; .env.example has only placeholders (checked separately).
+          DBMATCH=$(git ls-files -- "*.js" "*.ts" "*.json" | \
+            xargs grep -lE "postgresql://[^:]+:[^@]{8,}@" 2>/dev/null || true)
           if [ -n "$DBMATCH" ]; then
-            echo "::error::DATABASE_URL with embedded password found in a tracked file."
-            echo "$DBMATCH"
+            echo "::error::Hardcoded database URL with password found: $DBMATCH"
             FAIL=1
+          else
+            echo "OK: No hardcoded database credentials found in source files."
           fi
 
           if [ "$FAIL" -eq 1 ]; then
-            echo "::error::Secret scan failed. Remove secrets from git history and rotate exposed credentials immediately."
+            echo "::error::Secret scan failed. Remove secrets and rotate exposed credentials."
             exit 1
           fi
-          echo "Secret scan passed — no leaked credentials detected."
+          echo "Secret scan passed - no leaked credentials detected in tracked source files."

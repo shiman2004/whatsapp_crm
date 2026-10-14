@@ -661,6 +661,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <option value="potential">🟣 Potential</option>
               <option value="under_discussion">💬 Under Discussion</option>
               <option value="not_relevant">⚪ Not Relevant Inquiry</option>
+              <option value="not_eligible">🚫 Not Eligible</option>
               <option value="converted">🎉 {isCras ? 'Enrolled (Closed Won)' : 'Converted (Closed Won)'}</option>
               <option value="lost">🔴 Lost</option>
             </select>

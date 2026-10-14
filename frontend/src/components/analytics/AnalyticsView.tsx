@@ -89,7 +89,7 @@ export const AnalyticsView: React.FC = () => {
   const totalInquiries = filteredLeads.length;
   const convertedLeads = filteredLeads.filter(l => l.stage === 'converted').length;
   const activeDiscussionLeads = filteredLeads.filter(l => l.stage === 'under_discussion' || l.stage === 'potential').length;
-  const lostLeads = filteredLeads.filter(l => l.stage === 'lost' || l.stage === 'not_relevant').length;
+  const lostLeads = filteredLeads.filter(l => l.stage === 'lost' || l.stage === 'not_relevant' || l.stage === 'not_eligible').length;
 
   const conversionRate = totalInquiries > 0 
     ? ((convertedLeads / totalInquiries) * 100).toFixed(1) 

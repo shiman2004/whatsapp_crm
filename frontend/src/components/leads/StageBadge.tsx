@@ -68,6 +68,16 @@ export const STAGE_CONFIG: Record<LeadStage, { label: string; shortLabel: string
     pillText: 'text-[#94a3b8]',
     pillBorder: 'border-[#64748b]/40'
   },
+  not_eligible: {
+    label: 'Not Eligible',
+    shortLabel: 'NOT ELIGIBLE',
+    bg: 'bg-zinc-500/15',
+    text: 'text-zinc-400',
+    border: 'border-zinc-500/30',
+    pillBg: 'bg-[#52525b]/30',
+    pillText: 'text-[#a1a1aa]',
+    pillBorder: 'border-[#71717a]/40'
+  },
   converted: {
     label: 'Converted',
     shortLabel: 'CONVERTED',

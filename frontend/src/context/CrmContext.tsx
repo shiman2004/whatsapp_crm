@@ -3355,7 +3355,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           categoryId: data.categoryId,
           treatmentId: data.treatmentId,
           language: data.language || 'en',
-          assignedTo: data.assignedTo || (isCoordinator ? currentUser.id : undefined),
+          assignedTo: data.assignedTo || (isCoordinator && (!currentUser.company || currentUser.company === (data.company || 'RWC')) ? currentUser.id : undefined),
           initialMessage: data.initialMessage,
           templateName: data.templateName,
           templateParams: data.templateParams

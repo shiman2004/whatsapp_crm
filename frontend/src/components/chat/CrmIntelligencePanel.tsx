@@ -455,7 +455,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   {!isCras && <Check className="w-3.5 h-3.5 text-emerald-400" />}
                 </div>
                 <span className="text-[9.5px] font-mono text-emerald-400/80">
-                  +94 77 733 4455
+                  +94 70 639 3353
                 </span>
               </button>
 
@@ -481,7 +481,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   {isCras && <Check className="w-3.5 h-3.5 text-rose-400" />}
                 </div>
                 <span className="text-[9.5px] font-mono text-rose-400/80">
-                  +94 77 340 5330
+                  +94 70 637 3353
                 </span>
               </button>
             </div>
@@ -494,7 +494,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   <span>(CRAS) College of Royal Aesthetic Studies</span>
                 </div>
                 <span className="text-[10px] font-mono font-medium text-rose-400/90 bg-rose-950/70 px-2 py-0.5 rounded border border-rose-800/60">
-                  +94 77 340 5330
+                  +94 70 637 3353
                 </span>
               </div>
             ) : (
@@ -504,7 +504,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   <span>(RWC) Royal Wellness Center</span>
                 </div>
                 <span className="text-[10px] font-mono font-medium text-emerald-400/90 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/60">
-                  +94 77 733 4455
+                  +94 70 639 3353
                 </span>
               </div>
             )

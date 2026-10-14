@@ -2983,37 +2983,149 @@ const server = http.createServer(async (req, res) => {
             });
           }
 
-          // 2. Resolve or create Category & Treatment
+          // 2. Resolve or create Category & Treatment based on targetCompany
           let firstCat = null;
           let firstTrt = null;
-          if (categoryId) {
-            firstCat = await prisma.treatmentCategory.findUnique({ where: { id: categoryId } }).catch(() => null);
-          }
-          if (!firstCat) {
-            firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
+
+          if (targetCompany === 'CRAS') {
+            if (categoryId) {
+              firstCat = await prisma.treatmentCategory.findFirst({
+                where: {
+                  id: categoryId,
+                  OR: [
+                    { id: 'cat-cras-courses' },
+                    { id: { contains: 'cras' } },
+                    { name: { contains: 'CRAS' } },
+                    { name: { contains: 'Course' } },
+                    { name: { contains: 'Academic' } }
+                  ]
+                }
+              }).catch(() => null);
+            }
+            if (!firstCat) {
+              firstCat = await prisma.treatmentCategory.findFirst({
+                where: {
+                  OR: [
+                    { id: 'cat-cras-courses' },
+                    { id: { contains: 'cras' } },
+                    { name: { contains: 'CRAS' } },
+                    { name: { contains: 'Course' } },
+                    { name: { contains: 'Academic' } }
+                  ]
+                }
+              }).catch(() => null);
+            }
+
+            if (treatmentId) {
+              firstTrt = await prisma.treatment.findFirst({
+                where: {
+                  id: treatmentId,
+                  ...(firstCat ? { categoryId: firstCat.id } : {})
+                }
+              }).catch(() => null);
+            }
+            if (!firstTrt && firstCat) {
+              firstTrt = await prisma.treatment.findFirst({ where: { categoryId: firstCat.id } }).catch(() => null);
+            }
+            if (!firstTrt) {
+              firstTrt = await prisma.treatment.findFirst({
+                where: {
+                  OR: [
+                    { id: 'crs-adi' },
+                    { id: 'crs-fam' },
+                    { id: 'crs-fac' },
+                    { name: { contains: 'Injectables' } },
+                    { name: { contains: 'Aesthetic' } }
+                  ]
+                }
+              }).catch(() => null);
+            }
+          } else {
+            // RWC Category & Treatment
+            if (categoryId) {
+              firstCat = await prisma.treatmentCategory.findFirst({
+                where: {
+                  id: categoryId,
+                  NOT: {
+                    OR: [
+                      { id: 'cat-cras-courses' },
+                      { id: { contains: 'cras' } },
+                      { name: { contains: 'CRAS' } }
+                    ]
+                  }
+                }
+              }).catch(() => null);
+            }
+            if (!firstCat) {
+              firstCat = await prisma.treatmentCategory.findFirst({
+                where: {
+                  NOT: {
+                    OR: [
+                      { id: 'cat-cras-courses' },
+                      { id: { contains: 'cras' } },
+                      { name: { contains: 'CRAS' } }
+                    ]
+                  }
+                }
+              }).catch(() => null);
+            }
+
+            if (treatmentId) {
+              firstTrt = await prisma.treatment.findFirst({
+                where: {
+                  id: treatmentId,
+                  ...(firstCat ? { categoryId: firstCat.id } : {})
+                }
+              }).catch(() => null);
+            }
+            if (!firstTrt && firstCat) {
+              firstTrt = await prisma.treatment.findFirst({ where: { categoryId: firstCat.id } }).catch(() => null);
+            }
           }
 
-          if (treatmentId) {
-            firstTrt = await prisma.treatment.findUnique({ where: { id: treatmentId } }).catch(() => null);
-          }
-          if (!firstTrt && firstCat) {
-            firstTrt = await prisma.treatment.findFirst({ where: { categoryId: firstCat.id } }).catch(() => null);
-          }
-
-          // 3. Resolve assigned coordinator (if coordinator role, assign to self; otherwise payload assignedTo or null)
+          // 3. Resolve assigned coordinator (filter by company)
           let targetCoordinatorId = null;
           if (authUser?.role === 'coordinator') {
-            targetCoordinatorId = authUser.id;
+            const coordCompany = (authUser.company || 'RWC').toUpperCase();
+            if (coordCompany === targetCompany) {
+              targetCoordinatorId = authUser.id;
+            }
           } else if (assignedTo) {
             const coord = await prisma.user.findUnique({ where: { id: assignedTo } }).catch(() => null);
-            if (coord) targetCoordinatorId = coord.id;
+            if (coord) {
+              const coordCompany = (coord.company || 'RWC').toUpperCase();
+              if (coordCompany === targetCompany || !coord.company) {
+                targetCoordinatorId = coord.id;
+              }
+            }
           }
 
           // 4. Find existing or create new Lead
+          // First check if there is an existing lead specifically for targetCompany
           savedLead = await prisma.lead.findFirst({
-            where: { customerId: savedCustomer.id },
+            where: {
+              customerId: savedCustomer.id,
+              OR: [
+                { company: targetCompany },
+                { source: targetCompany },
+                { whatsappSessionId: targetCompany }
+              ]
+            },
             orderBy: { updatedAt: 'desc' }
           });
+
+          // If no company-specific lead exists, check if customer has an un-messaged empty lead
+          if (!savedLead) {
+            const existingLeads = await prisma.lead.findMany({
+              where: { customerId: savedCustomer.id },
+              include: { messages: true },
+              orderBy: { updatedAt: 'desc' }
+            });
+            const emptyLead = existingLeads.find(l => (l.messages || []).length === 0);
+            if (emptyLead) {
+              savedLead = emptyLead;
+            }
+          }
 
           const leadStage = initialMessage ? 'contacted' : (targetCoordinatorId ? 'assigned' : 'new');
 
@@ -3021,6 +3133,9 @@ const server = http.createServer(async (req, res) => {
             savedLead = await prisma.lead.create({
               data: {
                 customerId: savedCustomer.id,
+                company: targetCompany,
+                source: targetCompany,
+                whatsappSessionId: targetCompany,
                 categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                 stage: leadStage,
@@ -3028,7 +3143,6 @@ const server = http.createServer(async (req, res) => {
                 assignedById: targetCoordinatorId ? (authUser?.id || null) : null,
                 assignedByName: targetCoordinatorId ? (authUser?.fullName || 'Admin') : null,
                 assignedAt: targetCoordinatorId ? new Date() : null,
-                source: targetCompany,
                 language: language || 'en',
                 lastCustomerMessageAt: null
               },
@@ -3056,14 +3170,14 @@ const server = http.createServer(async (req, res) => {
               }).catch(() => null);
             }
           } else {
-            // If lead already exists and is already assigned, reject reassignment attempt if not super_admin
+            // If lead already exists and is already assigned, reject reassignment attempt if not super_admin or leads_officer
             if (savedLead.assignedTo && targetCoordinatorId && targetCoordinatorId !== savedLead.assignedTo) {
-              if (authUser?.role !== 'super_admin') {
+              if (authUser?.role !== 'super_admin' && authUser?.role !== 'leads_officer') {
                 res.writeHead(403, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({
                   success: false,
                   errorCode: 'ASSIGNMENT_LOCKED',
-                  error: 'Forbidden: Lead is already assigned to a coordinator. Only Super Admin can change or reassign assignments.'
+                  error: 'Forbidden: Lead is already assigned to a coordinator. Only Super Admin or Leads Officer can change assignments.'
                 }));
                 return;
               }
@@ -3072,15 +3186,17 @@ const server = http.createServer(async (req, res) => {
             savedLead = await prisma.lead.update({
               where: { id: savedLead.id },
               data: {
-                categoryId: firstCat?.id || savedLead.categoryId,
-                treatmentId: firstTrt?.id || savedLead.treatmentId,
-                assignedTo: targetCoordinatorId || savedLead.assignedTo,
+                company: targetCompany,
+                source: targetCompany,
+                whatsappSessionId: targetCompany,
+                categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : savedLead.categoryId),
+                treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : savedLead.treatmentId),
+                assignedTo: targetCoordinatorId !== undefined ? targetCoordinatorId : savedLead.assignedTo,
                 ...(targetCoordinatorId && targetCoordinatorId !== savedLead.assignedTo ? {
                   assignedById: authUser?.id || null,
                   assignedByName: authUser?.fullName || 'Admin',
                   assignedAt: new Date(),
                 } : {}),
-                source: company ? targetCompany : savedLead.source,
                 stage: initialMessage ? 'contacted' : savedLead.stage,
                 language: language || savedLead.language,
                 updatedAt: new Date()
@@ -4274,12 +4390,24 @@ const server = http.createServer(async (req, res) => {
                         lead = await prisma.lead.findFirst({
                           where: {
                             OR: [
-                              { customerId: cust.id },
-                              { customer: { whatsappNumber: { contains: rawClean.slice(-9) } } }
+                              { customerId: cust.id, company: companyInfo.code },
+                              { customerId: cust.id, source: companyInfo.code }
                             ]
                           },
                           orderBy: { updatedAt: 'desc' }
                         });
+
+                        if (!lead) {
+                          lead = await prisma.lead.findFirst({
+                            where: {
+                              OR: [
+                                { customerId: cust.id },
+                                { customer: { whatsappNumber: { contains: rawClean.slice(-9) } } }
+                              ]
+                            },
+                            orderBy: { updatedAt: 'desc' }
+                          });
+                        }
 
                         if (!lead) {
                           const firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
@@ -4291,7 +4419,9 @@ const server = http.createServer(async (req, res) => {
                               categoryId: firstCat?.id || null,
                               treatmentId: firstTrt?.id || null,
                               stage: 'new',
+                              company: companyInfo.code,
                               source: companyInfo.code,
+                              whatsappSessionId: companyInfo.code,
                               language: 'en',
                               lastCustomerMessageAt: new Date()
                             }
@@ -4300,7 +4430,9 @@ const server = http.createServer(async (req, res) => {
                           await prisma.lead.update({
                             where: { id: lead.id },
                             data: {
+                              company: companyInfo.code,
                               source: companyInfo.code,
+                              whatsappSessionId: companyInfo.code,
                               lastCustomerMessageAt: new Date(),
                               updatedAt: new Date()
                             }

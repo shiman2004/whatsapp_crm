@@ -1039,9 +1039,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 disabled={isDeleting}
                 onClick={async () => {
                   setIsDeleting(true);
-                  const res = await deleteForEveryone(message.id);
-                  setIsDeleting(false);
-                  if (res.success) {
+                  try {
+                    await deleteForEveryone(message.id);
+                  } finally {
+                    setIsDeleting(false);
                     setConfirmDeleteOpen(false);
                   }
                 }}

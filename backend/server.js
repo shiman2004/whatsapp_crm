@@ -3457,6 +3457,7 @@ const server = http.createServer(async (req, res) => {
 
         // Ownership enforcement: Staff can delete ONLY their own messages. Super Admin can also delete.
         const isAuthor = (msg.coordinatorId && msg.coordinatorId === authUser.id) ||
+                         (msg.senderId && msg.senderId === authUser.id) ||
                          (msg.senderName && authUser.fullName && msg.senderName.trim().toLowerCase() === authUser.fullName.trim().toLowerCase());
         const isSuperAdmin = authUser.role === 'super_admin';
 
@@ -3467,56 +3468,32 @@ const server = http.createServer(async (req, res) => {
         }
 
         // WhatsApp integration check:
-        // Meta Cloud API does NOT support revoking messages once delivered.
-        // Baileys WhatsApp Web integration supports message revoke protocol.
-        const isMetaCloudMsg = msg.id.startsWith('wamid.');
+        // If Baileys session is active, revoke the message directly on WhatsApp.
+        // If Meta Cloud API is used or Baileys is offline, proceed with CRM-wide deletion for everyone.
         const targetCoordinatorId = msg.coordinatorId || msg.lead?.assignedTo || authUser.id || 'user-admin-1';
         const recipientPhone = msg.customer?.phone || msg.lead?.phone || msg.customer?.whatsappId || msg.lead?.whatsappId;
 
-        // Check if Baileys session is active
-        const hasBaileys = sessionManager.isCoordinatorConnected(targetCoordinatorId) || sessionManager.isCoordinatorConnected('user-admin-1');
+        const hasBaileys = (typeof sessionManager.isCoordinatorConnected === 'function' &&
+                           (sessionManager.isCoordinatorConnected(targetCoordinatorId) || sessionManager.isCoordinatorConnected('user-admin-1'))) || false;
 
-        if (isMetaCloudMsg && !hasBaileys) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({
-            success: false,
-            error: 'The WhatsApp Meta Cloud API does not support deleting messages for everyone once delivered. Deletion for everyone requires an active WhatsApp Web session.'
-          }));
-          return;
-        }
+        let whatsappRevoked = false;
+        let whatsappNotice = null;
 
-        // Test mode bypass for CI/automated testing
-        const isTestEnv = process.env.NODE_ENV === 'test' || req.headers['x-test-mode'] === 'true';
-
-        if (!isTestEnv) {
-          if (!hasBaileys) {
-            res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              success: false,
-              error: 'No active WhatsApp session is connected to revoke this message on WhatsApp.'
-            }));
-            return;
-          }
-
-          // Execute Baileys revocation on WhatsApp
+        if (hasBaileys) {
           try {
             await sessionManager.deleteMessageForEveryone(targetCoordinatorId, {
               messageId: msg.id,
               to: recipientPhone,
               whatsappId: msg.customer?.whatsappId || msg.lead?.whatsappId
             });
+            whatsappRevoked = true;
           } catch (waErr) {
-            console.error('❌ [WhatsApp Revoke Error]:', waErr.message);
-            res.writeHead(502, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({
-              success: false,
-              error: `WhatsApp failed to revoke message: ${waErr.message}`
-            }));
-            return;
+            console.warn('⚠️ [WhatsApp Revoke Notice]:', waErr.message);
+            whatsappNotice = waErr.message;
           }
         }
 
-        // WhatsApp revocation succeeded (or test mode)! Update database securely
+        // Update database securely in Supabase PostgreSQL
         const now = new Date();
         const originalContent = msg.content;
         const deletedByName = authUser.fullName || authUser.email || 'Staff';
@@ -3591,10 +3568,13 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({
           success: true,
           message: 'Message deleted for everyone successfully.',
+          whatsappRevoked,
+          notice: whatsappNotice,
           data: {
             messageId: msg.id,
             isDeleted: true,
-            deletedForEveryone: true
+            deletedForEveryone: true,
+            whatsappRevoked
           }
         }));
       } catch (err) {

@@ -1815,7 +1815,9 @@ const server = http.createServer(async (req, res) => {
         const formattedTo = norm.canonical;
 
         let effectiveLanguage = language;
-        if (templateName === 'rwc_welcome_greeting' || templateName === 'cras_welcome_greeting' || effectiveLanguage === 'en') {
+        if (effectiveLanguage === 'ta' || effectiveLanguage === 'tamil') {
+          effectiveLanguage = 'ta';
+        } else if (templateName === 'rwc_welcome_greeting' || templateName === 'cras_welcome_greeting' || effectiveLanguage === 'en' || effectiveLanguage === 'si') {
           effectiveLanguage = 'en_US';
         }
 
@@ -3108,12 +3110,12 @@ const server = http.createServer(async (req, res) => {
                   if (targetCompany === 'CRAS') {
                     autoTplName = 'cras_welcome_greeting';
                     autoTplLang = 'en_US';
-                  } else if (language === 'si') {
-                    autoTplName = 'rwc_welcome_greeting_si';
-                    autoTplLang = 'en_US';
-                  } else if (language === 'ta') {
-                    autoTplName = 'rwc_welcome_greeting_ta';
+                  } else if (language === 'ta' || language === 'tamil') {
+                    autoTplName = 'rwc_welcome_greeting';
                     autoTplLang = 'ta';
+                  } else {
+                    autoTplName = 'rwc_welcome_greeting';
+                    autoTplLang = 'en_US';
                   }
 
                   const fallbackTplPayload = {

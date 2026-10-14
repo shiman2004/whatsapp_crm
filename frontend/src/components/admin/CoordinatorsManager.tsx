@@ -55,6 +55,7 @@ export const CoordinatorsManager: React.FC = () => {
   const [branch, setBranch] = useState('Colombo');
   const [pin, setPin] = useState(generateRandomPin());
   const [password, setPassword] = useState('staff');
+  const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
 
   const staffMembers = users.filter(u => u.role === 'coordinator' || u.role === 'leads_officer');
   const leadsOfficers = users.filter(u => u.role === 'leads_officer');
@@ -119,9 +120,9 @@ export const CoordinatorsManager: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim()) return;
+    if (!fullName.trim() || isSubmittingAdd) return;
 
     let systemRole: UserRole = 'coordinator';
     let assignedCompany: CompanyCode | undefined = undefined;
@@ -137,21 +138,28 @@ export const CoordinatorsManager: React.FC = () => {
       assignedCompany = 'RWC';
     }
 
-    addCoordinator({
-      fullName: fullName.trim(),
-      branch: branch || 'Colombo',
-      company: assignedCompany,
-      pin: pin.trim() || generateRandomPin(),
-      password: password.trim() || 'staff',
-      role: systemRole
-    });
+    setIsSubmittingAdd(true);
+    try {
+      await addCoordinator({
+        fullName: fullName.trim(),
+        branch: branch || 'Colombo',
+        company: assignedCompany,
+        pin: pin.trim() || generateRandomPin(),
+        password: password.trim() || 'staff',
+        role: systemRole
+      });
 
-    // Reset Form & Close
-    setFullName('');
-    setBranch('Colombo');
-    setPin(generateRandomPin());
-    setPassword('staff');
-    setShowAddModal(false);
+      // Reset Form & Close
+      setFullName('');
+      setBranch('Colombo');
+      setPin(generateRandomPin());
+      setPassword('staff');
+      setShowAddModal(false);
+    } catch (err) {
+      console.error('Failed to register staff:', err);
+    } finally {
+      setIsSubmittingAdd(false);
+    }
   };
 
   return (
@@ -586,11 +594,20 @@ export const CoordinatorsManager: React.FC = () => {
                 </button>
                 <button
                   type="submit"
-                  disabled={!fullName.trim()}
-                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer"
+                  disabled={!fullName.trim() || isSubmittingAdd}
+                  className="px-5 py-2.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 disabled:from-slate-800 disabled:to-slate-800 disabled:text-slate-500 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-1.5 cursor-pointer disabled:cursor-not-allowed"
                 >
-                  <UserPlus className="w-4 h-4" />
-                  <span>Create Team Member</span>
+                  {isSubmittingAdd ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin text-emerald-300" />
+                      <span>Saving to Supabase...</span>
+                    </>
+                  ) : (
+                    <>
+                      <UserPlus className="w-4 h-4" />
+                      <span>Create Team Member</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>

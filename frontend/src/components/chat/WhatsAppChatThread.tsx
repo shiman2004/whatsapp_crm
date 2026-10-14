@@ -32,6 +32,11 @@ import {
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { getDayKey, formatChatDateDivider } from '../../utils/dateUtils';
+import { 
+  getWindowStatus, 
+  formatWindowCountdown, 
+  getLatestCustomerMessageTime 
+} from '../../utils/window24hUtils';
 
 interface WhatsAppChatThreadProps {
   lead: Lead;
@@ -200,12 +205,21 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     ? inboundMessages.reduce((latest, m) => new Date(m.createdAt).getTime() > new Date(latest.createdAt).getTime() ? m : latest)
     : null;
 
-  // The 24h customer window strictly opens ONLY when an inbound message from the customer exists
-  const lastCustomerMessageTime = latestInboundMsg
-    ? new Date(latestInboundMsg.createdAt).getTime()
-    : (lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0);
+  // Realtime WhatsApp 24-Hour window ticking every 1 second automatically
+  const [windowNow, setWindowNow] = useState<number>(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setWindowNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
-  const is24hWindowOpen = lastCustomerMessageTime > 0 && (Date.now() - lastCustomerMessageTime) < (24 * 60 * 60 * 1000);
+  // The 24h customer window strictly opens ONLY when an inbound message from the customer exists (staff replies never reset this)
+  const lastCustomerMessageTime = getLatestCustomerMessageTime(lead, leadMessages);
+  const hasCustomerMessage = lastCustomerMessageTime > 0;
+  const windowExpiresAt = hasCustomerMessage ? lastCustomerMessageTime + (24 * 60 * 60 * 1000) : 0;
+  const windowRemainingMs = windowExpiresAt > 0 ? Math.max(0, windowExpiresAt - windowNow) : 0;
+  const windowStatusInfo = getWindowStatus(windowRemainingMs, hasCustomerMessage);
+  const windowCountdownText = formatWindowCountdown(windowRemainingMs);
+  const is24hWindowOpen = windowRemainingMs > 0;
 
   const filteredMessages = searchQuery.trim()
     ? leadMessages.filter(m => m.content?.toLowerCase().includes(searchQuery.toLowerCase()))
@@ -273,15 +287,23 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                     <span className="text-slate-600 hidden sm:inline">•</span>
                     <span className="hidden sm:inline">WhatsApp Direct</span>
                     <span className="text-slate-600 hidden sm:inline">•</span>
-                    {is24hWindowOpen ? (
-                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 font-medium">
-                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 24h Window Active
-                      </span>
-                    ) : (
-                      <span className="hidden sm:inline-flex items-center gap-1 text-[10px] text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 font-medium" title="24-hour care window closed. WhatsApp template required to message customer.">
-                        <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> Window Closed (Template Req.)
-                      </span>
-                    )}
+                    <span 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCrmPanelOpen(true);
+                      }}
+                      className={`hidden sm:inline-flex items-center gap-1.5 text-[10px] px-2 py-0.5 rounded border font-medium cursor-pointer transition-opacity hover:opacity-90 ${windowStatusInfo.badgeBg} ${windowStatusInfo.badgeBorder} ${windowStatusInfo.textColor}`}
+                      title={`WhatsApp 24-Hour Window: ${windowStatusInfo.label} (${windowCountdownText}) - Click to view in right panel`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${windowStatusInfo.dotColor}`} />
+                      <span>{windowStatusInfo.label}</span>
+                      {hasCustomerMessage && windowRemainingMs > 0 && (
+                        <>
+                          <span className="opacity-50">•</span>
+                          <span className="font-mono font-bold tracking-tight">{windowCountdownText}</span>
+                        </>
+                      )}
+                    </span>
                   </>
                 ) : (
                   <span>online</span>

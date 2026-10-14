@@ -3546,8 +3546,8 @@ const server = http.createServer(async (req, res) => {
         try {
           const payload = JSON.parse(body || '{}');
           const fullName = (payload.fullName || payload.name || '').trim();
-          const email = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
-          const pin = payload.pin || '2026';
+          let baseEmail = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
+          const cleanPin = String(payload.pin || '2026').trim().slice(0, 10);
           const phone = payload.phone || null;
           const role = payload.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
           const branch = (payload.branch || 'Colombo').trim();
@@ -3560,40 +3560,89 @@ const server = http.createServer(async (req, res) => {
           }
 
           let newUser = null;
+          let safeEmail = baseEmail;
           if (prisma && getDbStatus()) {
-            newUser = await prisma.user.create({
-              data: {
-                fullName,
-                email,
-                pin: hashSecret(pin),
-                phone,
-                role: role,
-                branch: branch,
-                company: company,
-                password: hashSecret(payload.password || 'staff')
-              }
-            });
+            // Check for duplicate email in Supabase and append random suffix if needed
+            const existingEmail = await prisma.user.findUnique({ where: { email: safeEmail } }).catch(() => null);
+            if (existingEmail) {
+              const [userPart, domainPart] = safeEmail.split('@');
+              safeEmail = `${userPart}_${Math.floor(100 + Math.random() * 900)}@${domainPart || 'royalwellness.lk'}`;
+            }
+
+            const desiredId = (payload.id && typeof payload.id === 'string' && payload.id.length <= 36) ? payload.id : undefined;
+
+            try {
+              newUser = await prisma.user.create({
+                data: {
+                  id: desiredId,
+                  fullName,
+                  email: safeEmail,
+                  pin: cleanPin,
+                  phone,
+                  role: role,
+                  branch: branch,
+                  company: company,
+                  password: hashSecret(payload.password || 'staff'),
+                  active: true
+                }
+              });
+              console.log(`✅ [Staff Created in Supabase] ID: ${newUser.id}, Name: ${newUser.fullName}, Role: ${newUser.role}, PIN: ${newUser.pin}`);
+            } catch (createErr) {
+              console.warn('⚠️ [Staff Create] Error with custom ID/email, retrying fallback:', createErr.message);
+              newUser = await prisma.user.create({
+                data: {
+                  fullName,
+                  email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
+                  pin: cleanPin,
+                  phone,
+                  role: role,
+                  branch: branch,
+                  company: company,
+                  password: hashSecret(payload.password || 'staff'),
+                  active: true
+                }
+              });
+              console.log(`✅ [Staff Created in Supabase Fallback] ID: ${newUser.id}, Name: ${newUser.fullName}`);
+            }
           }
 
-          const safeUserPayload = newUser ? { ...newUser } : {
+          const safeUserPayload = newUser ? {
+            id: newUser.id,
+            fullName: newUser.fullName,
+            email: newUser.email,
+            phone: newUser.phone,
+            role: newUser.role,
+            branch: newUser.branch,
+            company: newUser.company,
+            pin: cleanPin,
+            active: newUser.active ?? true,
+            createdAt: newUser.createdAt ? newUser.createdAt.toISOString() : new Date().toISOString()
+          } : {
             id: payload.id || `staff-${Date.now()}`,
             fullName,
-            email,
+            email: safeEmail,
             phone,
             role,
             branch,
             company,
-            active: true
+            pin: cleanPin,
+            active: true,
+            createdAt: new Date().toISOString()
           };
-          delete safeUserPayload.password;
-          delete safeUserPayload.pin;
+
+          // Broadcast staff created event via SSE
+          broadcastScopedSSE(null, {
+            type: 'STAFF_CREATED',
+            user: safeUserPayload
+          });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ 
             success: true, 
-            user: { ...safeUserPayload, branch, company } 
+            user: safeUserPayload 
           }));
         } catch (err) {
+          console.error('❌ [Staff Create Error]:', err.message);
           res.writeHead(500, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: err.message }));
         }

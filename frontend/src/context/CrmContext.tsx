@@ -136,7 +136,7 @@ interface CrmContextType {
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
-  addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => void;
+  addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => Promise<void>;
   updateCoordinator: (id: string, data: { fullName: string; branch: string; pin?: string; password?: string }) => Promise<void>;
   deleteCoordinator: (id: string) => void;
 
@@ -612,19 +612,29 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             }
           });
 
-          // Add backend coordinators only if active and not marked deleted
+          // PRESERVE locally stored staff members across refresh
+          const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
+          storedLocalUsers.forEach(u => {
+            if (!deletedUserIds.includes(u.id) && u.active !== false) {
+              userMap.set(u.id, u);
+            }
+          });
+
+          // Add backend coordinators from Supabase (authoritative cloud sync)
           dbCoords.forEach(u => {
             if (deletedUserIds.includes(u.id) || u.active === false) return;
             const isSuper = u.role === 'super_admin' || u.id === 'user-admin-1';
+            const existingLocal = userMap.get(u.id);
             userMap.set(u.id, {
+              ...existingLocal,
               ...u,
-              branch: u.branch || 'Colombo',
-              company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
+              branch: u.branch || existingLocal?.branch || 'Colombo',
+              company: u.role === 'leads_officer' ? undefined : (u.company || existingLocal?.company || 'RWC'),
               roleTitle: u.role === 'super_admin' ? 'Super Admin' : (u.role === 'leads_officer' ? 'Leads Officer' : (u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')),
-              password: u.password || (isSuper ? 'admin' : 'staff'),
-              pin: u.pin || (isSuper ? '1234' : '2026'),
+              password: u.password || existingLocal?.password || (isSuper ? 'admin' : 'staff'),
+              pin: u.pin || existingLocal?.pin || (isSuper ? '1234' : '2026'),
               active: u.active ?? true,
-              activeLeadsCount: u.activeLeadsCount || 0
+              activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
             });
           });
 
@@ -1010,6 +1020,40 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 }
                 return l;
               }));
+            }
+            return;
+          }
+
+          if (data.type === 'STAFF_CREATED' || data.type === 'COORDINATOR_CREATED') {
+            const incomingUser = data.user;
+            if (incomingUser && incomingUser.id) {
+              const deletedIds = getStored<string[]>('rw_crm_deleted_users', []);
+              if (!deletedIds.includes(incomingUser.id)) {
+                setUsers(prev => {
+                  const existingIdx = prev.findIndex(u => u.id === incomingUser.id);
+                  const isSuper = incomingUser.role === 'super_admin' || incomingUser.id === 'user-admin-1';
+                  const roleTitle = incomingUser.role === 'super_admin' ? 'Super Admin' : (incomingUser.role === 'leads_officer' ? 'Leads Officer' : (incomingUser.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'));
+                  const safeUserItem: User = {
+                    ...incomingUser,
+                    branch: incomingUser.branch || 'Colombo',
+                    company: incomingUser.role === 'leads_officer' ? undefined : (incomingUser.company || 'RWC'),
+                    roleTitle,
+                    password: incomingUser.password || (isSuper ? 'admin' : 'staff'),
+                    pin: incomingUser.pin || (isSuper ? '1234' : '2026'),
+                    active: incomingUser.active ?? true,
+                    activeLeadsCount: incomingUser.activeLeadsCount || 0
+                  };
+                  let updatedList: User[];
+                  if (existingIdx !== -1) {
+                    updatedList = [...prev];
+                    updatedList[existingIdx] = { ...prev[existingIdx], ...safeUserItem };
+                  } else {
+                    updatedList = [...prev, safeUserItem];
+                  }
+                  localStorage.setItem('rw_crm_users', JSON.stringify(updatedList));
+                  return updatedList;
+                });
+              }
             }
             return;
           }
@@ -2591,11 +2635,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(err => console.warn('Could not sync customer update to backend:', err));
   };
 
-  const addCoordinator = (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
+  const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
     const role: UserRole = data.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
     const cleanCompany: CompanyCode | undefined = role === 'leads_officer' ? undefined : (data.company || 'RWC');
     const newCoordId = (role === 'leads_officer' ? 'officer-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
+    const cleanPin = String(data.pin || '2026').trim().slice(0, 10);
     const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || (role === 'leads_officer' ? 'officer' : 'coord') + Date.now()}@royalwellness.lk`;
 
     const newCoord: User = {
@@ -2605,7 +2650,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       company: cleanCompany,
       email: autoEmail,
       password: data.password || 'staff',
-      pin: data.pin || '2026',
+      pin: cleanPin,
       phone: data.phone,
       role: role,
       treatmentCategoryId: data.treatmentCategoryId,
@@ -2622,37 +2667,74 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.setItem('rw_crm_deleted_users', JSON.stringify(updatedDeleted));
     }
 
+    // 1. Optimistically store in local state & localStorage immediately
     setUsers(prev => {
-      const updated = [...prev, newCoord];
+      const updated = [...prev.filter(u => u.id !== newCoordId), newCoord];
       localStorage.setItem('rw_crm_users', JSON.stringify(updated));
       return updated;
     });
 
-    // Sync coordinator / staff creation to backend
-    fetch(`${API_BASE_URL}/api/coordinators`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
-      },
-      body: JSON.stringify({
-        id: newCoordId,
-        fullName: data.fullName,
-        branch: cleanBranch,
-        company: cleanCompany || null,
-        email: autoEmail,
-        pin: data.pin || '2026',
-        phone: data.phone,
-        role: role
-      })
-    }).catch(err => console.warn('Could not sync new staff member to backend:', err));
+    // 2. Persist to Supabase via backend REST API with authenticated token
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/coordinators`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': token ? `Bearer ${token}` : '',
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
+        body: JSON.stringify({
+          id: newCoordId,
+          fullName: data.fullName,
+          branch: cleanBranch,
+          company: cleanCompany || null,
+          email: autoEmail,
+          pin: cleanPin,
+          phone: data.phone,
+          role: role,
+          password: data.password || 'staff'
+        })
+      });
+
+      if (res.ok) {
+        const resData = await res.json().catch(() => ({}));
+        if (resData.success && resData.user) {
+          const dbUser = resData.user;
+          // Reconcile client record with confirmed Supabase record
+          setUsers(prev => {
+            const mapped = prev.map(u => {
+              if (u.id === newCoordId || (dbUser.id && u.id === dbUser.id)) {
+                return {
+                  ...u,
+                  id: dbUser.id || u.id,
+                  email: dbUser.email || u.email,
+                  pin: dbUser.pin || cleanPin,
+                  fullName: dbUser.fullName || u.fullName,
+                  branch: dbUser.branch || u.branch,
+                  company: dbUser.company !== undefined ? (dbUser.company || undefined) : u.company,
+                };
+              }
+              return u;
+            });
+            localStorage.setItem('rw_crm_users', JSON.stringify(mapped));
+            return mapped;
+          });
+          console.log(`✅ [CRM Staff Saved in Supabase] ID: ${dbUser.id || newCoordId}`);
+        }
+      } else {
+        const errJson = await res.json().catch(() => ({}));
+        console.warn('Backend staff creation status:', res.status, errJson.error);
+      }
+    } catch (err: any) {
+      console.warn('Could not sync new staff member to Supabase backend:', err?.message || err);
+    }
 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
     const roleLabel = role === 'leads_officer' 
       ? 'Leads Officer' 
       : `Coordinator (${cleanCompany})`;
-    notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered successfully`, 'success');
+    notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered and saved successfully`, 'success');
   };
 
   const deleteCoordinator = async (id: string) => {

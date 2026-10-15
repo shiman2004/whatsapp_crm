@@ -314,12 +314,12 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
         </div>
 
         {/* Right Action Icons: Search, Menu, CRM Toggle */}
-        <div className="flex items-center gap-1.5 shrink-0 text-[#aebac1]">
+        <div className="flex items-center gap-1.5 shrink-0 text-[#54656f] dark:text-[#aebac1]">
           {/* Search in chat */}
           <button 
             onClick={() => setSearchInChat(!searchInChat)}
-            className={`w-9 h-9 rounded-full hover:bg-[#374248] flex items-center justify-center transition-colors ${
-              searchInChat ? 'text-[#00a884]' : ''
+            className={`w-9 h-9 rounded-full hover:bg-slate-200 dark:hover:bg-[#374248] flex items-center justify-center transition-colors cursor-pointer ${
+              searchInChat ? 'text-[#008069] dark:text-[#00a884] bg-slate-200/80 dark:bg-[#374248]' : ''
             }`}
             title="Search in chat"
           >
@@ -330,7 +330,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           <div className="relative">
             <button 
               onClick={() => setThreadMenuOpen(!threadMenuOpen)}
-              className="w-9 h-9 rounded-full hover:bg-[#374248] flex items-center justify-center transition-colors"
+              className="w-9 h-9 rounded-full hover:bg-slate-200 dark:hover:bg-[#374248] flex items-center justify-center transition-colors cursor-pointer"
               title="More options"
             >
               <MoreVertical className="w-5 h-5" />
@@ -339,16 +339,16 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             {threadMenuOpen && (
               <div 
                 ref={threadMenuRef}
-                className="absolute right-0 top-10 w-52 bg-[#233138] border border-[#2a3942] rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db]"
+                className="absolute right-0 top-10 w-52 bg-white dark:bg-[#233138] border border-slate-200 dark:border-[#2a3942] rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#111b21] dark:text-[#d1d7db]"
               >
                 <button 
                   onClick={() => {
                     setThreadMenuOpen(false);
                     setCrmPanelOpen(true);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
-                  <User className="w-4 h-4 text-[#8696a0]" />
+                  <User className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Contact info</span>
                 </button>
                 <button 
@@ -356,41 +356,41 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                     setThreadMenuOpen(false);
                     setSearchInChat(true);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
-                  <Search className="w-4 h-4 text-[#8696a0]" />
+                  <Search className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Search</span>
                 </button>
                 <button 
                   onClick={() => setThreadMenuOpen(false)} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
-                  <CheckSquare className="w-4 h-4 text-[#8696a0]" />
+                  <CheckSquare className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Select messages</span>
                 </button>
                 <button 
                   onClick={handleCloseChat} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 text-[#e9edef] hover:text-white font-medium transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#111b21] dark:text-[#e9edef] font-medium transition-colors cursor-pointer"
                 >
-                  <XCircle className="w-4 h-4 text-[#8696a0]" />
+                  <XCircle className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Close chat</span>
                 </button>
                 <button 
                   onClick={() => setThreadMenuOpen(false)} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
-                  <BellOff className="w-4 h-4 text-[#8696a0]" />
+                  <BellOff className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Mute notifications</span>
                 </button>
-                <div className="h-px bg-[#2a3942] my-1" />
+                <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
                 <button 
                   onClick={() => {
                     clearChat(lead.id);
                     setThreadMenuOpen(false);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#d1d7db] cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#111b21] dark:text-[#d1d7db] cursor-pointer"
                 >
-                  <Trash2 className="w-4 h-4 text-[#8696a0]" />
+                  <Trash2 className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Clear chat</span>
                 </button>
                 <button 
@@ -398,24 +398,24 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                     deleteChat(lead.id);
                     setThreadMenuOpen(false);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-400 font-medium cursor-pointer"
+                  className="w-full text-left px-4 py-2.5 hover:bg-rose-50 dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-600 dark:text-rose-400 font-medium cursor-pointer"
                 >
-                  <Trash2 className="w-4 h-4 text-rose-400" />
+                  <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                   <span>Delete chat</span>
                 </button>
               </div>
             )}
           </div>
 
-          <div className="h-5 w-px bg-slate-700/60 mx-1" />
+          <div className="h-5 w-px bg-slate-300 dark:bg-slate-700/60 mx-1" />
 
           {/* CRM Panel Toggle */}
           <button
             onClick={() => setCrmPanelOpen(!crmPanelOpen)}
-            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 ${
+            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
               crmPanelOpen
-                ? 'bg-[#00a884]/20 text-[#00a884] border-[#00a884]/40 shadow-sm'
-                : 'bg-[#202c33] text-[#d1d7db] border-slate-700 hover:bg-[#2a3942]'
+                ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border-[#00a884]/40 shadow-xs'
+                : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#d1d7db] border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-[#2a3942]'
             }`}
             title="Toggle Clinical Lead CRM Profile"
           >
@@ -427,17 +427,17 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
       {/* In-Chat Search Bar (When triggered) */}
       {searchInChat && (
-        <div className="px-4 py-2 bg-[#202c33] border-b border-[#222e35] flex items-center gap-2 text-xs">
-          <Search className="w-4 h-4 text-[#8696a0]" />
+        <div className="px-4 py-2 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-[#222e35] flex items-center gap-2 text-xs">
+          <Search className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder="Search messages..."
-            className="flex-1 bg-transparent text-[#d1d7db] placeholder-[#8696a0] outline-none"
+            className="flex-1 bg-transparent text-[#111b21] dark:text-[#d1d7db] placeholder-[#54656f] dark:placeholder-[#8696a0] outline-none"
             autoFocus
           />
-          <button onClick={() => { setSearchInChat(false); setSearchQuery(''); }} className="text-[#8696a0] hover:text-white">
+          <button onClick={() => { setSearchInChat(false); setSearchQuery(''); }} className="text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-white cursor-pointer font-medium">
             Cancel
           </button>
         </div>
@@ -506,7 +506,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             maxHeight: 'calc(100vh - 76px)',
             overflowY: 'auto'
           }}
-          className="z-[110] w-56 bg-[#233138] border border-[#2a3942] rounded-2xl shadow-2xl py-1.5 text-xs text-[#d1d7db] animate-in fade-in zoom-in-95 duration-100 select-none custom-scrollbar"
+          className="z-[110] w-56 bg-white dark:bg-[#233138] border border-slate-200 dark:border-[#2a3942] rounded-2xl shadow-2xl py-1.5 text-xs text-[#111b21] dark:text-[#d1d7db] animate-in fade-in zoom-in-95 duration-100 select-none custom-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -514,9 +514,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
               setBgMenuOpen(false);
               setCrmPanelOpen(true);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <UserPlus className="w-4 h-4 text-[#8696a0]" />
+            <UserPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Add to contacts</span>
           </button>
 
@@ -525,9 +525,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
               setBgMenuOpen(false);
               setCrmPanelOpen(true);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <User className="w-4 h-4 text-[#8696a0]" />
+            <User className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Contact info</span>
           </button>
 
@@ -536,99 +536,99 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
               setBgMenuOpen(false);
               setSearchInChat(true);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <Search className="w-4 h-4 text-[#8696a0]" />
+            <Search className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Search</span>
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <CheckSquare className="w-4 h-4 text-[#8696a0]" />
+            <CheckSquare className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Select messages</span>
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center justify-between transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center justify-between transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-3">
-              <BellOff className="w-4 h-4 text-[#8696a0]" />
+              <BellOff className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
               <span>Mute notifications</span>
             </div>
-            <ChevronDown className="w-3.5 h-3.5 -rotate-90 text-[#8696a0]" />
+            <ChevronDown className="w-3.5 h-3.5 -rotate-90 text-[#54656f] dark:text-[#8696a0]" />
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <Heart className="w-4 h-4 text-[#8696a0]" />
+            <Heart className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Add to favourites</span>
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <ListPlus className="w-4 h-4 text-[#8696a0]" />
+            <ListPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Add to list</span>
           </button>
 
           <button
             onClick={handleCloseChat}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 text-[#e9edef] hover:text-white font-medium transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#111b21] dark:text-[#e9edef] font-medium transition-colors cursor-pointer"
           >
-            <XCircle className="w-4 h-4 text-[#8696a0]" />
+            <XCircle className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Close chat</span>
           </button>
 
-          <div className="h-px bg-[#2a3942] my-1" />
+          <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <Link className="w-4 h-4 text-[#8696a0]" />
+            <Link className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Send call link</span>
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <PhoneCall className="w-4 h-4 text-[#8696a0]" />
+            <PhoneCall className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>New group call</span>
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <Flag className="w-4 h-4 text-[#8696a0]" />
+            <Flag className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Report</span>
           </button>
 
           <button
             onClick={() => setBgMenuOpen(false)}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
-            <Ban className="w-4 h-4 text-[#8696a0]" />
+            <Ban className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Block</span>
           </button>
 
-          <div className="h-px bg-[#2a3942] my-1" />
+          <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
 
           <button
             onClick={() => {
               clearChat(lead.id);
               setBgMenuOpen(false);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#d1d7db] cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#111b21] dark:text-[#d1d7db] cursor-pointer"
           >
-            <Trash className="w-4 h-4 text-[#8696a0]" />
+            <Trash className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Clear chat</span>
           </button>
 
@@ -637,9 +637,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
               deleteChat(lead.id);
               setBgMenuOpen(false);
             }}
-            className="w-full text-left px-4 py-2 hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-400 font-medium cursor-pointer"
+            className="w-full text-left px-4 py-2 hover:bg-rose-50 dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-600 dark:text-rose-400 font-medium cursor-pointer"
           >
-            <Trash2 className="w-4 h-4 text-rose-400" />
+            <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
             <span>Delete chat</span>
           </button>
         </div>

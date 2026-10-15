@@ -125,7 +125,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
             size="md" 
           />
           {/* Green Microphone Icon Badge (Exact WhatsApp Web style) */}
-          <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#00a884] border border-[#111b21] flex items-center justify-center shadow-md">
+          <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#00a884] border border-white dark:border-[#111b21] flex items-center justify-center shadow-xs">
             <Mic className="w-2.5 h-2.5 text-black stroke-[3]" />
           </div>
         </div>
@@ -137,7 +137,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
             {/* Play/Pause Button */}
             <button
               onClick={togglePlay}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#8696a0] hover:text-[#e9edef] active:scale-95 transition-all shrink-0"
+              className="w-8 h-8 rounded-full flex items-center justify-center text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] active:scale-95 transition-all shrink-0"
               title={isPlaying ? 'Pause' : 'Play voice note'}
             >
               {isPlaying ? (

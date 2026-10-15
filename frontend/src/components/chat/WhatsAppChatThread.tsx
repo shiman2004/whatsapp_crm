@@ -1,4 +1,4 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState, useMemo } from 'react';
 import { Lead, Message } from '../../types';
 import { MessageBubble } from './MessageBubble';
 import { MessageComposer } from './MessageComposer';
@@ -53,6 +53,11 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 }) => {
   const { messages, deleteChat, clearChat, setSelectedLeadId } = useCrm();
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const isAtBottomRef = useRef(true);
+  const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
+  const prevLeadIdRef = useRef(lead.id);
+  const prevMsgLengthRef = useRef(0);
   const threadMenuRef = useRef<HTMLDivElement>(null);
   const [threadMenuOpen, setThreadMenuOpen] = useState(false);
   const [searchInChat, setSearchInChat] = useState(false);
@@ -148,16 +153,19 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     setSelectedLeadId(null);
   };
 
-  const rawLeadMessages: Message[] = (() => {
+  // Memoize lead messages so re-renders (e.g. 1-second 24h window tick) do not recreate array reference
+  const leadMessages = useMemo(() => {
     const matched = messages.filter(m => 
       m.leadId === lead.id || 
       (lead.customerId && m.customerId === lead.customerId) ||
       (lead.customer?.whatsappNumber && ((m as any).to === lead.customer.whatsappNumber || (m as any).from === lead.customer.whatsappNumber)) ||
       (lead.customer?.whatsappId && (m as any).whatsappId === lead.customer.whatsappId)
     );
-    if (matched.length > 0) return matched;
-    if (Array.isArray((lead as any).messages) && (lead as any).messages.length > 0) {
-      return (lead as any).messages.map((m: any) => ({
+    let raw: Message[] = [];
+    if (matched.length > 0) {
+      raw = matched;
+    } else if (Array.isArray((lead as any).messages) && (lead as any).messages.length > 0) {
+      raw = (lead as any).messages.map((m: any) => ({
         id: m.id,
         leadId: m.leadId || lead.id,
         customerId: m.customerId || lead.customerId || '',
@@ -179,22 +187,21 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
         waMessageId: m.id
       })) as Message[];
     }
-    return [];
-  })();
 
-  // Deduplicate and sort messages chronologically (oldest at top, newest at bottom)
-  const seenMsgKeys = new Set<string>();
-  const leadMessages = rawLeadMessages
-    .filter(m => {
-      // Filter out empty messages
-      if ((!m.content || m.content.trim().length === 0) && !m.media) return false;
-      const timeBucket = Math.floor(new Date(m.createdAt).getTime() / 2000);
-      const key = m.waMessageId || m.id || `${m.direction}-${m.content}-${timeBucket}`;
-      if (seenMsgKeys.has(key)) return false;
-      seenMsgKeys.add(key);
-      return true;
-    })
-    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    // Deduplicate and sort messages chronologically (oldest at top, newest at bottom)
+    const seenMsgKeys = new Set<string>();
+    return raw
+      .filter(m => {
+        // Filter out empty messages
+        if ((!m.content || m.content.trim().length === 0) && !m.media) return false;
+        const timeBucket = Math.floor(new Date(m.createdAt).getTime() / 2000);
+        const key = m.waMessageId || m.id || `${m.direction}-${m.content}-${timeBucket}`;
+        if (seenMsgKeys.has(key)) return false;
+        seenMsgKeys.add(key);
+        return true;
+      })
+      .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  }, [messages, lead.id, lead.customerId, lead.customer?.whatsappNumber, lead.customer?.whatsappId, (lead as any).messages]);
 
   const displayName = lead.customer?.displayName || 'WhatsApp Contact';
   const rawPhone = lead.customer?.whatsappNumber || '';
@@ -238,8 +245,63 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     return -1;
   })();
 
+  // Handle user scroll detection
+  const handleScroll = () => {
+    if (!messagesContainerRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
+    // Consider user at bottom if within 100px from the bottom
+    const nearBottom = distanceFromBottom < 100;
+    isAtBottomRef.current = nearBottom;
+    setShowScrollBottomBtn(distanceFromBottom > 160);
+  };
+
+  // Scroll to bottom helper
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior
+      });
+      isAtBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+    } else {
+      messagesEndRef.current?.scrollIntoView({ behavior });
+    }
+  };
+
+  // 1. Initial mount scroll to bottom
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    prevMsgLengthRef.current = leadMessages.length;
+    scrollToBottom('auto');
+  }, []);
+
+  // 2. Chat/Contact switch: Always scroll down to bottom for the newly opened chat
+  useEffect(() => {
+    if (lead.id !== prevLeadIdRef.current) {
+      prevLeadIdRef.current = lead.id;
+      prevMsgLengthRef.current = leadMessages.length;
+      isAtBottomRef.current = true;
+      setShowScrollBottomBtn(false);
+      requestAnimationFrame(() => {
+        scrollToBottom('auto');
+      });
+    }
+  }, [lead.id]);
+
+  // 3. New message arrival: Only scroll down if user is ALREADY near the bottom OR if user sent the message
+  useEffect(() => {
+    const isNewMessageAdded = leadMessages.length > prevMsgLengthRef.current;
+    const lastMsg = leadMessages[leadMessages.length - 1];
+    const isOwnOutbound = lastMsg && lastMsg.direction === 'outbound';
+
+    prevMsgLengthRef.current = leadMessages.length;
+
+    if (isNewMessageAdded) {
+      if (isOwnOutbound || isAtBottomRef.current) {
+        scrollToBottom('smooth');
+      }
+    }
   }, [leadMessages]);
 
   return (
@@ -445,6 +507,8 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
       {/* 2. WhatsApp Message Stream with Doodle Pattern */}
       <div 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
         onContextMenu={handleBackgroundContextMenu}
         className="flex-1 wa-chat-bg p-4 pb-6 overflow-y-auto space-y-3 relative select-none"
       >
@@ -494,6 +558,18 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
+
+      {/* WhatsApp Web Scroll-to-bottom Floating Button */}
+      {showScrollBottomBtn && (
+        <button
+          onClick={() => scrollToBottom('smooth')}
+          className="absolute right-6 bottom-20 z-30 w-10 h-10 rounded-full bg-white dark:bg-[#202c33] text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-white shadow-md hover:shadow-lg border border-slate-200/80 dark:border-slate-700/60 flex items-center justify-center transition-all duration-200 hover:scale-105 active:scale-95 cursor-pointer"
+          title="Scroll to bottom"
+          aria-label="Scroll to bottom"
+        >
+          <ChevronDown className="w-5 h-5" />
+        </button>
+      )}
 
       {/* WhatsApp Web Background Wallpaper Context Menu (Mouse Right-Click on Black Area) */}
       {bgMenuOpen && bgMenuPos && (

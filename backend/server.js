@@ -2282,8 +2282,25 @@ const server = http.createServer(async (req, res) => {
           };
         });
 
+        // Enforce Company-Level Pipeline Isolation:
+        // Super Admin and Leads Officer can see all leads, or filter by query param: ?company=RWC or ?company=CRAS
+        // Other staff (Coordinators, Education Counsellors) strictly only see their company's pipeline
+        const isLeadsOfficer = authUser?.role === 'leads_officer';
+        const isSuperOrOfficer = isSuperAdmin || isLeadsOfficer;
+        let finalLeads = enrichedLeads;
+
+        if (!isSuperOrOfficer) {
+          const userCompany = (authUser?.company || 'RWC').toUpperCase();
+          finalLeads = finalLeads.filter(l => (l.company || 'RWC').toUpperCase() === userCompany);
+        } else {
+          const queryCompany = parsedUrl.query.company;
+          if (queryCompany && ['RWC', 'CRAS'].includes(String(queryCompany).toUpperCase())) {
+            finalLeads = finalLeads.filter(l => (l.company || 'RWC').toUpperCase() === String(queryCompany).toUpperCase());
+          }
+        }
+
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(enrichedLeads));
+        res.end(JSON.stringify(finalLeads));
         return;
       } catch (e) {
         console.error('Error fetching leads from DB:', e);

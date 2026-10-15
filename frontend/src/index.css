@@ -99,7 +99,7 @@
 .wa-chat-bg {
   background-color: var(--wa-chat-bg);
   background-image: url('/whatsapp-doodle.svg');
-  background-size: 380px 380px;
+  background-size: 360px 360px;
   background-repeat: repeat;
   position: relative;
 }
@@ -107,7 +107,7 @@
 .light .wa-chat-bg,
 :root:not(.dark) .wa-chat-bg {
   background-color: #efeae2;
-  color: #41525d;
+  color: #111b21;
 }
 
 .dark .wa-chat-bg {
@@ -118,7 +118,7 @@
 .wa-sim-bg {
   background-color: #efeae2;
   background-image: url('/whatsapp-doodle.svg');
-  background-size: 340px 340px;
+  background-size: 320px 320px;
 }
 
 /* WhatsApp Message Bubble Subtle Authentic Shadows */
@@ -152,6 +152,12 @@
 
 /* WhatsApp Web Context Menu */
 .wa-context-menu {
+  background: #ffffff;
+  border: 1px solid #e9edef;
+  box-shadow: 0 4px 20px rgba(11, 20, 26, 0.15);
+}
+
+.dark .wa-context-menu {
   background: #233138;
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
@@ -163,17 +169,31 @@
   gap: 12px;
   padding: 10px 16px;
   font-size: 13px;
-  color: #d1d7db;
+  color: #111b21;
   cursor: pointer;
   transition: all 0.15s ease;
 }
 
+.dark .wa-context-item {
+  color: #d1d7db;
+}
+
 .wa-context-item:hover {
+  background: #f5f6f6;
+  color: #111b21;
+}
+
+.dark .wa-context-item:hover {
   background: #182229;
   color: #ffffff;
 }
 
 .wa-context-item.danger:hover {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+}
+
+.dark .wa-context-item.danger:hover {
   background: rgba(239, 68, 68, 0.15);
   color: #f87171;
 }

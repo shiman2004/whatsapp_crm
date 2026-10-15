@@ -574,18 +574,18 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
       {/* 1. Replying Preview Bar */}
       {replyingMessage && (
-        <div className="mb-2 p-2 bg-[#111b21] border-l-4 border-[#00a884] rounded-r-lg flex items-center justify-between text-xs animate-in fade-in duration-100">
+        <div className="mb-2 p-2 bg-white dark:bg-[#111b21] border-l-4 border-[#00a884] rounded-r-lg flex items-center justify-between text-xs animate-in fade-in duration-100 shadow-xs border border-l-4 border-slate-200 dark:border-transparent">
           <div className="min-w-0 pr-2">
-            <span className="font-bold text-[#00a884] block truncate">
+            <span className="font-bold text-[#008069] dark:text-[#00a884] block truncate">
               {replyingMessage.direction === 'inbound' 
                 ? (lead.customer?.displayName || 'Customer') 
                 : 'You'}
             </span>
-            <p className="text-[#8696a0] truncate text-[11px]">{replyingMessage.content}</p>
+            <p className="text-[#54656f] dark:text-[#8696a0] truncate text-[11px]">{replyingMessage.content}</p>
           </div>
           <button 
             onClick={() => setReplyingMessage(null)}
-            className="p-1 hover:bg-[#202c33] rounded-full text-[#8696a0] hover:text-white"
+            className="p-1 hover:bg-slate-100 dark:hover:bg-[#202c33] rounded-full text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-white cursor-pointer"
           >
             <X className="w-4 h-4" />
           </button>
@@ -596,7 +596,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       {showAttachMenu && (
         <div 
           ref={attachRef}
-          className={`absolute bottom-16 left-4 bg-[#233138] border border-slate-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#d1d7db] space-y-1 select-none ${
+          className={`absolute bottom-16 left-4 bg-white dark:bg-[#233138] border border-slate-200 dark:border-slate-700/80 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#111b21] dark:text-[#d1d7db] space-y-1 select-none ${
             attachMenuMode === 'location' ? 'w-64' : 'w-52'
           }`}
         >
@@ -607,9 +607,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                   setShowAttachMenu(false);
                   fileInputRef.current?.click();
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors cursor-pointer"
               >
-                <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-400 flex items-center justify-center">
+                <div className="w-7 h-7 rounded-full bg-purple-500/20 text-purple-600 dark:text-purple-400 flex items-center justify-center">
                   <Image className="w-4 h-4" />
                 </div>
                 <span>Photos & videos</span>
@@ -620,9 +620,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                   setShowAttachMenu(false);
                   docInputRef.current?.click();
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors cursor-pointer"
               >
-                <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-400 flex items-center justify-center">
+                <div className="w-7 h-7 rounded-full bg-blue-500/20 text-blue-600 dark:text-blue-400 flex items-center justify-center">
                   <FileText className="w-4 h-4" />
                 </div>
                 <span>Document</span>
@@ -633,9 +633,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                   setShowAttachMenu(false);
                   setShowAddContactModal(true);
                 }}
-                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer"
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors cursor-pointer"
               >
-                <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center">
+                <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center">
                   <User className="w-4 h-4" />
                 </div>
                 <span>Contact</span>
@@ -646,15 +646,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                   e.stopPropagation();
                   setAttachMenuMode('location');
                 }}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#182229] transition-colors cursor-pointer group"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-xl hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors cursor-pointer group"
               >
                 <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-[#00a884] flex items-center justify-center">
+                  <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-[#008069] dark:text-[#00a884] flex items-center justify-center">
                     <MapPin className="w-4 h-4" />
                   </div>
                   <span>Location</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-[#8696a0] group-hover:text-white transition-colors" />
+                <ChevronRight className="w-4 h-4 text-[#54656f] dark:text-[#8696a0] group-hover:text-[#111b21] dark:group-hover:text-white transition-colors" />
               </button>
             </>
           ) : (
@@ -716,16 +716,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       {showEmojiPicker && (
         <div 
           ref={emojiRef}
-          className="absolute bottom-16 left-12 bg-[#202c33] border border-slate-700 rounded-2xl shadow-2xl p-3 w-72 z-50 animate-in fade-in zoom-in-95 duration-100 select-none"
+          className="absolute bottom-16 left-12 bg-white dark:bg-[#202c33] border border-slate-200 dark:border-slate-700 rounded-2xl shadow-2xl p-3 w-72 z-50 animate-in fade-in zoom-in-95 duration-100 select-none"
         >
-          <div className="text-[11px] font-bold text-[#8696a0] mb-2 uppercase tracking-wider">Frequently Used</div>
+          <div className="text-[11px] font-bold text-[#54656f] dark:text-[#8696a0] mb-2 uppercase tracking-wider">Frequently Used</div>
           <div className="grid grid-cols-5 gap-2 text-xl">
             {COMMON_EMOJIS.map((em) => (
               <button
                 key={em}
                 type="button"
                 onClick={() => handleInsertEmoji(em)}
-                className="w-9 h-9 rounded-lg hover:bg-[#2a3942] flex items-center justify-center hover:scale-125 transition-transform"
+                className="w-9 h-9 rounded-lg hover:bg-slate-100 dark:hover:bg-[#2a3942] flex items-center justify-center hover:scale-125 transition-transform cursor-pointer"
               >
                 {em}
               </button>
@@ -825,9 +825,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
       {/* 4b. 24-Hour Customer Care Window Banner */}
       {!is24hWindowOpen && (
-        <div className="mb-2 px-3.5 py-2 rounded-xl bg-amber-950/70 border border-amber-500/40 text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-sm animate-in fade-in duration-200">
+        <div className="mb-2 px-3.5 py-2 rounded-xl bg-amber-50 dark:bg-amber-950/70 border border-amber-300 dark:border-amber-500/40 text-amber-900 dark:text-amber-200 text-xs flex flex-wrap items-center justify-between gap-2 shadow-xs animate-in fade-in duration-200">
           <div className="flex items-center gap-2 min-w-0">
-            <Clock className="w-4 h-4 text-amber-400 shrink-0" />
+            <Clock className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
             <span className="font-medium text-[11.5px]">
               24-hour WhatsApp customer window is closed. Regular text will fail. Re-engage with an approved template:
             </span>
@@ -840,7 +840,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               const clientName = lead.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
               sendWhatsAppTemplate(lead.id, tplName, [clientName]);
             }}
-            className="px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-xs flex items-center gap-1.5 shadow transition-all cursor-pointer shrink-0"
+            className="px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0"
             title="Send official Meta-approved template to re-open 24-hour conversation window"
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -878,18 +878,18 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
       {/* 4d. Tamil & Sinhala Phonetic Language Selector Bar */}
       <div className="flex flex-wrap items-center justify-between gap-2 mb-2 px-1 select-none">
-        <div className="flex items-center gap-1 bg-[#182229] p-1 rounded-xl border border-slate-700/60 shadow-inner">
+        <div className="flex items-center gap-1 bg-white dark:bg-[#182229] p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-xs">
           <button
             type="button"
             onClick={() => handleSelectLanguage('en')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               typingLang === 'en'
-                ? 'bg-[#00a884] text-slate-950 font-bold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#202c33]'
+                ? 'bg-[#00a884] text-white font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#202c33]'
             }`}
             title="English keyboard typing (standard)"
           >
-            <span className="text-[10px] font-mono font-bold px-1 py-0.5 rounded bg-black/25">EN</span>
+            <span className="text-[10px] font-mono font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-black/25 text-slate-700 dark:text-slate-300">EN</span>
             <span>English</span>
           </button>
 
@@ -898,12 +898,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             onClick={() => handleSelectLanguage('ta')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               typingLang === 'ta'
-                ? 'bg-[#00a884] text-slate-950 font-bold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#202c33]'
+                ? 'bg-[#00a884] text-white font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#202c33]'
             }`}
             title="Tamil phonetic typing (e.g. vanakkam -> வணக்கம், nandri -> நன்றி)"
           >
-            <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-black/25">அ</span>
+            <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-black/25 text-slate-700 dark:text-slate-300">அ</span>
             <span>தமிழ்</span>
           </button>
 
@@ -912,20 +912,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             onClick={() => handleSelectLanguage('si')}
             className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
               typingLang === 'si'
-                ? 'bg-[#00a884] text-slate-950 font-bold shadow-md shadow-emerald-950/40'
-                : 'text-slate-400 hover:text-slate-200 hover:bg-[#202c33]'
+                ? 'bg-[#00a884] text-white font-bold shadow-xs'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#202c33]'
             }`}
             title="Sinhala phonetic typing (e.g. ayubowan -> ආයුබෝවන්, kohomada -> කොහොමද)"
           >
-            <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-black/25">සි</span>
+            <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-black/25 text-slate-700 dark:text-slate-300">සි</span>
             <span>සිංහල</span>
           </button>
         </div>
 
         {typingLang !== 'en' ? (
           <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#8696a0] bg-[#182229]/80 px-2.5 py-1 rounded-lg border border-slate-700/40">
-              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <div className="flex items-center gap-1.5 text-[11px] text-[#54656f] dark:text-[#8696a0] bg-white/80 dark:bg-[#182229]/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/40 shadow-xs">
+              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span className="hidden sm:inline font-medium">
                 {typingLang === 'ta' ? 'Tamil Phonetic' : 'Sinhala Phonetic'} • Space converts word
               </span>
@@ -936,16 +936,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               <button
                 type="button"
                 onClick={handleConvertAllText}
-                className="text-[11px] font-bold text-emerald-300 hover:text-white bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-500/40 px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 flex items-center gap-1 shadow-sm"
+                className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-white bg-emerald-100 dark:bg-emerald-900/60 hover:bg-emerald-600 dark:hover:bg-emerald-800/80 border border-emerald-300 dark:border-emerald-500/40 px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 flex items-center gap-1 shadow-xs"
                 title="Convert all typed English words to native script immediately"
               >
                 <span>Convert All</span>
-                <Sparkles className="w-3 h-3 text-emerald-400" />
+                <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
               </button>
             )}
           </div>
         ) : (
-          <div className="text-[11px] text-[#8696a0] hidden sm:block">
+          <div className="text-[11px] text-[#54656f] dark:text-[#8696a0] hidden sm:block">
             Standard Keyboard Mode
           </div>
         )}
@@ -954,21 +954,21 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       {/* 4e. Live Phonetic Conversion Suggestion Chip */}
       {activePreviewWord && typingLang !== 'en' && (
         <div className="mb-2 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1 duration-150">
-          <div className="bg-[#182229] border border-emerald-500/60 shadow-xl rounded-xl px-3 py-1 flex items-center gap-2 text-xs">
-            <span className="text-[#8696a0] text-[11px] font-mono">{activePreviewWord.raw} →</span>
+          <div className="bg-white dark:bg-[#182229] border border-emerald-500/60 shadow-xl rounded-xl px-3 py-1 flex items-center gap-2 text-xs">
+            <span className="text-[#54656f] dark:text-[#8696a0] text-[11px] font-mono">{activePreviewWord.raw} →</span>
             <button
               type="button"
               onClick={handleCommitPreview}
-              className="font-bold text-emerald-300 hover:text-emerald-200 hover:underline cursor-pointer flex items-center gap-1 text-sm transition-transform active:scale-95"
+              className="font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-200 hover:underline cursor-pointer flex items-center gap-1 text-sm transition-transform active:scale-95"
               title="Click or press Space / Tab to insert"
             >
               <span>{activePreviewWord.converted}</span>
-              <span className="text-[10px] text-emerald-400/80 font-mono font-normal bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-500/30">Space ↵</span>
+              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-normal bg-emerald-100 dark:bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/30">Space ↵</span>
             </button>
             <button
               type="button"
               onClick={() => setActivePreviewWord(null)}
-              className="p-1 rounded text-slate-400 hover:text-white hover:bg-slate-800/80 cursor-pointer ml-1"
+              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 cursor-pointer ml-1"
               title="Keep English (Esc)"
             >
               <X className="w-3 h-3" />

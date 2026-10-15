@@ -41,14 +41,14 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
           }}
           className={`relative p-2.5 rounded-full transition-all group cursor-pointer ${
             activeSection === 'chats' 
-              ? 'bg-slate-300/80 dark:bg-[#374248] text-[#111b21] dark:text-white shadow-xs' 
-              : 'text-[#54656f] dark:text-[#aebac1] hover:bg-slate-200 dark:hover:bg-[#374248]/60 hover:text-[#111b21] dark:hover:text-white'
+              ? 'bg-[#e9edef] dark:bg-[#374248] text-[#111b21] dark:text-white shadow-xs' 
+              : 'text-[#54656f] dark:text-[#aebac1] hover:bg-slate-200/70 dark:hover:bg-[#374248]/60 hover:text-[#111b21] dark:hover:text-white'
           }`}
           title="All Chats"
         >
           <MessageSquare className="w-5 h-5" />
           {totalUnreadCountForUser > 0 && (
-            <span className="absolute -top-1 -right-1 bg-[#25D366] text-black font-bold text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-md">
+            <span className="absolute -top-1 -right-1 bg-[#25D366] text-white font-semibold text-[10px] min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center shadow-sm">
               {totalUnreadCountForUser > 99 ? '99+' : totalUnreadCountForUser}
             </span>
           )}

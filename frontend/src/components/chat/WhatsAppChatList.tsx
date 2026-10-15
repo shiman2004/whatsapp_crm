@@ -412,13 +412,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
           <div className="md:hidden shrink-0">
             <BlinkingBellNotification variant="chat-header" />
           </div>
-          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center gap-2 truncate">
+          <h1 className="text-xl font-bold text-[#008069] dark:text-[#e9edef] tracking-tight flex items-center gap-2 truncate">
             <span>WhatsApp</span>
           </h1>
         </div>
         <button
           onClick={() => setIsAddContactOpen(true)}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#00a884] hover:bg-[#00c298] text-white font-bold text-xs shadow-md transition-all active:scale-95 cursor-pointer shrink-0"
           title="Add New Contact"
         >
           <UserPlus className="w-4 h-4 stroke-[2.5]" />
@@ -429,13 +429,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       {/* 2. Search Bar & Filter Chips */}
       <div className="px-3 pb-2 bg-white dark:bg-[#111b21] space-y-2.5 shrink-0">
         <div className="relative">
-          <Search className="w-4 h-4 text-[#667781] dark:text-[#8696a0] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#54656f] dark:text-[#8696a0] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search or start a new chat"
-            className="w-full bg-[#f0f2f5] dark:bg-[#202c33] border border-slate-200 dark:border-none rounded-lg pl-10 pr-4 py-1.5 text-xs text-[#111b21] dark:text-[#d1d7db] placeholder-[#667781] dark:placeholder-[#8696a0] outline-none focus:ring-1 focus:ring-[#00a884] transition-all"
+            className="w-full bg-[#f0f2f5] dark:bg-[#202c33] border-none rounded-lg pl-10 pr-4 py-1.5 text-xs text-[#111b21] dark:text-[#d1d7db] placeholder-[#54656f] dark:placeholder-[#8696a0] outline-none focus:ring-1 focus:ring-[#00a884] transition-all"
           />
         </div>
 
@@ -445,8 +445,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             onClick={() => handleFilterSelect('all')}
             className={`px-3 py-1 rounded-full text-xs font-semibold transition-all shrink-0 ${
               activeFilter === 'all'
-                ? 'bg-[#00a884]/20 text-[#00a884] font-bold'
-                : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                ? 'bg-[#d9fdd3] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] font-bold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
           >
             All
@@ -458,13 +458,13 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
               onClick={() => handleFilterSelect(activeFilter === 'unread' ? 'all' : 'unread')}
               className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'unread'
-                  ? 'bg-red-500/25 text-red-300 font-bold border-red-500/50'
-                  : 'bg-[#202c33] text-[#8696a0] border-transparent hover:bg-[#2a3942]'
+                  ? 'bg-emerald-100 text-[#008069] border-emerald-300 dark:bg-red-500/25 dark:text-red-300 dark:border-red-500/50 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
               title="Show unread conversations"
             >
               <span>Unread</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-red-500/20 text-red-300 font-bold">{totalUnreadCountForUser}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-emerald-200/60 dark:bg-red-500/20 text-[#008069] dark:text-red-300 font-bold">{totalUnreadCountForUser}</span>
             </button>
           )}
 
@@ -473,139 +473,139 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             onClick={() => handleFilterSelect('rwc')}
             className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
               activeFilter === 'rwc'
-                ? 'bg-[#008000]/25 text-[#22c55e] font-bold border-[#008000]'
-                : 'bg-[#202c33] text-[#8696a0] border-transparent hover:bg-[#2a3942]'
+                ? 'bg-emerald-100 text-[#15803d] border-[#16a34a] dark:bg-[#008000]/25 dark:text-[#22c55e] dark:border-[#008000] font-bold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
             title="Filter Royal Wellness Center messages"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#008000]" />
             <span>(RWC)</span>
-            {rwcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#008000]/20 text-[#22c55e]">{rwcCount}</span>}
+            {rwcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#008000]/15 dark:bg-[#008000]/20 text-[#15803d] dark:text-[#22c55e]">{rwcCount}</span>}
           </button>
 
           <button
             onClick={() => handleFilterSelect('cras')}
             className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
               activeFilter === 'cras'
-                ? 'bg-[#800000]/30 text-[#f87171] font-bold border-[#800000]'
-                : 'bg-[#202c33] text-[#8696a0] border-transparent hover:bg-[#2a3942]'
+                ? 'bg-rose-100 text-[#9f1239] border-[#be123c] dark:bg-[#800000]/30 dark:text-[#f87171] dark:border-[#800000] font-bold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
             title="Filter College of Royal Aesthetic messages"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
             <span>(CRAS)</span>
-            {crasCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#800000]/25 text-[#f87171]">{crasCount}</span>}
+            {crasCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#800000]/15 dark:bg-[#800000]/25 text-[#9f1239] dark:text-[#f87171]">{crasCount}</span>}
           </button>
 
           {newCount > 0 && (
             <button
               onClick={() => setActiveFilter('new')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'new'
-                  ? 'bg-rose-500/25 text-rose-300 font-bold border border-rose-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-500/25 dark:text-rose-300 dark:border-rose-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>New</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-rose-500/20 text-rose-300">{newCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-rose-200/60 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300">{newCount}</span>
             </button>
           )}
 
           {assignedCount > 0 && (
             <button
               onClick={() => setActiveFilter('assigned')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'assigned'
-                  ? 'bg-amber-500/25 text-amber-300 font-bold border border-amber-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-500/25 dark:text-amber-300 dark:border-amber-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Assigned</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-amber-500/20 text-amber-300">{assignedCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-amber-200/60 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300">{assignedCount}</span>
             </button>
           )}
 
           {contactedCount > 0 && (
             <button
               onClick={() => setActiveFilter('contacted')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'contacted'
-                  ? 'bg-emerald-500/25 text-emerald-300 font-bold border border-emerald-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-500/25 dark:text-emerald-300 dark:border-emerald-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Contacted</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-emerald-500/20 text-emerald-300">{contactedCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-emerald-200/60 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300">{contactedCount}</span>
             </button>
           )}
 
           {potentialCount > 0 && (
             <button
               onClick={() => setActiveFilter('potential')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'potential'
-                  ? 'bg-purple-500/25 text-purple-300 font-bold border border-purple-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-500/25 dark:text-purple-300 dark:border-purple-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Potential</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-purple-500/20 text-purple-300">{potentialCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-purple-200/60 dark:bg-purple-500/20 text-purple-800 dark:text-purple-300">{potentialCount}</span>
             </button>
           )}
 
           {discussionCount > 0 && (
             <button
               onClick={() => setActiveFilter('under_discussion')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'under_discussion'
-                  ? 'bg-sky-500/25 text-sky-300 font-bold border border-sky-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-500/25 dark:text-sky-300 dark:border-sky-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Discussion</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-sky-500/20 text-sky-300">{discussionCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-sky-200/60 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300">{discussionCount}</span>
             </button>
           )}
 
           {convertedCount > 0 && (
             <button
               onClick={() => setActiveFilter('converted')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'converted'
-                  ? 'bg-teal-500/25 text-teal-300 font-bold border border-teal-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-500/25 dark:text-teal-300 dark:border-teal-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Converted</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-teal-500/20 text-teal-300">{convertedCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-teal-200/60 dark:bg-teal-500/20 text-teal-800 dark:text-teal-300">{convertedCount}</span>
             </button>
           )}
 
           {lostCount > 0 && (
             <button
               onClick={() => setActiveFilter('lost')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'lost'
-                  ? 'bg-red-500/25 text-red-300 font-bold border border-red-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-red-100 text-red-800 border-red-300 dark:bg-red-500/25 dark:text-red-300 dark:border-red-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Lost</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-red-500/20 text-red-300">{lostCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-red-200/60 dark:bg-red-500/20 text-red-800 dark:text-red-300">{lostCount}</span>
             </button>
           )}
 
           {notEligibleCount > 0 && (
             <button
               onClick={() => setActiveFilter('not_eligible')}
-              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
                 activeFilter === 'not_eligible'
-                  ? 'bg-zinc-500/25 text-zinc-300 font-bold border border-zinc-500/40'
-                  : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                  ? 'bg-slate-200 text-slate-800 border-slate-300 dark:bg-zinc-500/25 dark:text-zinc-300 dark:border-zinc-500/40 font-bold'
+                  : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
               }`}
             >
               <span>Not Eligible</span>
-              <span className="text-[10px] font-mono px-1 rounded bg-zinc-500/20 text-zinc-300">{notEligibleCount}</span>
+              <span className="text-[10px] font-mono px-1 rounded bg-slate-300/60 dark:bg-zinc-500/20 text-slate-800 dark:text-zinc-300">{notEligibleCount}</span>
             </button>
           )}
 
@@ -613,8 +613,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             onClick={() => setActiveFilter('unread')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
               activeFilter === 'unread'
-                ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
-                : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                ? 'bg-[#d9fdd3] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] font-semibold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
           >
             <span>Unread</span>
@@ -627,11 +627,11 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             onClick={() => setActiveFilter('favourites')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1 ${
               activeFilter === 'favourites'
-                ? 'bg-[#00a884]/20 text-[#00a884] font-semibold'
-                : 'bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]'
+                ? 'bg-rose-100 text-rose-700 dark:bg-[#00a884]/20 dark:text-[#00a884] font-semibold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
           >
-            <Heart className="w-3 h-3 text-rose-400 fill-current" />
+            <Heart className="w-3 h-3 text-rose-500 fill-current" />
             <span>Favourites</span>
           </button>
         </div>
@@ -640,18 +640,18 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       {/* 3. Archived Row Banner */}
       <div 
         onClick={() => setActiveFilter(prev => prev === 'archived' ? 'all' : 'archived')}
-        className={`px-4 py-2 cursor-pointer flex items-center justify-between border-b border-[#222e35]/60 transition-colors shrink-0 ${
-          activeFilter === 'archived' ? 'bg-[#00a884]/15 border-[#00a884]/40' : 'hover:bg-[#202c33]'
+        className={`px-4 py-2 cursor-pointer flex items-center justify-between border-b border-[#e9edef] dark:border-[#222e35]/60 transition-colors shrink-0 ${
+          activeFilter === 'archived' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/15 border-[#00a884]/40' : 'hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
         }`}
       >
-        <div className="flex items-center gap-3 text-[#8696a0]">
-          <Archive className={`w-3.5 h-3.5 ${activeFilter === 'archived' ? 'text-[#00a884]' : 'text-[#8696a0]'}`} />
-          <span className={`text-xs font-medium ${activeFilter === 'archived' ? 'text-[#00a884] font-bold' : 'text-[#d1d7db]'}`}>
+        <div className="flex items-center gap-3 text-[#54656f] dark:text-[#8696a0]">
+          <Archive className={`w-3.5 h-3.5 ${activeFilter === 'archived' ? 'text-[#008069] dark:text-[#00a884]' : 'text-[#54656f] dark:text-[#8696a0]'}`} />
+          <span className={`text-xs font-medium ${activeFilter === 'archived' ? 'text-[#008069] dark:text-[#00a884] font-bold' : 'text-[#111b21] dark:text-[#d1d7db]'}`}>
             Archived Chats
           </span>
         </div>
         {archivedCount > 0 && (
-          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#202c33] text-[#8696a0]">
+          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-full bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0]">
             {archivedCount}
           </span>
         )}
@@ -812,7 +812,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     <div className="flex items-center gap-1 shrink-0">
                       {isPinned && <Pin className="w-3 h-3 text-[#8696a0] fill-current" />}
                       {(lead.unreadCount || 0) > 0 && lastMsg?.direction === 'inbound' && (
-                        <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-[#00a884] text-black font-bold text-[10px] flex items-center justify-center shadow">
+                        <span className="min-w-[19px] h-[19px] px-1 rounded-full bg-[#25d366] text-white font-bold text-[10px] flex items-center justify-center shadow-xs">
                           {lead.unreadCount}
                         </span>
                       )}
@@ -823,10 +823,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                           e.stopPropagation();
                           handleContextMenu(e, lead.id);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-white transition-opacity"
+                        className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-[#111b21] dark:hover:text-white transition-opacity"
                         title="Chat options"
                       >
-                        <ChevronDown className="w-3.5 h-3.5 text-[#8696a0]" />
+                        <ChevronDown className="w-3.5 h-3.5 text-[#54656f] dark:text-[#8696a0]" />
                       </button>
                     </div>
                   </div>
@@ -834,19 +834,19 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   {/* Bottom Line: Aesthetic Coordinator & Assignment Details */}
                   <div className="flex flex-col mt-0.5 text-[10px] font-medium leading-tight">
                     <div className="flex items-center gap-1">
-                      <User className="w-2.5 h-2.5 text-teal-400 shrink-0" />
-                      <span className={coordinator ? 'text-teal-300 font-semibold' : 'text-slate-500 italic'}>
+                      <User className="w-2.5 h-2.5 text-teal-600 dark:text-teal-400 shrink-0" />
+                      <span className={coordinator ? 'text-teal-700 dark:text-teal-300 font-semibold' : 'text-slate-500 italic'}>
                         Assigned to: {coordinatorName}
                       </span>
                     </div>
                     {coordinator && (
-                      <div className="flex items-center gap-1 pl-3.5 mt-0.5 text-[9.5px] text-[#8696a0] truncate">
+                      <div className="flex items-center gap-1 pl-3.5 mt-0.5 text-[9.5px] text-[#54656f] dark:text-[#8696a0] truncate">
                         <span>
-                          Assigned by: <span className="text-[#d1d7db] font-medium">{assignedByName || 'Admin'}</span>
+                          Assigned by: <span className="text-slate-700 dark:text-[#d1d7db] font-medium">{assignedByName || 'Admin'}</span>
                           {formattedAssignTime && (
                             <>
                               {' • '}
-                              <span className="text-[#8696a0]">{formattedAssignTime}</span>
+                              <span className="text-[#54656f] dark:text-[#8696a0]">{formattedAssignTime}</span>
                             </>
                           )}
                         </span>

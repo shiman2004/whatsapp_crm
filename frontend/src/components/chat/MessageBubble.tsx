@@ -277,8 +277,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               }}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                 showReactionPicker 
-                  ? 'bg-slate-700 text-whatsapp shadow-md' 
-                  : 'bg-black/30 hover:bg-[#202c33] text-slate-400 hover:text-slate-200'
+                  ? 'bg-slate-200 dark:bg-slate-700 text-[#00a884] shadow-md' 
+                  : 'bg-white/90 dark:bg-black/30 hover:bg-white dark:hover:bg-[#202c33] text-[#54656f] dark:text-slate-400 hover:text-[#111b21] dark:hover:text-slate-200 shadow-sm border border-slate-200/80 dark:border-transparent'
               }`}
               title="React"
             >
@@ -327,7 +327,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
               onClick={handleOpenMenu}
-              className="w-5 h-5 rounded-full bg-black/40 hover:bg-black/70 text-slate-300 hover:text-white flex items-center justify-center shadow transition-all"
+              className="w-5 h-5 rounded-full bg-white/90 dark:bg-black/40 hover:bg-white dark:hover:bg-black/70 text-[#54656f] dark:text-slate-300 hover:text-[#111b21] dark:hover:text-white flex items-center justify-center shadow-xs border border-slate-200/60 dark:border-transparent transition-all"
               title="Menu"
             >
               <ChevronDown className="w-3.5 h-3.5" />
@@ -341,7 +341,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 reactionPosAbove ? 'bottom-full mb-2' : 'top-full mt-2'
               } ${isOutbound ? 'right-0' : 'left-0'} z-50 animate-in fade-in zoom-in-95 duration-150`}
             >
-              <div className="bg-[#202c33] border border-slate-700 rounded-full px-2 py-1 shadow-2xl flex items-center gap-1 backdrop-blur-md">
+              <div className="bg-white dark:bg-[#202c33] border border-slate-200 dark:border-slate-700 rounded-full px-2 py-1 shadow-xl flex items-center gap-1 backdrop-blur-md">
                 {(showFullPicker ? EXTENDED_EMOJIS : QUICK_EMOJIS).map((emoji) => {
                   const isActive = message.reactions?.[0] === emoji;
                   return (
@@ -351,8 +351,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                       onClick={() => handleToggleReaction(emoji)}
                       className={`w-7 h-7 flex items-center justify-center text-sm hover:scale-125 transition-transform rounded-full ${
                         isActive 
-                          ? 'bg-emerald-950/80 ring-1 ring-emerald-500 scale-110 shadow-sm' 
-                          : 'hover:bg-slate-700/70'
+                          ? 'bg-emerald-100 dark:bg-emerald-950/80 ring-1 ring-emerald-500 scale-110 shadow-xs' 
+                          : 'hover:bg-slate-100 dark:hover:bg-slate-700/70'
                       } active:scale-95`}
                       title={isActive ? 'Remove reaction' : `React ${emoji}`}
                     >
@@ -363,7 +363,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 <button
                   type="button"
                   onClick={() => setShowFullPicker(!showFullPicker)}
-                  className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white rounded-full hover:bg-slate-700/60 transition-all"
+                  className="w-6 h-6 flex items-center justify-center text-[#54656f] dark:text-slate-400 hover:text-[#111b21] dark:hover:text-white rounded-full hover:bg-slate-100 dark:hover:bg-slate-700/60 transition-all"
                   title="More reactions"
                 >
                   <Plus className="w-3.5 h-3.5" />
@@ -374,11 +374,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
           {/* Quoted Reply Preview (if replyTo exists) */}
           {message.replyTo && (
-            <div className="mb-1.5 p-2 rounded-lg bg-black/25 border-l-4 border-whatsapp text-slate-200 text-[11px]">
-              <span className="font-bold text-teal-300 block text-[10px]">
+            <div className="mb-1.5 p-2 rounded-lg bg-black/[0.05] dark:bg-black/25 border-l-4 border-[#00a884] text-[#111b21] dark:text-slate-200 text-[11px]">
+              <span className="font-bold text-[#008069] dark:text-teal-300 block text-[10px]">
                 {message.replyTo.senderName}
               </span>
-              <p className="line-clamp-1 italic text-slate-300">
+              <p className="line-clamp-1 italic text-[#54656f] dark:text-slate-300">
                 {message.replyTo.content}
               </p>
             </div>
@@ -612,8 +612,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               }}
               className={`w-7 h-7 rounded-full flex items-center justify-center transition-all ${
                 showReactionPicker 
-                  ? 'bg-slate-700 text-whatsapp shadow-md' 
-                  : 'bg-black/30 hover:bg-[#202c33] text-slate-400 hover:text-slate-200'
+                  ? 'bg-slate-200 dark:bg-slate-700 text-[#00a884] shadow-md' 
+                  : 'bg-white/90 dark:bg-black/30 hover:bg-white dark:hover:bg-[#202c33] text-[#54656f] dark:text-slate-400 hover:text-[#111b21] dark:hover:text-slate-200 shadow-sm border border-slate-200/80 dark:border-transparent'
               }`}
               title="React"
             >
@@ -627,7 +627,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           <div className={`absolute -bottom-2.5 ${isOutbound ? 'right-2' : 'left-2'} z-20`}>
             <div 
               onClick={() => handleToggleReaction(message.reactions![0])}
-              className="bg-[#1f2c34] hover:bg-[#2a3942] border border-slate-700/80 px-1.5 py-0.5 rounded-full shadow-lg flex items-center justify-center cursor-pointer text-xs backdrop-blur-md hover:scale-115 transition-all select-none"
+              className="bg-white dark:bg-[#1f2c34] hover:bg-slate-50 dark:hover:bg-[#2a3942] border border-slate-200 dark:border-slate-700/80 px-1.5 py-0.5 rounded-full shadow-xs dark:shadow-lg flex items-center justify-center cursor-pointer text-xs text-[#111b21] dark:text-white backdrop-blur-md hover:scale-115 transition-all select-none"
               title="Click to remove reaction"
             >
               <span>{message.reactions[0]}</span>
@@ -639,7 +639,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
         {/* Super Admin ONLY: Message Sender Identification & Audit Trail */}
         {isSuperAdmin && isOutbound && auditDisplayText && (
           <div 
-            className="text-[11px] font-medium tracking-tight text-amber-600 dark:text-yellow-400 text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
+            className="text-[11px] font-medium tracking-tight text-amber-700 dark:text-yellow-400 text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
             title={`Internal Audit: ${auditDisplayText}`}
           >
             {auditDisplayText}
@@ -673,11 +673,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             maxHeight: 'calc(100vh - 76px)',
             overflowY: 'auto'
           }}
-          className="z-[100] w-52 bg-[#233138] border border-slate-700/90 rounded-2xl shadow-2xl py-1.5 text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md select-none custom-scrollbar"
+          className="z-[100] w-52 bg-white dark:bg-[#233138] border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl py-1.5 text-[#111b21] dark:text-slate-200 text-xs animate-in fade-in zoom-in-95 duration-100 backdrop-blur-md select-none custom-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
           {/* 1. Quick Reaction Bar (WhatsApp Web style at top of context menu) */}
-          <div className="px-3 py-2 border-b border-slate-700/60 flex items-center justify-between gap-1 bg-[#182229]/80 rounded-t-2xl">
+          <div className="px-3 py-2 border-b border-slate-100 dark:border-slate-700/60 flex items-center justify-between gap-1 bg-slate-50/90 dark:bg-[#182229]/80 rounded-t-2xl">
             {QUICK_EMOJIS.map((emoji) => {
               const isActive = message.reactions?.[0] === emoji;
               return (
@@ -686,7 +686,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                   type="button"
                   onClick={() => handleToggleReaction(emoji)}
                   className={`w-7 h-7 flex items-center justify-center text-sm hover:scale-125 transition-transform rounded-full ${
-                    isActive ? 'bg-emerald-950/80 ring-1 ring-emerald-500 scale-110 shadow-sm' : 'hover:bg-slate-700/60'
+                    isActive ? 'bg-emerald-100 dark:bg-emerald-950/80 ring-1 ring-emerald-500 scale-110 shadow-xs' : 'hover:bg-slate-200/80 dark:hover:bg-slate-700/60'
                   }`}
                   title={`React ${emoji}`}
                 >
@@ -700,7 +700,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 setShowFullPicker(true);
                 setShowReactionPicker(true);
               }}
-              className="w-6 h-6 flex items-center justify-center text-slate-400 hover:text-white rounded-full hover:bg-slate-700/60 transition-all"
+              className="w-6 h-6 flex items-center justify-center text-[#54656f] dark:text-slate-400 hover:text-[#111b21] dark:hover:text-white rounded-full hover:bg-slate-200/80 dark:hover:bg-slate-700/60 transition-all"
               title="More reactions"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -713,27 +713,27 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               setInfoModalOpen(true);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <Info className="w-4 h-4 text-slate-400 shrink-0" />
+            <Info className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
             <span>Message info</span>
           </button>
 
           {/* 3. Reply */}
           <button
             onClick={handleReply}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <CornerUpLeft className="w-4 h-4 text-slate-400 shrink-0" />
+            <CornerUpLeft className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
             <span>Reply</span>
           </button>
 
           {/* 4. Copy */}
           <button
             onClick={handleCopy}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <Copy className="w-4 h-4 text-slate-400 shrink-0" />
+            <Copy className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
             <span>Copy</span>
           </button>
 
@@ -745,9 +745,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 setEditContent(message.content || '');
                 setMenuOpen(false);
               }}
-              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors text-emerald-400 font-medium"
+              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors text-emerald-600 dark:text-emerald-400 font-medium"
             >
-              <Pencil className="w-4 h-4 text-emerald-400 shrink-0" />
+              <Pencil className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>Edit</span>
             </button>
           )}
@@ -762,9 +762,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               setShowReactionPicker(true);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <Smile className="w-4 h-4 text-slate-400 shrink-0" />
+            <Smile className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
             <span>React</span>
           </button>
 
@@ -780,9 +780,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 link.click();
                 setMenuOpen(false);
               }}
-              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
             >
-              <Download className="w-4 h-4 text-slate-400 shrink-0" />
+              <Download className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
               <span>Download</span>
             </button>
           )}
@@ -793,9 +793,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               setForwardModalOpen(true);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <Forward className="w-4 h-4 text-slate-400 shrink-0" />
+            <Forward className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
             <span>Forward</span>
           </button>
 
@@ -805,9 +805,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               pinMessage(message.id);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <Pin className="w-4 h-4 text-slate-400 shrink-0" />
+            <Pin className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
             <span>{message.pinned ? 'Unpin' : 'Pin'}</span>
           </button>
 
@@ -817,9 +817,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               setMetaAiModalOpen(true);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors text-teal-300 font-medium"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors text-teal-600 dark:text-teal-300 font-medium"
           >
-            <Sparkles className="w-4 h-4 text-teal-400 shrink-0" />
+            <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400 shrink-0" />
             <span>Ask Meta AI</span>
           </button>
 
@@ -829,9 +829,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               starMessage(message.id);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
           >
-            <Star className={`w-4 h-4 shrink-0 ${message.starred ? 'text-amber-400 fill-amber-400' : 'text-slate-400'}`} />
+            <Star className={`w-4 h-4 shrink-0 ${message.starred ? 'text-amber-500 fill-amber-500' : 'text-[#54656f] dark:text-slate-400'}`} />
             <span>{message.starred ? 'Unstar' : 'Star'}</span>
           </button>
 
@@ -842,14 +842,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 reportMessage(message.id);
                 setMenuOpen(false);
               }}
-              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#182229] transition-colors text-amber-300"
+              className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors text-amber-600 dark:text-amber-300"
             >
-              <Flag className="w-4 h-4 text-amber-400 shrink-0" />
+              <Flag className="w-4 h-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>Report</span>
             </button>
           )}
 
-          <div className="h-px bg-slate-700/60 my-1" />
+          <div className="h-px bg-slate-100 dark:bg-slate-700/60 my-1" />
 
           {/* 11. Delete */}
           <button
@@ -857,9 +857,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               deleteMessage(message.id);
               setMenuOpen(false);
             }}
-            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-red-950/40 text-red-400 transition-colors"
+            className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-rose-50 dark:hover:bg-red-950/40 text-rose-600 dark:text-red-400 transition-colors"
           >
-            <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+            <Trash2 className="w-4 h-4 text-rose-600 dark:text-red-400 shrink-0" />
             <span>Delete</span>
           </button>
         </div>

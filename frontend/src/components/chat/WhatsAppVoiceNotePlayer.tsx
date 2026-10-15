@@ -179,10 +179,10 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
           </div>
 
           {/* Bottom Row: Duration / Speed / Timestamp & Ticks */}
-          <div className="flex items-center justify-between text-[11px] text-[#8696a0] pl-1 pr-0.5 font-sans">
+          <div className="flex items-center justify-between text-[11px] text-[#667781] dark:text-[#8696a0] pl-1 pr-0.5 font-sans">
             <div className="flex items-center gap-2">
               {/* Duration Timer */}
-              <span className="tabular-nums font-medium text-[#8696a0]">
+              <span className="tabular-nums font-medium text-[#667781] dark:text-[#8696a0]">
                 {displayDuration === '0:00' && !isLoaded ? '0:01' : displayDuration}
               </span>
 
@@ -190,7 +190,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
               {(isPlaying || playbackRate !== 1) && (
                 <button
                   onClick={cycleSpeed}
-                  className="px-1.5 py-0.5 rounded-full bg-[#111b21]/60 hover:bg-[#111b21] text-[#00a884] font-semibold text-[10px] border border-white/10 transition-colors"
+                  className="px-1.5 py-0.5 rounded-full bg-[#111b21]/10 dark:bg-[#111b21]/60 hover:bg-[#111b21]/20 dark:hover:bg-[#111b21] text-[#00a884] font-semibold text-[10px] border border-black/10 dark:border-white/10 transition-colors"
                 >
                   {playbackRate}x
                 </button>
@@ -198,12 +198,12 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
             </div>
 
             {/* Timestamp & Status Checkmarks */}
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1 text-[#667781] dark:text-[#8696a0]">
               {message.pinned && (
-                <Pin className="w-3 h-3 fill-[#8696a0] text-[#8696a0] -rotate-45" />
+                <Pin className="w-3 h-3 fill-current -rotate-45" />
               )}
               {message.starred && (
-                <Star className="w-3 h-3 fill-[#8696a0] text-[#8696a0]" />
+                <Star className="w-3 h-3 fill-current" />
               )}
               <span className="whitespace-nowrap text-[10.5px]">
                 {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}

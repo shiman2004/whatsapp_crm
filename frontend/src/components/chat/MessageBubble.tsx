@@ -291,12 +291,38 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
         <div
           ref={bubbleRef}
           onContextMenu={handleContextMenu}
-          className={`relative max-w-[85%] md:max-w-[65%] rounded-lg px-2.5 pt-1.5 pb-1.5 shadow-sm text-xs leading-relaxed transition-all ${
+          title={auditDisplayText ? `Audit Trail: ${auditDisplayText}` : undefined}
+          className={`relative max-w-[85%] md:max-w-[65%] rounded-[7.5px] px-[9px] pt-[6px] pb-[8px] wa-bubble-shadow text-xs leading-relaxed transition-all ${
             isOutbound
-              ? 'bg-[#005c4b] text-[#e9edef] rounded-tr-none wa-bubble-out'
-              : 'bg-[#202c33] text-[#e9edef] rounded-tl-none wa-bubble-in'
+              ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none'
+              : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none'
           } ${message.pinned ? 'border border-amber-500/50 shadow-amber-500/10' : ''}`}
         >
+          {/* Authentic WhatsApp Corner SVG Tail */}
+          {isOutbound ? (
+            <svg 
+              viewBox="0 0 8 13" 
+              height="13" 
+              width="8" 
+              preserveAspectRatio="xMidYMid meet" 
+              className="absolute top-0 -right-2 text-[#d9fdd3] dark:text-[#005c4b] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+            >
+              <path opacity="0.13" fill="#000000" d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z" />
+              <path fill="currentColor" d="M5.188,0H0v11.193l6.467-8.625C7.526,1.156,6.958,0,5.188,0z" />
+            </svg>
+          ) : (
+            <svg 
+              viewBox="0 0 8 13" 
+              height="13" 
+              width="8" 
+              preserveAspectRatio="xMidYMid meet" 
+              className="absolute top-0 -left-2 text-white dark:text-[#202c33] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+            >
+              <path opacity="0.13" fill="#000000" d="M1.533,3.568L8,12.193V1H2.812 C1.042,1,0.474,2.156,1.533,3.568z" />
+              <path fill="currentColor" d="M1.533,2.568L8,11.193V0L2.812,0C1.042,0,0.474,1.156,1.533,2.568z" />
+            </svg>
+          )}
+
           {/* Top-Right Hover Chevron (WhatsApp Web standard) */}
           <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
             <button
@@ -463,7 +489,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 </div>
               </div>
             ) : (
-              <div className="text-[13.5px] leading-[19px] text-[#e9edef] break-words select-text">
+              <div className="text-[14.2px] leading-[19px] text-[#111b21] dark:text-[#e9edef] break-words select-text font-normal">
                 <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
 
                 {/* Location card preview if Google Maps link is present */}
@@ -479,15 +505,15 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                       href={mapUrl}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="mt-2 mb-1 flex items-center gap-2.5 p-2 rounded-lg bg-black/25 hover:bg-black/40 border border-[#00a884]/30 hover:border-[#00a884]/60 transition-all text-left cursor-pointer select-none group/loc"
+                      className="mt-2 mb-1 flex items-center gap-2.5 p-2 rounded-lg bg-black/5 dark:bg-black/25 hover:bg-black/10 dark:hover:bg-black/40 border border-[#00a884]/30 hover:border-[#00a884]/60 transition-all text-left cursor-pointer select-none group/loc"
                     >
                       <div className="w-8 h-8 rounded-full bg-[#00a884]/20 text-[#00a884] flex items-center justify-center shrink-0 group-hover/loc:scale-110 transition-transform">
                         <MapPin className="w-4 h-4" />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-semibold text-[#e9edef] flex items-center gap-1.5">
+                        <div className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] flex items-center gap-1.5">
                           <span>{locationName}</span>
-                          <ExternalLink className="w-3 h-3 text-[#8696a0] group-hover/loc:text-white" />
+                          <ExternalLink className="w-3 h-3 text-[#667781] dark:text-[#8696a0] group-hover/loc:text-[#111b21] dark:group-hover/loc:text-white" />
                         </div>
                         <p className="text-[10px] text-[#00a884] truncate">Open Google Maps</p>
                       </div>
@@ -496,7 +522,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 })()}
                 
                 {/* Inline float-right timestamp container */}
-                <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#8696a0] font-normal">
+                <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#667781] dark:text-[#8696a0] font-normal">
                   {message.pinned && (
                     <Pin className="w-3 h-3 fill-[#8696a0] text-[#8696a0] -rotate-45" />
                   )}
@@ -609,16 +635,6 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           </div>
         )}
         </div>
-
-        {/* Super Admin ONLY: Message Sender Identification & Audit Trail */}
-        {isSuperAdmin && isOutbound && auditDisplayText && (
-          <div 
-            className="text-[11px] font-medium tracking-tight text-yellow-400 text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
-            title={`Internal Audit: ${auditDisplayText}`}
-          >
-            {auditDisplayText}
-          </div>
-        )}
       </div>
 
       {/* Backdrop for Context Menu (Click outside to close) */}

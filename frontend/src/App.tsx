@@ -66,7 +66,7 @@ const MainLayout: React.FC = () => {
   };
 
   return (
-    <div className="h-screen max-h-screen overflow-hidden bg-slate-950 text-slate-100 flex flex-col font-sans select-none">
+    <div className="h-screen max-h-screen overflow-hidden bg-slate-100 dark:bg-slate-950 text-slate-900 dark:text-slate-100 flex flex-col font-sans select-none transition-colors">
       {/* Header */}
       <Header 
         onToggleMobileSidebar={() => setIsMobileSidebarOpen(prev => !prev)} 
@@ -87,7 +87,7 @@ const MainLayout: React.FC = () => {
 
         {/* Dynamic Workspace Panel */}
         <main className={`flex-1 min-h-0 flex flex-col overflow-hidden ${
-          activeTab === 'chat' ? 'p-0 bg-[#0b141a]' : 'p-3 sm:p-6 overflow-y-auto bg-slate-900/30'
+          activeTab === 'chat' ? 'p-0 bg-[#efeae2] dark:bg-[#0b141a]' : 'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/30'
         }`}>
           {activeTab === 'dashboard' && <DashboardOverview />}
           {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
@@ -106,12 +106,12 @@ const MainLayout: React.FC = () => {
 
       {/* Mobile Bottom Navigation Bar (Hidden when inside active chat message composer) */}
       {!(activeTab === 'chat' && !!selectedLeadId) && (
-        <nav className="md:hidden h-14 bg-[#111b21] border-t border-slate-800 flex items-center justify-around px-2 shrink-0 z-30 select-none">
+        <nav className="md:hidden h-14 bg-white dark:bg-[#111b21] border-t border-slate-200 dark:border-slate-800 flex items-center justify-around px-2 shrink-0 z-30 select-none">
           <button
             type="button"
             onClick={() => setActiveTab('chat')}
             className={`flex flex-col items-center justify-center py-1 px-3 rounded-xl transition-all cursor-pointer relative ${
-              activeTab === 'chat' ? 'text-whatsapp font-bold' : 'text-slate-400 hover:text-slate-200'
+              activeTab === 'chat' ? 'text-whatsapp font-bold' : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <div className="relative">

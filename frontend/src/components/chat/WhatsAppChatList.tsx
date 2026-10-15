@@ -403,16 +403,16 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const activeContextMenuLead = leads.find(l => l.id === contextMenuLeadId);
 
   return (
-    <div className={`w-full md:w-80 lg:w-[380px] bg-[#111b21] border-r border-[#222e35] flex flex-col h-full select-none shrink-0 ${className}`}>
+    <div className={`w-full md:w-80 lg:w-[380px] bg-white dark:bg-[#111b21] border-r border-[#e9edef] dark:border-[#222e35] flex flex-col h-full select-none shrink-0 ${className}`}>
       
       {/* 1. Header (Exact WhatsApp Web Title Bar) */}
-      <div className="h-14 px-4 bg-[#202c33] flex items-center justify-between shrink-0">
+      <div className="h-14 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-transparent flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Mobile Blinking Bell (Only on small screens where LeftRail is hidden) */}
           <div className="md:hidden shrink-0">
             <BlinkingBellNotification variant="chat-header" />
           </div>
-          <h1 className="text-xl font-bold text-[#e9edef] tracking-tight flex items-center gap-2 truncate">
+          <h1 className="text-xl font-bold text-[#111b21] dark:text-[#e9edef] tracking-tight flex items-center gap-2 truncate">
             <span>WhatsApp</span>
           </h1>
         </div>
@@ -427,15 +427,15 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       </div>
 
       {/* 2. Search Bar & Filter Chips */}
-      <div className="px-3 pb-2 bg-[#111b21] space-y-2.5 shrink-0">
+      <div className="px-3 pb-2 bg-white dark:bg-[#111b21] space-y-2.5 shrink-0">
         <div className="relative">
-          <Search className="w-4 h-4 text-[#8696a0] absolute left-3.5 top-1/2 -translate-y-1/2" />
+          <Search className="w-4 h-4 text-[#667781] dark:text-[#8696a0] absolute left-3.5 top-1/2 -translate-y-1/2" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search or start a new chat"
-            className="w-full bg-[#202c33] border-none rounded-lg pl-10 pr-4 py-1.5 text-xs text-[#d1d7db] placeholder-[#8696a0] outline-none focus:ring-1 focus:ring-[#00a884] transition-all"
+            className="w-full bg-[#f0f2f5] dark:bg-[#202c33] border border-slate-200 dark:border-none rounded-lg pl-10 pr-4 py-1.5 text-xs text-[#111b21] dark:text-[#d1d7db] placeholder-[#667781] dark:placeholder-[#8696a0] outline-none focus:ring-1 focus:ring-[#00a884] transition-all"
           />
         </div>
 
@@ -709,8 +709,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   markChatAsRead(lead.id);
                 }}
                 onContextMenu={(e) => handleContextMenu(e, lead.id)}
-                className={`group px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors relative border-b border-[#222e35]/30 ${
-                  isSelected ? 'bg-[#2a3942]' : 'hover:bg-[#202c33]'
+                className={`group px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors relative border-b border-[#e9edef] dark:border-[#222e35]/30 ${
+                  isSelected 
+                    ? 'bg-[#f0f2f5] dark:bg-[#2a3942]' 
+                    : 'bg-white dark:bg-transparent hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
                 }`}
               >
                 {/* Contact Avatar on the far-left */}
@@ -727,7 +729,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   {/* Top Line: Contact Name + Micro Stage Badge + Time */}
                   <div className="flex items-center justify-between gap-1.5">
                     <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                      <span className="text-xs font-semibold text-[#e9edef] truncate max-w-[140px]">
+                      <span className="text-xs font-semibold text-[#111b21] dark:text-[#e9edef] truncate max-w-[140px]">
                         {displayName}
                       </span>
 
@@ -759,7 +761,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     </div>
 
                     <span className={`text-[10px] font-mono shrink-0 ${
-                      (lead.unreadCount || 0) > 0 && lastMsg?.direction === 'inbound' ? 'text-[#00a884] font-bold' : 'text-[#8696a0]'
+                      (lead.unreadCount || 0) > 0 && lastMsg?.direction === 'inbound' ? 'text-[#00a884] font-bold' : 'text-[#667781] dark:text-[#8696a0]'
                     }`}>
                       {timeDisplay}
                     </span>
@@ -779,7 +781,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
 
                   {/* Middle Line: Last Message Snippet + Unread Indicator */}
                   <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <div className="flex items-center gap-1 min-w-0 text-[#8696a0] text-[11px] truncate">
+                    <div className="flex items-center gap-1 min-w-0 text-[#667781] dark:text-[#8696a0] text-[11px] truncate">
                       {lastMsg?.direction === 'outbound' && (
                         (lastMsg.status === 'read' && Boolean(lastMsg.readAt)) ? (
                           <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] shrink-0" />

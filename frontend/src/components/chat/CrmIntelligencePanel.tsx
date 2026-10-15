@@ -211,12 +211,12 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   });
 
   return (
-    <div className="w-full sm:w-96 md:w-96 shrink-0 border-l border-slate-800 bg-[#111b21] flex flex-col h-full overflow-hidden select-none fixed md:static inset-y-0 right-0 z-40 md:z-auto shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200">
+    <div className="w-full sm:w-96 md:w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111b21] flex flex-col h-full overflow-hidden select-none fixed md:static inset-y-0 right-0 z-40 md:z-auto shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200 transition-colors">
       {/* Header */}
-      <div className="h-12 px-3.5 bg-[#202c33] border-b border-slate-800 flex items-center justify-between shrink-0">
+      <div className="h-12 px-3.5 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-slate-200 dark:border-slate-800 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-1.5 min-w-0">
-          <User className={`w-3.5 h-3.5 shrink-0 ${isCras ? 'text-rose-400' : 'text-whatsapp'}`} />
-          <h3 className="font-bold text-xs text-slate-100 truncate">
+          <User className={`w-3.5 h-3.5 shrink-0 ${isCras ? 'text-rose-500 dark:text-rose-400' : 'text-emerald-600 dark:text-whatsapp'}`} />
+          <h3 className="font-bold text-xs text-slate-800 dark:text-slate-100 truncate">
             {isCras ? 'Student Details & Routing' : 'Patient Details & Routing'}
           </h3>
         </div>
@@ -224,23 +224,23 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           <button
             type="button"
             onClick={() => setIsCollapsed(!isCollapsed)}
-            className="text-slate-400 hover:text-slate-200 px-1.5 py-1 rounded bg-[#111b21] hover:bg-slate-800 border border-slate-700 flex items-center gap-1 text-[10px] font-semibold transition-colors"
+            className="text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 px-1.5 py-1 rounded bg-white dark:bg-[#111b21] hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 flex items-center gap-1 text-[10px] font-semibold transition-colors"
             title={isCollapsed ? "Show routing details" : "Collapse routing details to expand Notes"}
           >
             {isCollapsed ? (
               <>
-                <ChevronDown className="w-3 h-3 text-teal-400" />
-                <span className="text-teal-400">Details</span>
+                <ChevronDown className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+                <span className="text-teal-600 dark:text-teal-400">Details</span>
               </>
             ) : (
               <>
-                <ChevronUp className="w-3 h-3 text-slate-400" />
+                <ChevronUp className="w-3 h-3 text-slate-500 dark:text-slate-400" />
                 <span>Compact</span>
               </>
             )}
           </button>
           {onClose && (
-            <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-700/50">
+            <button onClick={onClose} className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-700/50">
               <X className="w-4 h-4" />
             </button>
           )}
@@ -248,15 +248,15 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       </div>
 
       {/* Unified Scrollable Container */}
-      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0">
+      <div className="flex-1 overflow-y-auto custom-scrollbar flex flex-col min-h-0 bg-slate-50/50 dark:bg-transparent">
         {/* Top Routing & Stage Controls */}
         {!isCollapsed && (
-          <div className="p-2.5 bg-[#202c33]/40 border-b border-slate-800 space-y-2 shrink-0">
+          <div className="p-2.5 bg-slate-100/70 dark:bg-[#202c33]/40 border-b border-slate-200 dark:border-slate-800 space-y-2 shrink-0">
             {/* WhatsApp 24-Hour Window Container */}
             <WhatsApp24hWindowInfo lead={lead} messages={leadMessages} />
 
             {/* Contact WhatsApp Card with Phone and Editable Name */}
-            <div className="bg-[#111b21] p-2.5 rounded-xl border border-slate-800 space-y-2 shadow-sm">
+            <div className="bg-white dark:bg-[#111b21] p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2 shadow-sm">
           
           {/* WhatsApp Number Row */}
           <div>
@@ -765,19 +765,19 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     )}
 
         {/* Clean Tabs Navigation (Sticky at top when scrolling down) */}
-        <div className="sticky top-0 z-20 px-2 py-1.5 border-b border-slate-800 bg-[#202c33]/95 backdrop-blur-sm grid grid-cols-3 gap-1 shrink-0 shadow-sm">
+        <div className="sticky top-0 z-20 px-2 py-1.5 border-b border-slate-200 dark:border-slate-800 bg-[#f0f2f5]/95 dark:bg-[#202c33]/95 backdrop-blur-sm grid grid-cols-3 gap-1 shrink-0 shadow-sm">
           <button
             onClick={() => setActiveTab('notes')}
             className={`py-1.5 px-1 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
               activeTab === 'notes'
-                ? 'bg-whatsapp/20 text-whatsapp border border-whatsapp/40'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-400 dark:bg-whatsapp/20 dark:text-whatsapp dark:border-whatsapp/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30'
             }`}
           >
             <FileText className="w-3.5 h-3.5" />
             <span>Notes</span>
             {leadNotesCount > 0 && (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-whatsapp/25 text-whatsapp font-extrabold border border-whatsapp/40">
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-400 dark:bg-whatsapp/25 dark:text-whatsapp font-extrabold dark:border-whatsapp/40">
                 {leadNotesCount}
               </span>
             )}
@@ -787,8 +787,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             onClick={() => setActiveTab('followups')}
             className={`py-1.5 px-1 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
               activeTab === 'followups'
-                ? 'bg-whatsapp/20 text-whatsapp border border-whatsapp/40'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-400 dark:bg-whatsapp/20 dark:text-whatsapp dark:border-whatsapp/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30'
             }`}
           >
             <Calendar className="w-3.5 h-3.5" />
@@ -799,8 +799,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             onClick={() => setActiveTab('history')}
             className={`py-1.5 px-1 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1.5 transition-all ${
               activeTab === 'history'
-                ? 'bg-whatsapp/20 text-whatsapp border border-whatsapp/40'
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-emerald-100 text-emerald-800 border border-emerald-400 dark:bg-whatsapp/20 dark:text-whatsapp dark:border-whatsapp/40'
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 hover:bg-slate-200/50 dark:hover:bg-slate-700/30'
             }`}
           >
             <History className="w-3.5 h-3.5" />

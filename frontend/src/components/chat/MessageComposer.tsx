@@ -555,7 +555,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const approvedTemplates = templates.filter(t => t.approved && (t.language === lead.language || t.language === 'en'));
 
   return (
-    <div className="bg-[#202c33] px-2 sm:px-4 py-2 border-t border-[#222e35] select-none shrink-0 relative">
+    <div className="bg-[#f0f2f5] dark:bg-[#202c33] px-2 sm:px-4 py-2 border-t border-[#d1d7db] dark:border-[#222e35] select-none shrink-0 relative">
       {/* Hidden File Inputs */}
       <input 
         ref={fileInputRef}
@@ -987,7 +987,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setShowTemplates(false);
           }}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
-            showAttachMenu ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
+            showAttachMenu 
+              ? 'bg-slate-200 dark:bg-[#374248] text-[#00a884]' 
+              : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#d1d7db] hover:bg-slate-200 dark:hover:bg-[#374248]/50'
           }`}
           title="Attach"
         >
@@ -1005,7 +1007,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setShowTemplates(false);
           }}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
-            showEmojiPicker ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
+            showEmojiPicker 
+              ? 'bg-slate-200 dark:bg-[#374248] text-[#00a884]' 
+              : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#d1d7db] hover:bg-slate-200 dark:hover:bg-[#374248]/50'
           }`}
           title="Emojis"
         >
@@ -1023,7 +1027,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             setAttachMenuMode('main');
           }}
           className={`w-9 h-9 rounded-full flex items-center justify-center transition-colors shrink-0 mb-0.5 cursor-pointer ${
-            showTemplates ? 'bg-[#374248] text-[#00a884]' : 'text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50'
+            showTemplates 
+              ? 'bg-slate-200 dark:bg-[#374248] text-[#00a884]' 
+              : 'text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#d1d7db] hover:bg-slate-200 dark:hover:bg-[#374248]/50'
           }`}
           title="Quick Templates & Greetings"
         >
@@ -1032,10 +1038,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
         {/* Input Field / Voice Recording View */}
         {isRecording ? (
-          <div className="flex-1 bg-[#2a3942] rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono animate-in fade-in duration-150 mb-0.5">
+          <div className="flex-1 bg-white dark:bg-[#2a3942] border border-slate-200 dark:border-transparent rounded-lg px-4 py-2 flex items-center justify-between text-xs font-mono animate-in fade-in duration-150 mb-0.5 shadow-xs">
             <div className="flex items-center gap-3">
               <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
-              <span className="text-rose-400 font-semibold tracking-wider">
+              <span className="text-rose-500 dark:text-rose-400 font-semibold tracking-wider">
                 {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}
               </span>
               <div className="hidden sm:flex items-center gap-1">
@@ -1045,13 +1051,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                 <div className="w-1 h-6 bg-rose-500/80 rounded animate-pulse delay-100" />
                 <div className="w-1 h-4 bg-rose-500/80 rounded animate-pulse delay-200" />
               </div>
-              <span className="text-[11px] text-[#8696a0] font-sans">Recording WhatsApp Voice Note...</span>
+              <span className="text-[11px] text-[#667781] dark:text-[#8696a0] font-sans">Recording WhatsApp Voice Note...</span>
             </div>
             
             <button 
               type="button"
               onClick={handleCancelRecording} 
-              className="p-1.5 hover:bg-[#374248] rounded-full text-[#8696a0] hover:text-rose-400 transition-colors flex items-center gap-1 font-sans"
+              className="p-1.5 hover:bg-slate-200 dark:hover:bg-[#374248] rounded-full text-[#667781] dark:text-[#8696a0] hover:text-rose-500 transition-colors flex items-center gap-1 font-sans cursor-pointer"
               title="Discard Voice Note"
             >
               <Trash2 className="w-4 h-4" />
@@ -1059,7 +1065,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             </button>
           </div>
         ) : (
-          <div className="flex-1 flex items-center bg-[#2a3942] rounded-xl px-3.5 py-1.5 focus-within:ring-1 focus-within:ring-[#00a884] transition-all min-h-[40px]">
+          <div className="flex-1 flex items-center bg-white dark:bg-[#2a3942] border border-slate-200 dark:border-transparent rounded-xl px-3.5 py-1.5 focus-within:ring-1 focus-within:ring-[#00a884] transition-all min-h-[40px] shadow-xs">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -1081,7 +1087,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                     : "Type a message..."
                   : "Please link your WhatsApp or configure Meta API to send messages..."
               }
-              className="w-full bg-transparent text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
+              className="w-full bg-transparent text-[#111b21] dark:text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
             />
           </div>
         )}

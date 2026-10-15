@@ -126,16 +126,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
               className={`w-72 shrink-0 rounded-2xl border flex flex-col max-h-[calc(100vh-235px)] overflow-hidden transition-all duration-200 ${
                 isDropTarget
                   ? isCras
-                    ? 'bg-rose-950/40 border-rose-400 ring-2 ring-rose-500/50 shadow-xl shadow-rose-950/50 scale-[1.01]'
-                    : 'bg-teal-950/40 border-teal-400 ring-2 ring-teal-500/50 shadow-xl shadow-teal-950/50 scale-[1.01]'
-                  : 'bg-slate-950/60 border-slate-800'
+                    ? 'bg-rose-50 dark:bg-rose-950/40 border-rose-400 ring-2 ring-rose-500/50 shadow-xl scale-[1.01]'
+                    : 'bg-teal-50 dark:bg-teal-950/40 border-teal-400 ring-2 ring-teal-500/50 shadow-xl scale-[1.01]'
+                  : 'bg-slate-100/80 dark:bg-slate-950/60 border-slate-200/90 dark:border-slate-800 shadow-sm'
               }`}
             >
               {/* Column Header */}
-              <div className={`p-3 border-b border-slate-800 flex items-center justify-between transition-colors ${
+              <div className={`p-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between transition-colors ${
                 isDropTarget 
-                  ? (isCras ? 'bg-rose-900/40' : 'bg-teal-900/40') 
-                  : 'bg-slate-900/80'
+                  ? (isCras ? 'bg-rose-100/90 dark:bg-rose-900/40' : 'bg-teal-100/90 dark:bg-teal-900/40') 
+                  : 'bg-white dark:bg-slate-900/80'
               }`}>
                 <div className="flex items-center gap-2 min-w-0">
                   <span
@@ -145,12 +145,12 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
                       borderColor: col.color ? `${col.color}80` : undefined
                     }}
                   ></span>
-                  <h3 className="text-xs font-bold text-slate-200 tracking-wide truncate">{displayLabel}</h3>
+                  <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-wide truncate">{displayLabel}</h3>
                 </div>
                 <span className={`px-2 py-0.5 text-[11px] font-mono font-bold rounded-full border transition-colors shrink-0 ml-1.5 ${
                   isDropTarget 
-                    ? (isCras ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : 'bg-teal-500/20 text-teal-300 border-teal-500/40')
-                    : 'bg-slate-800 text-slate-300 border-slate-700'
+                    ? (isCras ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border-rose-300 dark:border-rose-500/40' : 'bg-teal-100 dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border-teal-300 dark:border-teal-500/40')
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                 }`}>
                   {stageLeads.length}
                 </span>
@@ -161,17 +161,17 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
                 {/* Visual Drop Placeholder Indicator */}
                 {isDropTarget && draggedLeadId && (
                   <div className={`p-3.5 border-2 border-dashed rounded-xl text-center flex flex-col items-center justify-center gap-1 animate-pulse text-xs font-semibold ${
-                    isCras ? 'border-rose-400 bg-rose-500/10 text-rose-300' : 'border-teal-400 bg-teal-500/10 text-teal-300'
+                    isCras ? 'border-rose-400 bg-rose-50 dark:bg-rose-500/10 text-rose-700 dark:text-rose-300' : 'border-teal-400 bg-teal-50 dark:bg-teal-500/10 text-teal-700 dark:text-teal-300'
                   }`}>
-                    <ArrowDownCircle className={`w-5 h-5 animate-bounce ${isCras ? 'text-rose-400' : 'text-teal-400'}`} />
+                    <ArrowDownCircle className={`w-5 h-5 animate-bounce ${isCras ? 'text-rose-500 dark:text-rose-400' : 'text-teal-600 dark:text-teal-400'}`} />
                     <span>Drop to move into {displayLabel}</span>
                   </div>
                 )}
 
                 {stageLeads.length === 0 && !isDropTarget ? (
-                  <div className="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-800/80 rounded-lg text-slate-500 text-xs">
+                  <div className="h-32 flex flex-col items-center justify-center text-center p-4 border border-dashed border-slate-300 dark:border-slate-800/80 rounded-lg text-slate-400 dark:text-slate-500 text-xs">
                     <p>{isCras ? 'No student inquiries in this stage' : 'No patient leads in this stage'}</p>
-                    <span className="text-[10px] text-slate-600 mt-1">Pick and drop any lead card here</span>
+                    <span className="text-[10px] text-slate-400 dark:text-slate-600 mt-1">Pick and drop any lead card here</span>
                   </div>
                 ) : (
                   stageLeads.map((lead) => (

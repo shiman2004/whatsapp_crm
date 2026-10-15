@@ -228,49 +228,49 @@ export const StageManagementTab: React.FC = () => {
     <div className="space-y-6">
       {/* Top Banner / Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Configured Pipeline Stages</p>
-            <p className="text-2xl font-bold text-slate-100 font-mono mt-0.5">{totalCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Configured Pipeline Stages</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono mt-0.5">{totalCount}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center text-indigo-400">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 dark:bg-indigo-500/10 border border-indigo-200 dark:border-indigo-500/20 flex items-center justify-center text-indigo-600 dark:text-indigo-400">
             <KanbanSquare className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Active In Kanban</p>
-            <p className="text-2xl font-bold text-emerald-400 font-mono mt-0.5">{activeCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Active In Kanban</p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">{activeCount}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Protected System Stages</p>
-            <p className="text-2xl font-bold text-amber-400 font-mono mt-0.5">{systemCount || 3}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Protected System Stages</p>
+            <p className="text-2xl font-bold text-amber-600 dark:text-amber-400 font-mono mt-0.5">{systemCount || 3}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 flex items-center justify-center text-amber-600 dark:text-amber-400">
             <Lock className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Control Bar: Title & Add Button */}
-      <div className="flex items-center justify-between bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+      <div className="flex items-center justify-between bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-indigo-400" />
-          <span className="text-xs font-semibold text-slate-200">
+          <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
             Pipeline Column Display Sequence (Ordered Left to Right)
           </span>
         </div>
 
         <button
           onClick={handleOpenAddModal}
-          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-950/40 transition-all shrink-0"
+          className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md dark:shadow-lg dark:shadow-indigo-950/40 transition-all shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Custom Stage</span>
@@ -278,11 +278,11 @@ export const StageManagementTab: React.FC = () => {
       </div>
 
       {/* Ordered Stages Table / List */}
-      <div className="bg-slate-900/80 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+      <div className="bg-white dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm dark:shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
+              <tr className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
                 <th className="py-3 px-4 w-16 text-center">Order</th>
                 <th className="py-3 px-4">Stage Label & Key</th>
                 <th className="py-3 px-4">Description</th>
@@ -292,7 +292,7 @@ export const StageManagementTab: React.FC = () => {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {sortedStages.map((stage, idx) => {
                 const isSystem = isSystemStage(stage);
                 const isActive = stage.isActive !== false;
@@ -302,7 +302,7 @@ export const StageManagementTab: React.FC = () => {
                 return (
                   <tr
                     key={stage.id}
-                    className="hover:bg-slate-800/40 transition-colors group"
+                    className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                   >
                     {/* Order Controls */}
                     <td className="py-3.5 px-4 text-center">
@@ -311,18 +311,18 @@ export const StageManagementTab: React.FC = () => {
                           disabled={isFirst}
                           onClick={() => handleMoveUp(idx)}
                           title="Move Left / Earlier"
-                          className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 text-slate-300 rounded transition-colors"
+                          className="p-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
                         >
                           <ArrowUp className="w-3 h-3" />
                         </button>
-                        <span className="font-mono font-bold text-slate-400 w-5 text-center">
+                        <span className="font-mono font-bold text-slate-600 dark:text-slate-400 w-5 text-center">
                           {idx + 1}
                         </span>
                         <button
                           disabled={isLast}
                           onClick={() => handleMoveDown(idx)}
                           title="Move Right / Later"
-                          className="p-1 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 text-slate-300 rounded transition-colors"
+                          className="p-1 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-100 dark:disabled:hover:bg-slate-800 text-slate-700 dark:text-slate-300 rounded border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
                         >
                           <ArrowDown className="w-3 h-3" />
                         </button>
@@ -333,30 +333,30 @@ export const StageManagementTab: React.FC = () => {
                     <td className="py-3.5 px-4">
                       <div className="flex items-center gap-2">
                         <span
-                          className="w-3 h-3 rounded-full shrink-0 border border-white/20 shadow-sm"
+                          className="w-3 h-3 rounded-full shrink-0 border border-black/10 dark:border-white/20 shadow-sm"
                           style={{ backgroundColor: stage.color || '#6366f1' }}
                         />
                         <div>
-                          <p className="font-bold text-slate-100 text-sm">{stage.label}</p>
-                          <p className="text-[10px] text-slate-400 font-mono">{stage.key}</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{stage.label}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{stage.key}</p>
                         </div>
                       </div>
                     </td>
 
                     {/* Description */}
-                    <td className="py-3.5 px-4 text-slate-400 max-w-xs truncate">
+                    <td className="py-3.5 px-4 text-slate-600 dark:text-slate-400 max-w-xs truncate">
                       {stage.description || (
-                        <span className="text-slate-600 italic">No description</span>
+                        <span className="text-slate-400 dark:text-slate-600 italic">No description</span>
                       )}
                     </td>
 
                     {/* Color Tag */}
                     <td className="py-3.5 px-4">
                       <span
-                        className="px-2 py-0.5 rounded font-mono text-[10px] font-semibold border border-white/10"
+                        className="px-2 py-0.5 rounded font-mono text-[10px] font-semibold border border-slate-200 dark:border-white/10"
                         style={{
                           backgroundColor: `${stage.color || '#6366f1'}20`,
-                          color: stage.color || '#a5b4fc',
+                          color: stage.color || '#4f46e5',
                         }}
                       >
                         {stage.color || '#6366f1'}
@@ -366,7 +366,7 @@ export const StageManagementTab: React.FC = () => {
                     {/* System Guard */}
                     <td className="py-3.5 px-4">
                       {isSystem ? (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/30">
                           <Lock className="w-2.5 h-2.5" />
                           System Stage
                         </span>
@@ -378,13 +378,13 @@ export const StageManagementTab: React.FC = () => {
                     {/* Status */}
                     <td className="py-3.5 px-4">
                       {isActive ? (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 mr-1.5"></span>
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                          <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5"></span>
+                        <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                          <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 mr-1.5"></span>
                           Deactivated
                         </span>
                       )}
@@ -396,7 +396,7 @@ export const StageManagementTab: React.FC = () => {
                         <button
                           onClick={() => handleOpenEditModal(stage)}
                           title="Edit Stage Label & Color"
-                          className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-colors"
+                          className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer"
                         >
                           <Pencil className="w-3.5 h-3.5" />
                         </button>
@@ -404,7 +404,7 @@ export const StageManagementTab: React.FC = () => {
                         {isSystem ? (
                           <div
                             title="System stages (New, Converted, Lost) are required by CRM core logic and cannot be deactivated."
-                            className="p-1.5 bg-slate-900/80 text-slate-600 rounded-lg border border-slate-800 cursor-not-allowed"
+                            className="p-1.5 bg-slate-100 dark:bg-slate-900/80 text-slate-400 dark:text-slate-600 rounded-lg border border-slate-200 dark:border-slate-800 cursor-not-allowed"
                           >
                             <Lock className="w-3.5 h-3.5" />
                           </div>

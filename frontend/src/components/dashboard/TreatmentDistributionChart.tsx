@@ -26,18 +26,18 @@ export const TreatmentDistributionChart: React.FC<TreatmentDistributionChartProp
   })).filter(d => d.value > 0);
 
   return (
-    <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 backdrop-blur-md shadow-lg space-y-4">
+    <div className="bg-white dark:bg-slate-900/80 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 backdrop-blur-md shadow-sm dark:shadow-lg space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-slate-100">Enquiries by Treatment Category</h3>
-          <p className="text-xs text-slate-400">Demand distribution across wellness verticals</p>
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Enquiries by Treatment Category</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Demand distribution across wellness verticals</p>
         </div>
       </div>
 
       {data.length === 0 ? (
-        <div className="h-64 w-full flex flex-col items-center justify-center text-slate-500 text-xs border border-dashed border-slate-800 rounded-xl">
-          <p className="font-semibold text-slate-400">No Treatment Inquiries Yet</p>
-          <p className="text-[11px] text-slate-500 mt-0.5">Live incoming WhatsApp chats will populate category analytics</p>
+        <div className="h-64 w-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-xs border border-dashed border-slate-300 dark:border-slate-800 rounded-xl">
+          <p className="font-semibold text-slate-600 dark:text-slate-400">No Treatment Inquiries Yet</p>
+          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Live incoming WhatsApp chats will populate category analytics</p>
         </div>
       ) : (
         <div className="h-64 w-full flex items-center justify-center">

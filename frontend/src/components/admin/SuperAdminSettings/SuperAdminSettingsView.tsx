@@ -92,31 +92,31 @@ export const SuperAdminSettingsView: React.FC = () => {
   return (
     <div className="space-y-6 flex-1 overflow-y-auto pr-1 pb-10">
       {/* Page Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800/80 pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200 dark:border-slate-800/80 pb-5">
         <div>
           <div className="flex items-center gap-2">
-            <span className="p-2 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            <span className="p-2 rounded-xl bg-purple-50 dark:bg-purple-500/10 border border-purple-200 dark:border-purple-500/20 text-purple-600 dark:text-purple-400">
               <Sliders className="w-5 h-5" />
             </span>
-            <h1 className="text-xl font-bold text-slate-100 font-serif">
+            <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-serif">
               System Management & Dynamic Configuration
             </h1>
           </div>
-          <p className="text-xs text-slate-400 mt-1 pl-10">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-1 pl-10">
             Manage course curriculums, clinical treatment menus, pipeline stage sequences, and administrator accounts
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-start sm:self-auto">
-          <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-800 text-[11px] font-semibold text-slate-300 flex items-center gap-2 shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          <div className="px-3 py-1.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 shadow-sm">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 animate-pulse"></span>
             <span>Supabase Cloud Sync</span>
           </div>
         </div>
       </div>
 
       {/* Modern Segmented Navigation Tabs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 bg-slate-900/60 p-1.5 rounded-2xl border border-slate-800/80">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800/80">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -127,14 +127,14 @@ export const SuperAdminSettingsView: React.FC = () => {
               onClick={() => setActiveTab(tab.id)}
               className={`p-3 rounded-xl border text-left transition-all duration-150 flex flex-col justify-between ${
                 isActive
-                  ? `${tab.activeBg} shadow-lg shadow-black/20 scale-[1.01]`
-                  : 'bg-slate-950/40 border-slate-800/60 text-slate-400 hover:bg-slate-800/40 hover:text-slate-200'
+                  ? `${tab.activeBg} shadow-md dark:shadow-lg dark:shadow-black/20 scale-[1.01]`
+                  : 'bg-white dark:bg-slate-950/40 border-slate-200 dark:border-slate-800/60 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40 hover:text-slate-900 dark:hover:text-slate-200 shadow-sm'
               }`}
             >
               <div className="flex items-center justify-between mb-2">
                 <div
                   className={`w-8 h-8 rounded-lg flex items-center justify-center ${
-                    isActive ? 'bg-white/10' : 'bg-slate-900 text-slate-400'
+                    isActive ? 'bg-white/20 dark:bg-white/10' : 'bg-slate-100 dark:bg-slate-900 text-slate-500 dark:text-slate-400'
                   }`}
                 >
                   <Icon className={`w-4 h-4 ${tab.color}`} />
@@ -146,10 +146,10 @@ export const SuperAdminSettingsView: React.FC = () => {
                 </span>
               </div>
               <div>
-                <p className={`text-xs font-bold ${isActive ? 'text-slate-100' : 'text-slate-300'}`}>
+                <p className={`text-xs font-bold ${isActive ? 'text-slate-900 dark:text-slate-100' : 'text-slate-800 dark:text-slate-300'}`}>
                   {tab.label}
                 </p>
-                <p className="text-[10px] text-slate-500 mt-0.5 truncate">{tab.subtitle}</p>
+                <p className="text-[10px] text-slate-500 dark:text-slate-500 mt-0.5 truncate">{tab.subtitle}</p>
               </div>
             </button>
           );

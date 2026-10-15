@@ -77,20 +77,20 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
         return (
           <div
             key={idx}
-            className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 backdrop-blur-md shadow-lg flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-slate-700 transition-all"
+            className="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 backdrop-blur-md shadow-sm dark:shadow-lg flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition-all"
           >
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-xs font-semibold text-slate-400">{kpi.label}</span>
-                <h3 className="text-2xl font-black text-white tracking-tight mt-1 font-sans">{kpi.value}</h3>
+                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{kpi.label}</span>
+                <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-1 font-sans">{kpi.value}</h3>
               </div>
               <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${kpi.color} flex items-center justify-center text-white shadow-md`}>
                 <Icon className="w-5 h-5" />
               </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-800/80">
-              <span className="text-[11px] text-slate-400">{kpi.subtext}</span>
+            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800/80">
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">{kpi.subtext}</span>
               <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${kpi.badgeColor}`}>
                 {kpi.badge}
               </span>

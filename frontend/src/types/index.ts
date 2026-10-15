@@ -167,7 +167,7 @@ export interface Treatment {
   categoryId: string;
   company?: CompanyCode;
   name: string;
-  nameI18n: {
+  nameI18n?: {
     en: string;
     si: string;
     ta: string;
@@ -175,6 +175,24 @@ export interface Treatment {
   active: boolean;
   priceRange?: string;
   duration?: string;
+  durationMinutes?: number;
+  startingPrice?: number;
+  description?: string;
+  benefits?: string;
+}
+
+export interface LeadStageConfig {
+  id: string;
+  key: string;
+  label: string;
+  description?: string;
+  color?: string;
+  orderIndex: number;
+  isActive: boolean;
+  isSystem: boolean;
+  company?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LeadNote {

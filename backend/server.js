@@ -666,8 +666,13 @@ function isPublicRoute(req, pathname) {
   if (req.method === 'GET' && pathname === '/api/db/status') return true;
   // 5. Read-only Meta API status check (hasToken, phone IDs)
   if (req.method === 'GET' && (pathname === '/api/meta/config' || pathname === '/api/meta/token')) return true;
-  // 6. Read-only Treatment & Category Catalogs
-  if (req.method === 'GET' && (pathname === '/api/categories' || pathname === '/api/treatments')) return true;
+  // 6. Read-only Treatment, Course, Stage & Category Catalogs
+  if (req.method === 'GET' && (
+    pathname === '/api/categories' || 
+    pathname === '/api/treatments' || 
+    pathname === '/api/courses' || 
+    pathname === '/api/stages'
+  )) return true;
 
   return false;
 }
@@ -2138,6 +2143,20 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Helper for Super Admin Authorization
+  function requireSuperAdmin(authUser, res) {
+    if (!authUser || authUser.role !== 'super_admin') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ 
+        success: false, 
+        errorCode: 'FORBIDDEN_SUPER_ADMIN_REQUIRED',
+        error: 'Forbidden: Super Admin privileges required.' 
+      }));
+      return false;
+    }
+    return true;
+  }
+
   // 7. REST: Get Treatment Categories from Supabase
   if (req.method === 'GET' && pathname === '/api/categories') {
     const prisma = getPrisma();
@@ -2154,19 +2173,1046 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 8. REST: Get Treatments from Supabase
-  if (req.method === 'GET' && pathname === '/api/treatments') {
+  // =============================================================================
+  // 8. REST: Lead Stages Management (Dynamic Configuration & Workflow Protection)
+  // =============================================================================
+
+  // 8a. GET /api/stages & GET /api/admin/stages (Fetch configured lead stages)
+  if (req.method === 'GET' && (pathname === '/api/stages' || pathname === '/api/admin/stages')) {
     const prisma = getPrisma();
     if (prisma && getDbStatus()) {
       try {
-        const treatments = await prisma.treatment.findMany({ where: { active: true } });
+        const stages = await prisma.leadStageConfig.findMany({
+          orderBy: { orderIndex: 'asc' }
+        });
+        if (stages && stages.length > 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, stages }));
+          return;
+        }
+      } catch (e) {
+        // Fallback to raw SQL if model mapping issue
+        try {
+          const rawStages = await prisma.$queryRawUnsafe(`
+            SELECT id, key, label, description, color, order_index as "orderIndex", 
+                   is_active as "isActive", is_system as "isSystem", company,
+                   created_at as "createdAt", updated_at as "updatedAt"
+            FROM public.lead_stages
+            ORDER BY order_index ASC;
+          `);
+          if (Array.isArray(rawStages) && rawStages.length > 0) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: true, stages: rawStages }));
+            return;
+          }
+        } catch (rawErr) {}
+      }
+    }
+    // Canonical fallback if DB offline
+    const defaultStages = [
+      { id: 'stage-new', key: 'new', label: 'New Inquiry', description: 'Fresh uncontacted inbound lead', color: 'rose', orderIndex: 0, isActive: true, isSystem: true, company: 'ALL' },
+      { id: 'stage-assigned', key: 'assigned', label: 'Assigned', description: 'Lead assigned to coordinator or education counsellor', color: 'amber', orderIndex: 1, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-contacted', key: 'contacted', label: 'Contacted', description: 'Initial outreach made via WhatsApp or call', color: 'emerald', orderIndex: 2, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-potential', key: 'potential', label: 'Potential', description: 'Qualified prospect showing active interest', color: 'purple', orderIndex: 3, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', description: 'Ongoing treatment / course consultation & quotation', color: 'sky', orderIndex: 4, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: 'slate', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: 'zinc', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: 'teal', orderIndex: 7, isActive: true, isSystem: true, company: 'ALL' },
+      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: 'red', orderIndex: 8, isActive: true, isSystem: true, company: 'ALL' }
+    ];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, stages: defaultStages }));
+    return;
+  }
+
+  // 8b. POST /api/admin/stages (Super Admin: Add new lead stage)
+  if (req.method === 'POST' && pathname === '/api/admin/stages') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const rawKey = String(payload.key || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
+        const label = String(payload.label || '').trim();
+        const description = payload.description ? String(payload.description).trim() : '';
+        const color = payload.color ? String(payload.color).trim() : 'teal';
+        const company = payload.company || 'ALL';
+
+        if (!rawKey || !label) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Stage key and label are required.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          // Check for duplicate key or duplicate label
+          const existing = await prisma.$queryRawUnsafe(
+            `SELECT id, key, label FROM public.lead_stages WHERE LOWER(key) = $1 OR LOWER(label) = $2 LIMIT 1;`,
+            rawKey, label.toLowerCase()
+          ).catch(() => []);
+
+          if (existing && existing.length > 0) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `A lead stage with key "${rawKey}" or label "${label}" already exists.` 
+            }));
+            return;
+          }
+
+          // Compute next order index
+          const maxOrderRes = await prisma.$queryRawUnsafe(`SELECT COALESCE(MAX(order_index), 0) + 1 as "nextOrder" FROM public.lead_stages;`).catch(() => [{ nextOrder: 10 }]);
+          const nextOrder = Number(maxOrderRes[0]?.nextOrder || 10);
+
+          const stageId = `stage-${rawKey}-${Date.now()}`;
+          await prisma.$executeRawUnsafe(`
+            INSERT INTO public.lead_stages (id, key, label, description, color, order_index, is_active, is_system, company, created_at, updated_at)
+            VALUES ($1, $2, $3, $4, $5, $6, TRUE, FALSE, $7, NOW(), NOW());
+          `, stageId, rawKey, label, description, color, nextOrder, company);
+
+          // Ensure LeadStage enum in Postgres accepts the new key
+          await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS '${rawKey}';`).catch(() => null);
+
+          const newStage = {
+            id: stageId,
+            key: rawKey,
+            label,
+            description,
+            color,
+            orderIndex: nextOrder,
+            isActive: true,
+            isSystem: false,
+            company
+          };
+
+          broadcastScopedSSE(null, {
+            type: 'STAGE_CONFIG_UPDATED',
+            action: 'created',
+            stage: newStage
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, stage: newStage }));
+          return;
+        }
+
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Database offline' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8c. PATCH /api/admin/stages/reorder (Super Admin: Reorder display sequence)
+  if ((req.method === 'PATCH' || req.method === 'POST') && pathname === '/api/admin/stages/reorder') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const stageIds = Array.isArray(payload.stageIds) ? payload.stageIds : [];
+        if (stageIds.length === 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'stageIds array is required for reordering.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          for (let index = 0; index < stageIds.length; index++) {
+            const sid = stageIds[index];
+            await prisma.$executeRawUnsafe(
+              `UPDATE public.lead_stages SET order_index = $1, updated_at = NOW() WHERE id = $2 OR key = $2;`,
+              index, sid
+            ).catch(() => null);
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'STAGE_CONFIG_UPDATED',
+            action: 'reordered',
+            stageIds
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Stages reordered successfully.' }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Stages reordered (memory).' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8d. PUT/PATCH /api/admin/stages/:id (Super Admin: Edit stage details)
+  if ((req.method === 'PUT' || req.method === 'PATCH') && pathname.startsWith('/api/admin/stages/') && !pathname.endsWith('/reorder') && !pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const stageId = pathname.split('/')[4];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const label = payload.label ? String(payload.label).trim() : null;
+        const description = payload.description !== undefined ? String(payload.description).trim() : undefined;
+        const color = payload.color ? String(payload.color).trim() : undefined;
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          // Check existence
+          const existing = await prisma.$queryRawUnsafe(`SELECT * FROM public.lead_stages WHERE id = $1 OR key = $1 LIMIT 1;`, stageId).catch(() => []);
+          if (!existing || existing.length === 0) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Stage not found' }));
+            return;
+          }
+
+          const current = existing[0];
+          const newLabel = label || current.label;
+          const newDesc = description !== undefined ? description : current.description;
+          const newColor = color || current.color;
+
+          await prisma.$executeRawUnsafe(`
+            UPDATE public.lead_stages 
+            SET label = $1, description = $2, color = $3, updated_at = NOW()
+            WHERE id = $4 OR key = $4;
+          `, newLabel, newDesc, newColor, stageId);
+
+          broadcastScopedSSE(null, {
+            type: 'STAGE_CONFIG_UPDATED',
+            action: 'updated',
+            stageId: current.id,
+            stageKey: current.key,
+            label: newLabel,
+            color: newColor
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, stage: { ...current, label: newLabel, description: newDesc, color: newColor } }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8e. PATCH /api/admin/stages/:id/status (Super Admin: Activate/Deactivate stage with System Protection)
+  if ((req.method === 'PATCH' || req.method === 'POST') && pathname.startsWith('/api/admin/stages/') && pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const parts = pathname.split('/');
+    const stageId = parts[4];
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.$queryRawUnsafe(`SELECT * FROM public.lead_stages WHERE id = $1 OR key = $1 LIMIT 1;`, stageId).catch(() => []);
+          if (!existing || existing.length === 0) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Stage not found' }));
+            return;
+          }
+
+          const current = existing[0];
+
+          // SYSTEM STAGES PROTECTION: Never allow deactivation of 'new', 'converted', 'lost' or is_system
+          const systemProtectedKeys = ['new', 'converted', 'lost'];
+          if (systemProtectedKeys.includes(current.key) || current.is_system) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `System-required stage "${current.label}" cannot be deactivated. Essential CRM workflows rely on it.` 
+            }));
+            return;
+          }
+
+          const targetActive = payload.active !== undefined ? Boolean(payload.active) : !current.is_active;
+
+          await prisma.$executeRawUnsafe(
+            `UPDATE public.lead_stages SET is_active = $1, updated_at = NOW() WHERE id = $2 OR key = $2;`,
+            targetActive, stageId
+          );
+
+          broadcastScopedSSE(null, {
+            type: 'STAGE_CONFIG_UPDATED',
+            action: 'status_changed',
+            stageId: current.id,
+            stageKey: current.key,
+            isActive: targetActive
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: true, 
+            stageId: current.id, 
+            stageKey: current.key, 
+            isActive: targetActive,
+            message: `Stage "${current.label}" is now ${targetActive ? 'active' : 'inactive'}. Existing historical leads are preserved.`
+          }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, isActive: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // =============================================================================
+  // 9. REST: Course Management (CRAS Academic Programs)
+  // =============================================================================
+
+  // 9a. GET /api/courses & GET /api/admin/courses
+  if (req.method === 'GET' && (pathname === '/api/courses' || pathname === '/api/admin/courses')) {
+    const isSuperAdminReq = pathname === '/api/admin/courses';
+    if (isSuperAdminReq && !requireSuperAdmin(authUser, res)) return;
+
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const whereClause = {
+          OR: [
+            { company: 'CRAS' },
+            { categoryId: 'cat-cras-courses' },
+            { id: { startsWith: 'crs-' } }
+          ],
+          ...(isSuperAdminReq ? {} : { active: true })
+        };
+        const courses = await prisma.treatment.findMany({
+          where: whereClause,
+          orderBy: { name: 'asc' }
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, courses }));
+        return;
+      } catch (e) {}
+    }
+
+    const filtered = CRAS_COURSES.map(c => ({
+      ...c,
+      company: 'CRAS',
+      active: true,
+      durationMinutes: 60,
+      startingPrice: 0
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, courses: filtered }));
+    return;
+  }
+
+  // 9b. POST /api/admin/courses (Super Admin: Add new course)
+  if (req.method === 'POST' && pathname === '/api/admin/courses') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const name = String(payload.name || payload.nameEn || '').trim();
+        const code = String(payload.code || '').trim().toUpperCase();
+        const categoryId = payload.categoryId || 'cat-cras-courses';
+        const durationMinutes = Number(payload.durationMinutes || payload.duration || 60);
+        const startingPrice = Number(payload.startingPrice || payload.price || 0);
+        const description = payload.description ? String(payload.description).trim() : null;
+        const benefits = payload.benefits ? String(payload.benefits).trim() : null;
+
+        if (!name || !code) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Course name and course code are required.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          // Uniqueness check for code & name among CRAS courses
+          const existing = await prisma.treatment.findFirst({
+            where: {
+              OR: [
+                { code: { equals: code, mode: 'insensitive' } },
+                { name: { equals: name, mode: 'insensitive' } }
+              ],
+              AND: [
+                { OR: [{ company: 'CRAS' }, { categoryId: 'cat-cras-courses' }] }
+              ]
+            }
+          }).catch(() => null);
+
+          if (existing) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `A course with code "${code}" or name "${name}" already exists.` 
+            }));
+            return;
+          }
+
+          const courseId = `crs-${code.toLowerCase()}-${Date.now().toString().slice(-4)}`;
+          const createdCourse = await prisma.treatment.create({
+            data: {
+              id: courseId,
+              categoryId,
+              code,
+              company: 'CRAS',
+              name,
+              nameEn: name,
+              nameSi: payload.nameSi || name,
+              nameTa: payload.nameTa || name,
+              startingPrice,
+              durationMinutes,
+              active: true,
+              description,
+              benefits
+            }
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'COURSE_CONFIG_UPDATED',
+            action: 'created',
+            course: createdCourse
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, course: createdCourse }));
+          return;
+        }
+
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Database unavailable' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 9c. PUT/PATCH /api/admin/courses/:id (Super Admin: Edit course)
+  if ((req.method === 'PUT' || req.method === 'PATCH') && pathname.startsWith('/api/admin/courses/') && !pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const courseId = pathname.split('/')[4];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const current = await prisma.treatment.findUnique({ where: { id: courseId } });
+          if (!current) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Course not found' }));
+            return;
+          }
+
+          const updateData = {};
+          if (payload.name) {
+            updateData.name = String(payload.name).trim();
+            updateData.nameEn = updateData.name;
+          }
+          if (payload.code) {
+            const newCode = String(payload.code).trim().toUpperCase();
+            // Duplicate code check excluding self
+            const dup = await prisma.treatment.findFirst({
+              where: {
+                id: { not: courseId },
+                code: { equals: newCode, mode: 'insensitive' },
+                OR: [{ company: 'CRAS' }, { categoryId: 'cat-cras-courses' }]
+              }
+            });
+            if (dup) {
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: `Course code "${newCode}" is already in use.` }));
+              return;
+            }
+            updateData.code = newCode;
+          }
+          if (payload.durationMinutes !== undefined) updateData.durationMinutes = Number(payload.durationMinutes);
+          if (payload.startingPrice !== undefined) updateData.startingPrice = Number(payload.startingPrice);
+          if (payload.description !== undefined) updateData.description = payload.description;
+          if (payload.benefits !== undefined) updateData.benefits = payload.benefits;
+
+          const updatedCourse = await prisma.treatment.update({
+            where: { id: courseId },
+            data: updateData
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'COURSE_CONFIG_UPDATED',
+            action: 'updated',
+            course: updatedCourse
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, course: updatedCourse }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 9d. PATCH /api/admin/courses/:id/status (Super Admin: Activate/Deactivate course)
+  if ((req.method === 'PATCH' || req.method === 'POST') && pathname.startsWith('/api/admin/courses/') && pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const courseId = pathname.split('/')[4];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const current = await prisma.treatment.findUnique({ where: { id: courseId } });
+          if (!current) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Course not found' }));
+            return;
+          }
+
+          const targetActive = payload.active !== undefined ? Boolean(payload.active) : !current.active;
+
+          const updatedCourse = await prisma.treatment.update({
+            where: { id: courseId },
+            data: { active: targetActive }
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'COURSE_CONFIG_UPDATED',
+            action: 'status_changed',
+            course: updatedCourse
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: true, 
+            course: updatedCourse,
+            message: `Course "${updatedCourse.name}" is now ${targetActive ? 'active' : 'inactive'}. Historical student records preserved.`
+          }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // =============================================================================
+  // 10. REST: Treatment Management (RWC Clinical Treatments)
+  // =============================================================================
+
+  // 10a. GET /api/treatments (Active Treatments & Courses) & GET /api/admin/treatments (All RWC Treatments)
+  if (req.method === 'GET' && (pathname === '/api/treatments' || pathname === '/api/admin/treatments')) {
+    const isAdminView = pathname === '/api/admin/treatments';
+    if (isAdminView && !requireSuperAdmin(authUser, res)) return;
+
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const whereClause = isAdminView
+          ? { OR: [{ company: 'RWC' }, { company: null }] }
+          : { active: true };
+
+        const treatments = await prisma.treatment.findMany({
+          where: whereClause,
+          orderBy: { name: 'asc' }
+        });
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify(treatments));
         return;
       } catch (e) {}
     }
+
+    const fallbackList = CLINIC_TREATMENTS.map(t => ({
+      ...t,
+      company: 'RWC',
+      active: true,
+      durationMinutes: 45,
+      startingPrice: 0
+    }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify([]));
+    res.end(JSON.stringify(fallbackList));
+    return;
+  }
+
+  // 10b. POST /api/admin/treatments (Super Admin: Add new treatment)
+  if (req.method === 'POST' && pathname === '/api/admin/treatments') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const name = String(payload.name || payload.nameEn || '').trim();
+        const code = String(payload.code || '').trim().toUpperCase();
+        const categoryId = payload.categoryId || 'cat-skin-care';
+        const startingPrice = Number(payload.startingPrice || payload.price || 0);
+        const durationMinutes = Number(payload.durationMinutes || payload.duration || 45);
+        const description = payload.description ? String(payload.description).trim() : null;
+        const benefits = payload.benefits ? String(payload.benefits).trim() : null;
+
+        if (!name || !code) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Treatment name and treatment code are required.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          // Uniqueness check for code & name among RWC treatments
+          const existing = await prisma.treatment.findFirst({
+            where: {
+              OR: [
+                { code: { equals: code, mode: 'insensitive' } },
+                { name: { equals: name, mode: 'insensitive' } }
+              ],
+              AND: [
+                { OR: [{ company: 'RWC' }, { company: null }] }
+              ]
+            }
+          }).catch(() => null);
+
+          if (existing) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `A treatment with code "${code}" or name "${name}" already exists.` 
+            }));
+            return;
+          }
+
+          const treatmentId = `trt-${code.toLowerCase()}-${Date.now().toString().slice(-4)}`;
+          const createdTreatment = await prisma.treatment.create({
+            data: {
+              id: treatmentId,
+              categoryId,
+              code,
+              company: 'RWC',
+              name,
+              nameEn: name,
+              nameSi: payload.nameSi || name,
+              nameTa: payload.nameTa || name,
+              startingPrice,
+              durationMinutes,
+              active: true,
+              description,
+              benefits
+            }
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'TREATMENT_CONFIG_UPDATED',
+            action: 'created',
+            treatment: createdTreatment
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, treatment: createdTreatment }));
+          return;
+        }
+
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Database unavailable' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 10c. PUT/PATCH /api/admin/treatments/:id (Super Admin: Edit treatment)
+  if ((req.method === 'PUT' || req.method === 'PATCH') && pathname.startsWith('/api/admin/treatments/') && !pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const treatmentId = pathname.split('/')[4];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const current = await prisma.treatment.findUnique({ where: { id: treatmentId } });
+          if (!current) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Treatment not found' }));
+            return;
+          }
+
+          const updateData = {};
+          if (payload.name) {
+            updateData.name = String(payload.name).trim();
+            updateData.nameEn = updateData.name;
+          }
+          if (payload.code) {
+            const newCode = String(payload.code).trim().toUpperCase();
+            const dup = await prisma.treatment.findFirst({
+              where: {
+                id: { not: treatmentId },
+                code: { equals: newCode, mode: 'insensitive' },
+                OR: [{ company: 'RWC' }, { company: null }]
+              }
+            });
+            if (dup) {
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: `Treatment code "${newCode}" is already in use.` }));
+              return;
+            }
+            updateData.code = newCode;
+          }
+          if (payload.categoryId) updateData.categoryId = payload.categoryId;
+          if (payload.durationMinutes !== undefined) updateData.durationMinutes = Number(payload.durationMinutes);
+          if (payload.startingPrice !== undefined) updateData.startingPrice = Number(payload.startingPrice);
+          if (payload.description !== undefined) updateData.description = payload.description;
+          if (payload.benefits !== undefined) updateData.benefits = payload.benefits;
+
+          const updatedTreatment = await prisma.treatment.update({
+            where: { id: treatmentId },
+            data: updateData
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'TREATMENT_CONFIG_UPDATED',
+            action: 'updated',
+            treatment: updatedTreatment
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, treatment: updatedTreatment }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 10d. PATCH /api/admin/treatments/:id/status (Super Admin: Activate/Deactivate treatment)
+  if ((req.method === 'PATCH' || req.method === 'POST') && pathname.startsWith('/api/admin/treatments/') && pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const treatmentId = pathname.split('/')[4];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const current = await prisma.treatment.findUnique({ where: { id: treatmentId } });
+          if (!current) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Treatment not found' }));
+            return;
+          }
+
+          const targetActive = payload.active !== undefined ? Boolean(payload.active) : !current.active;
+
+          const updatedTreatment = await prisma.treatment.update({
+            where: { id: treatmentId },
+            data: { active: targetActive }
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'TREATMENT_CONFIG_UPDATED',
+            action: 'status_changed',
+            treatment: updatedTreatment
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: true, 
+            treatment: updatedTreatment,
+            message: `Treatment "${updatedTreatment.name}" is now ${targetActive ? 'active' : 'inactive'}. Historical patient records preserved.`
+          }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // =============================================================================
+  // 11. REST: Super Admin Account Management (Strict RBAC & Lockout Prevention)
+  // =============================================================================
+
+  // 11a. GET /api/admin/super-admins (Super Admin: List all Super Admin accounts)
+  if (req.method === 'GET' && pathname === '/api/admin/super-admins') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const superAdmins = await prisma.user.findMany({
+          where: { role: 'super_admin' },
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            phone: true,
+            role: true,
+            branch: true,
+            company: true,
+            active: true,
+            createdAt: true,
+            updatedAt: true
+          },
+          orderBy: { createdAt: 'asc' }
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, superAdmins }));
+        return;
+      } catch (e) {}
+    }
+
+    const fallbackAdmin = CANONICAL_USERS.filter(u => u.role === 'super_admin').map(u => ({
+      id: u.id,
+      fullName: u.fullName,
+      email: u.email,
+      role: u.role,
+      branch: u.branch,
+      active: true,
+      createdAt: '2026-01-01T08:00:00Z'
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, superAdmins: fallbackAdmin }));
+    return;
+  }
+
+  // 11b. POST /api/admin/super-admins (Super Admin: Create new Super Admin account)
+  if (req.method === 'POST' && pathname === '/api/admin/super-admins') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const fullName = String(payload.fullName || payload.name || '').trim();
+        const email = String(payload.email || '').trim().toLowerCase();
+        const phone = payload.phone ? String(payload.phone).trim() : null;
+        const branch = payload.branch ? String(payload.branch).trim() : 'Colombo (Head Office)';
+        const passwordPlain = payload.password ? String(payload.password).trim() : 'admin';
+        const pinPlain = payload.pin ? String(payload.pin).trim() : '1234';
+
+        if (!fullName || !email) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Full name and email address are required.' }));
+          return;
+        }
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid email address format.' }));
+          return;
+        }
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          // Check for duplicate account email
+          const existingUser = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } }
+          });
+
+          if (existingUser) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `An account with email "${email}" already exists.` 
+            }));
+            return;
+          }
+
+          const cleanPin = String(payload.pin || '1234').trim().slice(0, 10);
+          const newAdmin = await prisma.user.create({
+            data: {
+              fullName,
+              email,
+              phone,
+              branch,
+              role: 'super_admin',
+              password: hashSecret(passwordPlain),
+              pin: cleanPin,
+              active: true
+            },
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              branch: true,
+              role: true,
+              active: true,
+              createdAt: true
+            }
+          });
+
+          console.log(`🛡️ [Super Admin Created] Added by ${authUser.fullName}: ${newAdmin.fullName} (${newAdmin.email})`);
+
+          broadcastScopedSSE(null, {
+            type: 'SUPER_ADMIN_CONFIG_UPDATED',
+            action: 'created',
+            user: newAdmin
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: true, 
+            superAdmin: newAdmin,
+            message: `Super Admin account for ${newAdmin.fullName} created successfully.`
+          }));
+          return;
+        }
+
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Database unavailable' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 11c. PATCH /api/admin/super-admins/:id (Super Admin: Edit account name or activate/deactivate with Last Admin Guard)
+  if ((req.method === 'PATCH' || req.method === 'PUT') && pathname.startsWith('/api/admin/super-admins/')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const targetAdminId = pathname.split('/')[4];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const targetUser = await prisma.user.findUnique({
+            where: { id: targetAdminId }
+          });
+
+          if (!targetUser || targetUser.role !== 'super_admin') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
+            return;
+          }
+
+          // GUARD: Check if attempting to deactivate the last active Super Admin
+          if (payload.active === false && targetUser.active === true) {
+            const activeAdminCount = await prisma.user.count({
+              where: { role: 'super_admin', active: true }
+            });
+
+            if (activeAdminCount <= 1) {
+              console.warn(`⛔ [Lockout Prevented] Prevented deactivating last active Super Admin (${targetUser.email})`);
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                success: false, 
+                errorCode: 'LAST_ADMIN_LOCKOUT_PREVENTED',
+                error: 'Cannot deactivate the last active Super Admin account. At least one Super Admin must remain active.' 
+              }));
+              return;
+            }
+          }
+
+          const updateData = {};
+          if (payload.fullName) {
+            updateData.fullName = String(payload.fullName).trim();
+          }
+          if (payload.phone !== undefined) {
+            updateData.phone = payload.phone ? String(payload.phone).trim() : null;
+          }
+          if (payload.branch) {
+            updateData.branch = String(payload.branch).trim();
+          }
+          if (payload.active !== undefined) {
+            updateData.active = Boolean(payload.active);
+          }
+          if (payload.password) {
+            updateData.password = hashSecret(String(payload.password).trim());
+          }
+          if (payload.pin) {
+            updateData.pin = String(payload.pin).trim().slice(0, 10);
+          }
+
+          const updatedUser = await prisma.user.update({
+            where: { id: targetAdminId },
+            data: updateData,
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              branch: true,
+              role: true,
+              active: true,
+              createdAt: true,
+              updatedAt: true
+            }
+          });
+
+          broadcastScopedSSE(null, {
+            type: 'SUPER_ADMIN_CONFIG_UPDATED',
+            action: 'updated',
+            user: updatedUser
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: true, 
+            superAdmin: updatedUser,
+            message: `Super Admin account "${updatedUser.fullName}" updated successfully.`
+          }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
     return;
   }
 

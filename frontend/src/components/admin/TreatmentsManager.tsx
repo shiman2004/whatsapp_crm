@@ -194,10 +194,10 @@ export const TreatmentsManager: React.FC = () => {
                   {/* Multilingual Labels preview */}
                   <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 md:grid-cols-2 gap-2 text-[10px] text-slate-400">
                     <div>
-                      <strong className="text-amber-400">සිංහල:</strong> {trt.nameI18n.si}
+                      <strong className="text-amber-400">සිංහල:</strong> {trt.nameI18n?.si || trt.name}
                     </div>
                     <div>
-                      <strong className="text-rose-400">தமிழ்:</strong> {trt.nameI18n.ta}
+                      <strong className="text-rose-400">தமிழ்:</strong> {trt.nameI18n?.ta || trt.name}
                     </div>
                   </div>
                 </div>

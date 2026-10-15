@@ -132,6 +132,52 @@ export const checkDbConnection = async () => {
       );
     `).catch(() => null);
 
+    // Ensure treatments table has code and company columns for CRAS courses & RWC treatments
+    await prisma.$executeRawUnsafe(`ALTER TABLE "treatments" ADD COLUMN IF NOT EXISTS "code" VARCHAR(50);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "treatments" ADD COLUMN IF NOT EXISTS "company" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
+    await prisma.$executeRawUnsafe(`ALTER TABLE "treatments" ADD COLUMN IF NOT EXISTS "active" BOOLEAN DEFAULT TRUE;`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_treatments_company ON "treatments"("company");`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_treatments_code ON "treatments"("code");`).catch(() => null);
+
+    // Ensure lead_stages table exists for dynamic Lead Stages management
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.lead_stages (
+        id VARCHAR(50) PRIMARY KEY,
+        key VARCHAR(50) UNIQUE NOT NULL,
+        label VARCHAR(100) NOT NULL,
+        description TEXT,
+        color VARCHAR(50) DEFAULT 'teal',
+        order_index INT DEFAULT 0,
+        is_active BOOLEAN DEFAULT TRUE,
+        is_system BOOLEAN DEFAULT FALSE,
+        company VARCHAR(50) DEFAULT 'ALL',
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_lead_stages_order ON public.lead_stages(order_index ASC);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_lead_stages_active ON public.lead_stages(is_active);`).catch(() => null);
+
+    // Seed default lead stages if table is empty
+    const stageCountResult = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.lead_stages;`).catch(() => [{ count: 0 }]);
+    const currentStageCount = stageCountResult[0]?.count || 0;
+    if (currentStageCount === 0) {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public.lead_stages (id, key, label, description, color, order_index, is_active, is_system, company)
+        VALUES
+          ('stage-new', 'new', 'New Inquiry', 'Fresh uncontacted inbound lead', 'rose', 0, TRUE, TRUE, 'ALL'),
+          ('stage-assigned', 'assigned', 'Assigned', 'Lead assigned to coordinator or education counsellor', 'amber', 1, TRUE, FALSE, 'ALL'),
+          ('stage-contacted', 'contacted', 'Contacted', 'Initial outreach made via WhatsApp or call', 'emerald', 2, TRUE, FALSE, 'ALL'),
+          ('stage-potential', 'potential', 'Potential', 'Qualified prospect showing active interest', 'purple', 3, TRUE, FALSE, 'ALL'),
+          ('stage-under-discussion', 'under_discussion', 'Under Discussion', 'Ongoing treatment / course consultation & quotation', 'sky', 4, TRUE, FALSE, 'ALL'),
+          ('stage-not-relevant', 'not_relevant', 'Not Relevant Inquiry', 'Wrong inquiry or service not offered', 'slate', 5, TRUE, FALSE, 'ALL'),
+          ('stage-not-eligible', 'not_eligible', 'Not Eligible', 'Client medically or academically ineligible', 'zinc', 6, TRUE, FALSE, 'ALL'),
+          ('stage-converted', 'converted', 'Converted (Closed Won)', 'Patient booked appointment or student enrolled', 'teal', 7, TRUE, TRUE, 'ALL'),
+          ('stage-lost', 'lost', 'Lost', 'Lead discontinued, unresponsive, or declined', 'red', 8, TRUE, TRUE, 'ALL')
+        ON CONFLICT (key) DO NOTHING;
+      `).catch(() => null);
+    }
+
     return { connected: true, message: 'Supabase Postgres Connected' };
   } catch (err) {
     isDbConnected = false;

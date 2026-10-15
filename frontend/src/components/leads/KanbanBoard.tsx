@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Lead, LeadStage } from '../../types';
 import { LeadCard } from './LeadCard';
 import { STAGE_CONFIG } from './StageBadge';
@@ -11,7 +11,7 @@ interface KanbanBoardProps {
   company?: 'RWC' | 'CRAS' | 'ALL';
 }
 
-const STAGES: LeadStage[] = [
+const DEFAULT_FALLBACK_STAGES: LeadStage[] = [
   'new',
   'assigned',
   'contacted',
@@ -24,51 +24,69 @@ const STAGES: LeadStage[] = [
 ];
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, company = 'RWC' }) => {
-  const { updateLeadStage } = useCrm();
+  const { updateLeadStage, stages } = useCrm();
   const [draggedLeadId, setDraggedLeadId] = useState<string | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<LeadStage | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
 
   const isCras = company === 'CRAS';
 
-  const getStageLabel = (stage: LeadStage, defaultLabel: string) => {
+  // Compute active pipeline stages in sequence order
+  const activeColumns = useMemo(() => {
+    if (stages && stages.length > 0) {
+      return [...stages]
+        .filter(s => s.isActive !== false)
+        .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+    }
+    return DEFAULT_FALLBACK_STAGES.map((key, idx) => ({
+      id: `stage-${key}`,
+      key,
+      label: STAGE_CONFIG[key]?.label || key,
+      orderIndex: idx,
+      isActive: true,
+      isSystem: ['new', 'converted', 'lost'].includes(key),
+      color: STAGE_CONFIG[key]?.pillBorder || '#6366f1'
+    }));
+  }, [stages]);
+
+  const getStageLabel = (stageKey: string, defaultLabel: string) => {
     if (isCras) {
-      if (stage === 'converted') return 'Enrolled (Closed Won)';
-      if (stage === 'assigned') return 'Assigned to Counsellor';
-      if (stage === 'potential') return 'Prospective Students';
-      if (stage === 'under_discussion') return 'Course Discussion';
+      if (stageKey === 'converted') return 'Enrolled (Closed Won)';
+      if (stageKey === 'assigned') return 'Assigned to Counsellor';
+      if (stageKey === 'potential') return 'Prospective Students';
+      if (stageKey === 'under_discussion') return 'Course Discussion';
     } else {
-      if (stage === 'converted') return 'Converted (Closed Won)';
-      if (stage === 'assigned') return 'Assigned to Coordinator';
+      if (stageKey === 'converted') return 'Converted (Closed Won)';
+      if (stageKey === 'assigned') return 'Assigned to Coordinator';
     }
     return defaultLabel;
   };
 
-  const handleDragOver = (e: React.DragEvent, stage: LeadStage) => {
+  const handleDragOver = (e: React.DragEvent, stageKey: string) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (dragOverStage !== stage) {
-      setDragOverStage(stage);
+    if (dragOverStage !== stageKey) {
+      setDragOverStage(stageKey);
     }
   };
 
-  const handleDragLeave = (e: React.DragEvent, stage: LeadStage) => {
+  const handleDragLeave = (e: React.DragEvent, stageKey: string) => {
     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-    if (dragOverStage === stage) {
+    if (dragOverStage === stageKey) {
       setDragOverStage(null);
     }
   };
 
-  const handleDrop = (e: React.DragEvent, targetStage: LeadStage) => {
+  const handleDrop = (e: React.DragEvent, targetStageKey: string) => {
     e.preventDefault();
     const leadId = e.dataTransfer.getData('text/plain') || draggedLeadId;
     
     if (leadId) {
       const draggedLead = leads.find(l => l.id === leadId);
-      if (draggedLead && draggedLead.stage !== targetStage) {
+      if (draggedLead && draggedLead.stage !== targetStageKey) {
         updateLeadStage(
           leadId, 
-          targetStage, 
-          `Moved from ${draggedLead.stage.toUpperCase()} to ${targetStage.toUpperCase()} via Pick & Drop Kanban`
+          targetStageKey as LeadStage, 
+          `Moved from ${draggedLead.stage.toUpperCase()} to ${targetStageKey.toUpperCase()} via Pick & Drop Kanban`
         );
       }
     }
@@ -80,19 +98,31 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
   return (
     <div className="flex-1 overflow-x-auto pb-4 pt-1">
       <div className="flex gap-4 min-w-[1350px] items-start h-full">
-        {STAGES.map((stage) => {
-          const stageLeads = leads.filter(l => l.stage === stage);
-          const config = STAGE_CONFIG[stage];
-          const isDropTarget = dragOverStage === stage;
-          const displayLabel = getStageLabel(stage, config.label);
+        {activeColumns.map((col) => {
+          const stageKey = col.key;
+          const stageLeads = leads.filter(l => l.stage === stageKey);
+          const predefinedConfig = STAGE_CONFIG[stageKey as LeadStage];
+          const config = predefinedConfig || {
+            label: col.label,
+            shortLabel: col.label.slice(0, 10).toUpperCase(),
+            bg: 'bg-indigo-500/15',
+            text: 'text-indigo-400',
+            border: 'border-indigo-500/30',
+            pillBg: 'bg-[#6366f1]/20',
+            pillText: 'text-[#818cf8]',
+            pillBorder: 'border-[#818cf8]/40'
+          };
+
+          const isDropTarget = dragOverStage === stageKey;
+          const displayLabel = getStageLabel(stageKey, col.label || config.label);
 
           return (
             <div
-              key={stage}
-              onDragOver={(e) => handleDragOver(e, stage)}
-              onDragEnter={(e) => handleDragOver(e, stage)}
-              onDragLeave={(e) => handleDragLeave(e, stage)}
-              onDrop={(e) => handleDrop(e, stage)}
+              key={col.id || stageKey}
+              onDragOver={(e) => handleDragOver(e, stageKey)}
+              onDragEnter={(e) => handleDragOver(e, stageKey)}
+              onDragLeave={(e) => handleDragLeave(e, stageKey)}
+              onDrop={(e) => handleDrop(e, stageKey)}
               className={`w-72 shrink-0 rounded-2xl border flex flex-col max-h-[calc(100vh-235px)] overflow-hidden transition-all duration-200 ${
                 isDropTarget
                   ? isCras
@@ -108,7 +138,13 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
                   : 'bg-slate-900/80'
               }`}>
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${config.bg.replace('/15', '')} border ${config.border}`}></span>
+                  <span
+                    className={`w-2.5 h-2.5 rounded-full shrink-0 border`}
+                    style={{
+                      backgroundColor: col.color || undefined,
+                      borderColor: col.color ? `${col.color}80` : undefined
+                    }}
+                  ></span>
                   <h3 className="text-xs font-bold text-slate-200 tracking-wide truncate">{displayLabel}</h3>
                 </div>
                 <span className={`px-2 py-0.5 text-[11px] font-mono font-bold rounded-full border transition-colors shrink-0 ml-1.5 ${

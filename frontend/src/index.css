@@ -60,62 +60,81 @@
   border-color: rgba(45, 212, 190, 0.3);
 }
 
+/* WhatsApp Theme CSS Variables */
+:root {
+  --wa-bg: #efeae2;
+  --wa-chat-bg: #efeae2;
+  --wa-bubble-in: #ffffff;
+  --wa-bubble-out: #d9fdd3;
+  --wa-text-primary: #111b21;
+  --wa-text-secondary: #667781;
+  --wa-header-bg: #f0f2f5;
+  --wa-sidebar-bg: #ffffff;
+  --wa-border: #e9edef;
+  --wa-input-bg: #ffffff;
+  --wa-hover: #f5f6f6;
+  --wa-active: #f0f2f5;
+  --wa-tick: #8696a0;
+  --wa-read-tick: #53bdeb;
+}
+
+.dark {
+  --wa-bg: #0c1317;
+  --wa-chat-bg: #0b141a;
+  --wa-bubble-in: #202c33;
+  --wa-bubble-out: #005c4b;
+  --wa-text-primary: #e9edef;
+  --wa-text-secondary: #8696a0;
+  --wa-header-bg: #111b21;
+  --wa-sidebar-bg: #111b21;
+  --wa-border: #222e35;
+  --wa-input-bg: #2a3942;
+  --wa-hover: #202c33;
+  --wa-active: #2a3942;
+  --wa-tick: #8696a0;
+  --wa-read-tick: #53bdeb;
+}
+
 /* WhatsApp Pattern Background with Authentic Doodle Texture */
 .wa-chat-bg {
-  background-color: #0b141a;
-  background-image: radial-gradient(rgba(255, 255, 255, 0.04) 1px, transparent 0);
-  background-size: 24px 24px;
+  background-color: var(--wa-chat-bg);
+  background-image: url('/whatsapp-doodle.svg');
+  background-size: 380px 380px;
+  background-repeat: repeat;
   position: relative;
 }
 
-.wa-chat-bg::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  background-image: radial-gradient(#00a884 0.5px, transparent 0.5px), radial-gradient(#111b21 0.5px, transparent 0.5px);
-  background-size: 32px 32px;
-  background-position: 0 0, 16px 16px;
-  opacity: 0.05;
-  pointer-events: none;
+.light .wa-chat-bg,
+:root:not(.dark) .wa-chat-bg {
+  background-color: #efeae2;
+  color: #41525d;
+}
+
+.dark .wa-chat-bg {
+  background-color: #0b141a;
+  color: #8696a0;
 }
 
 .wa-sim-bg {
   background-color: #efeae2;
-  background-image: radial-gradient(rgba(0, 0, 0, 0.05) 1px, transparent 0);
-  background-size: 16px 16px;
+  background-image: url('/whatsapp-doodle.svg');
+  background-size: 340px 340px;
 }
 
-/* WhatsApp Message Bubble Tails */
+/* WhatsApp Message Bubble Subtle Authentic Shadows */
+.wa-bubble-shadow {
+  box-shadow: 0 1px 0.5px rgba(11, 20, 26, 0.13);
+}
+
+/* WhatsApp Message Bubble Legacy Tails (if SVG not mounted) */
 .wa-bubble-out {
   position: relative;
   border-top-right-radius: 0px !important;
 }
 
-.wa-bubble-out::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  right: -8px;
-  width: 0;
-  height: 0;
-  border-top: 10px solid #005c4b;
-  border-right: 10px solid transparent;
-}
-
 .wa-bubble-in {
   position: relative;
   border-top-left-radius: 0px !important;
-}
-
-.wa-bubble-in::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: -8px;
-  width: 0;
-  height: 0;
-  border-top: 10px solid #202c33;
-  border-left: 10px solid transparent;
 }
 
 /* Luxury Gold Text Gradient */

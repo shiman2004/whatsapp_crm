@@ -24,7 +24,7 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = () => {
   };
 
   return (
-    <div className="flex-1 flex min-w-0 h-full w-full bg-[#111b21] overflow-hidden relative">
+    <div className="flex-1 flex min-w-0 h-full w-full bg-[#f0f2f5] dark:bg-[#111b21] overflow-hidden relative">
       {/* 1. Authentic WhatsApp Web Leftmost Icon Rail (Desktop only) */}
       <WhatsAppLeftRail
         activeSection={activeSection}
@@ -47,12 +47,12 @@ export const LeadDetailWorkspace: React.FC<LeadDetailWorkspaceProps> = () => {
           onBack={handleBackToChatList}
         />
       ) : (
-        <div className="hidden md:flex flex-1 flex-col items-center justify-center p-12 text-center text-[#8696a0] bg-[#222e35]/20">
-          <div className="w-16 h-16 rounded-full bg-[#202c33] border border-slate-700/60 flex items-center justify-center text-[#00a884] mb-4 shadow">
+        <div className="hidden md:flex flex-1 flex-col items-center justify-center p-12 text-center text-[#667781] dark:text-[#8696a0] bg-[#f0f2f5] dark:bg-[#222e35]/20">
+          <div className="w-16 h-16 rounded-full bg-white dark:bg-[#202c33] border border-slate-200 dark:border-slate-700/60 flex items-center justify-center text-[#00a884] mb-4 shadow-sm">
             <MessageSquare className="w-8 h-8" />
           </div>
-          <h3 className="text-base font-bold text-[#d1d7db]">WhatsApp Web</h3>
-          <p className="text-xs text-[#8696a0] max-w-sm mt-1.5 leading-relaxed">
+          <h3 className="text-base font-bold text-[#111b21] dark:text-[#d1d7db]">WhatsApp Web</h3>
+          <p className="text-xs text-[#667781] dark:text-[#8696a0] max-w-sm mt-1.5 leading-relaxed">
             Send and receive messages without keeping your phone online. Select a chat to view live patient conversations.
           </p>
         </div>

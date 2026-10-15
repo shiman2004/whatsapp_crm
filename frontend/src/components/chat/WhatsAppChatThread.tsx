@@ -243,9 +243,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   }, [leadMessages]);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#0b141a] relative min-w-0 h-full overflow-hidden">
-      {/* 1. WhatsApp Top Chat Header (Exact 1:1 Match of Screenshot 1 & 2) */}
-      <div className="h-14 px-4 bg-[#202c33] border-b border-[#222e35] flex items-center justify-between gap-3 shrink-0 select-none z-10">
+    <div className="flex-1 flex flex-col bg-[#efeae2] dark:bg-[#0b141a] relative min-w-0 h-full overflow-hidden">
+      {/* 1. WhatsApp Top Chat Header (Exact 1:1 Match of Real WhatsApp Web) */}
+      <div className="h-14 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#d1d7db] dark:border-[#222e35] flex items-center justify-between gap-3 shrink-0 select-none z-10">
         {/* Left: Mobile Back Button + Contact Info */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {onBack && (
@@ -254,7 +254,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                 e.stopPropagation();
                 onBack();
               }}
-              className="md:hidden p-1.5 -ml-1 text-[#aebac1] hover:text-white hover:bg-[#374248] rounded-full transition-colors shrink-0"
+              className="md:hidden p-1.5 -ml-1 text-[#54656f] dark:text-[#aebac1] hover:text-[#111b21] dark:hover:text-white hover:bg-slate-200 dark:hover:bg-[#374248] rounded-full transition-colors shrink-0"
               title="Back to chat list"
             >
               <ArrowLeft className="w-5 h-5" />
@@ -275,12 +275,12 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
             <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="font-semibold text-sm text-[#e9edef] truncate leading-tight">
+                <h3 className="font-semibold text-sm text-[#111b21] dark:text-[#e9edef] truncate leading-tight">
                   {displayName}
                 </h3>
                 <CompanyTagBadge lead={lead} size="sm" showFullName={true} />
               </div>
-              <p className="text-[11px] text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
+              <p className="text-[11px] text-[#667781] dark:text-[#8696a0] font-sans truncate flex items-center gap-1.5 mt-0.5">
                 {displayPhone ? (
                   <>
                     <span className="font-mono text-[#00a884] font-medium">{displayPhone}</span>
@@ -449,14 +449,14 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
         className="flex-1 wa-chat-bg p-4 pb-6 overflow-y-auto space-y-3 relative select-none"
       >
         {/* End-to-End Encryption Notice (Exact WhatsApp Web style) */}
-        <div className="max-w-md mx-auto my-2 text-[#8696a0] text-center text-[11px] flex items-center justify-center gap-1.5 bg-[#182229]/90 border border-slate-800 rounded-lg px-4 py-1.5 shadow-sm">
+        <div className="max-w-md mx-auto my-2 text-[#54656f] dark:text-[#8696a0] text-center text-[11px] flex items-center justify-center gap-1.5 bg-[#ffeecd]/85 dark:bg-[#182229]/90 border border-amber-200/60 dark:border-slate-800 rounded-lg px-4 py-1.5 shadow-xs">
           <Lock className="w-3 h-3 text-[#00a884] shrink-0" />
           <span>Messages are end-to-end encrypted. No one outside of this chat can read or listen to them.</span>
         </div>
 
         {/* Message Bubbles with Dynamic WhatsApp Date Dividers ("Today", "Yesterday", etc.) */}
         {filteredMessages.length === 0 ? (
-          <div className="text-center text-[#8696a0] text-xs py-8">
+          <div className="text-center text-[#667781] dark:text-[#8696a0] text-xs py-8">
             <p>No messages in this chat yet</p>
           </div>
         ) : (
@@ -471,14 +471,14 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
               <React.Fragment key={msg.id || `${msg.createdAt}-${index}`}>
                 {dateDividerLabel && (
                   <div className="flex justify-center my-3 select-none">
-                    <span className="bg-[#182229] border border-slate-800/80 text-[#8696a0] text-[11px] font-medium px-3.5 py-1 rounded-lg shadow-sm">
+                    <span className="bg-white dark:bg-[#182229] border border-slate-200 dark:border-slate-800/80 text-[#54656f] dark:text-[#8696a0] text-[11px] font-medium px-3.5 py-1 rounded-lg wa-bubble-shadow">
                       {dateDividerLabel}
                     </span>
                   </div>
                 )}
                 {showUnreadDivider && (
                   <div className="flex justify-center my-3 select-none">
-                    <span className="bg-[#182229] border border-slate-800/80 text-[#8696a0] text-[11px] font-medium px-3.5 py-1 rounded-lg shadow-sm">
+                    <span className="bg-white dark:bg-[#182229] border border-slate-200 dark:border-slate-800/80 text-[#54656f] dark:text-[#8696a0] text-[11px] font-medium px-3.5 py-1 rounded-lg wa-bubble-shadow">
                       {lead.unreadCount} unread message{(lead.unreadCount || 0) > 1 ? 's' : ''}
                     </span>
                   </div>

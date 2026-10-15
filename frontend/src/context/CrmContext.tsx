@@ -129,7 +129,7 @@ interface CrmContextType {
   deleteMessage: (messageId: string) => void;
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   reportMessage: (messageId: string) => void;
-  forwardMessage: (messageId: string, targetLeadId: string) => void;
+  forwardMessage: (messageId: string, targetLeadId: string | string[]) => void;
   deleteChat: (leadId: string) => Promise<void>;
   clearChat: (leadId: string) => Promise<void>;
   
@@ -242,6 +242,11 @@ interface CrmContextType {
   openUnreadChats: () => void;
   activeNavTab: NavTab;
   setActiveNavTab: (tab: NavTab) => void;
+
+  // Theme Support
+  theme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark') => void;
+  toggleTheme: () => void;
 }
 
 const CrmContext = createContext<CrmContextType | undefined>(undefined);
@@ -339,6 +344,31 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Navigation & Chat list filter state
   const [activeNavTab, setActiveNavTab] = useState<NavTab>('dashboard');
   const [chatListFilter, setChatListFilter] = useState<string>('all');
+
+  // Light / Dark Theme state (default to light theme as requested, persist in localStorage)
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    const stored = localStorage.getItem('rw_crm_theme');
+    if (stored === 'light' || stored === 'dark') return stored;
+    return 'light';
+  });
+
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('rw_crm_theme', theme);
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+      root.setAttribute('data-theme', 'dark');
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+      root.setAttribute('data-theme', 'light');
+    }
+  }, [theme]);
 
   // Track per-user conversation read timestamps
   const [userReadTimestamps, setUserReadTimestamps] = useState<Record<string, number>>(() => {
@@ -2463,14 +2493,29 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Forward message to another lead
-  const forwardMessage = (messageId: string, targetLeadId: string) => {
+  // Forward message to one or multiple leads
+  const forwardMessage = (messageId: string, targetLeadId: string | string[]) => {
     const sourceMsg = messages.find(m => m.id === messageId);
-    const targetLead = leads.find(l => l.id === targetLeadId);
-    if (!sourceMsg || !targetLead) return;
-    
-    sendMessage(targetLeadId, sourceMsg.content, 'coordinator', sourceMsg.media);
-    notify('Message Forwarded ➡️', `Message forwarded to ${targetLead.customer?.displayName || 'contact'}`, 'success');
+    if (!sourceMsg) return;
+
+    const targetLeadIds = Array.isArray(targetLeadId) ? targetLeadId : [targetLeadId];
+    if (targetLeadIds.length === 0) return;
+
+    let successCount = 0;
+    targetLeadIds.forEach(tId => {
+      const targetLead = leads.find(l => l.id === tId);
+      if (targetLead) {
+        sendMessage(tId, sourceMsg.content, 'coordinator', sourceMsg.media);
+        successCount++;
+      }
+    });
+
+    if (successCount === 1) {
+      const targetLead = leads.find(l => l.id === targetLeadIds[0]);
+      notify('Message Forwarded ➡️', `Message forwarded to ${targetLead?.customer?.displayName || 'contact'}`, 'success');
+    } else if (successCount > 1) {
+      notify('Message Forwarded ➡️', `Message forwarded to ${successCount} contacts`, 'success');
+    }
   };
 
   // Send approved WhatsApp template via Meta Cloud API
@@ -4052,6 +4097,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     openUnreadChats,
     activeNavTab,
     setActiveNavTab,
+    theme,
+    setTheme,
+    toggleTheme,
   };
 
   return (

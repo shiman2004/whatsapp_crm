@@ -635,6 +635,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           </div>
         )}
         </div>
+
+        {/* Super Admin ONLY: Message Sender Identification & Audit Trail */}
+        {isSuperAdmin && isOutbound && auditDisplayText && (
+          <div 
+            className="text-[11px] font-medium tracking-tight text-amber-600 dark:text-yellow-400 text-right mt-1 pr-1 select-none animate-in fade-in duration-150"
+            title={`Internal Audit: ${auditDisplayText}`}
+          >
+            {auditDisplayText}
+          </div>
+        )}
       </div>
 
       {/* Backdrop for Context Menu (Click outside to close) */}

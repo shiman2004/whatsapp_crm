@@ -26,12 +26,6 @@ import { useCrm } from '../../context/CrmContext';
 import { getLatestCustomerMessageTime } from '../../utils/window24hUtils';
 import { WhatsAppVoiceRecorder } from '../../utils/audioRecorder';
 import { AddContactModal } from './AddContactModal';
-import { 
-  TypingLanguage, 
-  transliterateText, 
-  transliterateActiveWord, 
-  transliterateWordAtCursor 
-} from '../../utils/phoneticConverter';
 
 interface MessageComposerProps {
   lead: Lead;
@@ -63,56 +57,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [showAddContactModal, setShowAddContactModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
-
-  // Tamil & Sinhala Phonetic Typing Converter State
-  const [typingLang, setTypingLang] = useState<TypingLanguage>(() => {
-    const stored = localStorage.getItem('rw_composer_typing_lang');
-    if (stored === 'ta' || stored === 'si' || stored === 'en') return stored as TypingLanguage;
-    if (lead.language === 'ta' || lead.language === 'si') return lead.language as TypingLanguage;
-    return 'en';
-  });
-
-  const [activePreviewWord, setActivePreviewWord] = useState<{
-    raw: string;
-    converted: string;
-    start: number;
-    end: number;
-  } | null>(null);
-
-  const handleSelectLanguage = (lang: TypingLanguage) => {
-    setTypingLang(lang);
-    localStorage.setItem('rw_composer_typing_lang', lang);
-    setActivePreviewWord(null);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  };
-
-  const handleCommitPreview = () => {
-    if (!activePreviewWord || !textareaRef.current) return;
-    const text = inputVal;
-    const newText = text.slice(0, activePreviewWord.start) + activePreviewWord.converted + ' ' + text.slice(activePreviewWord.end);
-    setInputVal(newText);
-    const newPos = activePreviewWord.start + activePreviewWord.converted.length + 1;
-    setActivePreviewWord(null);
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.selectionStart = newPos;
-        textareaRef.current.selectionEnd = newPos;
-        textareaRef.current.focus();
-      }
-    }, 0);
-  };
-
-  const handleConvertAllText = () => {
-    if (!inputVal || typingLang === 'en') return;
-    const converted = transliterateText(inputVal, typingLang);
-    setInputVal(converted);
-    setActivePreviewWord(null);
-    if (textareaRef.current) {
-      textareaRef.current.focus();
-    }
-  };
 
   // Audio Recorder Ref
   const voiceRecorderRef = useRef<WhatsAppVoiceRecorder | null>(null);
@@ -409,14 +353,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     let finalMsg = inputVal.trim();
     if (!finalMsg) return;
 
-    // Transliterate any remaining uncommitted English words if in Tamil or Sinhala mode
-    if (typingLang !== 'en') {
-      finalMsg = transliterateText(finalMsg, typingLang).trim();
-    }
-
     sendMessage(lead.id, finalMsg, 'coordinator');
     setInputVal('');
-    setActivePreviewWord(null);
     setShowEmojiPicker(false);
     if (textareaRef.current) {
       textareaRef.current.style.height = '38px';
@@ -430,45 +368,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (typingLang !== 'en') {
-      // Tab accepts active candidate preview
-      if (e.key === 'Tab' && activePreviewWord) {
-        e.preventDefault();
-        handleCommitPreview();
-        return;
-      }
-
-      // Escape cancels candidate preview
-      if (e.key === 'Escape' && activePreviewWord) {
-        e.preventDefault();
-        setActivePreviewWord(null);
-        return;
-      }
-
-      // Space or punctuation commits the preceding word phonetically
-      if (e.key === ' ' || e.key === '.' || e.key === ',' || e.key === '?' || e.key === '!' || e.key === ':' || e.key === ';') {
-        const textarea = textareaRef.current;
-        if (textarea) {
-          const cursorPos = textarea.selectionStart;
-          const { newText, newCursorPos, convertedWord } = transliterateWordAtCursor(inputVal, cursorPos, typingLang);
-          if (convertedWord) {
-            e.preventDefault();
-            const charToInsert = e.key;
-            const textWithChar = newText.slice(0, newCursorPos) + charToInsert + newText.slice(newCursorPos);
-            setInputVal(textWithChar);
-            setActivePreviewWord(null);
-            setTimeout(() => {
-              if (textareaRef.current) {
-                textareaRef.current.selectionStart = newCursorPos + 1;
-                textareaRef.current.selectionEnd = newCursorPos + 1;
-              }
-            }, 0);
-            return;
-          }
-        }
-      }
-    }
-
     if (e.key === 'Enter') {
       if (e.shiftKey) {
         // Shift + Enter: inserts a new line in the text box
@@ -481,54 +380,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   };
 
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const val = e.target.value;
-    const cursorPos = e.target.selectionStart;
-
-    if (typingLang !== 'en') {
-      const textBefore = val.slice(0, cursorPos);
-
-      // Support mobile virtual keyboards: if a space or punctuation was just typed after Latin letters
-      const mobileBoundaryMatch = textBefore.match(/([a-zA-Z]+)([ \t\n.,?!:;])$/);
-      if (mobileBoundaryMatch) {
-        const rawWord = mobileBoundaryMatch[1];
-        const delimiter = mobileBoundaryMatch[2];
-        const converted = transliterateActiveWord(rawWord, typingLang);
-        if (converted && converted !== rawWord) {
-          const wordStart = textBefore.length - rawWord.length - delimiter.length;
-          const newText = textBefore.slice(0, wordStart) + converted + delimiter + val.slice(cursorPos);
-          const newPos = wordStart + converted.length + delimiter.length;
-          setInputVal(newText);
-          setActivePreviewWord(null);
-          setTimeout(() => {
-            if (textareaRef.current) {
-              textareaRef.current.selectionStart = newPos;
-              textareaRef.current.selectionEnd = newPos;
-            }
-          }, 0);
-          return;
-        }
-      }
-
-      // Check current in-progress word for real-time candidate preview
-      const activeMatch = textBefore.match(/([a-zA-Z]+)$/);
-      if (activeMatch) {
-        const raw = activeMatch[1];
-        const converted = transliterateActiveWord(raw, typingLang);
-        if (converted && converted !== raw) {
-          setActivePreviewWord({
-            raw,
-            converted,
-            start: textBefore.length - raw.length,
-            end: cursorPos
-          });
-          setInputVal(val);
-          return;
-        }
-      }
-    }
-
-    setActivePreviewWord(null);
-    setInputVal(val);
+    setInputVal(e.target.value);
   };
 
   const handleSendTemplate = (tpl: WhatsAppTemplate) => {
@@ -876,107 +728,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
-      {/* 4d. Tamil & Sinhala Phonetic Language Selector Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-2 px-1 select-none">
-        <div className="flex items-center gap-1 bg-white dark:bg-[#182229] p-1 rounded-xl border border-slate-200 dark:border-slate-700/60 shadow-xs">
-          <button
-            type="button"
-            onClick={() => handleSelectLanguage('en')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-              typingLang === 'en'
-                ? 'bg-[#00a884] text-white font-bold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#202c33]'
-            }`}
-            title="English keyboard typing (standard)"
-          >
-            <span className="text-[10px] font-mono font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-black/25 text-slate-700 dark:text-slate-300">EN</span>
-            <span>English</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSelectLanguage('ta')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-              typingLang === 'ta'
-                ? 'bg-[#00a884] text-white font-bold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#202c33]'
-            }`}
-            title="Tamil phonetic typing (e.g. vanakkam -> வணக்கம், nandri -> நன்றி)"
-          >
-            <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-black/25 text-slate-700 dark:text-slate-300">அ</span>
-            <span>தமிழ்</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSelectLanguage('si')}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-              typingLang === 'si'
-                ? 'bg-[#00a884] text-white font-bold shadow-xs'
-                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#202c33]'
-            }`}
-            title="Sinhala phonetic typing (e.g. ayubowan -> ආයුබෝවන්, kohomada -> කොහොමද)"
-          >
-            <span className="text-[11px] font-bold px-1 py-0.5 rounded bg-slate-100 dark:bg-black/25 text-slate-700 dark:text-slate-300">සි</span>
-            <span>සිංහල</span>
-          </button>
-        </div>
-
-        {typingLang !== 'en' ? (
-          <div className="flex items-center gap-2">
-            <div className="flex items-center gap-1.5 text-[11px] text-[#54656f] dark:text-[#8696a0] bg-white/80 dark:bg-[#182229]/80 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700/40 shadow-xs">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="hidden sm:inline font-medium">
-                {typingLang === 'ta' ? 'Tamil Phonetic' : 'Sinhala Phonetic'} • Space converts word
-              </span>
-              <span className="sm:hidden font-medium">Phonetic</span>
-            </div>
-
-            {inputVal.trim() && /[a-zA-Z]/.test(inputVal) && (
-              <button
-                type="button"
-                onClick={handleConvertAllText}
-                className="text-[11px] font-bold text-emerald-700 dark:text-emerald-300 hover:text-white bg-emerald-100 dark:bg-emerald-900/60 hover:bg-emerald-600 dark:hover:bg-emerald-800/80 border border-emerald-300 dark:border-emerald-500/40 px-2.5 py-1 rounded-lg cursor-pointer transition-all active:scale-95 flex items-center gap-1 shadow-xs"
-                title="Convert all typed English words to native script immediately"
-              >
-                <span>Convert All</span>
-                <Sparkles className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="text-[11px] text-[#54656f] dark:text-[#8696a0] hidden sm:block">
-            Standard Keyboard Mode
-          </div>
-        )}
-      </div>
-
-      {/* 4e. Live Phonetic Conversion Suggestion Chip */}
-      {activePreviewWord && typingLang !== 'en' && (
-        <div className="mb-2 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-1 duration-150">
-          <div className="bg-white dark:bg-[#182229] border border-emerald-500/60 shadow-xl rounded-xl px-3 py-1 flex items-center gap-2 text-xs">
-            <span className="text-[#54656f] dark:text-[#8696a0] text-[11px] font-mono">{activePreviewWord.raw} →</span>
-            <button
-              type="button"
-              onClick={handleCommitPreview}
-              className="font-bold text-emerald-700 dark:text-emerald-300 hover:text-emerald-800 dark:hover:text-emerald-200 hover:underline cursor-pointer flex items-center gap-1 text-sm transition-transform active:scale-95"
-              title="Click or press Space / Tab to insert"
-            >
-              <span>{activePreviewWord.converted}</span>
-              <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-mono font-normal bg-emerald-100 dark:bg-emerald-950/60 px-1 py-0.5 rounded border border-emerald-300 dark:border-emerald-500/30">Space ↵</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setActivePreviewWord(null)}
-              className="p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800/80 cursor-pointer ml-1"
-              title="Keep English (Esc)"
-            >
-              <X className="w-3 h-3" />
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* 5. Main Composer Row */}
       <div className="flex items-end gap-1.5 sm:gap-3">
         {/* Plus / Attach Button */}
@@ -1089,11 +840,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               }}
               placeholder={
                 whatsappStatus === 'connected' || hasMetaConfig || localStorage.getItem('meta_access_token')
-                  ? typingLang === 'ta'
-                    ? "Type in English letters to convert to தமிழ் (e.g. 'vanakkam', 'nandri')..."
-                    : typingLang === 'si'
-                    ? "Type in English letters to convert to සිංහල (e.g. 'ayubowan', 'kohomada')..."
-                    : "Type a message..."
+                  ? "Type a message..."
                   : "Please link your WhatsApp or configure Meta API to send messages..."
               }
               className="w-full bg-transparent text-[#111b21] dark:text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"

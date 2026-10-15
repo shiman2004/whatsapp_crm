@@ -5546,8 +5546,9 @@ const server = http.createServer(async (req, res) => {
                   if (Array.isArray(val.statuses) && val.statuses.length > 0) {
                     for (const statusItem of val.statuses) {
                       const wamid = statusItem.id;
-                      const status = statusItem.status; // 'sent' | 'delivered' | 'read' | 'failed'
+                      const incomingStatus = statusItem.status; // 'sent' | 'delivered' | 'read' | 'failed'
                       const recipientPhone = statusItem.recipient_id;
+                      const statusTimestamp = statusItem.timestamp ? new Date(Number(statusItem.timestamp) * 1000) : new Date();
                       let errorCode = null;
                       let errorMessage = null;
 
@@ -5557,29 +5558,22 @@ const server = http.createServer(async (req, res) => {
                         errorMessage = getMetaErrorExplanation(errorCode, rawMsg);
                       }
 
-                      console.log(`📩 [Meta Webhook Status] Message ${wamid} -> ${status}${errorCode ? ` [Code ${errorCode}: ${errorMessage}]` : ''} (Recipient: ${recipientPhone})`);
+                      console.log(`📩 [Meta Webhook Status] Message ${wamid} -> ${incomingStatus}${errorCode ? ` [Code ${errorCode}: ${errorMessage}]` : ''} at ${statusTimestamp.toISOString()} (Recipient: ${recipientPhone})`);
 
                       const prisma = getPrisma();
                       let leadId = null;
                       let customerId = null;
+                      let finalStatus = incomingStatus;
+                      let deliveredAtUtc = null;
+                      let readAtUtc = null;
 
                       if (prisma && getDbStatus() && wamid) {
                         try {
-                          const existingMsg = await prisma.message.findUnique({ where: { id: wamid } });
-                          if (existingMsg) {
-                            leadId = existingMsg.leadId;
-                            customerId = existingMsg.customerId;
-                            await prisma.message.update({
-                              where: { id: wamid },
-                              data: {
-                                status: status,
-                                errorCode: errorCode || undefined,
-                                errorMessage: errorMessage || undefined
-                              }
-                            });
-                          } else {
-                            // Find recent outbound message to this customer if stored under temporary ID
-                            const cleanRecip = recipientPhone ? recipientPhone.replace(/[^0-9]/g, '') : '';
+                          let existingMsg = await prisma.message.findUnique({ where: { id: wamid } });
+                          
+                          // If not found by wamid, check if message is stored under a temporary ID for this recipient
+                          if (!existingMsg && recipientPhone) {
+                            const cleanRecip = recipientPhone.replace(/[^0-9]/g, '');
                             const matchedCust = await prisma.customer.findFirst({
                               where: {
                                 OR: [
@@ -5590,41 +5584,115 @@ const server = http.createServer(async (req, res) => {
                               }
                             });
                             if (matchedCust) {
-                              customerId = matchedCust.id;
                               const recentOutbound = await prisma.message.findFirst({
                                 where: { customerId: matchedCust.id, direction: 'outbound' },
                                 orderBy: { timestamp: 'desc' }
                               });
-                              if (recentOutbound) {
-                                leadId = recentOutbound.leadId;
-                                await prisma.message.update({
-                                  where: { id: recentOutbound.id },
-                                  data: {
-                                    id: wamid,
-                                    status: status,
-                                    errorCode: errorCode || undefined,
-                                    errorMessage: errorMessage || undefined
-                                  }
-                                });
+                              if (recentOutbound && recentOutbound.id.startsWith('msg-')) {
+                                existingMsg = recentOutbound;
                               }
                             }
+                          }
+
+                          if (existingMsg) {
+                            leadId = existingMsg.leadId;
+                            customerId = existingMsg.customerId;
+                            deliveredAtUtc = existingMsg.deliveredAt;
+                            readAtUtc = existingMsg.readAt;
+
+                            // Strict Status Progression Guard (Hierarchy: pending: 0 < sent: 1 < delivered: 2 < read: 3)
+                            const STATUS_RANKS = {
+                              pending: 0,
+                              sent: 1,
+                              delivered: 2,
+                              read: 3,
+                              failed: 0
+                            };
+                            const currentRank = STATUS_RANKS[existingMsg.status] || 0;
+                            const incomingRank = STATUS_RANKS[incomingStatus] || 0;
+
+                            const updateFields = {};
+
+                            if (incomingStatus === 'failed') {
+                              // If already confirmed delivered or read, never downgrade to failed
+                              if (currentRank >= 2) {
+                                console.warn(`⚠️ [Status Guard] Ignored late 'failed' for already confirmed message ${wamid} (current status: ${existingMsg.status})`);
+                                finalStatus = existingMsg.status;
+                              } else {
+                                finalStatus = 'failed';
+                                updateFields.status = 'failed';
+                                updateFields.errorCode = errorCode || existingMsg.errorCode || undefined;
+                                updateFields.errorMessage = errorMessage || existingMsg.errorMessage || undefined;
+                              }
+                            } else if (incomingStatus === 'read') {
+                              finalStatus = 'read';
+                              readAtUtc = readAtUtc || statusTimestamp;
+                              deliveredAtUtc = deliveredAtUtc || statusTimestamp;
+                              updateFields.status = 'read';
+                              updateFields.readAt = readAtUtc;
+                              if (!existingMsg.deliveredAt) updateFields.deliveredAt = deliveredAtUtc;
+                            } else if (incomingStatus === 'delivered') {
+                              deliveredAtUtc = deliveredAtUtc || statusTimestamp;
+                              updateFields.deliveredAt = deliveredAtUtc;
+                              // Do not downgrade if already confirmed read
+                              if (currentRank >= 3) {
+                                finalStatus = 'read';
+                              } else {
+                                finalStatus = 'delivered';
+                                updateFields.status = 'delivered';
+                              }
+                            } else if (incomingStatus === 'sent') {
+                              // Do not downgrade if already delivered or read
+                              if (currentRank >= 2) {
+                                finalStatus = existingMsg.status;
+                              } else {
+                                finalStatus = 'sent';
+                                updateFields.status = 'sent';
+                                if (!existingMsg.sentAt) updateFields.sentAt = statusTimestamp;
+                              }
+                            }
+
+                            // If id was temporary, promote it to official wamid
+                            if (existingMsg.id !== wamid) {
+                              updateFields.id = wamid;
+                            }
+
+                            if (Object.keys(updateFields).length > 0) {
+                              await prisma.message.update({
+                                where: { id: existingMsg.id },
+                                data: updateFields
+                              });
+                            }
+
+                            // Also sync status and timestamps to message_audits for Super Admin audit trail
+                            await prisma.messageAudit.updateMany({
+                              where: { messageId: existingMsg.id },
+                              data: {
+                                deliveryStatus: finalStatus,
+                                ...(deliveredAtUtc ? { deliveredAt: deliveredAtUtc } : {}),
+                                ...(readAtUtc ? { readAt: readAtUtc } : {})
+                              }
+                            }).catch(() => {});
                           }
                         } catch (stErr) {
                           console.warn('⚠️ [Webhook Status DB Error]:', stErr.message);
                         }
                       }
 
-                      // Real-time broadcast to all connected staff
+                      // Real-time broadcast to all connected staff (Coordinator, Leads Officer, Super Admin)
                       broadcastScopedSSE(null, {
                         type: 'MESSAGE_STATUS_UPDATE',
                         messageId: wamid,
-                        status: status,
+                        status: finalStatus,
                         errorCode: errorCode || null,
                         errorMessage: errorMessage || null,
                         recipientPhone,
                         leadId,
                         customerId,
-                        timestamp: new Date().toISOString()
+                        sentAt: statusTimestamp.toISOString(),
+                        deliveredAt: deliveredAtUtc ? deliveredAtUtc.toISOString() : (finalStatus === 'delivered' || finalStatus === 'read' ? statusTimestamp.toISOString() : undefined),
+                        readAt: readAtUtc ? readAtUtc.toISOString() : (finalStatus === 'read' ? statusTimestamp.toISOString() : undefined),
+                        timestamp: statusTimestamp.toISOString()
                       });
                     }
                   }

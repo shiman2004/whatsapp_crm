@@ -974,15 +974,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (data.type === 'MESSAGE_STATUS_UPDATE') {
-            const { messageId, status, errorCode, errorMessage } = data;
+            const { messageId, status, errorCode, errorMessage, deliveredAt, readAt, sentAt } = data;
             console.log('🔄 [SSE Message Status Update]:', messageId, status, errorCode, errorMessage);
             setMessages(prev => prev.map(m => {
               if (m.id === messageId || m.waMessageId === messageId) {
+                // Out-of-order & duplicate guard (pending: 0 < sent: 1 < delivered: 2 < read: 3)
+                const STATUS_RANK = { pending: 0, sent: 1, delivered: 2, read: 3, failed: 0 };
+                const currentRank = STATUS_RANK[m.status as keyof typeof STATUS_RANK] || 0;
+                const newRank = STATUS_RANK[status as keyof typeof STATUS_RANK] || 0;
+
+                // Do not allow older state or late failure to overwrite confirmed delivery/reading
+                const shouldUpdateStatus = status === 'failed' ? currentRank < 2 : newRank >= currentRank;
+
                 return {
                   ...m,
-                  status: status as any,
+                  status: shouldUpdateStatus ? (status as any) : m.status,
                   errorCode: errorCode !== undefined ? errorCode : m.errorCode,
-                  errorMessage: errorMessage !== undefined ? errorMessage : m.errorMessage
+                  errorMessage: errorMessage !== undefined ? errorMessage : m.errorMessage,
+                  sentAt: sentAt || m.sentAt,
+                  deliveredAt: deliveredAt || m.deliveredAt,
+                  readAt: readAt || m.readAt
                 };
               }
               return m;

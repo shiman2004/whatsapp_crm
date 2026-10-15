@@ -16,6 +16,7 @@ import {
   LeadAssignmentHistory,
   AuditLog,
   LeadStage,
+  LeadStageConfig,
   LanguageCode,
   OnboardingSession,
   WhatsAppConnectionStatus,
@@ -58,6 +59,18 @@ interface NotificationToast {
   type: 'info' | 'success' | 'warning' | 'lead';
   timestamp: string;
 }
+
+export const DEFAULT_STAGES: LeadStageConfig[] = [
+  { id: 'stage-new', key: 'new', label: 'New Inquiry', orderIndex: 0, isActive: true, isSystem: true, color: '#f43f5e' },
+  { id: 'stage-assigned', key: 'assigned', label: 'Assigned', orderIndex: 1, isActive: true, isSystem: false, color: '#f59e0b' },
+  { id: 'stage-contacted', key: 'contacted', label: 'Contacted', orderIndex: 2, isActive: true, isSystem: false, color: '#10b981' },
+  { id: 'stage-potential', key: 'potential', label: 'Potential', orderIndex: 3, isActive: true, isSystem: false, color: '#a855f7' },
+  { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', orderIndex: 4, isActive: true, isSystem: false, color: '#0ea5e9' },
+  { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', orderIndex: 5, isActive: true, isSystem: false, color: '#64748b' },
+  { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', orderIndex: 6, isActive: true, isSystem: false, color: '#71717a' },
+  { id: 'stage-converted', key: 'converted', label: 'Converted', orderIndex: 7, isActive: true, isSystem: true, color: '#14b8a6' },
+  { id: 'stage-lost', key: 'lost', label: 'Lost', orderIndex: 8, isActive: true, isSystem: true, color: '#ef4444' }
+];
 
 interface CrmContextType {
   // Authentication & RBAC
@@ -130,8 +143,9 @@ interface CrmContextType {
   clearAllData: () => void;
   addCategory: (category: Omit<TreatmentCategory, 'id'>) => void;
   updateCategory: (id: string, updates: Partial<TreatmentCategory>) => void;
-  addTreatment: (treatment: Omit<Treatment, 'id'>) => void;
-  updateTreatment: (id: string, updates: Partial<Treatment>) => void;
+  addTreatment: (treatment: any) => Promise<{ success: boolean; error?: string }>;
+  updateTreatment: (id: string, updates: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
+  toggleTreatmentStatus: (id: string, active: boolean) => Promise<{ success: boolean; error?: string }>;
   addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => void;
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
@@ -139,6 +153,26 @@ interface CrmContextType {
   addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => Promise<void>;
   updateCoordinator: (id: string, data: { fullName: string; branch: string; pin?: string; password?: string }) => Promise<void>;
   deleteCoordinator: (id: string) => void;
+
+  // Super Admin Management & Dynamic Configuration
+  stages: LeadStageConfig[];
+  courses: Treatment[];
+  superAdmins: User[];
+  fetchStages: () => Promise<void>;
+  addStage: (stage: { key: string; label: string; description?: string; color?: string; orderIndex?: number }) => Promise<{ success: boolean; error?: string }>;
+  updateStage: (id: string, updates: Partial<LeadStageConfig>) => Promise<{ success: boolean; error?: string }>;
+  reorderStages: (order: { id: string; orderIndex: number }[]) => Promise<{ success: boolean; error?: string }>;
+  toggleStageStatus: (id: string, isActive: boolean) => Promise<{ success: boolean; error?: string }>;
+
+  fetchCourses: () => Promise<void>;
+  addCourse: (course: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
+  updateCourse: (id: string, updates: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
+  toggleCourseStatus: (id: string, active: boolean) => Promise<{ success: boolean; error?: string }>;
+
+  fetchTreatments: () => Promise<void>;
+  fetchSuperAdmins: () => Promise<void>;
+  createSuperAdmin: (data: { fullName: string; email: string; password?: string; pin?: string }) => Promise<{ success: boolean; error?: string }>;
+  updateSuperAdmin: (id: string, data: { fullName?: string; active?: boolean }) => Promise<{ success: boolean; error?: string }>;
 
   // Team Broadcast Channel
   broadcasts: TeamBroadcast[];
@@ -268,6 +302,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   });
   const [categories, setCategories] = useState<TreatmentCategory[]>(INITIAL_CATEGORIES);
   const [treatments, setTreatments] = useState<Treatment[]>(INITIAL_TREATMENTS);
+  const [courses, setCourses] = useState<Treatment[]>(() => {
+    const stored = getStored<Treatment[]>('rw_crm_courses', []);
+    return stored.length > 0 ? stored : INITIAL_TREATMENTS.filter(t => t.company === 'CRAS');
+  });
+  const [stages, setStages] = useState<LeadStageConfig[]>(() => getStored('rw_crm_stages', DEFAULT_STAGES));
+  const [superAdmins, setSuperAdmins] = useState<User[]>(() => {
+    const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    return storedUsers.filter(u => u.role === 'super_admin');
+  });
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
@@ -575,6 +618,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/broadcasts`, { headers: authHeaders }).catch(() => null)
       ]);
+
+      // Dynamic Catalogs & Stage Config Fetch
+      fetchStages().catch(() => null);
+      fetchCourses().catch(() => null);
+      fetchTreatments().catch(() => null);
+      if (currentUser?.role === 'super_admin') {
+        fetchSuperAdmins().catch(() => null);
+      }
 
       if (broadcastsRes && broadcastsRes.ok) {
         const bData = await broadcastsRes.json().catch(() => null);
@@ -888,6 +939,27 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (data.status) {
               setWhatsappStatus(data.status);
             }
+            return;
+          }
+
+          if (data.type === 'STAGE_CONFIG_UPDATED') {
+            fetchStages();
+            return;
+          }
+
+          if (data.type === 'COURSE_CONFIG_UPDATED') {
+            fetchCourses();
+            fetchTreatments();
+            return;
+          }
+
+          if (data.type === 'TREATMENT_CONFIG_UPDATED') {
+            fetchTreatments();
+            return;
+          }
+
+          if (data.type === 'SUPER_ADMIN_CONFIG_UPDATED') {
+            fetchSuperAdmins();
             return;
           }
 
@@ -2585,20 +2657,385 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Category Updated', 'Changes saved to catalogue', 'info');
   };
 
-  const addTreatment = (trt: Omit<Treatment, 'id'>) => {
-    const newTrt: Treatment = {
-      ...trt,
-      id: 'trt-' + Date.now(),
-    };
-    setTreatments(prev => [...prev, newTrt]);
-    logAudit('CREATE_TREATMENT', 'Treatment', newTrt.id, null, newTrt);
-    notify('Treatment Added', `${newTrt.name} added to service menu`, 'success');
+  // Dynamic Configuration & Super Admin Methods
+  const fetchStages = useCallback(async () => {
+    try {
+      const isSuper = currentUser?.role === 'super_admin';
+      const token = await ensureValidAuthToken();
+      const endpoint = isSuper ? `${API_BASE_URL}/api/admin/stages` : `${API_BASE_URL}/api/stages`;
+      const res = await fetch(endpoint, {
+        headers: isSuper && token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data) && data.length > 0) {
+          setStages(data);
+          localStorage.setItem('rw_crm_stages', JSON.stringify(data));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch stages:', e);
+    }
+  }, [currentUser?.role]);
+
+  const addStage = async (stageData: { key: string; label: string; description?: string; color?: string; orderIndex?: number }) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/stages`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(stageData)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to add stage' };
+      }
+      await fetchStages();
+      notify('Stage Created', `Stage "${stageData.label}" created successfully.`, 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error adding stage' };
+    }
   };
 
-  const updateTreatment = (id: string, updates: Partial<Treatment>) => {
-    setTreatments(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    logAudit('UPDATE_TREATMENT', 'Treatment', id, null, updates);
-    notify('Treatment Updated', 'Service details updated', 'info');
+  const updateStage = async (id: string, updates: Partial<LeadStageConfig>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/stages/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update stage' };
+      }
+      await fetchStages();
+      notify('Stage Updated', 'Stage updated successfully.', 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error updating stage' };
+    }
+  };
+
+  const reorderStages = async (order: { id: string; orderIndex: number }[]) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/stages/reorder`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ order })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to reorder stages' };
+      }
+      await fetchStages();
+      notify('Stages Reordered', 'Pipeline sequence updated successfully.', 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error reordering stages' };
+    }
+  };
+
+  const toggleStageStatus = async (id: string, isActive: boolean) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/stages/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isActive })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || data.reason || 'Failed to toggle stage status' };
+      }
+      await fetchStages();
+      notify('Stage Status Updated', `Stage is now ${isActive ? 'active' : 'deactivated'}.`, 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error toggling stage status' };
+    }
+  };
+
+  const fetchCourses = useCallback(async () => {
+    try {
+      const isSuper = currentUser?.role === 'super_admin';
+      const token = await ensureValidAuthToken();
+      const endpoint = isSuper ? `${API_BASE_URL}/api/admin/courses` : `${API_BASE_URL}/api/courses`;
+      const res = await fetch(endpoint, {
+        headers: isSuper && token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setCourses(data);
+          localStorage.setItem('rw_crm_courses', JSON.stringify(data));
+          setTreatments(prev => {
+            const rwcOnly = prev.filter(t => t.company !== 'CRAS');
+            return [...rwcOnly, ...data];
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch courses:', e);
+    }
+  }, [currentUser?.role]);
+
+  const addCourse = async (courseData: Partial<Treatment>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/courses`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(courseData)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to create course' };
+      }
+      await fetchCourses();
+      notify('Course Created', `Course "${courseData.name}" created successfully.`, 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error creating course' };
+    }
+  };
+
+  const updateCourse = async (id: string, updates: Partial<Treatment>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/courses/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update course' };
+      }
+      await fetchCourses();
+      notify('Course Updated', 'Course updated successfully.', 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error updating course' };
+    }
+  };
+
+  const toggleCourseStatus = async (id: string, active: boolean) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/courses/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ active })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to toggle course status' };
+      }
+      await fetchCourses();
+      notify('Course Status', `Course is now ${active ? 'active' : 'deactivated'}.`, 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error toggling course status' };
+    }
+  };
+
+  const fetchTreatments = useCallback(async () => {
+    try {
+      const isSuper = currentUser?.role === 'super_admin';
+      const token = await ensureValidAuthToken();
+      const endpoint = isSuper ? `${API_BASE_URL}/api/admin/treatments` : `${API_BASE_URL}/api/treatments`;
+      const res = await fetch(endpoint, {
+        headers: isSuper && token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setTreatments(prev => {
+            const crasCourses = prev.filter(t => t.company === 'CRAS');
+            return [...data, ...crasCourses];
+          });
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch treatments:', e);
+    }
+  }, [currentUser?.role]);
+
+  const addTreatment = async (trt: any): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = await ensureValidAuthToken();
+      const isSuper = currentUser?.role === 'super_admin';
+      if (isSuper && token) {
+        const res = await fetch(`${API_BASE_URL}/api/admin/treatments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(trt)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to create treatment' };
+        }
+        await fetchTreatments();
+        notify('Treatment Added', `${trt.name} added to service menu`, 'success');
+        return { success: true };
+      } else {
+        const newTrt: Treatment = {
+          ...trt,
+          id: 'trt-' + Date.now(),
+        };
+        setTreatments(prev => [...prev, newTrt]);
+        logAudit('CREATE_TREATMENT', 'Treatment', newTrt.id, null, newTrt);
+        notify('Treatment Added', `${newTrt.name} added to service menu`, 'success');
+        return { success: true };
+      }
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error adding treatment' };
+    }
+  };
+
+  const updateTreatment = async (id: string, updates: Partial<Treatment>): Promise<{ success: boolean; error?: string }> => {
+    try {
+      const token = await ensureValidAuthToken();
+      const isSuper = currentUser?.role === 'super_admin';
+      if (isSuper && token) {
+        const res = await fetch(`${API_BASE_URL}/api/admin/treatments/${id}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          },
+          body: JSON.stringify(updates)
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          return { success: false, error: data.error || 'Failed to update treatment' };
+        }
+        await fetchTreatments();
+        notify('Treatment Updated', 'Service details updated', 'info');
+        return { success: true };
+      } else {
+        setTreatments(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+        logAudit('UPDATE_TREATMENT', 'Treatment', id, null, updates);
+        notify('Treatment Updated', 'Service details updated', 'info');
+        return { success: true };
+      }
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error updating treatment' };
+    }
+  };
+
+  const toggleTreatmentStatus = async (id: string, active: boolean) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/treatments/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ active })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to toggle treatment status' };
+      }
+      await fetchTreatments();
+      notify('Treatment Status', `Treatment is now ${active ? 'active' : 'deactivated'}.`, 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error toggling treatment status' };
+    }
+  };
+
+  const fetchSuperAdmins = useCallback(async () => {
+    try {
+      if (currentUser?.role !== 'super_admin') return;
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/super-admins`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setSuperAdmins(data);
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch super admins:', e);
+    }
+  }, [currentUser?.role]);
+
+  const createSuperAdmin = async (data: { fullName: string; email: string; password?: string; pin?: string }) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/super-admins`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        return { success: false, error: resData.error || 'Failed to create Super Admin account' };
+      }
+      await fetchSuperAdmins();
+      notify('Super Admin Created', `Account for ${data.fullName} created successfully.`, 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error creating Super Admin' };
+    }
+  };
+
+  const updateSuperAdmin = async (id: string, data: { fullName?: string; active?: boolean }) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/super-admins/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(data)
+      });
+      const resData = await res.json();
+      if (!res.ok) {
+        return { success: false, error: resData.error || 'Failed to update Super Admin account' };
+      }
+      await fetchSuperAdmins();
+      notify('Super Admin Updated', 'Account updated successfully.', 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error updating Super Admin' };
+    }
   };
 
   const addTemplate = (tpl: Omit<WhatsAppTemplate, 'id'>) => {
@@ -3187,7 +3624,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // 3. Create initial conversation messages
     const trtObj = treatments.find(t => t.id === trtId);
     const catObj = categories.find(c => c.id === catId);
-    const trtLabel = trtObj?.nameI18n[lang] || trtObj?.name || 'Treatment';
+    const trtLabel = trtObj?.nameI18n?.[lang] || trtObj?.name || 'Treatment';
 
     const custMsg: Message = {
       id: 'msg-sim-' + Date.now(),
@@ -3508,6 +3945,23 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateCategory,
     addTreatment,
     updateTreatment,
+    toggleTreatmentStatus,
+    stages,
+    courses,
+    superAdmins,
+    fetchStages,
+    addStage,
+    updateStage,
+    reorderStages,
+    toggleStageStatus,
+    fetchCourses,
+    addCourse,
+    updateCourse,
+    toggleCourseStatus,
+    fetchTreatments,
+    fetchSuperAdmins,
+    createSuperAdmin,
+    updateSuperAdmin,
     addTemplate,
     updateTemplate,
     updateSequence,

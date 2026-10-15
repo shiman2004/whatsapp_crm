@@ -248,7 +248,7 @@ export const WhatsAppSimulator: React.FC = () => {
                         : 'bg-slate-50 hover:bg-teal-50 text-slate-800 border-slate-200 hover:border-teal-300'
                     }`}
                   >
-                    <div className="font-semibold">{trt.nameI18n[lang] || trt.name}</div>
+                    <div className="font-semibold">{trt.nameI18n?.[lang] || trt.name}</div>
                     {trt.priceRange && (
                       <div className={`text-[10px] ${simulatorSession.selectedTreatment === trt.id ? 'text-teal-100' : 'text-slate-500'}`}>
                         {trt.priceRange} ({trt.duration})

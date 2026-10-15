@@ -14,6 +14,7 @@ import { TemplatesManager } from './components/admin/TemplatesManager';
 import { AuditLogsViewer } from './components/admin/AuditLogsViewer';
 import { ArchitectureBlueprint } from './components/admin/ArchitectureBlueprint';
 import { WebhookSimulatorPlayground } from './components/admin/WebhookSimulatorPlayground';
+import { SuperAdminSettingsView } from './components/admin/SuperAdminSettings/SuperAdminSettingsView';
 import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
 import { LoginScreen } from './components/auth/LoginScreen';
 
@@ -46,6 +47,7 @@ const MainLayout: React.FC = () => {
   // Protect Super Admin only tabs against direct navigation by other roles
   React.useEffect(() => {
     const adminOnlyTabs: NavTab[] = [
+      'settings',
       'coordinators',
       'audit',
       'treatments',
@@ -90,6 +92,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'dashboard' && <DashboardOverview />}
           {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
           {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
+          {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
           {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
           {activeTab === 'templates' && <TemplatesManager />}

@@ -121,7 +121,16 @@ export const STAGE_CONFIG: Record<LeadStage, { label: string; shortLabel: string
 };
 
 export const StageBadge: React.FC<StageBadgeProps> = ({ stage, className = '', short = false }) => {
-  const config = STAGE_CONFIG[stage] || STAGE_CONFIG.new;
+  const config = STAGE_CONFIG[stage] || {
+    label: (stage || 'Stage').replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+    shortLabel: (stage || 'STAGE').slice(0, 10).toUpperCase(),
+    bg: 'bg-indigo-500/15',
+    text: 'text-indigo-400',
+    border: 'border-indigo-500/30',
+    pillBg: 'bg-[#6366f1]/20',
+    pillText: 'text-[#818cf8]',
+    pillBorder: 'border-[#818cf8]/40'
+  };
 
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold border ${config.bg} ${config.text} ${config.border} ${className}`}>

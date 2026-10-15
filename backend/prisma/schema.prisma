@@ -166,6 +166,8 @@ model TreatmentCategory {
 model Treatment {
   id              String            @id @db.VarChar(50)
   categoryId      String            @db.VarChar(50)
+  code            String?           @db.VarChar(50)
+  company         String?           @default("RWC") @db.VarChar(50)
   name            String            @db.VarChar(255)
   nameEn          String            @db.VarChar(255)
   nameSi          String            @db.VarChar(255)
@@ -183,7 +185,28 @@ model Treatment {
   leads           Lead[]
 
   @@index([categoryId])
+  @@index([company])
+  @@index([code])
   @@map("treatments")
+}
+
+// 4b. Dynamic Lead Stages Configuration
+model LeadStageConfig {
+  id          String   @id @db.VarChar(50)
+  key         String   @unique @db.VarChar(50)
+  label       String   @db.VarChar(100)
+  description String?  @db.Text
+  color       String?  @default("teal") @db.VarChar(50)
+  orderIndex  Int      @default(0) @map("order_index")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(false) @map("is_system")
+  company     String?  @default("ALL") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([orderIndex])
+  @@index([isActive])
+  @@map("lead_stages")
 }
 
 // 5. WhatsApp Customers / Patients

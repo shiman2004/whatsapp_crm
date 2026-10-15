@@ -10,6 +10,7 @@ import {
   ScrollText,
   Code2,
   Megaphone,
+  Sliders,
   X
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
@@ -19,6 +20,7 @@ export type NavTab =
   | 'leads-kanban' 
   | 'chat' 
   | 'broadcast'
+  | 'settings'
   | 'treatments' 
   | 'coordinators' 
   | 'templates' 
@@ -75,6 +77,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'Dashboard',
       icon: LayoutDashboard,
       adminOnly: false,
+    },
+    {
+      id: 'settings' as NavTab,
+      label: 'System Settings',
+      icon: Sliders,
+      adminOnly: true, // Super Admin only
     },
     {
       id: 'treatments' as NavTab,

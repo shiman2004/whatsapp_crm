@@ -2524,13 +2524,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
     const templateName = template?.waTemplateName || template?.name || templateId;
-    const defaultParam = lead.customer?.displayName || (templateName === 'cras_welcome_greeting' ? 'Dr. Perera' : 'Valued Client');
-    const effectiveParams = (params && params.length > 0) ? params : [defaultParam];
+    const hasVariables = (template?.variables && template.variables.length > 0) || (template?.body && template.body.includes('{{1}}'));
+    const defaultParam = lead.customer?.displayName || (templateName.startsWith('cras_') ? 'Dr. Perera' : 'Valued Client');
+    const effectiveParams = hasVariables ? ((params && params.length > 0) ? params : [defaultParam]) : [];
 
     let body = template?.body || `[WhatsApp Template: ${templateName}]`;
-    effectiveParams.forEach((param, idx) => {
-      body = body.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), param);
-    });
+    if (hasVariables) {
+      effectiveParams.forEach((param, idx) => {
+        body = body.replace(new RegExp(`\\{\\{${idx + 1}\\}\\}`, 'g'), param);
+      });
+    }
 
     const tempId = 'tpl-' + Date.now();
     const nowUtc = new Date().toISOString();

@@ -1801,9 +1801,9 @@ const server = http.createServer(async (req, res) => {
           if (checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
         }
 
-        if (templateName === 'cras_welcome_greeting') {
+        if (templateName === 'cras_welcome_greeting' || templateName.startsWith('cras_')) {
           resolvedCompany = 'CRAS';
-        } else if (templateName.startsWith('rwc_welcome_greeting')) {
+        } else if (templateName.startsWith('rwc_')) {
           resolvedCompany = 'RWC';
         }
 
@@ -1820,10 +1820,17 @@ const server = http.createServer(async (req, res) => {
         const formattedTo = norm.canonical;
 
         let effectiveLanguage = language;
-        if (templateName === 'rwc_welcome_greeting_ta' || effectiveLanguage === 'ta' || effectiveLanguage === 'tamil') {
+        if (
+          templateName === 'rwc_welcome_greeting_ta' || 
+          templateName === 'rwc_followup_discussion_ta' || 
+          effectiveLanguage === 'ta' || 
+          effectiveLanguage === 'tamil'
+        ) {
           effectiveLanguage = 'ta';
         } else if (
           templateName.startsWith('rwc_welcome_greeting') || 
+          templateName.startsWith('rwc_followup_discussion') || 
+          templateName.startsWith('cras_course_followup') || 
           templateName === 'cras_welcome_greeting' || 
           effectiveLanguage === 'en' || 
           effectiveLanguage === 'si'
@@ -1836,6 +1843,8 @@ const server = http.createServer(async (req, res) => {
           effectiveParams = [effectiveParams[0] || 'Valued Client'];
         } else if (templateName === 'cras_welcome_greeting') {
           effectiveParams = [effectiveParams[0] || 'Dr. Perera'];
+        } else if (templateName.startsWith('rwc_followup_discussion') || templateName.startsWith('cras_course_followup')) {
+          effectiveParams = [];
         }
 
         const templatePayload = {
@@ -1975,6 +1984,14 @@ const server = http.createServer(async (req, res) => {
           renderedContent = `Hello ${effectiveParams[0] || 'Valued Client'}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?`;
         } else if (templateName === 'cras_welcome_greeting') {
           renderedContent = `Hello ${effectiveParams[0] || 'Dr. Perera'}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?`;
+        } else if (templateName === 'rwc_followup_discussion_en') {
+          renderedContent = `Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!`;
+        } else if (templateName === 'rwc_followup_discussion_si') {
+          renderedContent = `Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!`;
+        } else if (templateName === 'rwc_followup_discussion_ta') {
+          renderedContent = `Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!`;
+        } else if (templateName === 'cras_course_followup_en') {
+          renderedContent = `Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!`;
         } else if (payload.templateBody) {
           let tb = payload.templateBody;
           effectiveParams.forEach((p, idx) => {

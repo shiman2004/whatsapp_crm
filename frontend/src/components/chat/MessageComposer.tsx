@@ -532,7 +532,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   };
 
   const handleSendTemplate = (tpl: WhatsAppTemplate) => {
-    const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS' || tpl.waTemplateName === 'cras_welcome_greeting';
+    const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS' || tpl.waTemplateName.startsWith('cras_');
     const custName = lead.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
     const trtName = treatment?.name || category?.name || 'Treatment';
     
@@ -739,16 +739,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         <div 
           ref={templateRef}
           onClick={(e) => e.stopPropagation()}
-          className="mb-2 bg-[#202c33] border border-slate-700/80 rounded-2xl p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-80 overflow-y-auto space-y-2.5 z-30"
+          className="mb-2 bg-white dark:bg-[#202c33] border border-slate-200 dark:border-slate-700/80 rounded-2xl p-3 shadow-2xl animate-in fade-in zoom-in-95 duration-150 max-h-80 overflow-y-auto space-y-2.5 z-30"
         >
-          <div className="flex items-center justify-between pb-1.5 border-b border-slate-700/80">
-            <span className="text-xs font-bold text-[#e9edef] flex items-center gap-1.5">
-              <span>🌿 Royal Wellness Center Templates</span>
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-700/80">
+            <span className="text-xs font-bold text-slate-800 dark:text-[#e9edef] flex items-center gap-1.5">
+              <span>🌿 WhatsApp Meta Approved Templates</span>
             </span>
             <button
               type="button"
               onClick={() => setShowTemplates(false)}
-              className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-700/50 cursor-pointer"
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-700/50 cursor-pointer"
               aria-label="Close"
             >
               <X className="w-4 h-4" />
@@ -758,14 +758,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           <div className="space-y-2">
             {templates.map((tpl) => {
               const isCopied = copiedTplId === tpl.id;
-              const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS' || tpl.waTemplateName === 'cras_welcome_greeting';
+              const isCras = lead.source?.toUpperCase() === 'CRAS' || lead.company === 'CRAS' || tpl.waTemplateName.startsWith('cras_');
               const defaultName = lead.customer?.displayName || (isCras ? 'Dr. Perera' : 'Valued Client');
               const renderedBody = tpl.body.replace(/\{\{1\}\}/g, defaultName);
               return (
-                <div key={tpl.id} className="bg-[#111b21] p-3 rounded-xl border border-slate-800 space-y-2">
+                <div key={tpl.id} className="bg-slate-50 dark:bg-[#111b21] p-3 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-white">{tpl.name}</span>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded ${
+                        tpl.waTemplateName.startsWith('cras_')
+                          ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-300 dark:border-rose-800'
+                          : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800'
+                      }`}>
+                        {tpl.waTemplateName.startsWith('cras_') ? 'CRAS' : 'RWC'}
+                      </span>
+                      <span className="text-xs font-bold text-slate-800 dark:text-white truncate">{tpl.name}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         onClick={() => {
@@ -774,7 +783,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                           setTimeout(() => setCopiedTplId(null), 2000);
                         }}
                         className={`px-2 py-1 rounded-lg font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
-                          isCopied ? 'bg-emerald-600 text-white' : 'bg-slate-800 hover:bg-slate-700 text-[#00a884]'
+                          isCopied ? 'bg-emerald-600 text-white' : 'bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-[#00a884]'
                         }`}
                         title="Copy text"
                       >
@@ -788,7 +797,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                           setShowTemplates(false);
                           textareaRef.current?.focus();
                         }}
-                        className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 font-medium text-[11px] transition-all cursor-pointer"
+                        className="px-2 py-1 rounded-lg bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium text-[11px] transition-all cursor-pointer"
                         title="Insert into chat box"
                       >
                         Insert
@@ -804,7 +813,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                       </button>
                     </div>
                   </div>
-                  <p className="text-[11px] text-slate-300 whitespace-pre-wrap max-h-24 overflow-y-auto font-sans leading-relaxed bg-slate-950/60 p-2 rounded-lg select-all">
+                  <p className="text-[11px] text-slate-700 dark:text-slate-300 whitespace-pre-wrap max-h-24 overflow-y-auto font-sans leading-relaxed bg-white dark:bg-slate-950/60 p-2 rounded-lg select-all border border-slate-200 dark:border-transparent">
                     {renderedBody}
                   </p>
                 </div>

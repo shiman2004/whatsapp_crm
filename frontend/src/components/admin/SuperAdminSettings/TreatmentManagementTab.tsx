@@ -219,39 +219,39 @@ export const TreatmentManagementTab: React.FC = () => {
     <div className="space-y-6">
       {/* Top Banner / Stats */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Total RWC Treatments</p>
-            <p className="text-2xl font-bold text-slate-100 font-mono mt-0.5">{totalCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Total RWC Treatments</p>
+            <p className="text-2xl font-bold text-slate-900 dark:text-slate-100 font-mono mt-0.5">{totalCount}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-teal-500/10 border border-teal-500/20 flex items-center justify-center text-teal-400">
+          <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20 flex items-center justify-center text-teal-600 dark:text-teal-400">
             <Sparkles className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Active Treatments</p>
-            <p className="text-2xl font-bold text-emerald-400 font-mono mt-0.5">{activeCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Active Treatments</p>
+            <p className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 font-mono mt-0.5">{activeCount}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
             <CheckCircle2 className="w-5 h-5" />
           </div>
         </div>
 
-        <div className="bg-slate-900/80 border border-slate-800 rounded-2xl p-4 flex items-center justify-between">
+        <div className="bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 flex items-center justify-between shadow-sm">
           <div>
-            <p className="text-xs text-slate-400 font-medium">Deactivated</p>
-            <p className="text-2xl font-bold text-slate-400 font-mono mt-0.5">{inactiveCount}</p>
+            <p className="text-xs text-slate-500 dark:text-slate-400 font-medium">Deactivated</p>
+            <p className="text-2xl font-bold text-slate-700 dark:text-slate-400 font-mono mt-0.5">{inactiveCount}</p>
           </div>
-          <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400">
+          <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-500 dark:text-slate-400">
             <Power className="w-5 h-5" />
           </div>
         </div>
       </div>
 
       {/* Control Bar: Search, Category Filter, Status Filter, Add Button */}
-      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+      <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3 bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex flex-wrap items-center gap-2.5 flex-1">
           <div className="relative min-w-[200px] max-w-xs flex-1">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -260,21 +260,21 @@ export const TreatmentManagementTab: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search treatments by code or name..."
-              className="w-full bg-slate-950 border border-slate-700/80 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-teal-500"
+              className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700/80 rounded-xl pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-200 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-teal-500"
             />
           </div>
 
           {/* Category Dropdown */}
-          <div className="flex items-center gap-1.5 bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-800 text-xs">
-            <Layers className="w-3.5 h-3.5 text-teal-400" />
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950 px-2.5 py-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+            <Layers className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
             <select
               value={selectedCatFilter}
               onChange={(e) => setSelectedCatFilter(e.target.value)}
-              className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer max-w-[160px] truncate"
+              className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[160px] truncate"
             >
-              <option value="all">All Categories</option>
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Categories</option>
               {rwcCategories.map((c) => (
-                <option key={c.id} value={c.id}>
+                <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                   {c.name}
                 </option>
               ))}
@@ -282,13 +282,13 @@ export const TreatmentManagementTab: React.FC = () => {
           </div>
 
           {/* Status Segmented Buttons */}
-          <div className="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
             <button
               onClick={() => setStatusFilter('all')}
               className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
                 statusFilter === 'all'
-                  ? 'bg-teal-500/20 text-teal-300 border border-teal-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-300 dark:border-teal-500/30 font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               All ({totalCount})
@@ -297,8 +297,8 @@ export const TreatmentManagementTab: React.FC = () => {
               onClick={() => setStatusFilter('active')}
               className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
                 statusFilter === 'active'
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-500/30 font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               Active ({activeCount})
@@ -307,8 +307,8 @@ export const TreatmentManagementTab: React.FC = () => {
               onClick={() => setStatusFilter('inactive')}
               className={`px-2.5 py-1 rounded-lg font-medium transition-colors ${
                 statusFilter === 'inactive'
-                  ? 'bg-slate-700 text-slate-200'
-                  : 'text-slate-400 hover:text-slate-200'
+                  ? 'bg-slate-200 dark:bg-slate-700 text-slate-800 dark:text-slate-200 font-semibold'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               Inactive ({inactiveCount})
@@ -318,7 +318,7 @@ export const TreatmentManagementTab: React.FC = () => {
 
         <button
           onClick={handleOpenAddModal}
-          className="px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-500 hover:to-teal-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-lg shadow-teal-950/40 transition-all shrink-0"
+          className="px-4 py-2 bg-gradient-to-r from-teal-600 to-teal-700 hover:from-teal-500 hover:to-teal-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 shadow-md dark:shadow-lg dark:shadow-teal-950/40 transition-all shrink-0 cursor-pointer"
         >
           <Plus className="w-4 h-4" />
           <span>Add Treatment</span>
@@ -326,11 +326,11 @@ export const TreatmentManagementTab: React.FC = () => {
       </div>
 
       {/* Treatments Table */}
-      <div className="bg-slate-900/80 rounded-2xl border border-slate-800 overflow-hidden shadow-xl">
+      <div className="bg-white dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm dark:shadow-xl">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse text-xs">
             <thead>
-              <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
+              <tr className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
                 <th className="py-3 px-4">Code</th>
                 <th className="py-3 px-4">Treatment / Clinical Service</th>
                 <th className="py-3 px-4">Category</th>
@@ -340,11 +340,11 @@ export const TreatmentManagementTab: React.FC = () => {
                 <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
               {filteredTreatments.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-slate-500">
-                    <Sparkles className="w-8 h-8 text-slate-600 mx-auto mb-2 opacity-50" />
+                  <td colSpan={7} className="py-12 text-center text-slate-400 dark:text-slate-500">
+                    <Sparkles className="w-8 h-8 text-slate-400 dark:text-slate-600 mx-auto mb-2 opacity-50" />
                     No treatments found matching your filters.
                   </td>
                 </tr>
@@ -355,11 +355,11 @@ export const TreatmentManagementTab: React.FC = () => {
                   return (
                     <tr
                       key={t.id}
-                      className="hover:bg-slate-800/40 transition-colors group"
+                      className="hover:bg-slate-50/80 dark:hover:bg-slate-800/40 transition-colors group"
                     >
                       {/* Code */}
-                      <td className="py-3.5 px-4 font-mono font-bold text-teal-400">
-                        <span className="px-2 py-1 rounded-md bg-teal-500/10 border border-teal-500/20">
+                      <td className="py-3.5 px-4 font-mono font-bold text-teal-600 dark:text-teal-400">
+                        <span className="px-2 py-1 rounded-md bg-teal-50 dark:bg-teal-500/10 border border-teal-200 dark:border-teal-500/20">
                           {t.code || 'TRT'}
                         </span>
                       </td>
@@ -367,14 +367,14 @@ export const TreatmentManagementTab: React.FC = () => {
                       {/* Name & Details */}
                       <td className="py-3.5 px-4">
                         <div>
-                          <p className="font-bold text-slate-100 text-sm">{t.name}</p>
+                          <p className="font-bold text-slate-900 dark:text-slate-100 text-sm">{t.name}</p>
                           {t.description && (
-                            <p className="text-[11px] text-slate-400 line-clamp-1 mt-0.5">
+                            <p className="text-[11px] text-slate-500 dark:text-slate-400 line-clamp-1 mt-0.5">
                               {t.description}
                             </p>
                           )}
                           {t.benefits && (
-                            <p className="text-[10px] text-teal-400/80 line-clamp-1 mt-0.5 italic">
+                            <p className="text-[10px] text-teal-600 dark:text-teal-400/80 line-clamp-1 mt-0.5 italic">
                               {t.benefits}
                             </p>
                           )}
@@ -383,38 +383,38 @@ export const TreatmentManagementTab: React.FC = () => {
 
                       {/* Category */}
                       <td className="py-3.5 px-4">
-                        <span className="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 border border-slate-700 text-[11px]">
+                        <span className="px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[11px]">
                           {category?.name || 'Clinical Care'}
                         </span>
                       </td>
 
                       {/* Duration */}
-                      <td className="py-3.5 px-4 text-slate-300">
+                      <td className="py-3.5 px-4 text-slate-600 dark:text-slate-300">
                         <div className="flex items-center gap-1.5">
-                          <Clock className="w-3.5 h-3.5 text-slate-500" />
+                          <Clock className="w-3.5 h-3.5 text-slate-400 dark:text-slate-500" />
                           <span>{t.duration || '45 mins'}</span>
                         </div>
                       </td>
 
                       {/* Starting Price */}
-                      <td className="py-3.5 px-4 font-mono font-medium text-slate-200">
+                      <td className="py-3.5 px-4 font-mono font-medium text-slate-800 dark:text-slate-200">
                         {t.startingPrice ? (
                           <span>LKR {Number(t.startingPrice).toLocaleString()}</span>
                         ) : (
-                          <span className="text-slate-500 italic">Consultation Required</span>
+                          <span className="text-slate-400 dark:text-slate-500 italic">Consultation Required</span>
                         )}
                       </td>
 
                       {/* Status */}
                       <td className="py-3.5 px-4">
                         {isActive ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1.5"></span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-500/30">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 dark:bg-emerald-400 mr-1.5"></span>
                             Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-500 mr-1.5"></span>
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700">
+                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400 dark:bg-slate-500 mr-1.5"></span>
                             Deactivated
                           </span>
                         )}
@@ -426,7 +426,7 @@ export const TreatmentManagementTab: React.FC = () => {
                           <button
                             onClick={() => handleOpenEditModal(t)}
                             title="Edit Treatment Details"
-                            className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition-colors"
+                            className="p-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white rounded-lg border border-slate-200 dark:border-slate-700 transition-colors"
                           >
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
@@ -435,8 +435,8 @@ export const TreatmentManagementTab: React.FC = () => {
                             title={isActive ? 'Deactivate Treatment' : 'Activate Treatment'}
                             className={`p-1.5 rounded-lg border transition-colors ${
                               isActive
-                                ? 'bg-rose-950/40 hover:bg-rose-900/60 text-rose-400 border-rose-800/60'
-                                : 'bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-400 border-emerald-800/60'
+                                ? 'bg-rose-50 hover:bg-rose-100 dark:bg-rose-950/40 dark:hover:bg-rose-900/60 text-rose-600 dark:text-rose-400 border-rose-200 dark:border-rose-800/60'
+                                : 'bg-emerald-50 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:hover:bg-emerald-900/60 text-emerald-600 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800/60'
                             }`}
                           >
                             <Power className="w-3.5 h-3.5" />

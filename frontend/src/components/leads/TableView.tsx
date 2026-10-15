@@ -27,11 +27,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   const coordinators = users.filter(u => u.role === 'coordinator');
 
   return (
-    <div className="bg-slate-900/80 rounded-xl border border-slate-800 overflow-hidden shadow-lg mt-3">
+    <div className="bg-white dark:bg-slate-900/80 rounded-xl border border-slate-200 dark:border-slate-800 overflow-hidden shadow-sm dark:shadow-lg mt-3">
       <div className="overflow-x-auto">
         <table className="w-full text-left border-collapse text-xs">
           <thead>
-            <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
+            <tr className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
               <th className="py-3 px-4">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
               <th className="py-3 px-4">Language</th>
               <th className="py-3 px-4">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
@@ -41,10 +41,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3 px-4 text-right">Action</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/60">
+          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={7} className="py-12 text-center text-slate-500">
+                <td colSpan={7} className="py-12 text-center text-slate-400 dark:text-slate-500">
                   No leads found matching your filters.
                 </td>
               </tr>
@@ -60,8 +60,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <tr
                     key={lead.id}
                     onClick={() => onSelectLead(lead.id)}
-                    className={`hover:bg-slate-800/60 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-teal-950/30' : ''
+                    className={`hover:bg-slate-50/80 dark:hover:bg-slate-800/60 cursor-pointer transition-colors ${
+                      isSelected ? 'bg-teal-50 dark:bg-teal-950/30' : ''
                     }`}
                   >
                     {/* Customer */}
@@ -70,21 +70,21 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         <img
                           src={lead.customer?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
                           alt={lead.customer?.displayName}
-                          className="w-8 h-8 rounded-full object-cover border border-slate-700"
+                          className="w-8 h-8 rounded-full object-cover border border-slate-200 dark:border-slate-700"
                         />
                         <div>
                           <div className="flex items-center gap-1.5">
-                            <p className="font-bold text-slate-100">{lead.customer?.displayName}</p>
+                            <p className="font-bold text-slate-800 dark:text-slate-100">{lead.customer?.displayName}</p>
                             <CompanyTagBadge lead={lead} size="xs" />
                           </div>
-                          <p className="text-[10px] text-slate-400 font-mono">{lead.customer?.whatsappNumber}</p>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{lead.customer?.whatsappNumber}</p>
                         </div>
                       </div>
                     </td>
 
                     {/* Language */}
                     <td className="py-3 px-4">
-                      <span className="px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] bg-slate-800 text-slate-300 border border-slate-700">
+                      <span className="px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
                         {lead.language}
                       </span>
                     </td>
@@ -93,20 +93,20 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     <td className="py-3 px-4">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className={`font-semibold ${isCras ? 'text-rose-400' : 'text-teal-400'}`}>
+                          <p className={`font-semibold ${isCras ? 'text-rose-600 dark:text-rose-400' : 'text-teal-700 dark:text-teal-400'}`}>
                             {treatment?.name || category?.name || (isCras ? 'Course Not Selected' : 'Treatment Not Selected')}
                           </p>
                           {lead.serialNumber && (
                             <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
                               isCras 
-                                ? 'bg-rose-950/60 text-rose-300 border-rose-500/40' 
-                                : 'bg-teal-950/60 text-teal-300 border-teal-500/40'
+                                ? 'bg-rose-50 dark:bg-rose-950/60 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/40' 
+                                : 'bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-500/40'
                             }`}>
                               #{lead.serialNumber}
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400">{category?.name}</p>
+                        <p className="text-[10px] text-slate-500 dark:text-slate-400">{category?.name}</p>
                       </div>
                     </td>
 
@@ -121,7 +121,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         <select
                           value={lead.assignedTo || ''}
                           onChange={(e) => assignLead(lead.id, e.target.value)}
-                          className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
+                          className="bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-700 rounded px-2 py-1 text-xs text-slate-800 dark:text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
                         >
                           <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCras ? '-- Assign Education Counsellor --' : '-- Assign Patient Coordinator --')}</option>
                           {coordinators.filter(c => isCras ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company)).map((c) => (
@@ -132,24 +132,24 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         </select>
                       ) : isLeadsOfficer && lead.assignedTo ? (
                         <div 
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-950/70 border border-slate-800 text-slate-300 font-medium"
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-slate-100 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-medium"
                           title="Assignment locked. Once assigned, only Super Admin can reassign this lead."
                         >
-                          <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                          <UserCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
                           <span className="truncate">{coordinator?.fullName || 'Assigned Coordinator'}</span>
-                          <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center gap-0.5 shrink-0 font-bold">
+                          <span className="ml-1 text-[9px] px-1.5 py-0.5 rounded bg-amber-50 dark:bg-amber-500/10 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-500/20 flex items-center gap-0.5 shrink-0 font-bold">
                             <Lock className="w-2.5 h-2.5" /> Locked
                           </span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-slate-300">
+                        <div className="flex items-center gap-1.5 text-slate-700 dark:text-slate-300">
                           {coordinator ? (
                             <>
-                              <UserCheck className="w-3.5 h-3.5 text-teal-400" />
+                              <UserCheck className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                               <span>{coordinator.fullName}</span>
                             </>
                           ) : (
-                            <span className="text-amber-400 flex items-center gap-1">
+                            <span className="text-amber-600 dark:text-amber-400 flex items-center gap-1 font-medium">
                               <AlertTriangle className="w-3.5 h-3.5" /> Unassigned
                             </span>
                           )}
@@ -158,7 +158,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     </td>
 
                     {/* Time */}
-                    <td className="py-3 px-4 text-slate-400 font-mono text-[11px]">
+                    <td className="py-3 px-4 text-slate-500 dark:text-slate-400 font-mono text-[11px]">
                       {new Date(lead.createdAt).toLocaleDateString()} {new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </td>
 
@@ -166,7 +166,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     <td className="py-3 px-4 text-right">
                       <button
                         onClick={() => onSelectLead(lead.id)}
-                        className="px-2.5 py-1 rounded bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1"
+                        className="px-2.5 py-1 rounded bg-teal-50 dark:bg-teal-500/10 hover:bg-teal-100 dark:hover:bg-teal-500/20 text-teal-700 dark:text-teal-400 border border-teal-200 dark:border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm"
                       >
                         <span>Chat</span>
                         <ChevronRight className="w-3.5 h-3.5" />

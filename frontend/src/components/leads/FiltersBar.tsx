@@ -66,7 +66,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
     : "Search by name, phone (+94), serial...";
 
   return (
-    <div className="bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-md">
+    <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm dark:shadow-md">
       {/* Left: Search input */}
       <div className="flex items-center gap-2.5 flex-1 min-w-[260px] max-w-md">
         <div className="relative w-full">
@@ -76,8 +76,10 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={searchPlaceholder}
-            className={`w-full bg-slate-950/80 border rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none transition-colors ${
-              isCras ? 'border-rose-500/30 focus:border-rose-500' : 'border-slate-700/80 focus:border-teal-500'
+            className={`w-full bg-slate-50 dark:bg-slate-950/80 border rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors ${
+              isCras 
+                ? 'border-rose-200 dark:border-rose-500/30 focus:border-rose-500' 
+                : 'border-slate-200 dark:border-slate-700/80 focus:border-teal-500'
             }`}
           />
         </div>
@@ -86,39 +88,39 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
       {/* Middle: Filter Dropdowns */}
       <div className="flex flex-wrap items-center gap-2">
         {/* Category / Course Filter */}
-        <div className="flex items-center gap-1.5 bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-800 text-xs">
+        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
           {isCras ? (
-            <GraduationCap className="w-3.5 h-3.5 text-rose-400" />
+            <GraduationCap className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
           ) : (
-            <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+            <Sparkles className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
           )}
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer max-w-[180px] truncate"
+            className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[180px] truncate"
           >
             {isCras ? (
               <>
-                <option value="all" className="bg-slate-900">All Academic Courses ({crasCourses.length})</option>
+                <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Academic Courses ({crasCourses.length})</option>
                 {crasCourses.map((c) => (
-                  <option key={c.id} value={c.id} className="bg-slate-900">
+                  <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                     {c.code ? `[${c.code}] ` : ''}{c.name}
                   </option>
                 ))}
               </>
             ) : isRwc ? (
               <>
-                <option value="all" className="bg-slate-900">All Treatments & Clinics</option>
-                <optgroup label="Clinical Departments" className="bg-slate-900 font-semibold text-teal-400">
+                <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Treatments & Clinics</option>
+                <optgroup label="Clinical Departments" className="bg-slate-100 dark:bg-slate-900 font-semibold text-teal-600 dark:text-teal-400">
                   {rwcCategories.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-900 text-slate-200">
+                    <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                       📂 {c.name}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="Specific Treatments" className="bg-slate-900 font-semibold text-teal-400">
+                <optgroup label="Specific Treatments" className="bg-slate-100 dark:bg-slate-900 font-semibold text-teal-600 dark:text-teal-400">
                   {rwcTreatments.map((t) => (
-                    <option key={t.id} value={t.id} className="bg-slate-900 text-slate-200">
+                    <option key={t.id} value={t.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                       ✦ {t.name}
                     </option>
                   ))}
@@ -126,17 +128,17 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
               </>
             ) : (
               <>
-                <option value="all" className="bg-slate-900">All Treatments & Courses</option>
-                <optgroup label="CRAS Academic Courses" className="bg-slate-900 font-semibold text-rose-400">
+                <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Treatments & Courses</option>
+                <optgroup label="CRAS Academic Courses" className="bg-slate-100 dark:bg-slate-900 font-semibold text-rose-600 dark:text-rose-400">
                   {crasCourses.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-900 text-slate-200">
+                    <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                       🎓 {c.name}
                     </option>
                   ))}
                 </optgroup>
-                <optgroup label="RWC Clinical Treatments" className="bg-slate-900 font-semibold text-teal-400">
+                <optgroup label="RWC Clinical Treatments" className="bg-slate-100 dark:bg-slate-900 font-semibold text-teal-600 dark:text-teal-400">
                   {rwcCategories.map((c) => (
-                    <option key={c.id} value={c.id} className="bg-slate-900 text-slate-200">
+                    <option key={c.id} value={c.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                       🌿 {c.name}
                     </option>
                   ))}
@@ -147,39 +149,39 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         </div>
 
         {/* Language Filter */}
-        <div className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800 text-xs">
-          <Globe className="w-3.5 h-3.5 text-amber-400" />
+        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+          <Globe className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
           <select
             value={selectedLanguage}
             onChange={(e) => setSelectedLanguage(e.target.value)}
-            className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer"
+            className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer"
           >
-            <option value="all" className="bg-slate-900">All Languages</option>
-            <option value="en" className="bg-slate-900">🇬🇧 English</option>
-            <option value="si" className="bg-slate-900">🇱🇰 සිංහල (Sinhala)</option>
-            <option value="ta" className="bg-slate-900">🇱🇰 தமிழ் (Tamil)</option>
+            <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Languages</option>
+            <option value="en" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">🇬🇧 English</option>
+            <option value="si" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">🇱🇰 සිංහල (Sinhala)</option>
+            <option value="ta" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">🇱🇰 தமிழ் (Tamil)</option>
           </select>
         </div>
 
         {/* Coordinator / Counsellor Filter (Super Admin & Leads Officer) */}
         {(isSuperAdmin || isLeadsOfficer) && (
-          <div className="flex items-center gap-1.5 bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-800 text-xs">
-            <UserCheck className={`w-3.5 h-3.5 ${isCras ? 'text-rose-400' : 'text-sky-400'}`} />
+          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+            <UserCheck className={`w-3.5 h-3.5 ${isCras ? 'text-rose-500 dark:text-rose-400' : 'text-sky-500 dark:text-sky-400'}`} />
             <select
               value={selectedCoordinator}
               onChange={(e) => setSelectedCoordinator(e.target.value)}
-              className="bg-transparent text-slate-300 text-xs outline-none cursor-pointer max-w-[210px] truncate"
+              className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[210px] truncate"
             >
-              <option value="all" className="bg-slate-900">
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                 {isCras 
                   ? `All Education Counsellors (${relevantCoordinators.length})` 
                   : isRwc 
                   ? `All Patient Coordinators (${relevantCoordinators.length})` 
                   : `All Staff (Coordinators & Counsellors)`}
               </option>
-              <option value="unassigned" className="bg-slate-900">⚠️ Unassigned Only</option>
+              <option value="unassigned" className="bg-white dark:bg-slate-900 text-amber-600 dark:text-amber-400">⚠️ Unassigned Only</option>
               {relevantCoordinators.map((u) => (
-                <option key={u.id} value={u.id} className="bg-slate-900">
+                <option key={u.id} value={u.id} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                   {u.fullName} ({u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
                 </option>
               ))}
@@ -191,13 +193,13 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
       {/* Right: View mode & Export */}
       <div className="flex items-center gap-2">
         {/* Toggle Kanban / Table */}
-        <div className="bg-slate-950 p-0.5 rounded-lg border border-slate-800 flex items-center">
+        <div className="bg-slate-100 dark:bg-slate-950 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center">
           <button
             onClick={() => setViewMode('kanban')}
             className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition-all ${
               viewMode === 'kanban' 
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm' 
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-slate-200 dark:border-teal-500/40 shadow-sm' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <LayoutGrid className="w-3.5 h-3.5" />
@@ -207,8 +209,8 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             onClick={() => setViewMode('table')}
             className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition-all ${
               viewMode === 'table' 
-                ? 'bg-teal-500/20 text-teal-300 border border-teal-500/40 shadow-sm' 
-                : 'text-slate-400 hover:text-slate-200'
+                ? 'bg-white dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-slate-200 dark:border-teal-500/40 shadow-sm' 
+                : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
             }`}
           >
             <TableIcon className="w-3.5 h-3.5" />
@@ -219,10 +221,10 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         {/* CSV Export Button */}
         <button
           onClick={onExportCsv}
-          className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
           title="Export Filtered Leads as CSV"
         >
-          <Download className="w-3.5 h-3.5 text-slate-300" />
+          <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
           <span>Export CSV</span>
         </button>
       </div>

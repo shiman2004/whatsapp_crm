@@ -253,19 +253,19 @@ export const AnalyticsView: React.FC = () => {
     <div className="space-y-6 flex-1 overflow-y-auto pr-1 pb-10">
       
       {/* Analytics Executive Header & Interactive Filter Bar */}
-      <div className="bg-[#111b21] p-5 rounded-3xl border border-slate-800 shadow-xl flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+      <div className="bg-white dark:bg-[#111b21] p-5 rounded-3xl border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2 mb-1">
-            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1.5">
+            <span className="px-2.5 py-0.5 rounded-full bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border border-emerald-500/20 text-[11px] font-bold flex items-center gap-1.5">
               <Activity className="w-3.5 h-3.5" />
               <span>Real-Time Clinical Telemetry</span>
             </span>
-            <span className="text-xs text-slate-400">Royal Wellness & CRAS Academy</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">Royal Wellness & CRAS Academy</span>
           </div>
-          <h2 className="text-xl font-bold text-slate-100 font-serif tracking-tight">
+          <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-serif tracking-tight">
             Operational Intelligence & Conversion Analytics
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Detailed performance breakdown of WhatsApp patient conversions, speed-to-lead SLAs, branch load, and clinical verticals.
           </p>
         </div>
@@ -273,7 +273,7 @@ export const AnalyticsView: React.FC = () => {
         {/* Filter Controls & Export */}
         <div className="flex flex-wrap items-center gap-2.5">
           {/* Time Horizon Selector */}
-          <div className="flex items-center bg-[#202c33] p-1 rounded-xl border border-slate-700/80 text-xs">
+          <div className="flex items-center bg-slate-100 dark:bg-[#202c33] p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs">
             {(['all', '30d', '7d', 'today'] as TimeRange[]).map((tr) => (
               <button
                 key={tr}
@@ -282,7 +282,7 @@ export const AnalyticsView: React.FC = () => {
                 className={`px-3 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
                   timeRange === tr
                     ? 'bg-emerald-600 text-white shadow-sm'
-                    : 'text-slate-400 hover:text-slate-200'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 {tr === 'all' ? 'All Time' : tr === '30d' ? '30 Days' : tr === '7d' ? '7 Days' : 'Today'}
@@ -291,12 +291,12 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           {/* Entity Filter */}
-          <div className="flex items-center bg-[#202c33] p-1 rounded-xl border border-slate-700/80 text-xs">
+          <div className="flex items-center bg-slate-100 dark:bg-[#202c33] p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs">
             <button
               type="button"
               onClick={() => setSelectedEntity('all')}
               className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                selectedEntity === 'all' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                selectedEntity === 'all' ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               All Brands
@@ -305,7 +305,7 @@ export const AnalyticsView: React.FC = () => {
               type="button"
               onClick={() => setSelectedEntity('RWC')}
               className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                selectedEntity === 'RWC' ? 'bg-[#008000] text-white' : 'text-slate-400 hover:text-slate-200'
+                selectedEntity === 'RWC' ? 'bg-[#008000] text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               RWC
@@ -314,7 +314,7 @@ export const AnalyticsView: React.FC = () => {
               type="button"
               onClick={() => setSelectedEntity('CRAS')}
               className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                selectedEntity === 'CRAS' ? 'bg-[#800000] text-white' : 'text-slate-400 hover:text-slate-200'
+                selectedEntity === 'CRAS' ? 'bg-[#800000] text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
               }`}
             >
               CRAS
@@ -322,14 +322,14 @@ export const AnalyticsView: React.FC = () => {
           </div>
 
           {/* Branch Filter */}
-          <div className="flex items-center bg-[#202c33] p-1 rounded-xl border border-slate-700/80 text-xs">
+          <div className="flex items-center bg-slate-100 dark:bg-[#202c33] p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 text-xs">
             {(['all', 'Colombo', 'Maruthamunai'] as BranchFilter[]).map((br) => (
               <button
                 key={br}
                 type="button"
                 onClick={() => setSelectedBranch(br)}
                 className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
-                  selectedBranch === br ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                  selectedBranch === br ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
                 }`}
               >
                 {br === 'all' ? 'All Branches' : br}
@@ -341,10 +341,10 @@ export const AnalyticsView: React.FC = () => {
           <button
             type="button"
             onClick={handleExportCSV}
-            className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold flex items-center gap-1.5 border border-slate-700 transition-colors shadow-sm cursor-pointer"
+            className="px-3 py-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer"
             title="Download CSV Summary Report"
           >
-            <Download className="w-3.5 h-3.5 text-emerald-400" />
+            <Download className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
             <span className="hidden sm:inline">Export CSV</span>
           </button>
         </div>
@@ -353,73 +353,73 @@ export const AnalyticsView: React.FC = () => {
       {/* Primary Clinical & Operational KPI Grid (5 High-Impact Cards) */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {/* Card 1: Conversion Rate */}
-        <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-emerald-500/40 transition-all">
+        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm relative overflow-hidden group hover:border-emerald-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400">Procedure Conversion</span>
-            <span className="p-1.5 rounded-lg bg-emerald-500/15 text-emerald-400">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Procedure Conversion</span>
+            <span className="p-1.5 rounded-lg bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
               <TrendingUp className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-emerald-400">{conversionRate}%</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-            <span className="text-emerald-400 font-bold">{convertedLeads} won</span>
+          <div className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">{conversionRate}%</div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{convertedLeads} won</span>
             <span>of {totalInquiries} inquiries</span>
           </div>
         </div>
 
         {/* Card 2: Speed-to-Lead Response SLA */}
-        <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-amber-500/40 transition-all">
+        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm relative overflow-hidden group hover:border-amber-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400">Speed-to-Lead SLA</span>
-            <span className="p-1.5 rounded-lg bg-amber-500/15 text-amber-400">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Speed-to-Lead SLA</span>
+            <span className="p-1.5 rounded-lg bg-amber-500/10 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400">
               <Zap className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-amber-400">{avgResponseMinutes}m</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-            <span className="text-emerald-400 font-bold">{slaCompliancePct}%</span>
+          <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">{avgResponseMinutes}m</div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{slaCompliancePct}%</span>
             <span>within &lt;5m SLA</span>
           </div>
         </div>
 
         {/* Card 3: Active Triage & Discussion */}
-        <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-indigo-500/40 transition-all">
+        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm relative overflow-hidden group hover:border-indigo-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400">Active Consultations</span>
-            <span className="p-1.5 rounded-lg bg-indigo-500/15 text-indigo-400">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Active Consultations</span>
+            <span className="p-1.5 rounded-lg bg-indigo-500/10 dark:bg-indigo-500/15 text-indigo-600 dark:text-indigo-400">
               <HeartPulse className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-indigo-400">{activeDiscussionLeads}</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
+          <div className="text-2xl font-black font-mono text-indigo-600 dark:text-indigo-400">{activeDiscussionLeads}</div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
             <span>In treatment discussion</span>
           </div>
         </div>
 
         {/* Card 4: Automated Follow-up Health */}
-        <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-purple-500/40 transition-all">
+        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm relative overflow-hidden group hover:border-purple-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400">Nurture Automation</span>
-            <span className="p-1.5 rounded-lg bg-purple-500/15 text-purple-400">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Nurture Automation</span>
+            <span className="p-1.5 rounded-lg bg-purple-500/10 dark:bg-purple-500/15 text-purple-600 dark:text-purple-400">
               <Sparkles className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-purple-400">100%</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
-            <span className="text-purple-300 font-bold">Day 1-7 auto-triggers</span>
+          <div className="text-2xl font-black font-mono text-purple-600 dark:text-purple-400">100%</div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+            <span className="text-purple-600 dark:text-purple-300 font-bold">Day 1-7 auto-triggers</span>
           </div>
         </div>
 
         {/* Card 5: Total WhatsApp Inquiries */}
-        <div className="bg-[#111b21] p-4 rounded-2xl border border-slate-800/90 shadow-md relative overflow-hidden group hover:border-blue-500/40 transition-all">
+        <div className="bg-white dark:bg-[#111b21] p-4 rounded-2xl border border-slate-200 dark:border-slate-800/90 shadow-sm relative overflow-hidden group hover:border-blue-500/40 transition-all">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-[11px] font-semibold text-slate-400">Inbound WhatsApp</span>
-            <span className="p-1.5 rounded-lg bg-blue-500/15 text-blue-400">
+            <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">Inbound WhatsApp</span>
+            <span className="p-1.5 rounded-lg bg-blue-500/10 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400">
               <Users className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-blue-400">{totalInquiries}</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-400 mt-1">
+          <div className="text-2xl font-black font-mono text-blue-600 dark:text-blue-400">{totalInquiries}</div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
             <span>Filtered patient threads</span>
           </div>
         </div>
@@ -429,73 +429,73 @@ export const AnalyticsView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
         
         {/* Branch Benchmark Comparison: Colombo vs Maruthamunai */}
-        <div className="lg:col-span-2 bg-[#111b21] p-5 rounded-2xl border border-slate-800 shadow-lg space-y-4">
+        <div className="lg:col-span-2 bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-400">
+              <div className="w-8 h-8 rounded-xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/20 dark:border-emerald-500/30 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
                 <Building2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-100">Branch Performance Comparison</h3>
-                <p className="text-xs text-slate-400">Colombo Head Office vs Maruthamunai Wellness Center</p>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Branch Performance Comparison</h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">Colombo Head Office vs Maruthamunai Wellness Center</p>
               </div>
             </div>
-            <span className="text-[11px] font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg">
+            <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
               2 Active Hubs
             </span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
             {/* Colombo Card */}
-            <div className="bg-[#202c33]/70 p-4 rounded-2xl border border-slate-800 space-y-3">
+            <div className="bg-slate-50 dark:bg-[#202c33]/70 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-emerald-400" />
-                  <span className="text-xs font-bold text-slate-100">Colombo (Head Office)</span>
+                  <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Colombo (Head Office)</span>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-950/60 border border-emerald-500/40 px-2 py-0.5 rounded-md">
+                <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/40 px-2 py-0.5 rounded-md">
                   {branchStats.colombo.rate}% Win
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-700/60">
+              <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-200 dark:border-slate-700/60">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Total Inquiries</span>
-                  <span className="text-base font-bold font-mono text-slate-100">{branchStats.colombo.count}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Total Inquiries</span>
+                  <span className="text-base font-bold font-mono text-slate-900 dark:text-slate-100">{branchStats.colombo.count}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Procedures Won</span>
-                  <span className="text-base font-bold font-mono text-emerald-400">{branchStats.colombo.won}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Procedures Won</span>
+                  <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{branchStats.colombo.won}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Response SLA</span>
-                  <span className="text-base font-bold font-mono text-amber-400">&lt; 2.5m</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Response SLA</span>
+                  <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400">&lt; 2.5m</span>
                 </div>
               </div>
             </div>
 
             {/* Maruthamunai Card */}
-            <div className="bg-[#202c33]/70 p-4 rounded-2xl border border-slate-800 space-y-3">
+            <div className="bg-slate-50 dark:bg-[#202c33]/70 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <MapPin className="w-4 h-4 text-teal-400" />
-                  <span className="text-xs font-bold text-slate-100">Maruthamunai Branch</span>
+                  <MapPin className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span className="text-xs font-bold text-slate-900 dark:text-slate-100">Maruthamunai Branch</span>
                 </div>
-                <span className="text-[11px] font-mono font-bold text-teal-400 bg-teal-950/60 border border-teal-500/40 px-2 py-0.5 rounded-md">
+                <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-950/60 border border-teal-300 dark:border-teal-500/40 px-2 py-0.5 rounded-md">
                   {branchStats.maruthamunai.rate}% Win
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-700/60">
+              <div className="grid grid-cols-3 gap-2 text-center pt-1 border-t border-slate-200 dark:border-slate-700/60">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Total Inquiries</span>
-                  <span className="text-base font-bold font-mono text-slate-100">{branchStats.maruthamunai.count}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Total Inquiries</span>
+                  <span className="text-base font-bold font-mono text-slate-900 dark:text-slate-100">{branchStats.maruthamunai.count}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Procedures Won</span>
-                  <span className="text-base font-bold font-mono text-teal-400">{branchStats.maruthamunai.won}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Procedures Won</span>
+                  <span className="text-base font-bold font-mono text-teal-600 dark:text-teal-400">{branchStats.maruthamunai.won}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Response SLA</span>
-                  <span className="text-base font-bold font-mono text-amber-400">&lt; 1.9m</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Response SLA</span>
+                  <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400">&lt; 1.9m</span>
                 </div>
               </div>
             </div>
@@ -503,30 +503,31 @@ export const AnalyticsView: React.FC = () => {
         </div>
 
         {/* Multilingual Patient Demographics */}
-        <div className="bg-[#111b21] p-5 rounded-2xl border border-slate-800 shadow-lg space-y-3">
+        {/* Multilingual Patient Demographics */}
+        <div className="bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Languages className="w-4 h-4 text-indigo-400" />
-              <h3 className="text-sm font-bold text-slate-100">Language Cohorts</h3>
+              <Languages className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Language Cohorts</h3>
             </div>
-            <span className="text-[10px] text-slate-400">EN / SI / TA</span>
+            <span className="text-[10px] text-slate-500 dark:text-slate-400">EN / SI / TA</span>
           </div>
 
           <div className="space-y-2.5 pt-1">
             {languageData.map((lang) => (
-              <div key={lang.code} className="bg-[#202c33]/60 p-2.5 rounded-xl border border-slate-800 space-y-1.5">
+              <div key={lang.code} className="bg-slate-50 dark:bg-[#202c33]/60 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 space-y-1.5">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-200">{lang.label}</span>
-                  <span className="font-mono font-bold text-slate-300">{lang.count} leads ({lang.pct}%)</span>
+                  <span className="font-semibold text-slate-800 dark:text-slate-200">{lang.label}</span>
+                  <span className="font-mono font-bold text-slate-700 dark:text-slate-300">{lang.count} leads ({lang.pct}%)</span>
                 </div>
-                <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
                   <div 
                     className="h-full rounded-full transition-all duration-500" 
                     style={{ width: `${Math.max(4, parseFloat(lang.pct))}%`, backgroundColor: lang.color }}
                   />
                 </div>
-                <div className="flex items-center justify-between text-[10px] text-slate-400">
-                  <span>Win Rate: <strong className="text-emerald-400">{lang.conversionRate}%</strong></span>
+                <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400">
+                  <span>Win Rate: <strong className="text-emerald-600 dark:text-emerald-400">{lang.conversionRate}%</strong></span>
                   <span>{lang.won} procedures booked</span>
                 </div>
               </div>
@@ -539,16 +540,16 @@ export const AnalyticsView: React.FC = () => {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
         
         {/* Stage Retention & Drop-off Funnel */}
-        <div className="bg-[#111b21] p-5 rounded-2xl border border-slate-800 shadow-lg space-y-4">
+        <div className="bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Flame className="w-4 h-4 text-amber-400" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Flame className="w-4 h-4 text-amber-500 dark:text-amber-400" />
                 <span>Conversion Velocity & Stage Funnel</span>
               </h3>
-              <p className="text-xs text-slate-400">Patient journey from WhatsApp hello to procedure execution</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Patient journey from WhatsApp hello to procedure execution</p>
             </div>
-            <span className="text-[11px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+            <span className="text-[11px] font-mono font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-500/20">
               {conversionRate}% Total Won
             </span>
           </div>
@@ -557,18 +558,18 @@ export const AnalyticsView: React.FC = () => {
             {funnelData.map((stage, idx) => (
               <div key={stage.name} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-slate-300 flex items-center gap-2">
-                    <span className="w-4 h-4 rounded-md bg-slate-800 text-slate-400 text-[10px] flex items-center justify-center font-bold">
+                  <span className="font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2">
+                    <span className="w-4 h-4 rounded-md bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-400 text-[10px] flex items-center justify-center font-bold">
                       {idx + 1}
                     </span>
                     {stage.name}
                   </span>
                   <div className="flex items-center gap-2 font-mono">
-                    <span className="text-slate-100 font-bold">{stage.count} leads</span>
-                    <span className="text-[11px] text-slate-400">({stage.pct}%)</span>
+                    <span className="text-slate-900 dark:text-slate-100 font-bold">{stage.count} leads</span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400">({stage.pct}%)</span>
                   </div>
                 </div>
-                <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden">
+                <div className="w-full bg-slate-200 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden">
                   <div 
                     className="h-full rounded-full transition-all duration-500"
                     style={{ 
@@ -583,16 +584,16 @@ export const AnalyticsView: React.FC = () => {
         </div>
 
         {/* Hourly Traffic & Peak Inbound Windows */}
-        <div className="bg-[#111b21] p-5 rounded-2xl border border-slate-800 shadow-lg space-y-4">
+        <div className="bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                <Clock className="w-4 h-4 text-teal-400" />
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <Clock className="w-4 h-4 text-teal-600 dark:text-teal-400" />
                 <span>Hourly Inbound Traffic & Message Volume</span>
               </h3>
-              <p className="text-xs text-slate-400">Optimal staffing windows for coordinator WhatsApp shifts</p>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Optimal staffing windows for coordinator WhatsApp shifts</p>
             </div>
-            <span className="text-[11px] font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-500/20">
+            <span className="text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-500/10 px-2.5 py-1 rounded-full border border-amber-200 dark:border-amber-500/20">
               Peak: 12:00 & 18:00
             </span>
           </div>
@@ -600,16 +601,16 @@ export const AnalyticsView: React.FC = () => {
           <div className="h-60 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyTrafficData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" className="stroke-slate-200 dark:stroke-slate-800" />
                 <XAxis dataKey="hour" stroke="#64748b" fontSize={11} tickLine={false} />
                 <YAxis stroke="#64748b" fontSize={11} tickLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: '#0f172a',
-                    borderColor: '#334155',
+                    backgroundColor: '#ffffff',
+                    borderColor: '#e2e8f0',
                     borderRadius: '8px',
                     fontSize: '12px',
-                    color: '#f8fafc'
+                    color: '#0f172a'
                   }}
                 />
                 <Bar dataKey="inbound" fill="#10b981" radius={[4, 4, 0, 0]} name="Inbound Messages" />
@@ -621,18 +622,18 @@ export const AnalyticsView: React.FC = () => {
       </div>
 
       {/* Row 4: Treatment Category Demand Matrix */}
-      <div className="bg-[#111b21] p-5 rounded-2xl border border-slate-800 shadow-lg space-y-4">
+      <div className="bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/15 border border-purple-500/30 flex items-center justify-center text-purple-400">
+            <div className="w-8 h-8 rounded-xl bg-purple-500/10 dark:bg-purple-500/15 border border-purple-500/20 dark:border-purple-500/30 flex items-center justify-center text-purple-600 dark:text-purple-400">
               <PieIcon className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">Clinical Verticals & Treatment Demand Matrix</h3>
-              <p className="text-xs text-slate-400">Inquiry share, procedure wins, and conversion success rates per speciality</p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Clinical Verticals & Treatment Demand Matrix</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Inquiry share, procedure wins, and conversion success rates per speciality</p>
             </div>
           </div>
-          <span className="text-xs font-mono font-bold text-slate-400">
+          <span className="text-xs font-mono font-bold text-slate-600 dark:text-slate-400">
             {categoryDemandData.length} Active Specialties
           </span>
         </div>
@@ -641,27 +642,27 @@ export const AnalyticsView: React.FC = () => {
           {categoryDemandData.map((cat, idx) => (
             <div 
               key={cat.id} 
-              className="bg-[#202c33]/70 p-4 rounded-2xl border border-slate-800 space-y-3 hover:border-slate-700 transition-colors"
+              className="bg-slate-50 dark:bg-[#202c33]/70 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3 hover:border-slate-300 dark:hover:border-slate-700 transition-colors shadow-sm"
             >
               <div className="flex items-center justify-between">
-                <span className="text-xs font-bold text-slate-100 truncate" title={cat.fullName}>
+                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate" title={cat.fullName}>
                   {cat.fullName}
                 </span>
-                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300">
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-500/40 text-emerald-700 dark:text-emerald-300">
                   {cat.conversionRate}% Win
                 </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-700/60 pt-2">
+              <div className="grid grid-cols-2 gap-2 text-xs border-t border-slate-200 dark:border-slate-700/60 pt-2">
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Inquiries</span>
-                  <span className="text-base font-bold font-mono text-slate-100">{cat.leadsCount}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Inquiries</span>
+                  <span className="text-base font-bold font-mono text-slate-900 dark:text-slate-100">{cat.leadsCount}</span>
                 </div>
                 <div>
-                  <span className="text-[10px] text-slate-400 block">Procedures Won</span>
-                  <span className="text-base font-bold font-mono text-emerald-400">{cat.wonCount}</span>
+                  <span className="text-[10px] text-slate-500 dark:text-slate-400 block">Procedures Won</span>
+                  <span className="text-base font-bold font-mono text-emerald-600 dark:text-emerald-400">{cat.wonCount}</span>
                 </div>
               </div>
-              <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+              <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
                 <div 
                   className="h-full rounded-full transition-all"
                   style={{ 
@@ -670,7 +671,7 @@ export const AnalyticsView: React.FC = () => {
                   }}
                 />
               </div>
-              <span className="text-[10px] text-slate-400 block text-right font-mono">
+              <span className="text-[10px] text-slate-500 dark:text-slate-400 block text-right font-mono">
                 {cat.sharePct}% of Total Inquiries
               </span>
             </div>
@@ -679,18 +680,18 @@ export const AnalyticsView: React.FC = () => {
       </div>
 
       {/* Row 5: Detailed Coordinator Performance & SLA Leaderboard */}
-      <div className="bg-[#111b21] p-5 rounded-2xl border border-slate-800 shadow-lg space-y-4">
+      <div className="bg-white dark:bg-[#111b21] p-5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-400">
+            <div className="w-8 h-8 rounded-xl bg-amber-500/10 dark:bg-amber-500/15 border border-amber-500/20 dark:border-amber-500/30 flex items-center justify-center text-amber-600 dark:text-amber-400">
               <UserCheck className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="text-sm font-bold text-slate-100">Coordinator SLA & Performance Leaderboard</h3>
-              <p className="text-xs text-slate-400">Individual workload, win rates, and WhatsApp response speeds across teams</p>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Coordinator SLA & Performance Leaderboard</h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400">Individual workload, win rates, and WhatsApp response speeds across teams</p>
             </div>
           </div>
-          <span className="text-xs font-mono text-slate-400 bg-slate-800 px-2.5 py-1 rounded-lg">
+          <span className="text-xs font-mono text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-700">
             {coordinatorLeaderboard.length} Staff Monitored
           </span>
         </div>
@@ -698,7 +699,7 @@ export const AnalyticsView: React.FC = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 text-[11px]">
+              <tr className="border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 text-[11px]">
                 <th className="pb-3 font-semibold">Staff Member</th>
                 <th className="pb-3 font-semibold">Role & Brand</th>
                 <th className="pb-3 font-semibold">Branch</th>
@@ -709,18 +710,18 @@ export const AnalyticsView: React.FC = () => {
                 <th className="pb-3 font-semibold text-right">Response SLA</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
               {coordinatorLeaderboard.map((staff, idx) => (
-                <tr key={staff.id} className="hover:bg-slate-800/30 transition-colors">
+                <tr key={staff.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
                   <td className="py-3">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-7 h-7 rounded-lg bg-slate-800 text-slate-200 font-bold text-xs flex items-center justify-center border border-slate-700">
+                      <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 font-bold text-xs flex items-center justify-center border border-slate-200 dark:border-slate-700">
                         {staff.name.slice(0, 2).toUpperCase()}
                       </div>
                       <div>
-                        <span className="font-bold text-slate-200 block">{staff.name}</span>
+                        <span className="font-bold text-slate-900 dark:text-slate-200 block">{staff.name}</span>
                         {idx === 0 && (
-                          <span className="text-[10px] text-amber-400 font-semibold flex items-center gap-0.5">
+                          <span className="text-[10px] text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-0.5">
                             ⭐ Top Performer
                           </span>
                         )}
@@ -730,7 +731,7 @@ export const AnalyticsView: React.FC = () => {
                   <td className="py-3">
                     <div className="flex items-center gap-1.5">
                       {staff.role === 'leads_officer' ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950/60 text-indigo-300 border border-indigo-500/40">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-500/40">
                           Leads Officer
                         </span>
                       ) : (
@@ -738,28 +739,28 @@ export const AnalyticsView: React.FC = () => {
                       )}
                     </div>
                   </td>
-                  <td className="py-3 text-slate-300 font-medium">
+                  <td className="py-3 text-slate-700 dark:text-slate-300 font-medium">
                     <div className="flex items-center gap-1 text-[11px]">
-                      <MapPin className="w-3 h-3 text-slate-500" />
+                      <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500" />
                       <span>{staff.branch}</span>
                     </div>
                   </td>
-                  <td className="py-3 text-center font-mono font-bold text-slate-200">
+                  <td className="py-3 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
                     {staff.totalAssigned}
                   </td>
-                  <td className="py-3 text-center font-mono font-semibold text-amber-400">
+                  <td className="py-3 text-center font-mono font-semibold text-amber-600 dark:text-amber-400">
                     {staff.activeCount} active
                   </td>
-                  <td className="py-3 text-center font-mono font-bold text-emerald-400">
+                  <td className="py-3 text-center font-mono font-bold text-emerald-600 dark:text-emerald-400">
                     {staff.wonCount} won
                   </td>
                   <td className="py-3 text-center">
-                    <span className="font-mono font-black text-xs px-2 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/30 text-emerald-300">
+                    <span className="font-mono font-black text-xs px-2 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-300 dark:border-emerald-500/30 text-emerald-700 dark:text-emerald-300">
                       {staff.winRate}%
                     </span>
                   </td>
                   <td className="py-3 text-right">
-                    <span className="text-[11px] font-mono font-semibold text-slate-300 bg-slate-800 px-2 py-0.5 rounded border border-slate-700">
+                    <span className="text-[11px] font-mono font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
                       {staff.slaStatus}
                     </span>
                   </td>

@@ -21,16 +21,28 @@ export function isLeadAccessibleForUser(lead: Lead, user: User | null | undefine
 
   // Check company scope if user is tied to a specific company
   const userCompany = user.company;
-  const leadCompany = lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC');
+  const isCrasLead = lead.company === 'CRAS' ||
+    lead.source?.toUpperCase() === 'CRAS' ||
+    lead.categoryId === 'cat-cras-courses' ||
+    (lead as any).assignedCoordinator?.company === 'CRAS';
+  const leadCompany = isCrasLead ? 'CRAS' : (lead.company || 'RWC');
+
+  // If this lead is directly assigned to this staff member, always grant them access
+  if (lead.assignedTo && lead.assignedTo === user.id) {
+    return true;
+  }
+
   if (userCompany && leadCompany && userCompany !== leadCompany) {
     return false;
   }
 
-  // 2. Sales Officer / Coordinator: strictly only assigned conversations
+  // 2. Sales Officer / Coordinator / Education Counsellor: strictly only assigned conversations
   const isSalesOfficer = role === 'coordinator' ||
     roleTitle.includes('sales officer') ||
     roleTitle.includes('sales') ||
-    roleTitle.includes('coordinator');
+    roleTitle.includes('coordinator') ||
+    roleTitle.includes('counsellor') ||
+    roleTitle.includes('education');
 
   const isManagementOrAssigning = role === 'super_admin' || 
     role === 'leads_officer' || 

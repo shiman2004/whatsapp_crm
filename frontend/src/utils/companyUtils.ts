@@ -49,7 +49,10 @@ export const getLeadCompany = (lead?: Partial<Lead> | { company?: string; source
   if (
     lead.company === 'CRAS' || 
     lead.source === 'CRAS' || 
-    (lead as any).whatsappSessionId === 'CRAS'
+    (lead as any).whatsappSessionId === 'CRAS' ||
+    (lead as any).categoryId === 'cat-cras-courses' ||
+    (lead as any).treatment?.company === 'CRAS' ||
+    (lead as any).assignedCoordinator?.company === 'CRAS'
   ) {
     return COMPANIES.CRAS;
   }

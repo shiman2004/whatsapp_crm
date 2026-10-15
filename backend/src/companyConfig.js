@@ -41,3 +41,31 @@ export function resolveCompany(phoneId, displayPhoneNumber) {
   }
   return COMPANIES.RWC;
 }
+
+/**
+ * Resolves company code ('CRAS' or 'RWC') from lead attributes.
+ * Prioritizes CRAS signals to avoid defaulting to RWC when legacy defaults exist.
+ */
+export function resolveLeadCompany(lead) {
+  if (!lead) return 'RWC';
+  const comp = String(lead.company || '').toUpperCase();
+  const src = String(lead.source || '').toUpperCase();
+  const waSession = String(lead.whatsappSessionId || '').toUpperCase();
+  const catId = String(lead.categoryId || '');
+  const trtComp = String(lead.treatment?.company || '').toUpperCase();
+  const coordComp = String(lead.assignedCoordinator?.company || '').toUpperCase();
+
+  if (
+    comp === 'CRAS' ||
+    src === 'CRAS' ||
+    waSession === 'CRAS' ||
+    catId === 'cat-cras-courses' ||
+    catId.startsWith('crs-') ||
+    trtComp === 'CRAS' ||
+    coordComp === 'CRAS'
+  ) {
+    return 'CRAS';
+  }
+  return 'RWC';
+}
+

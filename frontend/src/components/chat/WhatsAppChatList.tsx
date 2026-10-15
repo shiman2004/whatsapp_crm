@@ -28,6 +28,7 @@ import { AddContactModal } from './AddContactModal';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { formatChatListTimestamp } from '../../utils/dateUtils';
 import { isLeadAccessibleForUser } from '../../utils/permissionUtils';
+import { getLeadCompany } from '../../utils/companyUtils';
 import { BlinkingBellNotification } from '../notifications/BlinkingBellNotification';
 
 interface WhatsAppChatListProps {
@@ -241,8 +242,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const lostCount = accessibleLeads.filter(l => l.stage === 'lost').length;
   const notEligibleCount = accessibleLeads.filter(l => l.stage === 'not_eligible').length;
   const archivedCount = accessibleLeads.filter(l => archivedLeadIds.has(l.id)).length;
-  const rwcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && ((l.company || 'RWC') === 'RWC' || l.source?.toUpperCase() === 'RWC')).length;
-  const crasCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && (l.company === 'CRAS' || l.source?.toUpperCase() === 'CRAS')).length;
+  const rwcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'RWC').length;
+  const crasCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'CRAS').length;
 
   // Filter leads based on role & search & category/stage/archive filters
   const filteredLeads = accessibleLeads.filter((lead) => {
@@ -257,8 +258,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     }
 
     // Company filter pills
-    if (activeFilter === 'rwc' && (lead.company || 'RWC') !== 'RWC' && lead.source?.toUpperCase() !== 'RWC') return false;
-    if (activeFilter === 'cras' && lead.company !== 'CRAS' && lead.source?.toUpperCase() !== 'CRAS') return false;
+    if (activeFilter === 'rwc' && getLeadCompany(lead).code !== 'RWC') return false;
+    if (activeFilter === 'cras' && getLeadCompany(lead).code !== 'CRAS') return false;
 
     // Filter pills
     if (activeFilter === 'unread') {

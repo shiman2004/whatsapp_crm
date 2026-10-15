@@ -16,10 +16,13 @@ import {
 interface TableViewProps {
   leads: Lead[];
   onSelectLead: (leadId: string) => void;
+  company?: 'RWC' | 'CRAS' | 'ALL';
 }
 
-export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => {
+export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, company = 'RWC' }) => {
   const { categories, treatments, users, selectedLeadId, isSuperAdmin, isLeadsOfficer, canAssignLeads, canModifyAssignment, assignLead } = useCrm();
+
+  const isCras = company === 'CRAS';
 
   const coordinators = users.filter(u => u.role === 'coordinator');
 
@@ -29,11 +32,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
         <table className="w-full text-left border-collapse text-xs">
           <thead>
             <tr className="bg-slate-950/80 text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
-              <th className="py-3 px-4">Patient / Contact</th>
+              <th className="py-3 px-4">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
               <th className="py-3 px-4">Language</th>
-              <th className="py-3 px-4">Treatment / Course</th>
-              <th className="py-3 px-4">Stage</th>
-              <th className="py-3 px-4">Assigned Staff</th>
+              <th className="py-3 px-4">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
+              <th className="py-3 px-4">{isCras ? 'Admissions Stage' : 'Stage'}</th>
+              <th className="py-3 px-4">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3 px-4">Inquiry Time</th>
               <th className="py-3 px-4 text-right">Action</th>
             </tr>
@@ -121,7 +124,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead }) => 
                           className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200 outline-none focus:border-teal-500 cursor-pointer"
                         >
                           <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCras ? '-- Assign Education Counsellor --' : '-- Assign Patient Coordinator --')}</option>
-                          {coordinators.map((c) => (
+                          {coordinators.filter(c => isCras ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company)).map((c) => (
                             <option key={c.id} value={c.id}>
                               {c.fullName} ({c.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
                             </option>

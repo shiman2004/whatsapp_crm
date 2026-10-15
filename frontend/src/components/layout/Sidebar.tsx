@@ -42,8 +42,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
 }) => {
   const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, unreadBroadcastsCount, markAllBroadcastsAsRead } = useCrm();
 
-  const unassignedCount = leads.filter(l => l.stage === 'new').length;
-  const myAssignedCount = leads.filter(l => l.assignedTo === currentUser.id).length;
+  const isCrasUser = !isSuperAdmin && !isLeadsOfficer && currentUser?.company === 'CRAS';
+  const isRwcUser = !isSuperAdmin && !isLeadsOfficer && (currentUser?.company === 'RWC' || !currentUser?.company);
+
+  const scopedLeads = isCrasUser 
+    ? leads.filter(l => (l.company || l.source) === 'CRAS')
+    : isRwcUser
+    ? leads.filter(l => (l.company || l.source || 'RWC') === 'RWC')
+    : leads;
+
+  const unassignedCount = scopedLeads.filter(l => l.stage === 'new').length;
+  const myAssignedCount = scopedLeads.filter(l => l.assignedTo === currentUser.id).length;
   const pendingFollowupsCount = followups.filter(f => f.status === 'pending').length;
 
   const navItems = [

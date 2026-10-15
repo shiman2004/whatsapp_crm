@@ -2321,6 +2321,36 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // DELETE: Delete Super Admin Account (/api/admin/super-admins/:id)
+  if (req.method === 'DELETE' && pathname.startsWith('/api/admin/super-admins/')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const adminId = pathname.replace('/api/admin/super-admins/', '').split('/')[0];
+
+    if (adminId === authUser.id) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Cannot delete the currently logged in Super Admin account.' }));
+      return;
+    }
+
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        await prisma.user.delete({ where: { id: adminId } });
+      } catch (dbErr) {
+        console.warn('DB error deleting super admin:', dbErr.message);
+      }
+    }
+
+    const memIdx = CANONICAL_USERS.findIndex(u => u.id === adminId);
+    if (memIdx !== -1) {
+      CANONICAL_USERS.splice(memIdx, 1);
+    }
+
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, deletedId: adminId }));
+    return;
+  }
+
   // 7. REST: Get Treatment Categories from Supabase
   if (req.method === 'GET' && pathname === '/api/categories') {
     const prisma = getPrisma();

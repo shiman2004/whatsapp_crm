@@ -173,6 +173,7 @@ interface CrmContextType {
   fetchSuperAdmins: () => Promise<void>;
   createSuperAdmin: (data: { fullName: string; email: string; password?: string; pin?: string }) => Promise<{ success: boolean; error?: string }>;
   updateSuperAdmin: (id: string, data: { fullName?: string; active?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  deleteSuperAdmin: (id: string) => Promise<{ success: boolean; error?: string }>;
 
   // Team Broadcast Channel
   broadcasts: TeamBroadcast[];
@@ -283,7 +284,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         };
       }
     }
-    return merged.map(u => ({
+    const filteredUsers = merged.filter(u => 
+      !['6186a081-c8be-40c2-ad05-fc8faba514fe', 'f84ff967-3c72-4d1f-888f-6c1c998e0f40', '5dab2d42-2041-4e58-9b9f-28f73f58b8b4'].includes(u.id) &&
+      !u.email.startsWith('admin_test_')
+    );
+    try {
+      localStorage.setItem('rw_crm_users', JSON.stringify(filteredUsers));
+    } catch (e) {}
+    return filteredUsers.map(u => ({
       ...u,
       branch: u.branch || 'Colombo',
       company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
@@ -314,7 +322,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [stages, setStages] = useState<LeadStageConfig[]>(() => getStored('rw_crm_stages', DEFAULT_STAGES));
   const [superAdmins, setSuperAdmins] = useState<User[]>(() => {
     const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
-    return storedUsers.filter(u => u.role === 'super_admin');
+    return storedUsers.filter(u => 
+      u.role === 'super_admin' && 
+      !['6186a081-c8be-40c2-ad05-fc8faba514fe', 'f84ff967-3c72-4d1f-888f-6c1c998e0f40', '5dab2d42-2041-4e58-9b9f-28f73f58b8b4'].includes(u.id) &&
+      !u.email.startsWith('admin_test_')
+    );
   });
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
@@ -3177,6 +3189,38 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
+  const deleteSuperAdmin = async (id: string) => {
+    // 1. Optimistic removal
+    setSuperAdmins(prev => prev.filter(u => u.id !== id));
+    setUsers(prev => {
+      const updated = prev.filter(u => u.id !== id);
+      try {
+        localStorage.setItem('rw_crm_users', JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/super-admins/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const resData = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { success: false, error: resData.error || 'Failed to delete Super Admin' };
+      }
+      await fetchSuperAdmins();
+    } catch (e: any) {
+      console.warn('Backend deleteSuperAdmin warning:', e.message);
+    }
+
+    notify('Account Deleted', 'Super Admin account removed successfully.', 'info');
+    return { success: true };
+  };
+
   const addTemplate = (tpl: Omit<WhatsAppTemplate, 'id'>) => {
     const newTpl: WhatsAppTemplate = {
       ...tpl,
@@ -4101,6 +4145,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchSuperAdmins,
     createSuperAdmin,
     updateSuperAdmin,
+    deleteSuperAdmin,
     addTemplate,
     updateTemplate,
     updateSequence,

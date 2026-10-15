@@ -212,9 +212,9 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
               {isOutbound && (
                 message.status === 'failed' ? (
                   <span title={`Failed to send: ${message.errorMessage || 'WhatsApp API dispatch failed'}`}><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
-                ) : message.status === 'read' ? (
-                  <span title={message.readAt ? `Read by customer at ${new Date(message.readAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Read by customer"}><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
-                ) : message.status === 'delivered' ? (
+                ) : (message.status === 'read' && Boolean(message.readAt || (message as any).read_at)) ? (
+                  <span title={`Read by customer at ${new Date(message.readAt || (message as any).read_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                ) : (message.status === 'delivered' || message.status === 'read') ? (
                   <span title={message.deliveredAt ? `Delivered to customer at ${new Date(message.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Delivered to customer"}><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                 ) : message.status === 'sent' ? (
                   <span title={message.sentAt ? `Sent to WhatsApp at ${new Date(message.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Sent to WhatsApp Cloud"}><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>

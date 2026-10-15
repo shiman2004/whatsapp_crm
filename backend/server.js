@@ -6,7 +6,7 @@ import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
-import { resolveCompany, COMPANIES } from './src/companyConfig.js';
+import { resolveCompany, resolveLeadCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './src/audioConverter.js';
 
@@ -3293,14 +3293,7 @@ const server = http.createServer(async (req, res) => {
         });
 
         const enrichedLeads = leads.map(l => {
-          let compCode = 'RWC';
-          if (l.company) {
-            compCode = l.company.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          } else if (l.source) {
-            compCode = l.source.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          } else if (l.whatsappSessionId) {
-            compCode = l.whatsappSessionId.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          }
+          const compCode = resolveLeadCompany(l);
           const isCras = compCode === 'CRAS';
           const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
           const inboundMsgs = (l.messages || []).filter(m => m.direction === 'inbound');
@@ -3337,7 +3330,11 @@ const server = http.createServer(async (req, res) => {
 
         if (!isSuperOrOfficer) {
           const userCompany = (authUser?.company || 'RWC').toUpperCase();
-          finalLeads = finalLeads.filter(l => (l.company || 'RWC').toUpperCase() === userCompany);
+          finalLeads = finalLeads.filter(l => {
+            // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
+            if (l.assignedTo && l.assignedTo === authUser.id) return true;
+            return (l.company || 'RWC').toUpperCase() === userCompany;
+          });
         } else {
           const queryCompany = parsedUrl.query.company;
           if (queryCompany && ['RWC', 'CRAS'].includes(String(queryCompany).toUpperCase())) {
@@ -3834,7 +3831,7 @@ const server = http.createServer(async (req, res) => {
             updateData.source = companyCode;
 
             // When company changes, reset treatment/course and unassign coordinator if they belong to another company
-            const prevCompany = (targetLead?.company || targetLead?.source || targetLead?.whatsappSessionId || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+            const prevCompany = resolveLeadCompany(targetLead);
             if (prevCompany !== companyCode) {
               updateData.treatmentId = null;
               updateData.categoryId = null;
@@ -3887,14 +3884,7 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => {});
           }
 
-          let compCode = 'RWC';
-          if (updated.company) {
-            compCode = updated.company.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          } else if (updated.source) {
-            compCode = updated.source.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          } else if (updated.whatsappSessionId) {
-            compCode = updated.whatsappSessionId.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-          }
+          const compCode = resolveLeadCompany(updated);
           const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
           const enrichedLead = {
             ...updated,

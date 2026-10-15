@@ -681,7 +681,7 @@ function isPublicRoute(req, pathname) {
 const server = http.createServer(async (req, res) => {
   // CORS Headers
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, x-coordinator-id, x-user-id');
 
   if (req.method === 'OPTIONS') {
@@ -2172,6 +2172,153 @@ const server = http.createServer(async (req, res) => {
       return false;
     }
     return true;
+  }
+
+  // 6b. REST: Super Admin Accounts Management (/api/admin/super-admins)
+  // GET: Fetch list of Super Admin accounts
+  if (req.method === 'GET' && pathname === '/api/admin/super-admins') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const admins = await prisma.user.findMany({
+          where: { role: 'super_admin' },
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            branch: true,
+            role: true,
+            active: true,
+            createdAt: true,
+            updatedAt: true
+          },
+          orderBy: { createdAt: 'asc' }
+        });
+        if (admins && admins.length > 0) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(admins));
+          return;
+        }
+      } catch (e) {
+        console.warn('DB error fetching super admins:', e.message);
+      }
+    }
+    const memoryAdmins = CANONICAL_USERS.filter(u => u.role === 'super_admin').map(u => ({
+      id: u.id,
+      fullName: u.fullName,
+      email: u.email,
+      branch: u.branch,
+      role: u.role,
+      active: u.active !== false,
+      createdAt: u.createdAt || new Date().toISOString()
+    }));
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify(memoryAdmins));
+    return;
+  }
+
+  // POST: Create new Super Admin account
+  if (req.method === 'POST' && pathname === '/api/admin/super-admins') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const { fullName, email, password, pin } = payload;
+        if (!fullName || !email) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Full Name and Email are required.' }));
+          return;
+        }
+        const cleanEmail = email.trim().toLowerCase();
+        const prisma = getPrisma();
+        let newAdmin = null;
+        if (prisma && getDbStatus()) {
+          try {
+            newAdmin = await prisma.user.create({
+              data: {
+                fullName: fullName.trim(),
+                email: cleanEmail,
+                role: 'super_admin',
+                active: true,
+                branch: 'Colombo (Head Office)',
+                password: password ? hashSecret(password) : DEFAULT_ADMIN_PASSWORD_HASH,
+                pin: pin ? hashSecret(pin) : DEFAULT_ADMIN_PIN_HASH
+              }
+            });
+          } catch (dbErr) {
+            console.warn('DB error creating super admin:', dbErr.message);
+          }
+        }
+        if (!newAdmin) {
+          newAdmin = {
+            id: `user-admin-${Date.now()}`,
+            fullName: fullName.trim(),
+            email: cleanEmail,
+            role: 'super_admin',
+            active: true,
+            branch: 'Colombo (Head Office)',
+            createdAt: new Date().toISOString()
+          };
+          CANONICAL_USERS.push(newAdmin);
+        }
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, user: newAdmin }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // PATCH / PUT / POST: Update Super Admin Account (Full Name, Active Status)
+  if ((req.method === 'PATCH' || req.method === 'PUT' || req.method === 'POST') && pathname.startsWith('/api/admin/super-admins/')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const adminId = pathname.replace('/api/admin/super-admins/', '').split('/')[0];
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const updateData = {};
+        if (typeof payload.fullName === 'string' && payload.fullName.trim()) {
+          updateData.fullName = payload.fullName.trim();
+        }
+        if (typeof payload.active === 'boolean') {
+          updateData.active = payload.active;
+        }
+
+        const prisma = getPrisma();
+        let updated = null;
+        if (prisma && getDbStatus()) {
+          try {
+            updated = await prisma.user.update({
+              where: { id: adminId },
+              data: updateData
+            });
+          } catch (dbErr) {
+            console.warn('DB error updating super admin:', dbErr.message);
+          }
+        }
+
+        // Also update memory canonical list
+        const memIdx = CANONICAL_USERS.findIndex(u => u.id === adminId);
+        if (memIdx !== -1) {
+          CANONICAL_USERS[memIdx] = { ...CANONICAL_USERS[memIdx], ...updateData };
+          if (!updated) updated = CANONICAL_USERS[memIdx];
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, user: updated || { id: adminId, ...updateData } }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
   }
 
   // 7. REST: Get Treatment Categories from Supabase

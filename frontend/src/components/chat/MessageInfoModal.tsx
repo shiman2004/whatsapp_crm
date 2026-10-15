@@ -8,7 +8,8 @@ import {
   Smartphone, 
   Calendar,
   Sparkles,
-  Info
+  Info,
+  AlertCircle
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -61,7 +62,19 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
             <p className="whitespace-pre-line break-words text-[13px]">{message.content}</p>
             <div className="mt-1 flex items-center justify-end gap-1 text-[10px] text-slate-300 font-mono">
               <span>{createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-              {isOutbound && <CheckCheck className="w-3.5 h-3.5 text-sky-400" />}
+              {isOutbound && (
+                message.status === 'read' ? (
+                  <CheckCheck className="w-3.5 h-3.5 text-sky-400" />
+                ) : message.status === 'delivered' ? (
+                  <CheckCheck className="w-3.5 h-3.5 text-slate-400" />
+                ) : message.status === 'sent' ? (
+                  <Check className="w-3.5 h-3.5 text-slate-400" />
+                ) : message.status === 'failed' ? (
+                  <AlertCircle className="w-3.5 h-3.5 text-rose-400" />
+                ) : (
+                  <Clock className="w-3.5 h-3.5 text-slate-400 animate-pulse" />
+                )
+              )}
             </div>
           </div>
         </div>
@@ -72,36 +85,54 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
             <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Delivery Status</h4>
             
             {/* Read Status */}
-            <div className="flex items-center justify-between p-3 bg-[#202c33]/70 rounded-xl border border-slate-800">
+            <div className={`flex items-center justify-between p-3 rounded-xl border ${
+              message.status === 'read' ? 'bg-[#202c33]/70 border-sky-500/30' : 'bg-[#182229]/40 border-slate-800/50 opacity-60'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-sky-500/20 text-sky-400 flex items-center justify-center">
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                  message.status === 'read' ? 'bg-sky-500/20 text-sky-400' : 'bg-slate-700/30 text-slate-500'
+                }`}>
                   <CheckCheck className="w-4 h-4" />
                 </div>
                 <div>
                   <span className="font-semibold text-slate-200 block">Read</span>
                   <span className="text-[11px] text-slate-400">
-                    {message.status === 'read' ? 'Seen by recipient' : 'Sent via WhatsApp'}
+                    {message.status === 'read' 
+                      ? 'Read receipt confirmed by Meta' 
+                      : (message.status === 'failed' ? 'Not delivered' : 'Not yet read')}
                   </span>
                 </div>
               </div>
               <span className="text-[11px] font-mono text-slate-400">
-                {createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {message.readAt 
+                  ? new Date(message.readAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                  : (message.status === 'read' ? createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
               </span>
             </div>
 
             {/* Delivered Status */}
-            <div className="flex items-center justify-between p-3 bg-[#202c33]/70 rounded-xl border border-slate-800">
+            <div className={`flex items-center justify-between p-3 rounded-xl border ${
+              message.status === 'delivered' || message.status === 'read' ? 'bg-[#202c33]/70 border-emerald-500/30' : 'bg-[#182229]/40 border-slate-800/50 opacity-60'
+            }`}>
               <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                  <Check className="w-4 h-4" />
+                <div className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                  message.status === 'delivered' || message.status === 'read' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/30 text-slate-500'
+                }`}>
+                  <CheckCheck className="w-4 h-4" />
                 </div>
                 <div>
                   <span className="font-semibold text-slate-200 block">Delivered</span>
-                  <span className="text-[11px] text-slate-400">Received on phone hardware</span>
+                  <span className="text-[11px] text-slate-400">
+                    {message.status === 'delivered' || message.status === 'read' 
+                      ? 'Delivered to recipient phone' 
+                      : (message.status === 'failed' ? 'Delivery failed' : 'Pending delivery')}
+                  </span>
                 </div>
               </div>
               <span className="text-[11px] font-mono text-slate-400">
-                {createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {message.deliveredAt 
+                  ? new Date(message.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) 
+                  : (message.status === 'delivered' || message.status === 'read' ? createdDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—')}
               </span>
             </div>
           </div>

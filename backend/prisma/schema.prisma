@@ -297,6 +297,8 @@ model Message {
   senderRole          String?           @db.VarChar(50)
   messageSource       String?           @default("CRM User") @db.VarChar(50) // 'CRM User' | 'Automation' | 'API' | 'System'
   sentAt              DateTime?         @default(now())
+  deliveredAt         DateTime?         @map("delivered_at")
+  readAt              DateTime?         @map("read_at")
 
   // Relations
   lead                Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
@@ -326,6 +328,8 @@ model MessageAudit {
   messageSource   String   @default("CRM User") @map("message_source") @db.VarChar(50)
   deliveryStatus  String   @default("sent") @map("delivery_status") @db.VarChar(50)
   sentAt          DateTime @default(now()) @map("sent_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  readAt          DateTime? @map("read_at")
   createdAt       DateTime @default(now()) @map("created_at")
 
   @@index([leadId])

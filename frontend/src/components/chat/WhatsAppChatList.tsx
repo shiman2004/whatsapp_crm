@@ -20,7 +20,9 @@ import {
   User,
   UserPlus,
   Check,
-  Tag
+  Tag,
+  Clock,
+  AlertCircle
 } from 'lucide-react';
 import { Lead, Message } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
@@ -770,7 +772,17 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <div className="flex items-center gap-1 min-w-0 text-[#8696a0] text-[11px] truncate">
                       {lastMsg?.direction === 'outbound' && (
-                        <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] shrink-0" />
+                        lastMsg.status === 'read' ? (
+                          <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] shrink-0" />
+                        ) : lastMsg.status === 'delivered' ? (
+                          <CheckCheck className="w-3.5 h-3.5 text-[#8696a0] shrink-0" />
+                        ) : lastMsg.status === 'sent' ? (
+                          <Check className="w-3.5 h-3.5 text-[#8696a0] shrink-0" />
+                        ) : lastMsg.status === 'failed' ? (
+                          <AlertCircle className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                        ) : (
+                          <Clock className="w-3.5 h-3.5 text-[#8696a0] shrink-0" />
+                        )
                       )}
                       {lastMsg?.content?.includes('[Media') || lastMsg?.media?.type === 'image' ? (
                         <span className="flex items-center gap-1 text-[#8696a0]">

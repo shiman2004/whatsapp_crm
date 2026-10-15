@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test-meta-token-security.js && node test-bell-notification.js && node test-sender-audit.js && node test-24h-window.js && npx tsx test-phonetic-composer.js && node test-company-switching.js && node test-cras-contact-creation.js && node test-company-pipelines.js && node test-super-admin-settings.js",
+    "test": "node test-meta-token-security.js && node test-bell-notification.js && node test-sender-audit.js && node test-24h-window.js && npx tsx test-phonetic-composer.js && node test-company-switching.js && node test-cras-contact-creation.js && node test-company-pipelines.js && node test-super-admin-settings.js && node test-meta-message-status.js",
     "build": "prisma generate",
     "postinstall": "prisma generate",
     "webhook": "node webhook-standalone.js",

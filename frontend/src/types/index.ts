@@ -129,6 +129,8 @@ export interface Message {
   senderRole?: string;
   messageSource?: 'CRM User' | 'Automation' | 'API' | 'System';
   sentAt?: string;
+  deliveredAt?: string;
+  readAt?: string;
   timestamp?: string;
 }
 
@@ -145,6 +147,8 @@ export interface MessageAudit {
   messageSource: 'CRM User' | 'Automation' | 'API' | 'System';
   deliveryStatus: string;
   sentAt: string;
+  deliveredAt?: string;
+  readAt?: string;
   createdAt: string;
 }
 

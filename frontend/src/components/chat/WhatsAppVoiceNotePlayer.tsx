@@ -210,14 +210,16 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
               </span>
 
               {isOutbound && (
-                message.status === 'read' ? (
-                  <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" />
+                message.status === 'failed' ? (
+                  <span title={`Failed to send: ${message.errorMessage || 'WhatsApp API dispatch failed'}`}><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
+                ) : message.status === 'read' ? (
+                  <span title={message.readAt ? `Read by customer at ${new Date(message.readAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Read by customer"}><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
                 ) : message.status === 'delivered' ? (
-                  <CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" />
+                  <span title={message.deliveredAt ? `Delivered to customer at ${new Date(message.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Delivered to customer"}><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                 ) : message.status === 'sent' ? (
-                  <Check className="w-3.5 h-3.5 text-[#8696a0]" />
+                  <span title={message.sentAt ? `Sent to WhatsApp at ${new Date(message.sentAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Sent to WhatsApp Cloud"}><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                 ) : (
-                  <Clock className="w-3 h-3 text-[#8696a0]" />
+                  <span title="Sending to WhatsApp..."><Clock className="w-3.5 h-3.5 text-[#8696a0] animate-pulse" /></span>
                 )
               )}
             </div>

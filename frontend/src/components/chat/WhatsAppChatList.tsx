@@ -666,8 +666,17 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
         ) : (
           visibleLeads.map((lead) => {
             const isSelected = selectedLeadId === lead.id;
-            const leadMsgs = messages.filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
-            leadMsgs.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            const leadMsgs = messages.filter(m => 
+              m.leadId === lead.id || 
+              (lead.customerId && m.customerId === lead.customerId) ||
+              (lead.customer?.whatsappNumber && ((m as any).to === lead.customer.whatsappNumber || (m as any).from === lead.customer.whatsappNumber)) ||
+              (lead.customer?.whatsappId && (m as any).whatsappId === lead.customer.whatsappId)
+            );
+            leadMsgs.sort((a, b) => {
+              const tA = new Date(a.createdAt || a.timestamp || a.sentAt || 0).getTime();
+              const tB = new Date(b.createdAt || b.timestamp || b.sentAt || 0).getTime();
+              return tA - tB;
+            });
             const lastMsg = leadMsgs[leadMsgs.length - 1];
             const isPinned = pinnedLeadIds.has(lead.id);
             const isFav = favouriteLeadIds.has(lead.id);
@@ -772,9 +781,9 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   <div className="flex items-center justify-between gap-2 mt-0.5">
                     <div className="flex items-center gap-1 min-w-0 text-[#8696a0] text-[11px] truncate">
                       {lastMsg?.direction === 'outbound' && (
-                        lastMsg.status === 'read' ? (
+                        (lastMsg.status === 'read' && Boolean(lastMsg.readAt)) ? (
                           <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] shrink-0" />
-                        ) : lastMsg.status === 'delivered' ? (
+                        ) : (lastMsg.status === 'delivered' || lastMsg.status === 'read') ? (
                           <CheckCheck className="w-3.5 h-3.5 text-[#8696a0] shrink-0" />
                         ) : lastMsg.status === 'sent' ? (
                           <Check className="w-3.5 h-3.5 text-[#8696a0] shrink-0" />

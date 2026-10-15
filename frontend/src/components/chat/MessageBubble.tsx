@@ -512,9 +512,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                   {isOutbound && (
                     message.status === 'failed' ? (
                       <span title={`Failed to Send${message.errorCode ? ` (Code ${message.errorCode})` : ''}: ${message.errorMessage || 'WhatsApp API dispatch failed'}`}><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
-                    ) : message.status === 'read' ? (
+                    ) : (message.status === 'read' && Boolean(message.readAt || (message as any).read_at)) ? (
                       <span title="Read by customer"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
-                    ) : message.status === 'delivered' ? (
+                    ) : (message.status === 'delivered' || message.status === 'read') ? (
                       <span title="Delivered to customer"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                     ) : message.status === 'sent' ? (
                       <span title="Sent to WhatsApp Cloud"><Check className="w-3.5 h-3.5 text-[#8696a0]" /></span>

@@ -316,7 +316,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', []));
   const [leads, setLeads] = useState<Lead[]>(() => getStored('rw_crm_leads', []));
-  const [messages, setMessages] = useState<Message[]>(() => getStored('rw_crm_messages', []));
+  const [messages, setMessages] = useState<Message[]>(() => {
+    const raw = getStored<Message[]>('rw_crm_messages', []);
+    return raw.map(m => {
+      const readAt = m.readAt || (m as any).read_at;
+      if (m.status === 'read' && !readAt) {
+        return { ...m, status: 'delivered' };
+      }
+      return m;
+    });
+  });
   const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
   const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
@@ -797,7 +806,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             messageSource: m.messageSource || m.audit?.messageSource,
             sentAt: m.sentAt || m.audit?.sentAt,
             content: m.content || '',
-            status: m.status || 'delivered',
+            status: (m.status === 'read' && !(m.readAt || m.read_at)) ? 'delivered' : (m.status || 'delivered'),
+            deliveredAt: m.deliveredAt || m.delivered_at,
+            readAt: m.readAt || m.read_at,
             createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
             media: m.mediaUrl ? {
               type: m.mediaType || 'image',
@@ -977,7 +988,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const { messageId, status, errorCode, errorMessage, deliveredAt, readAt, sentAt } = data;
             console.log('🔄 [SSE Message Status Update]:', messageId, status, errorCode, errorMessage);
             setMessages(prev => prev.map(m => {
-              if (m.id === messageId || m.waMessageId === messageId) {
+              const isMatch = m.id === messageId || m.waMessageId === messageId ||
+                (m.id.startsWith('msg-') && m.direction === 'outbound' && data.leadId && m.leadId === data.leadId);
+              if (isMatch) {
                 // Out-of-order & duplicate guard (pending: 0 < sent: 1 < delivered: 2 < read: 3)
                 const STATUS_RANK = { pending: 0, sent: 1, delivered: 2, read: 3, failed: 0 };
                 const currentRank = STATUS_RANK[m.status as keyof typeof STATUS_RANK] || 0;
@@ -988,6 +1001,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
                 return {
                   ...m,
+                  id: (m.id.startsWith('msg-') && messageId) ? messageId : m.id,
+                  waMessageId: messageId || m.waMessageId,
                   status: shouldUpdateStatus ? (status as any) : m.status,
                   errorCode: errorCode !== undefined ? errorCode : m.errorCode,
                   errorMessage: errorMessage !== undefined ? errorMessage : m.errorMessage,
@@ -998,6 +1013,28 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               }
               return m;
             }));
+
+            // Also synchronize with l.messages if lead holds messages array
+            setLeads(prevLeads => prevLeads.map(l => {
+              if (l.id === data.leadId || (Array.isArray((l as any).messages) && (l as any).messages.some((m: any) => m.id === messageId || m.waMessageId === messageId))) {
+                return {
+                  ...l,
+                  messages: Array.isArray((l as any).messages) ? (l as any).messages.map((m: any) => {
+                    if (m.id === messageId || m.waMessageId === messageId) {
+                      return {
+                        ...m,
+                        status,
+                        deliveredAt: deliveredAt || m.deliveredAt,
+                        readAt: readAt || m.readAt
+                      };
+                    }
+                    return m;
+                  }) : undefined
+                };
+              }
+              return l;
+            }));
+
             if (status === 'failed' && errorMessage) {
               notify('Delivery Failed', errorMessage, 'warning');
             }
@@ -1631,7 +1668,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
 
     setLeads(prev => prev.map(l => l.id === leadId ? { ...l, unreadCount: 0 } : l));
-    setMessages(prev => prev.map(m => m.leadId === leadId ? { ...m, status: 'read' } : m));
   };
 
   // Mark chat as unread (sets unread indicator for current user)
@@ -2273,7 +2309,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...m,
               id: data.messageId,
               waMessageId: data.messageId,
-              status: 'sent',
+              status: (m.status === 'delivered' || m.status === 'read') ? m.status : 'sent',
               errorCode: undefined,
               errorMessage: undefined
             } : m));

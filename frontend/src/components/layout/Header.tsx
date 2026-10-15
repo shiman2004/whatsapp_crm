@@ -23,6 +23,49 @@ interface HeaderProps {
   onToggleMobileSidebar?: () => void;
 }
 
+const getUserRoleInfo = (user: any) => {
+  const roleTitle = (user?.roleTitle || '').trim();
+  const role = (user?.role || '').toLowerCase().trim();
+
+  // 1. Super Admin
+  if (role === 'super_admin' || roleTitle.toLowerCase().includes('super admin')) {
+    return {
+      title: 'Super Admin',
+      className: 'bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60'
+    };
+  }
+
+  // 2. Leads Officer / Inquiry Assigning
+  if (role === 'leads_officer' || roleTitle.toLowerCase().includes('leads') || roleTitle.toLowerCase().includes('inquiry')) {
+    return {
+      title: roleTitle || 'Leads Officer',
+      className: 'bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300 border border-sky-300/60 dark:border-sky-700/60'
+    };
+  }
+
+  // 3. Education Counsellor (CRAS)
+  if (user?.company === 'CRAS' || roleTitle.toLowerCase().includes('education') || roleTitle.toLowerCase().includes('counsellor')) {
+    return {
+      title: roleTitle || 'Education Counsellor',
+      className: 'bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300 border border-purple-300/60 dark:border-purple-700/60'
+    };
+  }
+
+  // 4. Clinic Manager / Doctor
+  if (roleTitle.toLowerCase().includes('clinic') || roleTitle.toLowerCase().includes('manager') || roleTitle.toLowerCase().includes('doctor')) {
+    return {
+      title: roleTitle || 'Clinic Manager',
+      className: 'bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300 border border-rose-300/60 dark:border-rose-700/60'
+    };
+  }
+
+  // 5. Patient Coordinator / Sales Officer (RWC)
+  return {
+    title: roleTitle || (user?.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'),
+    className: 'bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 border border-teal-300/60 dark:border-teal-700/60'
+  };
+};
+
 export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
   const { 
     currentUser, 
@@ -188,10 +231,20 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
             {/* Dropdown Menu */}
             {userDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-[#111b21] border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 flex flex-col">
+              <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#111b21] border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 flex flex-col">
                 <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
-                  <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser?.fullName}</p>
-                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">{currentUser?.email}</p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser?.fullName}</p>
+                    {(() => {
+                      const roleInfo = getUserRoleInfo(currentUser);
+                      return (
+                        <span className={`text-[9.5px] px-1.5 py-0.5 rounded-md font-bold tracking-tight shrink-0 ${roleInfo.className}`}>
+                          {roleInfo.title}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate mt-0.5">{currentUser?.email}</p>
                 </div>
 
                 {/* Switch Profile Section - Scrollable for clean compact view */}
@@ -201,23 +254,35 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
                       Switch Profile (Admin View)
                     </label>
                     <div className="max-h-56 overflow-y-auto pr-1 space-y-0.5 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-700 scrollbar-track-transparent">
-                      {users.map((u: any) => (
-                        <button
-                          key={u.id}
-                          onClick={() => {
-                            setCurrentUser(u);
-                            setUserDropdownOpen(false);
-                          }}
-                          className={`w-full text-left px-3 py-1.5 rounded-lg text-xs flex items-center justify-between transition-all cursor-pointer ${
-                            currentUser?.id === u.id 
-                              ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold' 
-                              : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#202c33] hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          <span className="truncate">{u.fullName}</span>
-                          {currentUser?.id === u.id && <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0 ml-1.5">Active</span>}
-                        </button>
-                      ))}
+                      {users.map((u: any) => {
+                        const roleInfo = getUserRoleInfo(u);
+                        return (
+                          <button
+                            key={u.id}
+                            onClick={() => {
+                              setCurrentUser(u);
+                              setUserDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-1.5 transition-all cursor-pointer ${
+                              currentUser?.id === u.id 
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 font-bold' 
+                                : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-[#202c33] hover:text-slate-900 dark:hover:text-white'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              <span className="truncate">{u.fullName}</span>
+                              <span className={`text-[9.5px] px-1.5 py-0.5 rounded font-semibold tracking-tight shrink-0 ${roleInfo.className}`}>
+                                {roleInfo.title}
+                              </span>
+                            </div>
+                            {currentUser?.id === u.id && (
+                              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold shrink-0 ml-1">
+                                Active
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}

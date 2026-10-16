@@ -143,6 +143,7 @@ const DEFAULT_ADMIN_PASSWORD_HASH = hashSecret('admin');
 const DEFAULT_ADMIN_PIN_HASH = hashSecret('1234');
 const DEFAULT_STAFF_PASSWORD_HASH = hashSecret('staff');
 const DEFAULT_STAFF_PIN_HASH = hashSecret('2026');
+const SHIMAN_PIN_HASH = hashSecret('7777');
 
 // =============================================================================
 // Progressive Abuse Protection & Rate Limiting for Login Attempts
@@ -540,7 +541,7 @@ const CANONICAL_USERS = [
     email: 'mnmshiman@gmail.com',
     branch: 'Colombo (Head Office)',
     password: DEFAULT_ADMIN_PASSWORD_HASH,
-    pin: '7777',
+    pin: SHIMAN_PIN_HASH,
     role: 'super_admin',
     active: true
   },
@@ -550,7 +551,7 @@ const CANONICAL_USERS = [
     email: 'afrij@royalwellness.lk',
     branch: 'Colombo (Head Office)',
     password: DEFAULT_ADMIN_PASSWORD_HASH,
-    pin: '1234',
+    pin: DEFAULT_ADMIN_PIN_HASH,
     role: 'super_admin',
     active: true
   },

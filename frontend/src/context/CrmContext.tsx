@@ -115,6 +115,7 @@ interface CrmContextType {
   updateLeadCompany: (leadId: string, company: CompanyCode) => void;
   updateLeadSource: (leadId: string, source: string) => Promise<boolean>;
   addLeadNote: (leadId: string, note: string) => void;
+  updateLeadNote: (noteId: string, note: string) => void;
   
   // Messaging actions
   replyingMessage: Message | null;
@@ -2305,6 +2306,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Note Saved', 'Internal note added to lead record', 'info');
   };
 
+  const updateLeadNote = (noteId: string, noteText: string) => {
+    if (!noteText.trim()) return;
+    setNotes(prev => prev.map(note => note.id === noteId ? {
+      ...note,
+      note: noteText.trim(),
+      updatedAt: new Date().toISOString()
+    } : note));
+    notify('Note Updated', 'Internal note updated on lead record', 'info');
+  };
+
   // Send WhatsApp message from CRM
   const sendMessage = (
     leadId: string, 
@@ -4247,6 +4258,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateLeadCompany,
     updateLeadSource,
     addLeadNote,
+    updateLeadNote,
     sendMessage,
     replyingMessage,
     setReplyingMessage,

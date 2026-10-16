@@ -413,24 +413,47 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       (lead.assignedById ? users.find(u => u.id === lead.assignedById)?.fullName : null) ||
       'System';
 
-    const assignedDate = lead.assignedAt ? new Date(lead.assignedAt) : null;
-
     return (
       <div 
         className="flex items-center gap-2 whitespace-nowrap"
-        title={assignedDate ? `Assigned by ${assignerName} on ${assignedDate.toLocaleString()}` : `Assigned by ${assignerName}`}
+        title={`Assigned by ${assignerName}`}
       >
         <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-400 shrink-0 shadow-xs">
           {assignerName.charAt(0).toUpperCase()}
         </div>
-        <div className="flex flex-col min-w-0">
-          <p className="font-semibold text-slate-200 text-xs whitespace-nowrap leading-tight">{assignerName}</p>
-          {assignedDate && (
-            <p className="text-[10px] text-slate-400 font-mono whitespace-nowrap leading-tight">
-              {assignedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}
-            </p>
-          )}
-        </div>
+        <span className="font-semibold text-slate-200 text-xs whitespace-nowrap leading-tight">{assignerName}</span>
+      </div>
+    );
+  };
+
+  /**
+   * Renders Assigned Time and Date between Assigned By and 1st Response
+   */
+  const renderAssignedTimeAndDateCell = (lead: Lead) => {
+    if (!lead.assignedTo) {
+      return <span className="text-slate-500 font-mono text-xs">—</span>;
+    }
+
+    const rawDate = lead.assignedAt || lead.assignmentHistories?.[0]?.assignedAt;
+    if (!rawDate) {
+      return <span className="text-slate-500 font-mono text-xs">—</span>;
+    }
+
+    const d = new Date(rawDate);
+    if (isNaN(d.getTime())) {
+      return <span className="text-slate-500 font-mono text-xs">—</span>;
+    }
+
+    const dateStr = d.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' });
+    const timeStr = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+    return (
+      <div 
+        className="flex items-center gap-1.5 text-slate-300 font-mono text-xs whitespace-nowrap"
+        title={`Assigned at ${d.toLocaleString()}`}
+      >
+        <Clock className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+        <span>{dateStr}, <span className="text-slate-400">{timeStr}</span></span>
       </div>
     );
   };
@@ -480,7 +503,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[1760px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[1940px]">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
             <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
               <th className="py-3.5 px-3 min-w-[120px]">Serial No.</th>
@@ -493,6 +516,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
               <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
+              <th className="py-3.5 px-3 min-w-[180px]">Assigned Time and Date</th>
               <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
               <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
               <th className="py-3.5 px-4 text-right min-w-[90px]">Action</th>
@@ -501,7 +525,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={13} className="py-16 text-center text-slate-500">
+                <td colSpan={14} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -658,12 +682,17 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       )}
                     </td>
 
-                    {/* 9. Assigned By (Clear Avatar + Name + Date) */}
+                    {/* 9. Assigned By (Clear Avatar + Name) */}
                     <td className="py-3.5 px-3 min-w-[160px] whitespace-nowrap">
                       {renderAssignedByCell(lead)}
                     </td>
 
-                    {/* 10. 1st Response Time from Coordinator (Single-line timestamp + Latency Badge) */}
+                    {/* 10. Assigned Time and Date */}
+                    <td className="py-3.5 px-3 min-w-[180px] whitespace-nowrap">
+                      {renderAssignedTimeAndDateCell(lead)}
+                    </td>
+
+                    {/* 11. 1st Response Time from Coordinator (Single-line timestamp + Latency Badge) */}
                     <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap">
                       {renderFirstResponseCell(lead)}
                     </td>

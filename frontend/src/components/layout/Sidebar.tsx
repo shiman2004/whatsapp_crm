@@ -79,6 +79,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       adminOnly: false,
     },
     {
+      id: 'broadcast' as NavTab,
+      label: 'Team Broadcast 📢',
+      icon: Megaphone,
+      badge: unreadBroadcastsCount > 0 ? unreadBroadcastsCount : undefined,
+      badgeColor: 'bg-amber-500 text-slate-950 font-black',
+      adminOnly: false, // Visible to all team members
+    },
+    {
       id: 'settings' as NavTab,
       label: 'System Settings',
       icon: Sliders,
@@ -127,14 +135,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
       label: 'API Specs',
       icon: Code2,
       adminOnly: true, // Super Admin only
-    },
-    {
-      id: 'broadcast' as NavTab,
-      label: 'Team Broadcast 📢',
-      icon: Megaphone,
-      badge: unreadBroadcastsCount > 0 ? unreadBroadcastsCount : undefined,
-      badgeColor: 'bg-amber-500 text-slate-950 font-black',
-      adminOnly: false, // Visible to all team members
     }
   ];
 

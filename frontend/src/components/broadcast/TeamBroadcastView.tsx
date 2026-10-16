@@ -22,7 +22,8 @@ import {
   Lock,
   Calendar,
   Clock,
-  Maximize2
+  Maximize2,
+  User
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { TeamBroadcast } from '../../types';
@@ -30,7 +31,7 @@ import { WhatsAppVoiceRecorder, AudioRecordingResult } from '../../utils/audioRe
 import { API_BASE_URL } from '../../config/api';
 
 export const TeamBroadcastView: React.FC = () => {
-  const { currentUser, broadcasts, sendBroadcast, deleteBroadcast, markAllBroadcastsAsRead } = useCrm();
+  const { currentUser, users, broadcasts, sendBroadcast, deleteBroadcast, markAllBroadcastsAsRead } = useCrm();
 
   // Automatically mark all current broadcasts as read when staff member views this screen
   useEffect(() => {
@@ -49,6 +50,8 @@ export const TeamBroadcastView: React.FC = () => {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [companyTarget, setCompanyTarget] = useState<'ALL' | 'RWC' | 'CRAS'>('ALL');
+  const [targetType, setTargetType] = useState<'ALL' | 'RWC' | 'CRAS' | 'STAFF'>('ALL');
+  const [targetStaffId, setTargetStaffId] = useState<string>('');
   const [isPinned, setIsPinned] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -195,10 +198,23 @@ export const TeamBroadcastView: React.FC = () => {
         }
       }
 
+      let staffName: string | undefined = undefined;
+      if (targetType === 'STAFF') {
+        if (!targetStaffId) {
+          alert('Please select an individual staff member to send this message to.');
+          setIsSubmitting(false);
+          return;
+        }
+        const found = (users || []).find(u => u.id === targetStaffId);
+        staffName = found?.fullName || 'Staff Member';
+      }
+
       const success = await sendBroadcast({
         title: title.trim() || undefined,
         content: content.trim(),
-        company: companyTarget,
+        company: targetType === 'STAFF' ? 'ALL' : targetType,
+        targetStaffId: targetType === 'STAFF' ? targetStaffId : undefined,
+        targetStaffName: staffName,
         isPinned,
         mediaType,
         mediaUrl: uploadedUrl,
@@ -210,6 +226,7 @@ export const TeamBroadcastView: React.FC = () => {
         setTitle('');
         setContent('');
         setIsPinned(false);
+        setTargetStaffId('');
         clearAttachment();
       }
     } finally {
@@ -219,16 +236,24 @@ export const TeamBroadcastView: React.FC = () => {
 
   // Filter broadcasts according to user company & selected filters
   const filteredBroadcasts = (broadcasts || []).filter(item => {
-    // 1. Role & company visibility rule:
-    // Coordinators can only see broadcasts targeted to 'ALL' or their specific company.
-    if (!canBroadcast && currentUser?.company) {
-      if (item.company && item.company !== 'ALL' && item.company !== currentUser.company) {
+    // 1. Role & individual staff visibility rule:
+    if (item.targetStaffId) {
+      if (!canBroadcast && item.targetStaffId !== currentUser?.id) {
         return false;
+      }
+    } else {
+      if (!canBroadcast && currentUser?.company) {
+        if (item.company && item.company !== 'ALL' && item.company !== currentUser.company) {
+          return false;
+        }
       }
     }
 
-    // 2. Company tab filter
-    if (selectedCompanyFilter !== 'ALL') {
+    // 2. Tab filter
+    if (selectedCompanyFilter === 'STAFF') {
+      if (!item.targetStaffId) return false;
+    } else if (selectedCompanyFilter !== 'ALL') {
+      if (item.targetStaffId) return false;
       if (item.company && item.company !== 'ALL' && item.company !== selectedCompanyFilter) {
         return false;
       }
@@ -240,8 +265,9 @@ export const TeamBroadcastView: React.FC = () => {
       const matchTitle = item.title?.toLowerCase().includes(q);
       const matchContent = item.content?.toLowerCase().includes(q);
       const matchSender = item.senderName?.toLowerCase().includes(q);
+      const matchTarget = item.targetStaffName?.toLowerCase().includes(q);
       const matchFile = item.fileName?.toLowerCase().includes(q);
-      if (!matchTitle && !matchContent && !matchSender && !matchFile) {
+      if (!matchTitle && !matchContent && !matchSender && !matchTarget && !matchFile) {
         return false;
       }
     }
@@ -334,12 +360,16 @@ export const TeamBroadcastView: React.FC = () => {
                   <Building2 className="w-3.5 h-3.5 text-slate-400" />
                   Target Audience:
                 </span>
-                <div className="inline-flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 text-xs">
+                <div className="inline-flex rounded-xl bg-slate-900/80 p-1 border border-slate-800 text-xs flex-wrap gap-0.5">
                   <button
                     type="button"
-                    onClick={() => setCompanyTarget('ALL')}
+                    onClick={() => {
+                      setTargetType('ALL');
+                      setCompanyTarget('ALL');
+                      setTargetStaffId('');
+                    }}
                     className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                      companyTarget === 'ALL'
+                      targetType === 'ALL'
                         ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
@@ -348,9 +378,13 @@ export const TeamBroadcastView: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCompanyTarget('RWC')}
+                    onClick={() => {
+                      setTargetType('RWC');
+                      setCompanyTarget('RWC');
+                      setTargetStaffId('');
+                    }}
                     className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                      companyTarget === 'RWC'
+                      targetType === 'RWC'
                         ? 'bg-emerald-600 text-white font-bold shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
@@ -359,17 +393,58 @@ export const TeamBroadcastView: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setCompanyTarget('CRAS')}
+                    onClick={() => {
+                      setTargetType('CRAS');
+                      setCompanyTarget('CRAS');
+                      setTargetStaffId('');
+                    }}
                     className={`px-3 py-1 rounded-lg font-medium transition-all ${
-                      companyTarget === 'CRAS'
-                        ? 'bg-sky-600 text-white font-bold shadow-xs'
+                      targetType === 'CRAS'
+                        ? 'bg-[#800000] text-white font-bold shadow-xs'
                         : 'text-slate-400 hover:text-white'
                     }`}
                   >
-                    Ceylon Root Only
+                    CRAS College Only
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTargetType('STAFF');
+                    }}
+                    className={`px-3 py-1 rounded-lg font-medium transition-all flex items-center gap-1.5 ${
+                      targetType === 'STAFF'
+                        ? 'bg-indigo-600 text-white font-bold shadow-xs'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Individual Staff
                   </button>
                 </div>
               </div>
+
+              {/* Individual Staff Selector Dropdown (Shown when Individual Staff target is selected) */}
+              {targetType === 'STAFF' && (
+                <div className="w-full sm:w-auto flex items-center gap-2 bg-slate-900/90 border border-indigo-500/50 rounded-xl px-3 py-1.5 text-xs text-slate-200 shadow-sm animate-in fade-in duration-150">
+                  <User className="w-4 h-4 text-indigo-400 shrink-0" />
+                  <span className="font-semibold text-slate-400 whitespace-nowrap">Send to:</span>
+                  <select
+                    value={targetStaffId}
+                    onChange={(e) => setTargetStaffId(e.target.value)}
+                    required
+                    className="bg-slate-950 text-white text-xs rounded-lg px-2.5 py-1 border border-slate-700 focus:border-indigo-400 focus:outline-hidden cursor-pointer"
+                  >
+                    <option value="" disabled>-- Select Staff Member --</option>
+                    {(users || [])
+                      .filter(u => u.active !== false && u.id !== currentUser?.id)
+                      .map(u => (
+                        <option key={u.id} value={u.id}>
+                          {u.fullName} ({u.roleTitle || u.role} - {u.company || 'All'})
+                        </option>
+                      ))}
+                  </select>
+                </div>
+              )}
 
               {/* Pin Toggle */}
               <button
@@ -603,11 +678,23 @@ export const TeamBroadcastView: React.FC = () => {
             onClick={() => setSelectedCompanyFilter('CRAS')}
             className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg font-medium transition-all ${
               selectedCompanyFilter === 'CRAS'
-                ? 'bg-sky-600/30 text-sky-300 border border-sky-500/30 font-bold'
+                ? 'bg-[#800000]/40 text-rose-300 border border-rose-500/30 font-bold'
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            Ceylon Root (CRAS)
+            CRAS College
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedCompanyFilter('STAFF')}
+            className={`flex-1 sm:flex-initial px-3.5 py-1.5 rounded-lg font-medium transition-all flex items-center justify-center gap-1.5 ${
+              selectedCompanyFilter === 'STAFF'
+                ? 'bg-indigo-600/30 text-indigo-300 border border-indigo-500/30 font-bold'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <User className="w-3.5 h-3.5" />
+            Direct Messages
           </button>
         </div>
 
@@ -792,9 +879,17 @@ const BroadcastCard: React.FC<BroadcastCardProps> = ({
                   {broadcast.company === 'RWC'
                     ? 'Royal Wellness'
                     : broadcast.company === 'CRAS'
-                    ? 'Ceylon Root'
+                    ? 'CRAS College'
                     : 'All Staff'}
                 </span>
+
+                {/* Direct Staff Badge */}
+                {broadcast.targetStaffId && (
+                  <span className="px-2 py-0.5 text-[10px] font-bold rounded-md uppercase tracking-wider bg-pink-500/20 text-pink-300 border border-pink-500/30 flex items-center gap-1">
+                    <User className="w-2.5 h-2.5" />
+                    Direct: {broadcast.targetStaffName || 'Staff Member'}
+                  </span>
+                )}
               </div>
 
               <div className="flex items-center gap-1.5 text-[11px] text-slate-400 mt-0.5">

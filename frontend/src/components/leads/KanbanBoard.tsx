@@ -35,6 +35,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
     if (stages && stages.length > 0) {
       return [...stages]
         .filter(s => s.isActive !== false)
+        .filter(s => !s.company || s.company === 'ALL' || s.company === company)
         .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
     }
     return DEFAULT_FALLBACK_STAGES.map((key, idx) => ({
@@ -46,7 +47,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
       isSystem: ['new', 'converted', 'lost'].includes(key),
       color: STAGE_CONFIG[key]?.pillBorder || '#6366f1'
     }));
-  }, [stages]);
+  }, [stages, company]);
 
   const getStageLabel = (stageKey: string, defaultLabel: string) => {
     if (isCras) {

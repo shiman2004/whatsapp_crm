@@ -159,7 +159,7 @@ interface CrmContextType {
   courses: Treatment[];
   superAdmins: User[];
   fetchStages: () => Promise<void>;
-  addStage: (stage: { key: string; label: string; description?: string; color?: string; orderIndex?: number }) => Promise<{ success: boolean; error?: string }>;
+  addStage: (stage: { key: string; label: string; description?: string; color?: string; orderIndex?: number; company?: 'ALL' | 'RWC' | 'CRAS' | string }) => Promise<{ success: boolean; error?: string; stage?: LeadStageConfig }>;
   updateStage: (id: string, updates: Partial<LeadStageConfig>) => Promise<{ success: boolean; error?: string }>;
   reorderStages: (order: { id: string; orderIndex: number }[]) => Promise<{ success: boolean; error?: string }>;
   toggleStageStatus: (id: string, isActive: boolean) => Promise<{ success: boolean; error?: string }>;
@@ -188,6 +188,8 @@ interface CrmContextType {
     fileSize?: number;
     isPinned?: boolean;
     company?: string;
+    targetStaffId?: string;
+    targetStaffName?: string;
   }) => Promise<boolean>;
   deleteBroadcast: (id: string) => Promise<boolean>;
 
@@ -446,9 +448,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!token || isExpired) {
       try {
         const isSuper = currentUser?.role === 'super_admin' || currentUser?.id === 'user-admin-1';
-        const identifier = isSuper ? 'user-admin-1' : (currentUser?.email || currentUser?.id || 'admin@royalwellness.lk');
-        const pin = isSuper ? '1234' : (currentUser?.pin || '2026');
-        const password = isSuper ? 'admin' : (currentUser?.password || 'staff');
+        const identifier = currentUser?.email || currentUser?.id || (isSuper ? 'user-admin-1' : 'admin@royalwellness.lk');
+        const pin = currentUser?.pin || (isSuper ? '1234' : '2026');
+        const password = currentUser?.password || (isSuper ? 'admin' : 'staff');
 
         const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
           method: 'POST',
@@ -461,6 +463,21 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             token = authData.token;
             localStorage.setItem('rw_crm_auth_token', token);
             setAuthToken(token);
+          }
+        } else if (isSuper && identifier !== 'user-admin-1') {
+          // If custom user login failed, fallback attempt with standard user-admin-1
+          const fallbackRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identifier: 'user-admin-1', pin: '1234', password: 'admin' })
+          });
+          if (fallbackRes.ok) {
+            const fbData = await fallbackRes.json();
+            if (fbData.token) {
+              token = fbData.token;
+              localStorage.setItem('rw_crm_auth_token', token);
+              setAuthToken(token);
+            }
           }
         }
       } catch (e) {
@@ -2775,9 +2792,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          setStages(data);
-          localStorage.setItem('rw_crm_stages', JSON.stringify(data));
+        const stageList = Array.isArray(data) ? data : (data?.stages || []);
+        if (Array.isArray(stageList) && stageList.length > 0) {
+          setStages(stageList);
+          localStorage.setItem('rw_crm_stages', JSON.stringify(stageList));
         }
       }
     } catch (e) {
@@ -2785,7 +2803,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, [currentUser?.role]);
 
-  const addStage = async (stageData: { key: string; label: string; description?: string; color?: string; orderIndex?: number }) => {
+  const addStage = async (stageData: { key: string; label: string; description?: string; color?: string; orderIndex?: number; company?: 'ALL' | 'RWC' | 'CRAS' | string }) => {
     try {
       const token = await ensureValidAuthToken();
       const res = await fetch(`${API_BASE_URL}/api/admin/stages`, {
@@ -2800,9 +2818,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!res.ok) {
         return { success: false, error: data.error || 'Failed to add stage' };
       }
+      if (data.stage) {
+        setStages(prev => {
+          const exists = prev.some(s => s.id === data.stage.id || s.key === data.stage.key);
+          if (exists) return prev.map(s => (s.id === data.stage.id || s.key === data.stage.key) ? data.stage : s);
+          const next = [...prev, data.stage];
+          localStorage.setItem('rw_crm_stages', JSON.stringify(next));
+          return next;
+        });
+      }
       await fetchStages();
       notify('Stage Created', `Stage "${stageData.label}" created successfully.`, 'success');
-      return { success: true };
+      return { success: true, stage: data.stage };
     } catch (e: any) {
       return { success: false, error: e.message || 'Network error adding stage' };
     }
@@ -2823,6 +2850,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!res.ok) {
         return { success: false, error: data.error || 'Failed to update stage' };
       }
+      setStages(prev => {
+        const next = prev.map(s => (s.id === id || s.key === id) ? { ...s, ...updates } : s);
+        localStorage.setItem('rw_crm_stages', JSON.stringify(next));
+        return next;
+      });
       await fetchStages();
       notify('Stage Updated', 'Stage updated successfully.', 'success');
       return { success: true };
@@ -3540,6 +3572,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fileSize?: number;
     isPinned?: boolean;
     company?: string;
+    targetStaffId?: string;
+    targetStaffName?: string;
   }): Promise<boolean> => {
     try {
       const token = localStorage.getItem('rw_crm_auth_token') || currentUser?.id || 'user-admin-1';

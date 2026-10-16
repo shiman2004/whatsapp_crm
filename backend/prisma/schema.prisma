@@ -461,8 +461,10 @@ model TeamBroadcast {
   mediaUrl    String?   @map("media_url") @db.Text
   fileName    String?   @map("file_name") @db.VarChar(255)
   fileSize    Int?      @map("file_size")
-  isPinned    Boolean   @default(false) @map("is_pinned")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  isPinned        Boolean   @default(false) @map("is_pinned")
+  targetStaffId   String?   @map("target_staff_id") @db.VarChar(50)
+  targetStaffName String?   @map("target_staff_name") @db.VarChar(255)
+  createdAt       DateTime  @default(now()) @map("created_at")
 
   @@index([createdAt])
   @@map("team_broadcasts")

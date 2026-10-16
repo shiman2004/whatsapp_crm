@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Lead, Message } from '../../types';
+import { Lead } from '../../types';
 import { StageBadge } from './StageBadge';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
@@ -12,9 +12,7 @@ import {
   Globe,
   ArrowDown,
   ArrowUp,
-  SlidersHorizontal,
-  Flame,
-  CheckCircle2
+  SlidersHorizontal
 } from 'lucide-react';
 import { 
   getWindowStatus, 
@@ -34,7 +32,6 @@ interface TableViewProps {
  */
 function getCustomerInitials(name?: string): string {
   if (!name) return 'WA';
-  // Strip emojis and non-alphanumeric
   const clean = name.replace(/[\u{1F600}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu, '')
                     .replace(/[^a-zA-Z0-9\s]/g, '')
                     .trim();
@@ -82,7 +79,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     users, 
     messages, 
     selectedLeadId, 
-    isSuperAdmin, 
     isLeadsOfficer, 
     canModifyAssignment, 
     assignLead,
@@ -140,7 +136,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         label: 'Facebook',
         badgeClass: 'bg-blue-500/15 text-blue-400 border-blue-500/30 hover:bg-blue-500/25',
         icon: (
-          <svg className="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
             <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
           </svg>
         )
@@ -152,7 +148,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         label: 'Instagram',
         badgeClass: 'bg-gradient-to-r from-pink-500/15 via-rose-500/15 to-purple-500/15 text-pink-400 border-pink-500/30 hover:opacity-90',
         icon: (
-          <svg className="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24">
+          <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
             <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"/>
           </svg>
         )
@@ -163,7 +159,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         key: 'website',
         label: 'Website',
         badgeClass: 'bg-sky-500/15 text-sky-400 border-sky-500/30 hover:bg-sky-500/25',
-        icon: <Globe className="w-3 h-3 shrink-0" />
+        icon: <Globe className="w-3.5 h-3.5 shrink-0" />
       };
     }
     // Default WhatsApp
@@ -172,7 +168,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       label: 'WhatsApp',
       badgeClass: 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/25',
       icon: (
-        <svg className="w-3 h-3 fill-current shrink-0" viewBox="0 0 24 24">
+        <svg className="w-3.5 h-3.5 fill-current shrink-0" viewBox="0 0 24 24">
           <path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/>
         </svg>
       )
@@ -192,7 +188,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         <img
           src={avatarUrl}
           alt={displayName || 'Customer'}
-          className="w-8 h-8 rounded-full object-cover border border-slate-700/80 shrink-0 shadow-xs"
+          className="w-9 h-9 rounded-full object-cover border border-slate-700/80 shrink-0 shadow-xs"
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
         />
       );
@@ -200,7 +196,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
     return (
       <div 
-        className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-[11px] shrink-0 border border-white/10 shadow-xs ${colorClass}`}
+        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/10 shadow-xs ${colorClass}`}
         title={displayName || 'Customer'}
       >
         {initials}
@@ -212,7 +208,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
    * Renders Real 24-Hour WhatsApp Service Window countdown & status badge
    */
   const render24hWindowCell = (lead: Lead) => {
-    // Specifically gets the latest inbound customer message for THIS lead
     const lastCustomerMsgTime = getLatestCustomerMessageTime(lead, messages);
     const hasCustomerMessage = lastCustomerMsgTime > 0 && !isNaN(lastCustomerMsgTime);
     const expiresAt = hasCustomerMessage ? lastCustomerMsgTime + (24 * 60 * 60 * 1000) : 0;
@@ -222,10 +217,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     if (isExpired) {
       return (
         <div 
-          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border bg-slate-800/80 border-slate-700/80 text-slate-400 whitespace-nowrap shadow-xs"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-800/80 border-slate-700 text-slate-400 whitespace-nowrap shadow-xs"
           title={hasCustomerMessage ? `24H Window Expired.\nCustomer last replied: ${formatWindowTimestamp(lastCustomerMsgTime)}` : 'No customer messages received yet'}
         >
-          <span className="w-1.5 h-1.5 rounded-full bg-slate-500" />
+          <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
           <span>Expired</span>
         </div>
       );
@@ -247,11 +242,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
     return (
       <div 
-        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-semibold border whitespace-nowrap shadow-xs transition-colors ${statusStyle}`}
+        className={`inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold border whitespace-nowrap shadow-xs transition-colors ${statusStyle}`}
         title={`24H Service Window Active (${countdownText} remaining)\nCustomer Last Replied: ${formatWindowTimestamp(lastCustomerMsgTime)}\nExpires: ${formatWindowTimestamp(expiresAt)}`}
       >
-        <span className={`w-1.5 h-1.5 rounded-full ${dotStyle}`} />
-        <span className="font-mono font-bold tracking-tight">{countdownText}</span>
+        <span className={`w-2 h-2 rounded-full ${dotStyle} shrink-0`} />
+        <span className="font-mono font-bold tracking-tight text-xs">{countdownText}</span>
       </div>
     );
   };
@@ -261,7 +256,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
    */
   const renderFirstResponseCell = (lead: Lead) => {
     if (!lead.assignedTo) {
-      return <span className="text-slate-500 font-mono text-[11px]">—</span>;
+      return <span className="text-slate-500 font-mono text-xs">—</span>;
     }
 
     const assignedTime = lead.assignedAt ? new Date(lead.assignedAt).getTime() : 0;
@@ -313,15 +308,15 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
       return (
         <div 
-          className="flex flex-col gap-0.5"
+          className="flex flex-col gap-1 whitespace-nowrap"
           title={`First reply sent on ${d.toLocaleString()}${assignedTime > 0 ? ` (${delayText} after assignment)` : ''}`}
         >
-          <span className="font-mono text-[11px] text-slate-200 font-semibold flex items-center gap-1">
-            <Clock className="w-3 h-3 text-slate-400 shrink-0" />
+          <div className="flex items-center gap-1.5 text-slate-200 font-semibold font-mono text-xs whitespace-nowrap">
+            <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>{dateStr}, {timeStr}</span>
-          </span>
+          </div>
           {assignedTime > 0 && (
-            <span className={`inline-flex items-center w-fit px-1.5 py-0.5 rounded text-[9px] font-mono font-bold border ${delayColor}`}>
+            <span className={`inline-flex items-center w-fit px-2 py-0.5 rounded text-[10px] font-mono font-bold border whitespace-nowrap ${delayColor}`}>
               {delayText}
             </span>
           )}
@@ -344,18 +339,18 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
       return (
         <div 
-          className="flex flex-col gap-0.5"
+          className="flex flex-col gap-1 whitespace-nowrap"
           title={`Assigned at ${new Date(assignedTime).toLocaleString()}.\nNo coordinator reply sent yet (${elapsedText} waiting).`}
         >
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold border ${
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-[10px] font-bold border whitespace-nowrap ${
             isLongWait 
               ? 'bg-rose-500/15 text-rose-400 border-rose-500/30' 
               : 'bg-amber-500/15 text-amber-400 border-amber-500/30'
           }`}>
-            <AlertTriangle className="w-2.5 h-2.5 shrink-0" />
-            No Reply Yet
+            <AlertTriangle className="w-3 h-3 shrink-0" />
+            <span>No Reply Yet</span>
           </span>
-          <span className="text-[9px] text-slate-400 font-mono">
+          <span className="text-[10px] text-slate-400 font-mono whitespace-nowrap">
             Waiting {elapsedText}
           </span>
         </div>
@@ -363,7 +358,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     }
 
     return (
-      <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-medium bg-slate-800 text-slate-400 border border-slate-700">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap">
         No Reply Yet
       </span>
     );
@@ -374,7 +369,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
    */
   const renderAssignedByCell = (lead: Lead) => {
     if (!lead.assignedTo) {
-      return <span className="text-slate-500 font-mono text-[11px]">—</span>;
+      return <span className="text-slate-500 font-mono text-xs">—</span>;
     }
 
     const assignerName = lead.assignedByName ||
@@ -386,16 +381,16 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
     return (
       <div 
-        className="flex items-center gap-1.5"
+        className="flex items-center gap-2 whitespace-nowrap"
         title={assignedDate ? `Assigned by ${assignerName} on ${assignedDate.toLocaleString()}` : `Assigned by ${assignerName}`}
       >
-        <div className="w-5 h-5 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-slate-300 shrink-0">
+        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-400 shrink-0 shadow-xs">
           {assignerName.charAt(0).toUpperCase()}
         </div>
-        <div className="truncate">
-          <p className="font-medium text-slate-200 truncate leading-tight">{assignerName}</p>
+        <div className="flex flex-col min-w-0">
+          <p className="font-semibold text-slate-200 text-xs whitespace-nowrap leading-tight">{assignerName}</p>
           {assignedDate && (
-            <p className="text-[9px] text-slate-400 font-mono leading-tight">
+            <p className="text-[10px] text-slate-400 font-mono whitespace-nowrap leading-tight">
               {assignedDate.toLocaleDateString([], { month: 'short', day: 'numeric' })}
             </p>
           )}
@@ -407,23 +402,23 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   return (
     <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-xl mt-3 flex flex-col">
       {/* Sub-header Controls Bar with Direct Scroll Navigation */}
-      <div className="px-4 py-2.5 bg-slate-950/70 border-b border-slate-800 flex items-center justify-between text-xs">
-        <div className="flex items-center gap-2">
-          <span className="font-semibold text-slate-300">
+      <div className="px-5 py-3 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-2.5">
+          <span className="font-bold text-slate-200 text-sm">
             {leads.length} {leads.length === 1 ? 'Lead' : 'Leads'}
           </span>
           <span className="text-slate-600">•</span>
-          <span className="text-[11px] text-slate-400">
-            Horizontal scrollable table with real-time 24h Meta SLA timers
+          <span className="text-xs text-slate-400">
+            Pipeline Management Table
           </span>
         </div>
 
         {/* Scroll Quick Actions */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={scrollToBottom}
-            className="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-teal-400 border border-slate-700/80 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95"
+            className="px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
             title="Scroll directly to the bottom of the table"
           >
             <ArrowDown className="w-3.5 h-3.5" />
@@ -433,36 +428,36 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             <button
               type="button"
               onClick={scrollToTop}
-              className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700/80 text-[11px] font-semibold inline-flex items-center gap-1 transition-all shadow-sm active:scale-95"
+              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
               title="Scroll back to top of the table"
             >
               <ArrowUp className="w-3.5 h-3.5" />
-              <span>Top</span>
+              <span>Back to Top</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* Scrollable Table View with Sticky Header and Always-Visible Bottom Scrollbar */}
+      {/* Scrollable Table View with Sticky Header and Guaranteed Column Widths */}
       <div 
         ref={tableContainerRef}
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[1200px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[1780px]">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
-            <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
-              <th className="py-2.5 px-2.5 w-[135px]">Inquiry Time</th>
-              <th className="py-2.5 px-2.5 w-[210px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
-              <th className="py-2.5 px-2 w-[52px] text-center">Source</th>
-              <th className="py-2.5 px-2 text-center w-[55px]">Lang</th>
-              <th className="py-2.5 px-2.5 w-[170px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
-              <th className="py-2.5 px-2.5 w-[130px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
-              <th className="py-2.5 px-2.5 w-[190px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
-              <th className="py-2.5 px-2 w-[115px]">Assigned By</th>
-              <th className="py-2.5 px-2 w-[135px]">1st Response</th>
-              <th className="py-2.5 px-2 w-[125px]">24h Window</th>
-              <th className="py-2.5 px-2 text-right w-[75px]">Action</th>
+            <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
+              <th className="py-3.5 px-4 min-w-[240px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
+              <th className="py-3.5 px-3 min-w-[130px]">Source</th>
+              <th className="py-3.5 px-2 text-center min-w-[65px]">Lang</th>
+              <th className="py-3.5 px-4 min-w-[220px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
+              <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
+              <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
+              <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
+              <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
+              <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
+              <th className="py-3.5 px-4 min-w-[160px]">Inquiry Time</th>
+              <th className="py-3.5 px-4 text-right min-w-[90px]">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -488,35 +483,29 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <tr
                     key={lead.id}
                     onClick={() => onSelectLead(lead.id)}
-                    className={`hover:bg-slate-800/40 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-teal-950/30' : ''
+                    className={`hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                      isSelected ? 'bg-teal-950/40' : ''
                     }`}
                   >
-                    {/* 1. Inquiry Time */}
-                    <td className="py-2.5 px-2.5 text-slate-400 font-mono text-[10px] whitespace-nowrap">
-                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
-                      {new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-
-                    {/* 2. Customer Contact & Authentic Avatar */}
-                    <td className="py-2.5 px-2.5">
-                      <div className="flex items-center gap-2.5">
+                    {/* 1. Customer Contact & Authentic Avatar */}
+                    <td className="py-3.5 px-4 min-w-[240px]">
+                      <div className="flex items-center gap-3">
                         {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
-                        <div className="min-w-0">
+                        <div className="min-w-0 flex flex-col">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="font-bold text-slate-100 truncate">{lead.customer?.displayName}</p>
+                            <p className="font-bold text-slate-100 text-xs truncate">{lead.customer?.displayName}</p>
                             <CompanyTagBadge lead={lead} size="xs" />
                           </div>
-                          <p className="text-[10px] text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber}</p>
+                          <p className="text-[11px] text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber}</p>
                         </div>
                       </div>
                     </td>
 
-                    {/* 3. Source Channel (icon-only) */}
-                    <td className="py-2.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                    {/* 2. Source Channel (Facebook, Instagram, WhatsApp, Website) */}
+                    <td className="py-3.5 px-3 min-w-[130px]" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <div 
-                          className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-[10px] font-semibold border cursor-pointer transition-all shadow-xs ${sourceInfo.badgeClass}`}
+                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border cursor-pointer transition-all shadow-xs whitespace-nowrap ${sourceInfo.badgeClass}`}
                           title={`Source: ${sourceInfo.label}. Click to switch acquisition channel.`}
                         >
                           {sourceInfo.icon}
@@ -538,22 +527,22 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 4. Language */}
-                    <td className="py-2.5 px-2 text-center">
-                      <span className="px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px] bg-slate-800 text-slate-300 border border-slate-700">
+                    {/* 3. Language */}
+                    <td className="py-3.5 px-2 text-center min-w-[65px]">
+                      <span className="px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
                         {lead.language}
                       </span>
                     </td>
 
-                    {/* 5. Treatment / Course */}
-                    <td className="py-2.5 px-2.5">
-                      <div>
+                    {/* 4. Treatment / Course */}
+                    <td className="py-3.5 px-4 min-w-[220px]">
+                      <div className="flex flex-col gap-0.5">
                         <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className={`font-semibold ${isCrasLead ? 'text-rose-400' : 'text-teal-400'}`}>
+                          <p className={`font-semibold text-xs leading-tight ${isCrasLead ? 'text-rose-400' : 'text-teal-400'}`}>
                             {treatment?.name || category?.name || (isCrasLead ? 'Course Not Selected' : 'Treatment Not Selected')}
                           </p>
                           {lead.serialNumber && (
-                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${
                               isCrasLead 
                                 ? 'bg-rose-950/60 text-rose-300 border-rose-500/40' 
                                 : 'bg-teal-950/60 text-teal-300 border-teal-500/40'
@@ -562,22 +551,22 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                             </span>
                           )}
                         </div>
-                        <p className="text-[10px] text-slate-400">{category?.name}</p>
+                        <p className="text-[11px] text-slate-400 leading-tight">{category?.name}</p>
                       </div>
                     </td>
 
-                    {/* 6. Stage */}
-                    <td className="py-2.5 px-2.5">
+                    {/* 5. Stage */}
+                    <td className="py-3.5 px-4 min-w-[150px] whitespace-nowrap">
                       <StageBadge stage={lead.stage} />
                     </td>
 
-                    {/* 7. Coordinator */}
-                    <td className="py-2.5 px-2.5" onClick={(e) => e.stopPropagation()}>
+                    {/* 6. Coordinator (Wide, Clear, Never Truncated) */}
+                    <td className="py-3.5 px-4 min-w-[260px]" onClick={(e) => e.stopPropagation()}>
                       {canModifyAssignment(lead) ? (
                         <select
                           value={lead.assignedTo || ''}
                           onChange={(e) => assignLead(lead.id, e.target.value)}
-                          className="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-slate-200 outline-none focus:border-teal-500 cursor-pointer w-full max-w-[210px]"
+                          className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-teal-500 cursor-pointer w-full min-w-[240px] shadow-sm"
                         >
                           <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCrasLead ? '-- Assign Counsellor --' : '-- Assign Coordinator --')}</option>
                           {coordinators.filter(c => isCrasLead ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company)).map((c) => (
@@ -588,7 +577,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         </select>
                       ) : isLeadsOfficer && lead.assignedTo ? (
                         <div 
-                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 font-medium"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 font-medium whitespace-nowrap"
                           title="Assignment locked. Once assigned, only Super Admin can reassign this lead."
                         >
                           <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
@@ -598,11 +587,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                           </span>
                         </div>
                       ) : (
-                        <div className="flex items-center gap-1.5 text-slate-300">
+                        <div className="flex items-center gap-1.5 text-slate-300 whitespace-nowrap">
                           {coordinator ? (
                             <>
                               <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                              <span className="truncate">{coordinator.fullName}</span>
+                              <span className="font-medium text-slate-200">{coordinator.fullName}</span>
                             </>
                           ) : (
                             <span className="text-amber-400 flex items-center gap-1 font-medium">
@@ -613,26 +602,32 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       )}
                     </td>
 
-                    {/* 8. Assigned By */}
-                    <td className="py-2.5 px-2">
+                    {/* 7. Assigned By (Clear Avatar + Name + Date) */}
+                    <td className="py-3.5 px-3 min-w-[160px] whitespace-nowrap">
                       {renderAssignedByCell(lead)}
                     </td>
 
-                    {/* 9. 1st Response Time from Coordinator */}
-                    <td className="py-2.5 px-2">
+                    {/* 8. 1st Response Time from Coordinator (Single-line timestamp + Latency Badge) */}
+                    <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap">
                       {renderFirstResponseCell(lead)}
                     </td>
 
-                    {/* 10. Real 24h Window Remaining Time */}
-                    <td className="py-2.5 px-2">
+                    {/* 9. Real 24h Window Remaining Time */}
+                    <td className="py-3.5 px-3 min-w-[160px] whitespace-nowrap">
                       {render24hWindowCell(lead)}
                     </td>
 
+                    {/* 10. Inquiry Time (Never wrapped) */}
+                    <td className="py-3.5 px-4 text-slate-300 font-mono text-xs whitespace-nowrap min-w-[160px]">
+                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{', '}
+                      <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </td>
+
                     {/* 11. Action */}
-                    <td className="py-2.5 px-2 text-right">
+                    <td className="py-3.5 px-4 text-right min-w-[90px] whitespace-nowrap">
                       <button
                         onClick={() => onSelectLead(lead.id)}
-                        className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors"
+                        className="px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                       >
                         <span>Chat</span>
                         <ChevronRight className="w-3.5 h-3.5" />
@@ -647,28 +642,28 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       </div>
 
       {/* Bottom status footer */}
-      <div className="px-4 py-2 bg-slate-950/50 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block" /> Active Window (&gt;6h)
+      <div className="px-5 py-2.5 bg-slate-950/70 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
+        <div className="flex items-center gap-4 flex-wrap">
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shadow-xs" /> Active Window (&gt;6h)
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block" /> Expiring Soon (1-6h)
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shadow-xs" /> Expiring Soon (1-6h)
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" /> Urgent (&lt;1h)
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-rose-500 inline-block shadow-xs" /> Urgent (&lt;1h)
           </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-slate-500 inline-block" /> Expired (&gt;24h)
+          <span className="flex items-center gap-1.5">
+            <span className="w-2 h-2 rounded-full bg-slate-500 inline-block shadow-xs" /> Expired (&gt;24h)
           </span>
         </div>
 
         <button
           type="button"
           onClick={scrollToTop}
-          className="text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1"
+          className="text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer text-xs font-medium"
         >
-          <ArrowUp className="w-3 h-3" />
+          <ArrowUp className="w-3.5 h-3.5" />
           <span>Back to Top</span>
         </button>
       </div>

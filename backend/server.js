@@ -4,7 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting } from './src/db.js';
+import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting, allocateCompanyLeadSerial as allocatePersistedCompanyLeadSerial } from './src/db.js';
 import { sessionManager } from './src/sessionManager.js';
 import { resolveCompany, resolveLeadCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
@@ -17,6 +17,25 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.META_VERIFY_TOKEN || 'royal_wellness_hmac_secret_2026';
+
+async function allocateCompanyLeadSerial(prisma, company) {
+  try {
+    return await allocatePersistedCompanyLeadSerial(prisma, company);
+  } catch (error) {
+    console.warn('Company serial allocator unavailable; using a collision-safe fallback:', error.message);
+  }
+
+  const companyCode = String(company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+  const leads = await prisma.lead.findMany({
+    where: { OR: [{ company: companyCode }, { source: companyCode }] },
+    select: { serialNumber: true }
+  });
+  const maxValue = leads.reduce((max, lead) => {
+    const match = String(lead.serialNumber || '').match(new RegExp(`^${companyCode}-(\\d+)$`));
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `${companyCode}-${String(maxValue + 1).padStart(4, '0')}`;
+}
 
 // Cryptographic Token Helpers (HMAC-SHA256 with Expiration Support)
 function signAuthToken(payload, expiresInMs = 7 * 24 * 60 * 60 * 1000) {
@@ -1586,6 +1605,7 @@ const server = http.createServer(async (req, res) => {
                   const firstTrt = await prisma.treatment.findFirst().catch(() => null);
                   lead = await prisma.lead.create({
                     data: {
+                      serialNumber: await allocateCompanyLeadSerial(prisma, resolvedCompany),
                       customerId: cust.id,
                       categoryId: firstCat?.id || (resolvedCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
                       treatmentId: firstTrt?.id || (resolvedCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
@@ -3859,6 +3879,7 @@ const server = http.createServer(async (req, res) => {
               const firstTrt = await prisma.treatment.findFirst();
               updatedLead = await prisma.lead.create({
                 data: {
+                  serialNumber: await allocateCompanyLeadSerial(prisma, 'RWC'),
                   id: leadId && !leadId.startsWith('lead-') ? leadId : undefined,
                   customerId: cust.id,
                   categoryId: firstCat?.id || 'cat-hair-care',
@@ -4415,11 +4436,13 @@ const server = http.createServer(async (req, res) => {
           const leadStage = initialMessage ? 'contacted' : (targetCoordinatorId ? 'assigned' : 'new');
 
           if (!savedLead) {
+            const companySerial = await allocateCompanyLeadSerial(prisma, targetCompany);
             savedLead = await prisma.lead.create({
               data: {
                 customerId: savedCustomer.id,
                 company: targetCompany,
                 source: targetCompany,
+                serialNumber: companySerial,
                 categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                 stage: leadStage,
@@ -5706,6 +5729,7 @@ const server = http.createServer(async (req, res) => {
 
                           lead = await prisma.lead.create({
                             data: {
+                              serialNumber: await allocateCompanyLeadSerial(prisma, companyInfo.code),
                               customerId: cust.id,
                               categoryId: firstCat?.id || null,
                               treatmentId: firstTrt?.id || null,

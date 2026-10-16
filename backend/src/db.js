@@ -43,6 +43,25 @@ export const checkDbConnection = async () => {
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "source" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "company" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.company_lead_serials (
+        company VARCHAR(10) PRIMARY KEY,
+        next_value INTEGER NOT NULL DEFAULT 1
+      );
+      INSERT INTO public.company_lead_serials (company, next_value)
+      VALUES ('RWC', 1), ('CRAS', 1)
+      ON CONFLICT (company) DO NOTHING;
+      CREATE OR REPLACE FUNCTION public.next_company_lead_serial(company_code VARCHAR)
+      RETURNS VARCHAR LANGUAGE plpgsql AS $serial$
+      DECLARE normalized_company VARCHAR(10) := CASE WHEN upper(company_code) = 'CRAS' THEN 'CRAS' ELSE 'RWC' END;
+      allocated_value INTEGER;
+      BEGIN
+        INSERT INTO public.company_lead_serials (company, next_value) VALUES (normalized_company, 1) ON CONFLICT (company) DO NOTHING;
+        UPDATE public.company_lead_serials SET next_value = next_value + 1 WHERE company = normalized_company RETURNING next_value - 1 INTO allocated_value;
+        RETURN normalized_company || '-' || lpad(allocated_value::text, 4, '0');
+      END;
+      $serial$;
+    `).catch(() => null);
 
     // Ensure media_files table exists for persistent image/audio storage
     await prisma.$executeRawUnsafe(`
@@ -187,6 +206,12 @@ export const checkDbConnection = async () => {
 };
 
 export const getDbStatus = () => isDbConnected;
+
+export const allocateCompanyLeadSerial = async (prisma, company) => {
+  const companyCode = String(company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+  const result = await prisma.$queryRawUnsafe(`SELECT public.next_company_lead_serial($1) AS "serialNumber"`, companyCode);
+  return result?.[0]?.serialNumber || `${companyCode}-${Date.now()}`;
+};
 
 export const getSystemSetting = async (key) => {
   const prisma = getPrisma();

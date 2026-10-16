@@ -80,11 +80,20 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             <GripVertical className="w-3.5 h-3.5" />
           </div>
           <div className="relative shrink-0">
-            <img
-              src={lead.customer?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-              alt={lead.customer?.displayName}
-              className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-            />
+            {lead.customer?.avatarUrl && !lead.customer.avatarUrl.includes('photo-1534528741775-53994a69daeb') ? (
+              <img
+                src={lead.customer.avatarUrl}
+                alt={lead.customer?.displayName}
+                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <div 
+                className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] bg-teal-600 text-white border border-teal-500/30 shrink-0 shadow-xs"
+              >
+                {(lead.customer?.displayName || 'W').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'WA'}
+              </div>
+            )}
             {(lead.unreadCount || 0) > 0 && (
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 ring-2 ring-white dark:ring-slate-900 absolute -top-0.5 -right-0.5"></span>
             )}

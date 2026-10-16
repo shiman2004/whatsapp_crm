@@ -446,11 +446,18 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                       {/* Staff Member */}
                       <td className="py-2.5 px-4 sticky left-0 z-10 bg-white dark:bg-[#111b21] group-hover:bg-slate-50">
                         <div className="flex items-center gap-2.5">
-                          <img
-                            src={item.coordinator.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                            alt={item.coordinator.fullName}
-                            className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
-                          />
+                          {item.coordinator.avatar && !item.coordinator.avatar.includes('photo-1534528741775-53994a69daeb') ? (
+                            <img
+                              src={item.coordinator.avatar}
+                              alt={item.coordinator.fullName}
+                              className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700 shrink-0"
+                              onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 border border-teal-500/30">
+                              {(item.coordinator.fullName || 'C').slice(0, 2).toUpperCase()}
+                            </div>
+                          )}
                           <div className="min-w-0">
                             <p className="font-bold text-slate-800 dark:text-slate-100 truncate leading-tight">
                               {item.coordinator.fullName}
@@ -616,11 +623,18 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                       <td className="py-2.5 px-4">
                         <div className="flex items-center gap-2.5">
                           <div className="relative shrink-0">
-                            <img
-                              src={item.coordinator.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-                              alt={item.coordinator.fullName}
-                              className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-                            />
+                            {item.coordinator.avatar && !item.coordinator.avatar.includes('photo-1534528741775-53994a69daeb') ? (
+                              <img
+                                src={item.coordinator.avatar}
+                                alt={item.coordinator.fullName}
+                                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                              />
+                            ) : (
+                              <div className="w-7 h-7 rounded-full bg-teal-600 text-white flex items-center justify-center font-bold text-[10px] shrink-0 border border-teal-500/30">
+                                {(item.coordinator.fullName || 'C').slice(0, 2).toUpperCase()}
+                              </div>
+                            )}
                             {idx === 0 && (
                               <span className="w-3.5 h-3.5 rounded-full bg-amber-500 text-slate-950 font-bold text-[8px] flex items-center justify-center absolute -top-1 -right-1 shadow">
                                 1

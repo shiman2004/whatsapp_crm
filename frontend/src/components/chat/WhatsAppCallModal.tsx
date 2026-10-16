@@ -77,11 +77,18 @@ export const WhatsAppCallModal: React.FC<CallModalProps> = ({ lead, onClose }) =
         {/* Patient Photo & Info */}
         <div className="space-y-3">
           <div className="relative inline-block">
-            <img
-              src={lead.customer?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-              alt={lead.customer?.displayName}
-              className="w-24 h-24 rounded-full object-cover border-4 border-teal-500/50 shadow-xl mx-auto"
-            />
+            {lead.customer?.avatarUrl && !lead.customer.avatarUrl.includes('photo-1534528741775-53994a69daeb') ? (
+              <img
+                src={lead.customer.avatarUrl}
+                alt={lead.customer?.displayName}
+                className="w-24 h-24 rounded-full object-cover border-4 border-teal-500/50 shadow-xl mx-auto"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full flex items-center justify-center font-bold text-2xl bg-teal-600 text-white border-4 border-teal-500/50 shadow-xl mx-auto">
+                {(lead.customer?.displayName || 'W').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'WA'}
+              </div>
+            )}
             {callStatus === 'ringing' && (
               <span className="w-6 h-6 rounded-full bg-emerald-400 border-2 border-slate-900 absolute bottom-0 right-0 animate-ping"></span>
             )}

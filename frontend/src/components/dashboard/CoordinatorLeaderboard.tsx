@@ -21,10 +21,6 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
     currentUser?.role === 'super_admin' || 
     currentUser?.role === 'leads_officer';
 
-  if (!isOfficerOrAdmin) {
-    return null;
-  }
-
   // Use full leads context to allow multi-company cross-analytics
   const allLeads = ctxLeads && ctxLeads.length > 0 ? ctxLeads : (propLeads || []);
 
@@ -105,6 +101,10 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
   const overallConvRate = summaryTotals.total > 0
     ? Math.round((summaryTotals.converted / summaryTotals.total) * 100)
     : 0;
+
+  if (!isOfficerOrAdmin) {
+    return null;
+  }
 
   return (
     <div className="bg-white dark:bg-[#111b21] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden select-none">

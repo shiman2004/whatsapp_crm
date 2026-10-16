@@ -132,59 +132,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
           </div>
         </div>
 
-        {/* Right Controls: Link Device (QR) + Meta API + Theme Toggle + User Profile Dropdown */}
+        {/* Right Controls: Meta API Live Bridge + User Profile Dropdown */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
           
-          {/* Light / Dark Mode Toggle Button */}
-          <button
-            type="button"
-            onClick={toggleTheme}
-            title={theme === 'dark' ? 'Switch to Light Theme' : 'Switch to Dark Theme'}
-            className="p-1.5 sm:px-2.5 sm:py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all bg-slate-100 hover:bg-slate-200 dark:bg-[#202c33] dark:hover:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs cursor-pointer active:scale-95"
-          >
-            {theme === 'dark' ? (
-              <>
-                <Sun className="w-4 h-4 text-amber-400 shrink-0" />
-                <span className="hidden sm:inline">Light</span>
-              </>
-            ) : (
-              <>
-                <Moon className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span className="hidden sm:inline">Dark</span>
-              </>
-            )}
-          </button>
-
-          {/* WhatsApp Web QR Code Link Device Button with Real-time Status */}
-          <button
-            type="button"
-            onClick={() => setQrModalOpen(true)}
-            title={whatsappStatus === 'connected' ? 'WhatsApp Web Linked' : whatsappStatus === 'syncing' ? 'Syncing...' : 'Link Device (QR)'}
-            className={`px-2 sm:px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer ${
-              whatsappStatus === 'connected'
-                ? 'bg-emerald-100 dark:bg-emerald-950/80 border border-emerald-500/50 text-emerald-800 dark:text-emerald-300 hover:bg-emerald-200 dark:hover:bg-emerald-900/80'
-                : whatsappStatus === 'syncing'
-                ? 'bg-amber-100 dark:bg-amber-950/80 border border-amber-500/50 text-amber-800 dark:text-amber-300 hover:bg-amber-200 dark:hover:bg-amber-900/80 animate-pulse'
-                : 'bg-whatsapp hover:bg-emerald-500 text-slate-950'
-            }`}
-          >
-            <QrCode className="w-4 h-4 shrink-0" />
-            <span className="hidden sm:inline">
-              {whatsappStatus === 'connected' 
-                ? '🟢 Linked' 
-                : whatsappStatus === 'syncing' 
-                ? '🔄 Syncing...' 
-                : 'Link Device (QR)'}
-            </span>
-            <span className="sm:hidden text-[11px]">
-              {whatsappStatus === 'connected' 
-                ? 'Linked' 
-                : whatsappStatus === 'syncing' 
-                ? 'Sync...' 
-                : 'QR'}
-            </span>
-          </button>
-
           {/* Meta Cloud API Live Bridge Toggle */}
           <button
             type="button"
@@ -200,9 +150,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
             <span className="hidden sm:inline">Meta API</span>
             <span className="sm:hidden text-[11px]">API</span>
           </button>
-
-          {/* Real-time WhatsApp Blinking Bell Notification (Global across all CRM views) */}
-          <BlinkingBellNotification variant="top-header" />
 
           {/* Authenticated User Profile Badge & Dropdown */}
           <div className="relative" ref={dropdownRef}>

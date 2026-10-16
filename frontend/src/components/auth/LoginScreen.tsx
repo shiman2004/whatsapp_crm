@@ -57,6 +57,7 @@ export const LoginScreen: React.FC = () => {
     try { return JSON.parse(localStorage.getItem('rw_crm_deleted_users') || '[]'); } catch { return []; }
   })();
   const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false;
+  const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
   const rwcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
   const crasCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'CRAS');
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
@@ -126,7 +127,8 @@ export const LoginScreen: React.FC = () => {
     setErrorMsg(null);
 
     if (portalView === 'super_admin') {
-      setIdentifierInput('admin@royalwellness.lk');
+      const firstAdmin = superAdmins[0];
+      setIdentifierInput(firstAdmin ? firstAdmin.email : 'mnmshiman@gmail.com');
       setPasswordInput('admin');
     } else if (portalView === 'rwc') {
       const firstRwc = rwcCoordinators[0];
@@ -141,7 +143,7 @@ export const LoginScreen: React.FC = () => {
       setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('staff');
     }
-  }, [portalView, rwcCoordinators.length, crasCoordinators.length, leadsOfficers.length]);
+  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, leadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
@@ -508,7 +510,23 @@ export const LoginScreen: React.FC = () => {
                 {currentMeta.accountLabel}
               </label>
               
-              {portalView === 'rwc' && rwcCoordinators.length > 0 ? (
+              {portalView === 'super_admin' && superAdmins.length > 0 ? (
+                <select
+                  value={identifierInput}
+                  onChange={(e) => {
+                    setIdentifierInput(e.target.value);
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#00a884] transition-colors cursor-pointer"
+                >
+                  {superAdmins.map((a: any) => (
+                    <option key={a.id} value={a.email} className="bg-[#111b21] text-white">
+                      {a.fullName} — Super Admin ({a.branch || 'Executive'})
+                    </option>
+                  ))}
+                </select>
+              ) : portalView === 'rwc' && rwcCoordinators.length > 0 ? (
                 <select
                   value={identifierInput}
                   onChange={(e) => {

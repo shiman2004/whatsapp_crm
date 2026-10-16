@@ -38,7 +38,9 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
-  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  // Table view keeps the overall pipeline visible in one consolidated workspace;
+  // Kanban remains available from the existing view toggle.
+  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 

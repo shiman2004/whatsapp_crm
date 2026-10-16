@@ -3756,12 +3756,30 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanSecret = (secret || '').trim();
 
-    const matchedUser = users.find(u => 
+    const userPool = [...users];
+    for (const initU of INITIAL_USERS) {
+      if (!userPool.some(u => u.id === initU.id)) {
+        userPool.push(initU);
+      }
+    }
+
+    const matchedUser = userPool.find(u => 
       u.email.toLowerCase() === cleanId || 
       u.id.toLowerCase() === cleanId ||
       u.fullName.toLowerCase() === cleanId ||
+      (u.fullName.toLowerCase().replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')) ||
       (u.phone && u.phone.includes(cleanId))
     );
+
+    if (matchedUser && !users.some(u => u.id === matchedUser.id)) {
+      setUsers(prev => [...prev, matchedUser]);
+      try {
+        const stored = JSON.parse(localStorage.getItem('rw_crm_users') || '[]');
+        if (!stored.some((u: any) => u.id === matchedUser.id)) {
+          localStorage.setItem('rw_crm_users', JSON.stringify([...stored, matchedUser]));
+        }
+      } catch (e) {}
+    }
 
     if (!matchedUser) {
       return { success: false, error: 'Staff account not found. Check email or select profile.' };

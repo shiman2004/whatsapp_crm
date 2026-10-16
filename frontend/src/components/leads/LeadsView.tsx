@@ -35,6 +35,9 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedLanguage, setSelectedLanguage] = useState('all');
   const [selectedCoordinator, setSelectedCoordinator] = useState('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [selectedStage, setSelectedStage] = useState('');
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
@@ -107,7 +110,15 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
       return false;
     }
 
-    // 5. Coordinator / Counsellor filter (Super Admin & Leads Officer)
+    // 5. Created date range filter (inclusive)
+    const createdDate = lead.createdAt.slice(0, 10);
+    if (dateFrom && createdDate < dateFrom) return false;
+    if (dateTo && createdDate > dateTo) return false;
+
+    // 6. Quick stage filter
+    if (selectedStage && lead.stage !== selectedStage) return false;
+
+    // 7. Coordinator / Counsellor filter (Super Admin & Leads Officer)
     if (canSeeBothCompanies && selectedCoordinator !== 'all') {
       if (selectedCoordinator === 'unassigned' && lead.assignedTo) return false;
       if (selectedCoordinator !== 'unassigned' && lead.assignedTo !== selectedCoordinator) return false;
@@ -315,6 +326,12 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
         setSelectedLanguage={setSelectedLanguage}
         selectedCoordinator={selectedCoordinator}
         setSelectedCoordinator={setSelectedCoordinator}
+        dateFrom={dateFrom}
+        setDateFrom={setDateFrom}
+        dateTo={dateTo}
+        setDateTo={setDateTo}
+        selectedStage={selectedStage}
+        setSelectedStage={setSelectedStage}
         viewMode={viewMode}
         setViewMode={setViewMode}
         onExportCsv={handleExportCsv}

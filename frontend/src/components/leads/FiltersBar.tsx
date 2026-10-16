@@ -21,6 +21,12 @@ interface FiltersBarProps {
   setSelectedLanguage: (lang: string) => void;
   selectedCoordinator: string;
   setSelectedCoordinator: (coord: string) => void;
+  dateFrom: string;
+  setDateFrom: (date: string) => void;
+  dateTo: string;
+  setDateTo: (date: string) => void;
+  selectedStage: string;
+  setSelectedStage: (stage: string) => void;
   viewMode: 'kanban' | 'table';
   setViewMode: (mode: 'kanban' | 'table') => void;
   onExportCsv: () => void;
@@ -36,12 +42,19 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   setSelectedLanguage,
   selectedCoordinator,
   setSelectedCoordinator,
+  dateFrom,
+  setDateFrom,
+  dateTo,
+  setDateTo,
+  selectedStage,
+  setSelectedStage,
   viewMode,
   setViewMode,
   onExportCsv,
   company = 'RWC'
 }) => {
-  const { categories, treatments, users, isSuperAdmin, isLeadsOfficer } = useCrm();
+  const [isFilterOpen, setIsFilterOpen] = React.useState(false);
+  const { categories, treatments, users, stages, isSuperAdmin, isLeadsOfficer } = useCrm();
 
   const isCras = company === 'CRAS';
   const isRwc = company === 'RWC';
@@ -65,6 +78,19 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
     ? "Search by patient name, phone (+94), serial..." 
     : "Search by name, phone (+94), serial...";
 
+  const activeFilterCount = Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + Number(Boolean(selectedStage));
+
+  const clearAllFilters = () => {
+    setSearchQuery('');
+    setSelectedCategory('all');
+    setSelectedLanguage('all');
+    setSelectedCoordinator('all');
+    setDateFrom('');
+    setDateTo('');
+    setSelectedStage('');
+    setIsFilterOpen(false);
+  };
+
   return (
     <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm dark:shadow-md">
       {/* Left: Search input */}
@@ -87,6 +113,56 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
 
       {/* Middle: Filter Dropdowns */}
       <div className="flex flex-wrap items-center gap-2">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setIsFilterOpen((open) => !open)}
+            aria-expanded={isFilterOpen}
+            aria-haspopup="dialog"
+            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors ${
+              activeFilterCount > 0
+                ? 'bg-teal-50 dark:bg-teal-500/15 border-teal-300 dark:border-teal-500/40 text-teal-700 dark:text-teal-300'
+                : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+            }`}
+          >
+            <Filter className="w-3.5 h-3.5" />
+            <span>Filter</span>
+            {activeFilterCount > 0 && <span className="min-w-4 h-4 px-1 rounded-full bg-teal-600 text-white text-[10px] leading-4 text-center">{activeFilterCount}</span>}
+          </button>
+          {isFilterOpen && (
+            <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-xl">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Date range</p>
+                {activeFilterCount > 0 && <button type="button" onClick={clearAllFilters} className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline">Clear filters</button>}
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <label className="text-[11px] text-slate-500 dark:text-slate-400">From
+                  <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500" />
+                </label>
+                <label className="text-[11px] text-slate-500 dark:text-slate-400">To
+                  <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500" />
+                </label>
+              </div>
+            </div>
+          )}
+        </div>
+        {/* Lead Stage Filter */}
+        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+          <Filter className={`w-3.5 h-3.5 ${selectedStage ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400'}`} />
+          <select
+            value={selectedStage}
+            onChange={(e) => setSelectedStage(e.target.value)}
+            aria-label="Filter by lead stage"
+            className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[150px] truncate"
+          >
+            <option value="" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Lead Stages</option>
+            {stages.filter((stage) => stage.isActive).sort((a, b) => a.orderIndex - b.orderIndex).map((stage) => (
+              <option key={stage.id} value={stage.key} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+                {stage.label}
+              </option>
+            ))}
+          </select>
+        </div>
         {/* Category / Course Filter */}
         <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
           {isCras ? (

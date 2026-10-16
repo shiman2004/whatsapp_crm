@@ -509,7 +509,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                           title={`Source: ${sourceInfo.label}. Click to switch acquisition channel.`}
                         >
                           {sourceInfo.icon}
-                          <span>{sourceInfo.label}</span>
                         </div>
                         {canModifyAssignment(lead) && (
                           <select

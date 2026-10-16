@@ -4068,7 +4068,9 @@ const server = http.createServer(async (req, res) => {
           }
 
           // Company change authorization: Only Super Admin and Leads Officer can change company
-          if (payload.company !== undefined || payload.source !== undefined) {
+          const isExplicitCompanyChange = payload.company !== undefined || 
+            (payload.source !== undefined && ['CRAS', 'RWC'].includes(String(payload.source).toUpperCase()));
+          if (isExplicitCompanyChange) {
             const isAuthorized = authUser.role === 'super_admin' || authUser.role === 'leads_officer';
             if (!isAuthorized) {
               res.writeHead(403, { 'Content-Type': 'application/json' });
@@ -4090,10 +4092,10 @@ const server = http.createServer(async (req, res) => {
           if (payload.lastCustomerMessageAt !== undefined) {
             updateData.lastCustomerMessageAt = payload.lastCustomerMessageAt ? new Date(payload.lastCustomerMessageAt) : null;
           }
-          if (payload.company !== undefined || payload.source !== undefined) {
-            const companyCode = (payload.company || payload.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+
+          if (payload.company !== undefined) {
+            const companyCode = String(payload.company).toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
             updateData.company = companyCode;
-            updateData.source = companyCode;
 
             // When company changes, reset treatment/course and unassign coordinator if they belong to another company
             const prevCompany = resolveLeadCompany(targetLead);
@@ -4102,7 +4104,6 @@ const server = http.createServer(async (req, res) => {
               updateData.categoryId = null;
               updateData.serialNumber = null;
 
-              // If coordinator belongs to opposite company, unassign so proper company staff can be assigned
               if (targetLead?.assignedCoordinator) {
                 const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
                 if (coordComp !== companyCode) {
@@ -4113,6 +4114,36 @@ const server = http.createServer(async (req, res) => {
                   updateData.stage = 'new';
                 }
               }
+            }
+          }
+
+          if (payload.source !== undefined) {
+            const rawSrc = String(payload.source).trim();
+            const srcUpper = rawSrc.toUpperCase();
+            if (srcUpper === 'CRAS' || srcUpper === 'RWC') {
+              updateData.source = srcUpper;
+              if (payload.company === undefined) {
+                updateData.company = srcUpper;
+                const prevCompany = resolveLeadCompany(targetLead);
+                if (prevCompany !== srcUpper) {
+                  updateData.treatmentId = null;
+                  updateData.categoryId = null;
+                  updateData.serialNumber = null;
+                  if (targetLead?.assignedCoordinator) {
+                    const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
+                    if (coordComp !== srcUpper) {
+                      updateData.assignedTo = null;
+                      updateData.assignedById = null;
+                      updateData.assignedByName = null;
+                      updateData.assignedAt = null;
+                      updateData.stage = 'new';
+                    }
+                  }
+                }
+              }
+            } else {
+              // Acquisition channel: facebook, instagram, whatsapp, website, etc.
+              updateData.source = rawSrc.toLowerCase();
             }
           }
           updateData.updatedAt = new Date();

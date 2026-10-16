@@ -113,6 +113,7 @@ interface CrmContextType {
   updateLeadTreatment: (leadId: string, treatmentId: string, customSerial?: string) => void;
   updateLeadLanguage: (leadId: string, language: 'en' | 'si' | 'ta') => void;
   updateLeadCompany: (leadId: string, company: CompanyCode) => void;
+  updateLeadSource: (leadId: string, source: string) => Promise<boolean>;
   addLeadNote: (leadId: string, note: string) => void;
   
   // Messaging actions
@@ -2240,6 +2241,52 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Company Updated', `Inquiry assigned to ${compConfig.name} (${compConfig.tag})`, 'success');
   };
 
+  // Update lead acquisition source channel (e.g. 'whatsapp', 'facebook', 'instagram', 'website')
+  const updateLeadSource = async (leadId: string, newSource: string): Promise<boolean> => {
+    const targetLead = leads.find(l => l.id === leadId);
+    if (!targetLead) return false;
+
+    const normalizedSource = newSource.trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    setLeads(prev => prev.map(l => {
+      if (l.id === leadId) {
+        return {
+          ...l,
+          source: normalizedSource,
+          updatedAt: nowIso
+        };
+      }
+      return l;
+    }));
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/leads/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+          'x-coordinator-id': currentUser?.id || 'user-admin-1'
+        },
+        body: JSON.stringify({
+          leadId,
+          source: normalizedSource
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) {
+        notify('Source Update Failed', data.error || 'Failed to update lead source.', 'warning');
+        return false;
+      }
+      const label = normalizedSource === 'facebook' ? 'Facebook' : normalizedSource === 'instagram' ? 'Instagram' : normalizedSource === 'whatsapp' ? 'WhatsApp' : normalizedSource;
+      notify('Lead Source Updated', `Source set to ${label}`, 'success');
+      return true;
+    } catch (err) {
+      console.warn('Could not sync lead source update to backend:', err);
+      return false;
+    }
+  };
+
   // Add internal note
   const addLeadNote = (leadId: string, noteText: string) => {
     if (!noteText.trim()) return;
@@ -4178,6 +4225,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateLeadTreatment,
     updateLeadLanguage,
     updateLeadCompany,
+    updateLeadSource,
     addLeadNote,
     sendMessage,
     replyingMessage,

@@ -42,6 +42,7 @@ export const StageManagementTab: React.FC = () => {
   const [label, setLabel] = useState('');
   const [description, setDescription] = useState('');
   const [color, setColor] = useState('#6366f1');
+  const [company, setCompany] = useState<'ALL' | 'RWC' | 'CRAS'>('ALL');
   const [addError, setAddError] = useState('');
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
 
@@ -50,8 +51,12 @@ export const StageManagementTab: React.FC = () => {
   const [editLabel, setEditLabel] = useState('');
   const [editDescription, setEditDescription] = useState('');
   const [editColor, setEditColor] = useState('#6366f1');
+  const [editCompany, setEditCompany] = useState<'ALL' | 'RWC' | 'CRAS'>('ALL');
   const [editError, setEditError] = useState('');
   const [isSubmittingEdit, setIsSubmittingEdit] = useState(false);
+
+  // Filter Company Scope tab
+  const [companyFilter, setCompanyFilter] = useState<'ALL' | 'RWC' | 'CRAS' | 'ALL_SCOPE'>('ALL');
 
   // Toggle Confirm Modal State
   const [togglingStage, setTogglingStage] = useState<LeadStageConfig | null>(null);
@@ -108,6 +113,7 @@ export const StageManagementTab: React.FC = () => {
     setLabel('');
     setDescription('');
     setColor(PRESET_COLORS[9]); // Indigo
+    setCompany('ALL');
     setAddError('');
     setShowAddModal(true);
   };
@@ -147,6 +153,7 @@ export const StageManagementTab: React.FC = () => {
       label: cleanLabel,
       description: description.trim() || undefined,
       color,
+      company,
       orderIndex: maxOrder + 1,
     });
 
@@ -164,6 +171,7 @@ export const StageManagementTab: React.FC = () => {
     setEditLabel(s.label);
     setEditDescription(s.description || '');
     setEditColor(s.color || '#6366f1');
+    setEditCompany((s.company as 'ALL' | 'RWC' | 'CRAS') || 'ALL');
     setEditError('');
   };
 
@@ -192,6 +200,7 @@ export const StageManagementTab: React.FC = () => {
       label: cleanLabel,
       description: editDescription.trim() || undefined,
       color: editColor,
+      company: editCompany
     });
 
     setIsSubmittingEdit(false);
@@ -259,13 +268,61 @@ export const StageManagementTab: React.FC = () => {
         </div>
       </div>
 
-      {/* Control Bar: Title & Add Button */}
-      <div className="flex items-center justify-between bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
+      {/* Control Bar: Title, Company Filter & Add Button */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-white dark:bg-slate-900/60 p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm">
         <div className="flex items-center gap-2">
-          <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400" />
+          <Layers className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
           <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
-            Pipeline Column Display Sequence (Ordered Left to Right)
+            Pipeline Stages Sequence (Ordered Left to Right)
           </span>
+        </div>
+
+        {/* Company Scope Filter Tabs */}
+        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+          <button
+            type="button"
+            onClick={() => setCompanyFilter('ALL')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              companyFilter === 'ALL'
+                ? 'bg-white dark:bg-slate-800 text-slate-900 dark:text-white shadow-sm'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            All Stages
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompanyFilter('ALL_SCOPE')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              companyFilter === 'ALL_SCOPE'
+                ? 'bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            Both Companies
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompanyFilter('RWC')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              companyFilter === 'RWC'
+                ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            RWC Only
+          </button>
+          <button
+            type="button"
+            onClick={() => setCompanyFilter('CRAS')}
+            className={`px-2.5 py-1 rounded-lg font-medium transition-all ${
+              companyFilter === 'CRAS'
+                ? 'bg-sky-500/20 text-sky-700 dark:text-sky-300 border border-sky-500/30'
+                : 'text-slate-500 hover:text-slate-800 dark:hover:text-slate-200'
+            }`}
+          >
+            CRAS Only
+          </button>
         </div>
 
         <button
@@ -285,6 +342,7 @@ export const StageManagementTab: React.FC = () => {
               <tr className="bg-slate-50 dark:bg-slate-950/80 text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
                 <th className="py-3 px-4 w-16 text-center">Order</th>
                 <th className="py-3 px-4">Stage Label & Key</th>
+                <th className="py-3 px-4">Company Scope</th>
                 <th className="py-3 px-4">Description</th>
                 <th className="py-3 px-4">Color Tag</th>
                 <th className="py-3 px-4">System Guard</th>
@@ -293,7 +351,13 @@ export const StageManagementTab: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
-              {sortedStages.map((stage, idx) => {
+              {sortedStages
+                .filter(s => {
+                  if (companyFilter === 'ALL') return true;
+                  if (companyFilter === 'ALL_SCOPE') return !s.company || s.company === 'ALL';
+                  return s.company === companyFilter;
+                })
+                .map((stage, idx) => {
                 const isSystem = isSystemStage(stage);
                 const isActive = stage.isActive !== false;
                 const isFirst = idx === 0;
@@ -341,6 +405,23 @@ export const StageManagementTab: React.FC = () => {
                           <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono">{stage.key}</p>
                         </div>
                       </div>
+                    </td>
+
+                    {/* Company Scope */}
+                    <td className="py-3.5 px-4">
+                      <span className={`inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${
+                        stage.company === 'RWC'
+                          ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30'
+                          : stage.company === 'CRAS'
+                          ? 'bg-sky-500/15 text-sky-700 dark:text-sky-400 border border-sky-500/30'
+                          : 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/30'
+                      }`}>
+                        {stage.company === 'RWC'
+                          ? 'Royal Wellness (RWC)'
+                          : stage.company === 'CRAS'
+                          ? 'CRAS College (CRAS)'
+                          : 'Both Companies'}
+                      </span>
                     </td>
 
                     {/* Description */}
@@ -527,6 +608,50 @@ export const StageManagementTab: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Company Pipeline Scope <span className="text-indigo-400">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setCompany('ALL')}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                      company === 'ALL'
+                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 ring-1 ring-purple-500/50'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    Both Companies
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompany('RWC')}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                      company === 'RWC'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 ring-1 ring-emerald-500/50'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    Royal Wellness (RWC)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setCompany('CRAS')}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                      company === 'CRAS'
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 ring-1 ring-sky-500/50'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    CRAS College
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 mt-1">
+                  Configure whether this pipeline stage appears on Kanban for Both Companies, RWC only, or CRAS only.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
                   Description / Qualification Criteria
                 </label>
                 <textarea
@@ -621,6 +746,47 @@ export const StageManagementTab: React.FC = () => {
                   onChange={(e) => setEditLabel(e.target.value)}
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Company Pipeline Scope <span className="text-indigo-400">*</span>
+                </label>
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditCompany('ALL')}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                      editCompany === 'ALL'
+                        ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 ring-1 ring-purple-500/50'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    Both Companies
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditCompany('RWC')}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                      editCompany === 'RWC'
+                        ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/50 ring-1 ring-emerald-500/50'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    Royal Wellness (RWC)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setEditCompany('CRAS')}
+                    className={`px-3 py-2 rounded-xl text-xs font-semibold border transition-all text-center ${
+                      editCompany === 'CRAS'
+                        ? 'bg-sky-500/20 text-sky-300 border-sky-500/50 ring-1 ring-sky-500/50'
+                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                    }`}
+                  >
+                    CRAS College
+                  </button>
+                </div>
               </div>
 
               <div>

@@ -2560,6 +2560,7 @@ const server = http.createServer(async (req, res) => {
         const label = payload.label ? String(payload.label).trim() : null;
         const description = payload.description !== undefined ? String(payload.description).trim() : undefined;
         const color = payload.color ? String(payload.color).trim() : undefined;
+        const company = payload.company !== undefined ? String(payload.company).trim() : undefined;
 
         const prisma = getPrisma();
         if (prisma && getDbStatus()) {
@@ -2575,12 +2576,13 @@ const server = http.createServer(async (req, res) => {
           const newLabel = label || current.label;
           const newDesc = description !== undefined ? description : current.description;
           const newColor = color || current.color;
+          const newCompany = company !== undefined ? company : (current.company || 'ALL');
 
           await prisma.$executeRawUnsafe(`
             UPDATE public.lead_stages 
-            SET label = $1, description = $2, color = $3, updated_at = NOW()
-            WHERE id = $4 OR key = $4;
-          `, newLabel, newDesc, newColor, stageId);
+            SET label = $1, description = $2, color = $3, company = $4, updated_at = NOW()
+            WHERE id = $5 OR key = $5;
+          `, newLabel, newDesc, newColor, newCompany, stageId);
 
           broadcastScopedSSE(null, {
             type: 'STAGE_CONFIG_UPDATED',
@@ -2588,11 +2590,12 @@ const server = http.createServer(async (req, res) => {
             stageId: current.id,
             stageKey: current.key,
             label: newLabel,
-            color: newColor
+            color: newColor,
+            company: newCompany
           });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, stage: { ...current, label: newLabel, description: newDesc, color: newColor } }));
+          res.end(JSON.stringify({ success: true, stage: { ...current, label: newLabel, description: newDesc, color: newColor, company: newCompany } }));
           return;
         }
 
@@ -5246,6 +5249,8 @@ const server = http.createServer(async (req, res) => {
                 file_name as "fileName", 
                 file_size as "fileSize", 
                 is_pinned as "isPinned", 
+                target_staff_id as "targetStaffId",
+                target_staff_name as "targetStaffName",
                 created_at as "createdAt"
               FROM public.team_broadcasts 
               ORDER BY is_pinned DESC, created_at DESC 
@@ -5292,6 +5297,8 @@ const server = http.createServer(async (req, res) => {
           const fileSize = payload.fileSize ? Number(payload.fileSize) : null;
           const isPinned = Boolean(payload.isPinned);
           const company = payload.company || 'ALL'; // 'ALL', 'RWC', 'CRAS'
+          const targetStaffId = payload.targetStaffId ? String(payload.targetStaffId).trim() : null;
+          const targetStaffName = payload.targetStaffName ? String(payload.targetStaffName).trim() : null;
 
           if (!content && !mediaUrl) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -5313,6 +5320,8 @@ const server = http.createServer(async (req, res) => {
             fileName,
             fileSize,
             isPinned,
+            targetStaffId,
+            targetStaffName,
             createdAt: new Date().toISOString()
           };
 
@@ -5320,8 +5329,8 @@ const server = http.createServer(async (req, res) => {
             await prisma.$executeRawUnsafe(`
               INSERT INTO public.team_broadcasts (
                 id, sender_id, sender_name, sender_role, company, title, content, 
-                media_type, media_url, file_name, file_size, is_pinned, created_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, NOW());
+                media_type, media_url, file_name, file_size, is_pinned, target_staff_id, target_staff_name, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, NOW());
             `, 
               newBroadcast.id, 
               newBroadcast.senderId, 
@@ -5334,7 +5343,9 @@ const server = http.createServer(async (req, res) => {
               newBroadcast.mediaUrl, 
               newBroadcast.fileName, 
               newBroadcast.fileSize, 
-              newBroadcast.isPinned
+              newBroadcast.isPinned,
+              newBroadcast.targetStaffId,
+              newBroadcast.targetStaffName
             ).catch(e => console.warn('⚠️ Could not insert broadcast into Supabase:', e.message));
           }
 

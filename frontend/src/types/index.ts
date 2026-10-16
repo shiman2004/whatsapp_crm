@@ -303,5 +303,7 @@ export interface TeamBroadcast {
   fileName?: string;
   fileSize?: number;
   isPinned?: boolean;
+  targetStaffId?: string;
+  targetStaffName?: string;
   createdAt: string;
 }

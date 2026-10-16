@@ -449,20 +449,20 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[1400px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[1200px]">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
             <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
-              <th className="py-3.5 px-4 w-[230px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
-              <th className="py-3.5 px-3 w-[120px]">Source</th>
-              <th className="py-3.5 px-2 text-center w-[60px]">Lang</th>
-              <th className="py-3.5 px-4 w-[180px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
-              <th className="py-3.5 px-4 w-[140px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
-              <th className="py-3.5 px-4 w-[210px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
-              <th className="py-3.5 px-3 w-[130px]">Assigned By</th>
-              <th className="py-3.5 px-3 w-[150px]">1st Response</th>
-              <th className="py-3.5 px-3 w-[140px]">24h Window</th>
-              <th className="py-3.5 px-4 w-[140px]">Inquiry Time</th>
-              <th className="py-3.5 px-4 text-right w-[85px]">Action</th>
+              <th className="py-2.5 px-2.5 w-[135px]">Inquiry Time</th>
+              <th className="py-2.5 px-2.5 w-[210px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
+              <th className="py-2.5 px-2 w-[52px] text-center">Source</th>
+              <th className="py-2.5 px-2 text-center w-[55px]">Lang</th>
+              <th className="py-2.5 px-2.5 w-[170px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
+              <th className="py-2.5 px-2.5 w-[130px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
+              <th className="py-2.5 px-2.5 w-[190px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
+              <th className="py-2.5 px-2 w-[115px]">Assigned By</th>
+              <th className="py-2.5 px-2 w-[135px]">1st Response</th>
+              <th className="py-2.5 px-2 w-[125px]">24h Window</th>
+              <th className="py-2.5 px-2 text-right w-[75px]">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -492,8 +492,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       isSelected ? 'bg-teal-950/30' : ''
                     }`}
                   >
-                    {/* 1. Customer Contact & Authentic Avatar */}
-                    <td className="py-3.5 px-4">
+                    {/* 1. Inquiry Time */}
+                    <td className="py-2.5 px-2.5 text-slate-400 font-mono text-[10px] whitespace-nowrap">
+                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                      {new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+
+                    {/* 2. Customer Contact & Authentic Avatar */}
+                    <td className="py-2.5 px-2.5">
                       <div className="flex items-center gap-2.5">
                         {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
                         <div className="min-w-0">
@@ -506,15 +512,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 2. Source Channel (Facebook, Instagram, WhatsApp, Website) */}
-                    <td className="py-3.5 px-3" onClick={(e) => e.stopPropagation()}>
+                    {/* 3. Source Channel (icon-only) */}
+                    <td className="py-2.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <div 
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[10px] font-semibold border cursor-pointer transition-all shadow-xs ${sourceInfo.badgeClass}`}
+                          className={`inline-flex items-center justify-center w-7 h-7 rounded-md text-[10px] font-semibold border cursor-pointer transition-all shadow-xs ${sourceInfo.badgeClass}`}
                           title={`Source: ${sourceInfo.label}. Click to switch acquisition channel.`}
                         >
                           {sourceInfo.icon}
-                          <span>{sourceInfo.label}</span>
                         </div>
                         {canModifyAssignment(lead) && (
                           <select
@@ -533,15 +538,15 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 3. Language */}
-                    <td className="py-3.5 px-2 text-center">
+                    {/* 4. Language */}
+                    <td className="py-2.5 px-2 text-center">
                       <span className="px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px] bg-slate-800 text-slate-300 border border-slate-700">
                         {lead.language}
                       </span>
                     </td>
 
-                    {/* 4. Treatment / Course */}
-                    <td className="py-3.5 px-4">
+                    {/* 5. Treatment / Course */}
+                    <td className="py-2.5 px-2.5">
                       <div>
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <p className={`font-semibold ${isCrasLead ? 'text-rose-400' : 'text-teal-400'}`}>
@@ -561,13 +566,13 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 5. Stage */}
-                    <td className="py-3.5 px-4">
+                    {/* 6. Stage */}
+                    <td className="py-2.5 px-2.5">
                       <StageBadge stage={lead.stage} />
                     </td>
 
-                    {/* 6. Coordinator */}
-                    <td className="py-3.5 px-4" onClick={(e) => e.stopPropagation()}>
+                    {/* 7. Coordinator */}
+                    <td className="py-2.5 px-2.5" onClick={(e) => e.stopPropagation()}>
                       {canModifyAssignment(lead) ? (
                         <select
                           value={lead.assignedTo || ''}
@@ -608,29 +613,23 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       )}
                     </td>
 
-                    {/* 7. Assigned By */}
-                    <td className="py-3.5 px-3">
+                    {/* 8. Assigned By */}
+                    <td className="py-2.5 px-2">
                       {renderAssignedByCell(lead)}
                     </td>
 
-                    {/* 8. 1st Response Time from Coordinator */}
-                    <td className="py-3.5 px-3">
+                    {/* 9. 1st Response Time from Coordinator */}
+                    <td className="py-2.5 px-2">
                       {renderFirstResponseCell(lead)}
                     </td>
 
-                    {/* 9. Real 24h Window Remaining Time */}
-                    <td className="py-3.5 px-3">
+                    {/* 10. Real 24h Window Remaining Time */}
+                    <td className="py-2.5 px-2">
                       {render24hWindowCell(lead)}
                     </td>
 
-                    {/* 10. Inquiry Time */}
-                    <td className="py-3.5 px-4 text-slate-400 font-mono text-[11px] whitespace-nowrap">
-                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
-                      {new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </td>
-
                     {/* 11. Action */}
-                    <td className="py-3.5 px-4 text-right">
+                    <td className="py-2.5 px-2 text-right">
                       <button
                         onClick={() => onSelectLead(lead.id)}
                         className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors"

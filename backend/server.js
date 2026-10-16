@@ -507,11 +507,31 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
 const CANONICAL_USERS = [
   {
     id: 'user-admin-1',
-    fullName: 'Super Admin',
+    fullName: 'Jahan',
     email: 'admin@royalwellness.lk',
     branch: 'Colombo (Head Office)',
     password: DEFAULT_ADMIN_PASSWORD_HASH,
     pin: DEFAULT_ADMIN_PIN_HASH,
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: '1124d646-210c-4a6a-8a62-4d408212e1f6',
+    fullName: 'Shiman',
+    email: 'mnmshiman@gmail.com',
+    branch: 'Colombo (Head Office)',
+    password: DEFAULT_ADMIN_PASSWORD_HASH,
+    pin: '7777',
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: 'c0129458-4141-4b77-aeab-4cb72afdb816',
+    fullName: 'Afrij',
+    email: 'afrij@royalwellness.lk',
+    branch: 'Colombo (Head Office)',
+    password: DEFAULT_ADMIN_PASSWORD_HASH,
+    pin: '1234',
     role: 'super_admin',
     active: true
   },
@@ -2187,7 +2207,9 @@ const server = http.createServer(async (req, res) => {
             id: true,
             fullName: true,
             email: true,
+            phone: true,
             branch: true,
+            company: true,
             role: true,
             active: true,
             createdAt: true,
@@ -2197,7 +2219,7 @@ const server = http.createServer(async (req, res) => {
         });
         if (admins && admins.length > 0) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(admins));
+          res.end(JSON.stringify({ success: true, superAdmins: admins }));
           return;
         }
       } catch (e) {
@@ -2208,13 +2230,15 @@ const server = http.createServer(async (req, res) => {
       id: u.id,
       fullName: u.fullName,
       email: u.email,
-      branch: u.branch,
+      phone: u.phone || null,
+      branch: u.branch || 'Colombo (Head Office)',
+      company: u.company || 'RWC',
       role: u.role,
       active: u.active !== false,
       createdAt: u.createdAt || new Date().toISOString()
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(memoryAdmins));
+    res.end(JSON.stringify({ success: true, superAdmins: memoryAdmins }));
     return;
   }
 
@@ -2226,46 +2250,99 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const { fullName, email, password, pin } = payload;
+        const fullName = String(payload.fullName || payload.name || '').trim();
+        const email = String(payload.email || '').trim().toLowerCase();
+        const phone = payload.phone ? String(payload.phone).trim() : null;
+        const branch = payload.branch ? String(payload.branch).trim() : 'Colombo (Head Office)';
+        const passwordPlain = payload.password ? String(payload.password).trim() : 'admin';
+        const cleanPin = String(payload.pin || '1234').trim().slice(0, 10);
+
         if (!fullName || !email) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'Full Name and Email are required.' }));
           return;
         }
-        const cleanEmail = email.trim().toLowerCase();
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid email address format.' }));
+          return;
+        }
+
         const prisma = getPrisma();
         let newAdmin = null;
         if (prisma && getDbStatus()) {
+          const existingUser = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } }
+          }).catch(() => null);
+
+          if (existingUser) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `An account with email "${email}" already exists.` 
+            }));
+            return;
+          }
+
           try {
             newAdmin = await prisma.user.create({
               data: {
-                fullName: fullName.trim(),
-                email: cleanEmail,
+                fullName,
+                email,
+                phone,
+                branch,
                 role: 'super_admin',
+                password: hashSecret(passwordPlain),
+                pin: cleanPin,
+                active: true
+              },
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                branch: true,
+                role: true,
                 active: true,
-                branch: 'Colombo (Head Office)',
-                password: password ? hashSecret(password) : DEFAULT_ADMIN_PASSWORD_HASH,
-                pin: pin ? hashSecret(pin) : DEFAULT_ADMIN_PIN_HASH
+                createdAt: true
               }
             });
           } catch (dbErr) {
             console.warn('DB error creating super admin:', dbErr.message);
           }
         }
+
         if (!newAdmin) {
           newAdmin = {
             id: `user-admin-${Date.now()}`,
-            fullName: fullName.trim(),
-            email: cleanEmail,
+            fullName,
+            email,
+            phone,
             role: 'super_admin',
             active: true,
-            branch: 'Colombo (Head Office)',
+            branch,
             createdAt: new Date().toISOString()
           };
           CANONICAL_USERS.push(newAdmin);
         }
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, user: newAdmin }));
+
+        console.log(`🛡️ [Super Admin Created] Added by ${authUser.fullName}: ${newAdmin.fullName} (${newAdmin.email})`);
+
+        broadcastScopedSSE(null, {
+          type: 'SUPER_ADMIN_CONFIG_UPDATED',
+          action: 'created',
+          user: newAdmin
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          user: newAdmin,
+          superAdmin: newAdmin,
+          message: `Super Admin account for ${newAdmin.fullName} created successfully.`
+        }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
@@ -2274,7 +2351,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // PATCH / PUT / POST: Update Super Admin Account (Full Name, Active Status)
+  // PATCH / PUT / POST: Update Super Admin Account (Full Name, Active Status, Last Admin Guard)
   if ((req.method === 'PATCH' || req.method === 'PUT' || req.method === 'POST') && pathname.startsWith('/api/admin/super-admins/')) {
     if (!requireSuperAdmin(authUser, res)) return;
     const adminId = pathname.replace('/api/admin/super-admins/', '').split('/')[0];
@@ -2283,36 +2360,118 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const updateData = {};
-        if (typeof payload.fullName === 'string' && payload.fullName.trim()) {
-          updateData.fullName = payload.fullName.trim();
-        }
-        if (typeof payload.active === 'boolean') {
-          updateData.active = payload.active;
-        }
-
         const prisma = getPrisma();
-        let updated = null;
+
         if (prisma && getDbStatus()) {
+          const targetUser = await prisma.user.findUnique({
+            where: { id: adminId }
+          }).catch(() => null);
+
+          if (!targetUser || targetUser.role !== 'super_admin') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
+            return;
+          }
+
+          // Guard: Cannot deactivate last active super admin
+          if (payload.active === false && targetUser.active === true) {
+            const activeAdminCount = await prisma.user.count({
+              where: { role: 'super_admin', active: true }
+            }).catch(() => 1);
+
+            if (activeAdminCount <= 1) {
+              console.warn(`⛔ [Lockout Prevented] Prevented deactivating last active Super Admin (${targetUser.email})`);
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                success: false, 
+                errorCode: 'LAST_ADMIN_LOCKOUT_PREVENTED',
+                error: 'Cannot deactivate the last active Super Admin account. At least one Super Admin must remain active.' 
+              }));
+              return;
+            }
+          }
+
+          const updateData = {};
+          if (typeof payload.fullName === 'string' && payload.fullName.trim()) {
+            updateData.fullName = payload.fullName.trim();
+          }
+          if (payload.phone !== undefined) {
+            updateData.phone = payload.phone ? String(payload.phone).trim() : null;
+          }
+          if (payload.branch) {
+            updateData.branch = String(payload.branch).trim();
+          }
+          if (typeof payload.active === 'boolean') {
+            updateData.active = payload.active;
+          }
+          if (payload.password) {
+            updateData.password = hashSecret(String(payload.password).trim());
+          }
+          if (payload.pin) {
+            updateData.pin = String(payload.pin).trim().slice(0, 10);
+          }
+
+          let updated = null;
           try {
             updated = await prisma.user.update({
               where: { id: adminId },
-              data: updateData
+              data: updateData,
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                branch: true,
+                role: true,
+                active: true,
+                createdAt: true,
+                updatedAt: true
+              }
             });
           } catch (dbErr) {
             console.warn('DB error updating super admin:', dbErr.message);
           }
+
+          if (updated) {
+            broadcastScopedSSE(null, {
+              type: 'SUPER_ADMIN_CONFIG_UPDATED',
+              action: 'updated',
+              user: updated
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: true, 
+              user: updated,
+              superAdmin: updated,
+              message: `Super Admin account "${updated.fullName}" updated successfully.`
+            }));
+            return;
+          }
         }
 
-        // Also update memory canonical list
+        // Memory fallback
         const memIdx = CANONICAL_USERS.findIndex(u => u.id === adminId);
         if (memIdx !== -1) {
+          const updateData = {};
+          if (typeof payload.fullName === 'string' && payload.fullName.trim()) updateData.fullName = payload.fullName.trim();
+          if (typeof payload.active === 'boolean') updateData.active = payload.active;
           CANONICAL_USERS[memIdx] = { ...CANONICAL_USERS[memIdx], ...updateData };
-          if (!updated) updated = CANONICAL_USERS[memIdx];
+          const updated = CANONICAL_USERS[memIdx];
+
+          broadcastScopedSSE(null, {
+            type: 'SUPER_ADMIN_CONFIG_UPDATED',
+            action: 'updated',
+            user: updated
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, user: updated, superAdmin: updated }));
+          return;
         }
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, user: updated || { id: adminId, ...updateData } }));
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
@@ -2334,6 +2493,19 @@ const server = http.createServer(async (req, res) => {
 
     const prisma = getPrisma();
     if (prisma && getDbStatus()) {
+      const activeAdminCount = await prisma.user.count({
+        where: { role: 'super_admin', active: true }
+      }).catch(() => 1);
+
+      if (activeAdminCount <= 1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: 'Cannot delete the last remaining Super Admin account.' 
+        }));
+        return;
+      }
+
       try {
         await prisma.user.delete({ where: { id: adminId } });
       } catch (dbErr) {
@@ -2345,6 +2517,12 @@ const server = http.createServer(async (req, res) => {
     if (memIdx !== -1) {
       CANONICAL_USERS.splice(memIdx, 1);
     }
+
+    broadcastScopedSSE(null, {
+      type: 'SUPER_ADMIN_CONFIG_UPDATED',
+      action: 'deleted',
+      deletedId: adminId
+    });
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, deletedId: adminId }));
@@ -3240,246 +3418,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // =============================================================================
-  // 11. REST: Super Admin Account Management (Strict RBAC & Lockout Prevention)
-  // =============================================================================
-
-  // 11a. GET /api/admin/super-admins (Super Admin: List all Super Admin accounts)
-  if (req.method === 'GET' && pathname === '/api/admin/super-admins') {
-    if (!requireSuperAdmin(authUser, res)) return;
-    const prisma = getPrisma();
-    if (prisma && getDbStatus()) {
-      try {
-        const superAdmins = await prisma.user.findMany({
-          where: { role: 'super_admin' },
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            phone: true,
-            role: true,
-            branch: true,
-            company: true,
-            active: true,
-            createdAt: true,
-            updatedAt: true
-          },
-          orderBy: { createdAt: 'asc' }
-        });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, superAdmins }));
-        return;
-      } catch (e) {}
-    }
-
-    const fallbackAdmin = CANONICAL_USERS.filter(u => u.role === 'super_admin').map(u => ({
-      id: u.id,
-      fullName: u.fullName,
-      email: u.email,
-      role: u.role,
-      branch: u.branch,
-      active: true,
-      createdAt: '2026-01-01T08:00:00Z'
-    }));
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, superAdmins: fallbackAdmin }));
-    return;
-  }
-
-  // 11b. POST /api/admin/super-admins (Super Admin: Create new Super Admin account)
-  if (req.method === 'POST' && pathname === '/api/admin/super-admins') {
-    if (!requireSuperAdmin(authUser, res)) return;
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const fullName = String(payload.fullName || payload.name || '').trim();
-        const email = String(payload.email || '').trim().toLowerCase();
-        const phone = payload.phone ? String(payload.phone).trim() : null;
-        const branch = payload.branch ? String(payload.branch).trim() : 'Colombo (Head Office)';
-        const passwordPlain = payload.password ? String(payload.password).trim() : 'admin';
-        const pinPlain = payload.pin ? String(payload.pin).trim() : '1234';
-
-        if (!fullName || !email) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Full name and email address are required.' }));
-          return;
-        }
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid email address format.' }));
-          return;
-        }
-
-        const prisma = getPrisma();
-        if (prisma && getDbStatus()) {
-          // Check for duplicate account email
-          const existingUser = await prisma.user.findFirst({
-            where: { email: { equals: email, mode: 'insensitive' } }
-          });
-
-          if (existingUser) {
-            res.writeHead(409, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ 
-              success: false, 
-              error: `An account with email "${email}" already exists.` 
-            }));
-            return;
-          }
-
-          const cleanPin = String(payload.pin || '1234').trim().slice(0, 10);
-          const newAdmin = await prisma.user.create({
-            data: {
-              fullName,
-              email,
-              phone,
-              branch,
-              role: 'super_admin',
-              password: hashSecret(passwordPlain),
-              pin: cleanPin,
-              active: true
-            },
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
-              phone: true,
-              branch: true,
-              role: true,
-              active: true,
-              createdAt: true
-            }
-          });
-
-          console.log(`🛡️ [Super Admin Created] Added by ${authUser.fullName}: ${newAdmin.fullName} (${newAdmin.email})`);
-
-          broadcastScopedSSE(null, {
-            type: 'SUPER_ADMIN_CONFIG_UPDATED',
-            action: 'created',
-            user: newAdmin
-          });
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            success: true, 
-            superAdmin: newAdmin,
-            message: `Super Admin account for ${newAdmin.fullName} created successfully.`
-          }));
-          return;
-        }
-
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Database unavailable' }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
-
-  // 11c. PATCH /api/admin/super-admins/:id (Super Admin: Edit account name or activate/deactivate with Last Admin Guard)
-  if ((req.method === 'PATCH' || req.method === 'PUT') && pathname.startsWith('/api/admin/super-admins/')) {
-    if (!requireSuperAdmin(authUser, res)) return;
-    const targetAdminId = pathname.split('/')[4];
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const prisma = getPrisma();
-        if (prisma && getDbStatus()) {
-          const targetUser = await prisma.user.findUnique({
-            where: { id: targetAdminId }
-          });
-
-          if (!targetUser || targetUser.role !== 'super_admin') {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
-            return;
-          }
-
-          // GUARD: Check if attempting to deactivate the last active Super Admin
-          if (payload.active === false && targetUser.active === true) {
-            const activeAdminCount = await prisma.user.count({
-              where: { role: 'super_admin', active: true }
-            });
-
-            if (activeAdminCount <= 1) {
-              console.warn(`⛔ [Lockout Prevented] Prevented deactivating last active Super Admin (${targetUser.email})`);
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ 
-                success: false, 
-                errorCode: 'LAST_ADMIN_LOCKOUT_PREVENTED',
-                error: 'Cannot deactivate the last active Super Admin account. At least one Super Admin must remain active.' 
-              }));
-              return;
-            }
-          }
-
-          const updateData = {};
-          if (payload.fullName) {
-            updateData.fullName = String(payload.fullName).trim();
-          }
-          if (payload.phone !== undefined) {
-            updateData.phone = payload.phone ? String(payload.phone).trim() : null;
-          }
-          if (payload.branch) {
-            updateData.branch = String(payload.branch).trim();
-          }
-          if (payload.active !== undefined) {
-            updateData.active = Boolean(payload.active);
-          }
-          if (payload.password) {
-            updateData.password = hashSecret(String(payload.password).trim());
-          }
-          if (payload.pin) {
-            updateData.pin = String(payload.pin).trim().slice(0, 10);
-          }
-
-          const updatedUser = await prisma.user.update({
-            where: { id: targetAdminId },
-            data: updateData,
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
-              phone: true,
-              branch: true,
-              role: true,
-              active: true,
-              createdAt: true,
-              updatedAt: true
-            }
-          });
-
-          broadcastScopedSSE(null, {
-            type: 'SUPER_ADMIN_CONFIG_UPDATED',
-            action: 'updated',
-            user: updatedUser
-          });
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            success: true, 
-            superAdmin: updatedUser,
-            message: `Super Admin account "${updatedUser.fullName}" updated successfully.`
-          }));
-          return;
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
 
   // 9. REST: Get Messages with RBAC & Coordinator Isolation
   if (req.method === 'GET' && pathname === '/api/messages') {

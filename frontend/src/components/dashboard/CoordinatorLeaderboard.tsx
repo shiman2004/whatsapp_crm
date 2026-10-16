@@ -45,6 +45,30 @@ function isLeadInTimeframe(lead: Lead, coordId: string, timeframe: TimePeriod): 
   return true;
 }
 
+const STAGE_COLOR_MAP: Record<string, string> = {
+  rose: '#f43f5e',
+  amber: '#f59e0b',
+  emerald: '#10b981',
+  purple: '#8b5cf6',
+  sky: '#0ea5e9',
+  slate: '#64748b',
+  zinc: '#71717a',
+  teal: '#0d9488',
+  red: '#ef4444',
+  orange: '#f97316',
+  indigo: '#6366f1',
+  pink: '#ec4899',
+  cyan: '#06b6d4',
+  lime: '#84cc16',
+  fuchsia: '#d946ef'
+};
+
+const getStageHexColor = (color?: string, fallback = '#6366f1'): string => {
+  if (!color) return fallback;
+  if (color.startsWith('#')) return color;
+  return STAGE_COLOR_MAP[color.toLowerCase()] || fallback;
+};
+
 export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({ 
   leads: propLeads, 
   companyFilter: initialCompanyFilter = 'all' 
@@ -393,7 +417,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                       <div className="flex items-center justify-center gap-1.5">
                         <span
                           className="w-2 h-2 rounded-full shrink-0"
-                          style={{ backgroundColor: stage.color || '#6366f1' }}
+                          style={{ backgroundColor: getStageHexColor(stage.color) }}
                         />
                         <span className="truncate max-w-[100px]" title={stage.label}>
                           {stage.label}
@@ -460,6 +484,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                       {dynamicStages.map((stage) => {
                         const cell = item.distribution[stage.key] || { count: 0, percentage: 0 };
                         const hasLeads = cell.count > 0;
+                        const stageHex = getStageHexColor(stage.color);
 
                         return (
                           <td
@@ -471,9 +496,9 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                                 <span
                                   className="px-2 py-0.5 rounded-md font-mono font-bold text-xs"
                                   style={{
-                                    backgroundColor: `${stage.color || '#6366f1'}25`,
-                                    color: stage.color || '#818cf8',
-                                    border: `1px solid ${stage.color || '#6366f1'}50`
+                                    backgroundColor: `${stageHex}25`,
+                                    color: stageHex,
+                                    border: `1px solid ${stageHex}50`
                                   }}
                                 >
                                   {cell.percentage}%

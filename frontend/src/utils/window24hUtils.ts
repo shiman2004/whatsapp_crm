@@ -116,30 +116,36 @@ export function getWindowStatus(remainingMs: number, hasCustomerMessage: boolean
 }
 
 /**
- * Calculates the latest customer inbound message timestamp.
+ * Calculates the latest customer inbound message timestamp for a specific lead.
  * Staff replies (outbound) are strictly excluded and NEVER reset this timestamp.
  */
 export function getLatestCustomerMessageTime(lead: Lead, messages?: Message[]): number {
   if (!lead) return 0;
 
-  const relevantMessages: Message[] = (messages && messages.length > 0)
+  const allMessages: Message[] = (messages && messages.length > 0)
     ? messages
     : ((lead as any).messages || []);
 
-  const inbound = relevantMessages.filter((m: Message) => m.direction === 'inbound');
+  // Strictly filter messages belonging ONLY to this specific lead or its customer
+  const leadInbound = allMessages.filter((m: Message) => {
+    const isMatch = m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId);
+    return isMatch && m.direction === 'inbound';
+  });
 
-  if (inbound.length > 0) {
-    const latest = inbound.reduce((latestMsg: Message, m: Message) => {
-      const t = new Date(m.createdAt).getTime();
-      const curLatest = new Date(latestMsg.createdAt).getTime();
+  if (leadInbound.length > 0) {
+    const latest = leadInbound.reduce((latestMsg: Message, m: Message) => {
+      const t = new Date(m.createdAt || (m as any).timestamp || 0).getTime();
+      const curLatest = new Date(latestMsg.createdAt || (latestMsg as any).timestamp || 0).getTime();
       return t > curLatest ? m : latestMsg;
     });
-    return new Date(latest.createdAt).getTime();
+    const ts = new Date(latest.createdAt || (latest as any).timestamp || 0).getTime();
+    if (!isNaN(ts) && ts > 0) return ts;
   }
 
+  // Fallback to lead-level recorded lastCustomerMessageAt
   if (lead.lastCustomerMessageAt) {
     const t = new Date(lead.lastCustomerMessageAt).getTime();
-    if (!isNaN(t)) return t;
+    if (!isNaN(t) && t > 0) return t;
   }
 
   return 0;

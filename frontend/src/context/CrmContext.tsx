@@ -563,7 +563,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       customerId: 'cust-demo-test',
       contactName: 'Ameera Jasmine',
       contactPhone: '+94 77 123 4567',
-      avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+      avatarUrl: undefined,
       messageText: notificationSettingsRef.current.showPreview 
         ? 'Hello! I would like to book a consultation for tomorrow morning please. 🌿' 
         : 'New WhatsApp message',

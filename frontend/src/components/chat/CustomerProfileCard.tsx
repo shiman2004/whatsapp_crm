@@ -66,11 +66,18 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
         {/* Patient Photo & Info Header */}
         <div className="flex items-center gap-2.5 pb-2.5 border-b border-slate-800/70">
           <div className="relative shrink-0">
-            <img
-              src={lead.customer?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
-              alt={lead.customer?.displayName}
-              className="w-10 h-10 rounded-full object-cover border border-teal-500/40 shadow"
-            />
+            {lead.customer?.avatarUrl && !lead.customer.avatarUrl.includes('photo-1534528741775-53994a69daeb') ? (
+              <img
+                src={lead.customer.avatarUrl}
+                alt={lead.customer?.displayName}
+                className="w-10 h-10 rounded-full object-cover border border-teal-500/40 shadow"
+                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full flex items-center justify-center font-bold text-xs bg-teal-600 text-white border border-teal-500/40 shadow">
+                {(lead.customer?.displayName || 'W').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'WA'}
+              </div>
+            )}
             <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 ring-2 ring-slate-950 absolute bottom-0 right-0"></span>
           </div>
           <div className="min-w-0 flex-1">

@@ -2404,15 +2404,15 @@ const server = http.createServer(async (req, res) => {
     }
     // Canonical fallback if DB offline
     const defaultStages = [
-      { id: 'stage-new', key: 'new', label: 'New Inquiry', description: 'Fresh uncontacted inbound lead', color: 'rose', orderIndex: 0, isActive: true, isSystem: true, company: 'ALL' },
-      { id: 'stage-assigned', key: 'assigned', label: 'Assigned', description: 'Lead assigned to coordinator or education counsellor', color: 'amber', orderIndex: 1, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-contacted', key: 'contacted', label: 'Contacted', description: 'Initial outreach made via WhatsApp or call', color: 'emerald', orderIndex: 2, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-potential', key: 'potential', label: 'Potential', description: 'Qualified prospect showing active interest', color: 'purple', orderIndex: 3, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', description: 'Ongoing treatment / course consultation & quotation', color: 'sky', orderIndex: 4, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: 'slate', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: 'zinc', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: 'teal', orderIndex: 7, isActive: true, isSystem: true, company: 'ALL' },
-      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: 'red', orderIndex: 8, isActive: true, isSystem: true, company: 'ALL' }
+      { id: 'stage-new', key: 'new', label: 'New Inquiry', description: 'Fresh uncontacted inbound lead', color: '#f43f5e', orderIndex: 0, isActive: true, isSystem: true, company: 'ALL' },
+      { id: 'stage-assigned', key: 'assigned', label: 'Assigned', description: 'Lead assigned to coordinator or education counsellor', color: '#f59e0b', orderIndex: 1, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-contacted', key: 'contacted', label: 'Contacted', description: 'Initial outreach made via WhatsApp or call', color: '#10b981', orderIndex: 2, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-potential', key: 'potential', label: 'Potential', description: 'Qualified prospect showing active interest', color: '#8b5cf6', orderIndex: 3, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', description: 'Ongoing treatment / course consultation & quotation', color: '#0ea5e9', orderIndex: 4, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: '#64748b', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: '#71717a', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: '#0d9488', orderIndex: 7, isActive: true, isSystem: true, company: 'ALL' },
+      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: '#ef4444', orderIndex: 8, isActive: true, isSystem: true, company: 'ALL' }
     ];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, stages: defaultStages }));
@@ -2510,10 +2510,15 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const stageIds = Array.isArray(payload.stageIds) ? payload.stageIds : [];
+        const stageIds = Array.isArray(payload.stageIds) && payload.stageIds.length > 0
+          ? payload.stageIds
+          : Array.isArray(payload.order) && payload.order.length > 0
+            ? payload.order.map(item => typeof item === 'string' ? item : item.id)
+            : [];
+
         if (stageIds.length === 0) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'stageIds array is required for reordering.' }));
+          res.end(JSON.stringify({ success: false, error: 'stageIds or order array is required for reordering.' }));
           return;
         }
 
@@ -2675,6 +2680,69 @@ const server = http.createServer(async (req, res) => {
         res.end(JSON.stringify({ success: false, error: err.message }));
       }
     });
+    return;
+  }
+
+  // 8f. DELETE /api/admin/stages/:id (Super Admin: Delete/Remove custom stage)
+  if (req.method === 'DELETE' && pathname.startsWith('/api/admin/stages/')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const parts = pathname.split('/');
+    const stageId = parts[4];
+
+    try {
+      const prisma = getPrisma();
+      if (prisma && getDbStatus()) {
+        const existing = await prisma.$queryRawUnsafe(`SELECT * FROM public.lead_stages WHERE id = $1 OR key = $1 LIMIT 1;`, stageId).catch(() => []);
+        if (!existing || existing.length === 0) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Stage not found' }));
+          return;
+        }
+
+        const current = existing[0];
+        const systemProtectedKeys = ['new', 'converted', 'lost'];
+        if (systemProtectedKeys.includes(current.key) || current.is_system) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ 
+            success: false, 
+            error: `System-required stage "${current.label}" cannot be deleted.` 
+          }));
+          return;
+        }
+
+        // Reassign any leads currently in this stage to 'new'
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.leads SET stage = 'new', updated_at = NOW() WHERE stage = $1::text::"LeadStage";`,
+          current.key
+        ).catch(() => null);
+
+        // Delete from lead_stages in Supabase
+        await prisma.$executeRawUnsafe(
+          `DELETE FROM public.lead_stages WHERE id = $1 OR key = $1;`,
+          current.id
+        );
+
+        broadcastScopedSSE(null, {
+          type: 'STAGE_CONFIG_UPDATED',
+          action: 'deleted',
+          stageId: current.id,
+          stageKey: current.key
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          message: `Stage "${current.label}" has been permanently removed.` 
+        }));
+        return;
+      }
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Stage removed (memory)' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
     return;
   }
 

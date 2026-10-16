@@ -11,6 +11,30 @@ interface KanbanBoardProps {
   company?: 'RWC' | 'CRAS' | 'ALL';
 }
 
+const STAGE_COLOR_MAP: Record<string, string> = {
+  rose: '#f43f5e',
+  amber: '#f59e0b',
+  emerald: '#10b981',
+  purple: '#8b5cf6',
+  sky: '#0ea5e9',
+  slate: '#64748b',
+  zinc: '#71717a',
+  teal: '#0d9488',
+  red: '#ef4444',
+  orange: '#f97316',
+  indigo: '#6366f1',
+  pink: '#ec4899',
+  cyan: '#06b6d4',
+  lime: '#84cc16',
+  fuchsia: '#d946ef'
+};
+
+const getStageHexColor = (color?: string, fallback = '#6366f1'): string => {
+  if (!color) return fallback;
+  if (color.startsWith('#')) return color;
+  return STAGE_COLOR_MAP[color.toLowerCase()] || fallback;
+};
+
 const DEFAULT_FALLBACK_STAGES: LeadStage[] = [
   'new',
   'assigned',
@@ -142,8 +166,8 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({ leads, onSelectLead, c
                   <span
                     className={`w-2.5 h-2.5 rounded-full shrink-0 border`}
                     style={{
-                      backgroundColor: col.color || undefined,
-                      borderColor: col.color ? `${col.color}80` : undefined
+                      backgroundColor: getStageHexColor(col.color),
+                      borderColor: `${getStageHexColor(col.color)}80`
                     }}
                   ></span>
                   <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 tracking-wide truncate">{displayLabel}</h3>

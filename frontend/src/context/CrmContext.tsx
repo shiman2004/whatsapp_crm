@@ -163,6 +163,7 @@ interface CrmContextType {
   updateStage: (id: string, updates: Partial<LeadStageConfig>) => Promise<{ success: boolean; error?: string }>;
   reorderStages: (order: { id: string; orderIndex: number }[]) => Promise<{ success: boolean; error?: string }>;
   toggleStageStatus: (id: string, isActive: boolean) => Promise<{ success: boolean; error?: string }>;
+  deleteStage: (id: string) => Promise<{ success: boolean; error?: string }>;
 
   fetchCourses: () => Promise<void>;
   addCourse: (course: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
@@ -2865,6 +2866,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const reorderStages = async (order: { id: string; orderIndex: number }[]) => {
     try {
+      const stageIdOrder = order.map(o => o.id);
+      // Optimistic local update so UI moves immediately
+      setStages(prev => {
+        const reordered = [...prev].sort((a, b) => {
+          const idxA = stageIdOrder.indexOf(a.id);
+          const idxB = stageIdOrder.indexOf(b.id);
+          return (idxA !== -1 ? idxA : 999) - (idxB !== -1 ? idxB : 999);
+        }).map((s, idx) => ({ ...s, orderIndex: idx }));
+        localStorage.setItem('rw_crm_stages', JSON.stringify(reordered));
+        return reordered;
+      });
+
       const token = await ensureValidAuthToken();
       const res = await fetch(`${API_BASE_URL}/api/admin/stages/reorder`, {
         method: 'PATCH',
@@ -2872,17 +2885,45 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ order })
+        body: JSON.stringify({ stageIds: stageIdOrder, order })
       });
       const data = await res.json();
       if (!res.ok) {
+        await fetchStages();
         return { success: false, error: data.error || 'Failed to reorder stages' };
       }
       await fetchStages();
       notify('Stages Reordered', 'Pipeline sequence updated successfully.', 'success');
       return { success: true };
     } catch (e: any) {
+      await fetchStages();
       return { success: false, error: e.message || 'Network error reordering stages' };
+    }
+  };
+
+  const deleteStage = async (id: string) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/stages/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to delete stage' };
+      }
+      setStages(prev => {
+        const next = prev.filter(s => s.id !== id && s.key !== id);
+        localStorage.setItem('rw_crm_stages', JSON.stringify(next));
+        return next;
+      });
+      await fetchStages();
+      notify('Stage Removed', 'Stage permanently removed from database.', 'success');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error deleting stage' };
     }
   };
 
@@ -4171,6 +4212,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateStage,
     reorderStages,
     toggleStageStatus,
+    deleteStage,
     fetchCourses,
     addCourse,
     updateCourse,

@@ -2316,7 +2316,7 @@ const server = http.createServer(async (req, res) => {
                 branch,
                 role: 'super_admin',
                 password: hashSecret(passwordPlain),
-                pin: cleanPin,
+                pin: hashSecret(cleanPin),
                 active: true
               },
               select: {
@@ -2429,7 +2429,7 @@ const server = http.createServer(async (req, res) => {
             updateData.password = hashSecret(String(payload.password).trim());
           }
           if (payload.pin) {
-            updateData.pin = String(payload.pin).trim().slice(0, 10);
+            updateData.pin = hashSecret(String(payload.pin).trim().slice(0, 10));
           }
 
           let updated = null;
@@ -5065,7 +5065,7 @@ const server = http.createServer(async (req, res) => {
                   id: desiredId,
                   fullName,
                   email: safeEmail,
-                  pin: cleanPin,
+                  pin: hashSecret(cleanPin),
                   phone,
                   role: role,
                   branch: branch,
@@ -5081,7 +5081,7 @@ const server = http.createServer(async (req, res) => {
                 data: {
                   fullName,
                   email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
-                  pin: cleanPin,
+                  pin: hashSecret(cleanPin),
                   phone,
                   role: role,
                   branch: branch,
@@ -5169,7 +5169,7 @@ const server = http.createServer(async (req, res) => {
         if (payload.name !== undefined && !payload.fullName) updateData.fullName = String(payload.name).trim();
         if (payload.branch !== undefined) updateData.branch = String(payload.branch).trim();
         if (payload.pin !== undefined && String(payload.pin).trim()) {
-          updateData.pin = String(payload.pin).trim();
+          updateData.pin = hashSecret(String(payload.pin).trim());
         }
         if (payload.password !== undefined && String(payload.password).trim()) {
           updateData.password = hashSecret(String(payload.password).trim());

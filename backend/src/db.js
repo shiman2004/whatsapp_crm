@@ -43,14 +43,20 @@ export const checkDbConnection = async () => {
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "source" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
     await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "company" VARCHAR(50) DEFAULT 'RWC';`).catch(() => null);
+    // NOTE: Postgres prepared statements allow only ONE command per call,
+    // so each DDL/DML statement must be sent separately.
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS public.company_lead_serials (
         company VARCHAR(10) PRIMARY KEY,
         next_value INTEGER NOT NULL DEFAULT 1
       );
+    `).catch((err) => console.warn('⚠️ company_lead_serials table provisioning skipped:', err.message));
+    await prisma.$executeRawUnsafe(`
       INSERT INTO public.company_lead_serials (company, next_value)
       VALUES ('RWC', 1), ('CRAS', 1)
       ON CONFLICT (company) DO NOTHING;
+    `).catch((err) => console.warn('⚠️ company_lead_serials seed skipped:', err.message));
+    await prisma.$executeRawUnsafe(`
       CREATE OR REPLACE FUNCTION public.next_company_lead_serial(company_code VARCHAR)
       RETURNS VARCHAR LANGUAGE plpgsql AS $serial$
       DECLARE normalized_company VARCHAR(10) := CASE WHEN upper(company_code) = 'CRAS' THEN 'CRAS' ELSE 'RWC' END;
@@ -61,7 +67,7 @@ export const checkDbConnection = async () => {
         RETURN normalized_company || '-' || lpad(allocated_value::text, 4, '0');
       END;
       $serial$;
-    `).catch(() => null);
+    `).catch((err) => console.warn('⚠️ next_company_lead_serial() provisioning skipped:', err.message));
 
     // Ensure media_files table exists for persistent image/audio storage
     await prisma.$executeRawUnsafe(`

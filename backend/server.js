@@ -5,7 +5,6 @@ import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting, allocateCompanyLeadSerial as allocatePersistedCompanyLeadSerial } from './src/db.js';
-import { sessionManager } from './src/sessionManager.js';
 import { resolveCompany, resolveLeadCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './src/audioConverter.js';
@@ -321,9 +320,6 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
     } catch (e) {}
   });
 }
-
-// Attach isolated broadcaster to session manager
-sessionManager.setSseEmitter(broadcastScopedSSE);
 
 /**
  * Safe Diagnostic Logger (No sensitive tokens, credentials, or QR data)
@@ -1088,25 +1084,21 @@ const server = http.createServer(async (req, res) => {
   // Central Clinic WhatsApp Master Session ID
   const masterLineId = 'user-admin-1';
 
-  // 1. Health & Central Clinic WhatsApp Status
+  // 1. Health & Central Clinic WhatsApp Status (Meta Cloud API Native)
   if (req.method === 'GET' && (pathname === '/api/status' || pathname === '/api/whatsapp/status')) {
-    const runtimeSession = sessionManager.getRuntimeSession(masterLineId);
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
-
-    const status = runtimeSession?.status || dbRecord.status || 'disconnected';
-    const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
-    const hasQr = Boolean(runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl);
-
-    logWaSessionDebug('/api/status', authUser, masterLineId, runtimeSession, dbRecord);
+    const hasMeta = Boolean((metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim());
+    const status = hasMeta ? 'connected' : 'disconnected';
+    const phone = '94706393353';
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status,
       phone,
-      hasQr,
+      hasQr: false,
+      provider: 'meta_cloud_api',
       coordinatorId: masterLineId,
       authenticatedUserId: authUser.id,
-      sessionId: runtimeSession?.sessionId || dbRecord.id,
+      sessionId: 'meta-cloud-api-session',
       db: {
         connected: getDbStatus(),
       }
@@ -1122,41 +1114,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. Central Clinic WhatsApp QR Code Endpoint
+  // 3. Central Clinic WhatsApp QR Code Endpoint (Not needed under Meta Cloud API)
   if (req.method === 'GET' && (pathname === '/api/qr' || pathname === '/api/whatsapp/qr')) {
-    let runtimeSession = sessionManager.getRuntimeSession(masterLineId);
-    
-    if (!runtimeSession || (runtimeSession.status === 'disconnected' && !runtimeSession.qrCodeDataUrl && !runtimeSession.isStarting)) {
-      runtimeSession = await sessionManager.startCoordinatorSocket(masterLineId, true);
-    }
-
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
-    const status = runtimeSession?.status || dbRecord.status || 'disconnected';
-    const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
-    const qr = runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null;
-
-    logWaSessionDebug('/api/qr', authUser, masterLineId, runtimeSession, dbRecord);
-
+    const hasMeta = Boolean((metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim());
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      qr,
-      status,
-      phone,
+      qr: null,
+      status: hasMeta ? 'connected' : 'disconnected',
+      phone: '94706393353',
+      provider: 'meta_cloud_api',
+      message: 'Meta WhatsApp Cloud API is active. QR code pairing is not required.',
       coordinatorId: masterLineId,
       authenticatedUserId: authUser.id,
-      sessionId: runtimeSession?.sessionId || dbRecord.id
+      sessionId: 'meta-cloud-api-session'
     }));
     return;
   }
 
-  // 3b. Reconnect / Force Fresh QR for Central Clinic Line
+  // 3b. Reconnect / Refresh Status
   if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect' || pathname === '/api/whatsapp/reconnect')) {
-    logWaSessionDebug('/api/reconnect', authUser, masterLineId, null, null);
-    const session = await sessionManager.startCoordinatorSocket(masterLineId, true);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
-      message: 'Clinic WhatsApp reconnection initiated.',
+      status: 'connected',
+      provider: 'meta_cloud_api',
+      message: 'Meta WhatsApp Cloud API connection active.',
       coordinatorId: masterLineId,
       authenticatedUserId: authUser.id
     }));
@@ -1179,19 +1161,17 @@ const server = http.createServer(async (req, res) => {
 
     sseClients.push(clientObj);
 
-    const runtimeSession = sessionManager.getRuntimeSession(authUser.id);
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(authUser.id);
-
-    logWaSessionDebug('/api/events (subscribe)', authUser, authUser.id, runtimeSession, dbRecord);
+    const hasMeta = Boolean((metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim());
 
     res.write(`data: ${JSON.stringify({
       type: 'INIT',
-      status: runtimeSession?.status || dbRecord.status || 'disconnected',
-      phone: runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null,
-      qrDataUrl: runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null,
+      status: hasMeta ? 'connected' : 'disconnected',
+      phone: '94706393353',
+      qrDataUrl: null,
+      provider: 'meta_cloud_api',
       coordinatorId: authUser.id,
       authenticatedUserId: authUser.id,
-      sessionId: runtimeSession?.sessionId || dbRecord.id,
+      sessionId: 'meta-cloud-api-session',
       dbConnected: getDbStatus(),
     })}\n\n`);
 
@@ -1258,15 +1238,9 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // Check if runtime Baileys session is active
-        const coordSession = sessionManager.getRuntimeSession(targetCoordinatorId);
-        const masterSession = sessionManager.getRuntimeSession(masterLineId);
-        const isBaileysConnected = (coordSession && coordSession.status === 'connected' && coordSession.sock) ||
-                                  (masterSession && masterSession.status === 'connected' && masterSession.sock);
-
         let sendResult = null;
 
-        // If Meta Cloud API token is configured on server or supplied, dispatch directly to Meta Graph API; otherwise use Baileys socket
+        // Meta Cloud API token resolution (server configured or payload supplied)
         const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || payload.token || process.env.META_TOKEN || '').trim();
         
         // 1. Phone validation in international format
@@ -1731,33 +1705,8 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // If Meta Cloud API was not used or failed, fallback to active Baileys socket
-        if (!sendResult && isBaileysConnected) {
-          console.log(`🚀 [Baileys Dispatch] Sending message to ${formattedTo || cleanTo} via linked coordinator socket...`);
-          const baileysMsg = await sessionManager.sendMessage(targetCoordinatorId, {
-            to: formattedTo,
-            whatsappId: cleanTo,
-            message: msgContent,
-            media: media ? {
-              type: media.type,
-              dataUrl: media.dataUrl,
-              url: savedMediaUrl || media.url,
-              fileName: media.fileName
-            } : null,
-            leadId,
-            customerId
-          });
-          if (baileysMsg) {
-            sendResult = {
-              success: true,
-              messageId: baileysMsg.key?.id || `baileys-${Date.now()}`,
-              status: 'sent'
-            };
-          }
-        }
-
         if (!sendResult) {
-          throw new Error('No active WhatsApp line or Meta API token configured.');
+          throw new Error('Meta WhatsApp Cloud API token not configured or message transmission failed.');
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2186,18 +2135,16 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink' || pathname === '/api/whatsapp/disconnect')) {
     if (authUser.role !== 'super_admin') {
       res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can disconnect the clinic WhatsApp session.' }));
+      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can modify clinic WhatsApp configuration.' }));
       return;
     }
-    try {
-      logWaSessionDebug('/api/disconnect', authUser, masterLineId, sessionManager.getRuntimeSession(masterLineId), null);
-      const unlinkRes = await sessionManager.unlinkSession(masterLineId);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ...unlinkRes, coordinatorId: masterLineId, authenticatedUserId: authUser.id }));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
-    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      success: true, 
+      message: 'Meta WhatsApp Cloud API is active; physical device unlinking is not required.', 
+      coordinatorId: masterLineId, 
+      authenticatedUserId: authUser.id 
+    }));
     return;
   }
 
@@ -3708,9 +3655,6 @@ const server = http.createServer(async (req, res) => {
               }
             }).catch(() => null);
           }
-
-          // Ensure session record exists
-          await sessionManager.getOrCreateSessionRecord(coordinatorId);
 
           // Find lead by leadId, customerId, or phone
           let targetLead = null;
@@ -6113,7 +6057,6 @@ if (!isTestRunner) {
         if (savedWabaId && savedWabaId.trim()) metaConfig.wabaId = savedWabaId.trim();
 
         await autoSeedDbIfEmpty();
-        await sessionManager.restoreAllActiveSessions();
       }
     });
   });

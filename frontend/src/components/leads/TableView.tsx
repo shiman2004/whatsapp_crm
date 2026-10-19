@@ -3,6 +3,7 @@ import { Lead } from '../../types';
 import { StageBadge } from './StageBadge';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
+import { PatientContactDrawer } from './PatientContactDrawer';
 import { 
   ChevronRight, 
   Clock, 
@@ -101,6 +102,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   const [noteLeadId, setNoteLeadId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
+  const [patientDrawerLeadId, setPatientDrawerLeadId] = useState<string | null>(null);
+  const patientClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [treatmentSort, setTreatmentSort] = useState<'asc' | 'desc' | null>(null);
 
   // Real-time ticking clock (ticks every 1s for accurate 24h countdown)
@@ -151,6 +154,22 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     : leads;
   const noteLead = noteLeadId ? leads.find(lead => lead.id === noteLeadId) : null;
   const leadNotes = noteLeadId ? notes.filter(note => note.leadId === noteLeadId) : [];
+  const patientDrawerLead = patientDrawerLeadId ? leads.find(lead => lead.id === patientDrawerLeadId) : null;
+
+  const handlePatientClick = (leadId: string) => {
+    if (patientClickTimerRef.current) clearTimeout(patientClickTimerRef.current);
+    patientClickTimerRef.current = setTimeout(() => {
+      setPatientDrawerLeadId(leadId);
+      patientClickTimerRef.current = null;
+    }, 220);
+  };
+
+  const handlePatientDoubleClick = (leadId: string) => {
+    if (patientClickTimerRef.current) clearTimeout(patientClickTimerRef.current);
+    patientClickTimerRef.current = null;
+    setPatientDrawerLeadId(null);
+    onSelectLead(leadId);
+  };
 
   const openNotes = (lead: Lead) => {
     setNoteLeadId(lead.id);
@@ -515,15 +534,15 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[1940px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[2040px]">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
             <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
+              <th className="py-3.5 px-3 min-w-[60px] text-center">No.</th>
               <th className="py-3.5 px-3 min-w-[120px]">Serial No.</th>
-              <th className="py-3.5 px-2 text-center min-w-[70px]">Notes</th>
-              <th className="py-3.5 px-3 min-w-[160px]">Inquiry Time</th>
               <th className="py-3.5 px-4 min-w-[240px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
-              <th className="py-3.5 px-3 min-w-[130px]">Source</th>
-              <th className="py-3.5 px-2 text-center min-w-[65px]">Lang</th>
+              <th className="py-3.5 px-2 min-w-[90px]">Source</th>
+              <th className="py-3.5 px-2 text-center min-w-[65px] max-w-[120px]">Lang</th>
+              <th className="py-3.5 px-2 text-center min-w-[70px]">Notes</th>
               <th className="py-3.5 px-4 min-w-[220px]">
                 <button
                   type="button"
@@ -538,16 +557,29 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
               <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
-              <th className="py-3.5 px-3 min-w-[180px]">Assigned Time and Date</th>
+              <th className="py-3.5 px-3 min-w-[160px]">In_Receive Time</th>
+              <th className="py-3.5 px-3 min-w-[180px]">Assign Time</th>
               <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
               <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
               <th className="py-3.5 px-4 text-right min-w-[90px]">Action</th>
+              {/* Treatment / Service remains available through the existing sort state but is omitted from this compact table order. */}
+              {/*
+                <button
+                  type="button"
+                  onClick={() => setTreatmentSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null)}
+                  className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  title="Sort by treatment or service"
+                >
+                  {isCras ? 'Course / Program' : 'Treatment / Service'}
+                  <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
+                </button>
+              */}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={14} className="py-16 text-center text-slate-500">
+                <td colSpan={15} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -555,7 +587,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 </td>
               </tr>
             ) : (
-              displayedLeads.map((lead) => {
+              displayedLeads.map((lead, index) => {
                 const category = categories.find(c => c.id === lead.categoryId);
                 const treatment = treatments.find(t => t.id === lead.treatmentId);
                 const coordinator = users.find(u => u.id === lead.assignedTo);
@@ -571,35 +603,20 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       isSelected ? 'bg-teal-950/40' : ''
                     }`}
                   >
-                    {/* 1. Company-scoped unique lead serial */}
+                    {/* 1. Sequential row number for the current displayed order */}
+                    <td className="py-3.5 px-3 text-center min-w-[60px] whitespace-nowrap">
+                      <span className="font-mono font-bold text-slate-300">{String(index + 1).padStart(3, '0')}</span>
+                    </td>
+
+                    {/* 2. Company-scoped unique lead serial */}
                     <td className="py-3.5 px-3 min-w-[120px] whitespace-nowrap">
                       <span className={`inline-flex items-center px-2 py-1 rounded-md border text-[10px] font-mono font-bold ${isCrasLead ? 'bg-rose-950/60 text-rose-300 border-rose-500/40' : 'bg-teal-950/60 text-teal-300 border-teal-500/40'}`} title="Unique company lead serial">
                         {lead.serialNumber || 'Pending'}
                       </span>
                     </td>
 
-                    {/* 2. Internal Notes */}
-                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        type="button"
-                        onClick={() => openNotes(lead)}
-                        className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${lead.notesCount ? 'bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500/25' : 'bg-slate-800/70 text-slate-400 border-slate-700 hover:text-teal-300 hover:border-teal-500/40'}`}
-                        title={`Open notes${lead.notesCount ? ` (${lead.notesCount})` : ''}`}
-                        aria-label={`Open notes for ${lead.customer?.displayName || 'lead'}`}
-                      >
-                        <StickyNote className="w-4 h-4" />
-                        {lead.notesCount ? <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-teal-500 text-[9px] leading-3.5 text-slate-950 font-bold">{lead.notesCount}</span> : null}
-                      </button>
-                    </td>
-
-                    {/* 3. Inquiry Time */}
-                    <td className="py-3.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap min-w-[160px]">
-                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{', '}
-                      <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </td>
-
-                    {/* 3. Customer Contact & Authentic Avatar */}
-                    <td className="py-3.5 px-4 min-w-[240px]">
+                    {/* 5. Customer Contact & Authentic Avatar */}
+                    <td className="py-3.5 px-4 min-w-[240px]" onClick={(event) => { event.stopPropagation(); handlePatientClick(lead.id); }} onDoubleClick={(event) => { event.stopPropagation(); handlePatientDoubleClick(lead.id); }}>
                       <div className="flex items-center gap-3">
                         {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
                         <div className="min-w-0 flex flex-col">
@@ -612,8 +629,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 4. Source Channel (icon-only) */}
-                    <td className="py-3.5 px-3 min-w-[130px]" onClick={(e) => e.stopPropagation()}>
+                    {/* 6. Source Channel (icon-only) */}
+                    <td className="py-3.5 px-2 min-w-[90px]" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <div 
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border cursor-pointer transition-all shadow-xs whitespace-nowrap ${sourceInfo.badgeClass}`}
@@ -638,21 +655,27 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 5. Language */}
-                    <td className="py-3.5 px-2 text-center min-w-[65px]">
-                      <span className="px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
+                    {/* 7. Language */}
+                    <td className="py-3.5 px-2 text-center min-w-[65px] max-w-[120px]">
+                      <span className="inline-block max-w-full px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] leading-relaxed bg-slate-800 text-slate-300 border border-slate-700 break-words">
                         {lead.language}
                       </span>
                     </td>
 
-                    {/* 6. Treatment / Course */}
+                    {/* 6. Internal Notes */}
+                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                      <button type="button" onClick={() => openNotes(lead)} className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${lead.notesCount ? 'bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500/25' : 'bg-slate-800/70 text-slate-400 border-slate-700 hover:text-teal-300 hover:border-teal-500/40'}`} title={`Open notes${lead.notesCount ? ` (${lead.notesCount})` : ''}`} aria-label={`Open notes for ${lead.customer?.displayName || 'lead'}`}>
+                        <StickyNote className="w-4 h-4" />
+                        {lead.notesCount ? <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-teal-500 text-[9px] leading-3.5 text-slate-950 font-bold">{lead.notesCount}</span> : null}
+                      </button>
+                    </td>
+
+                    {/* 7. Treatment / Course */}
                     <td className="py-3.5 px-4 min-w-[220px]">
                       <div className="flex flex-col gap-0.5">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <p className={`font-semibold text-xs leading-tight ${isCrasLead ? 'text-rose-400' : 'text-teal-400'}`}>
-                            {treatment?.name || category?.name || (isCrasLead ? 'Course Not Selected' : 'Treatment Not Selected')}
-                          </p>
-                        </div>
+                        <p className={`font-semibold text-xs leading-tight ${isCrasLead ? 'text-rose-400' : 'text-teal-400'}`}>
+                          {treatment?.name || category?.name || (isCrasLead ? 'Course Not Selected' : 'Treatment Not Selected')}
+                        </p>
                         <p className="text-[11px] text-slate-400 leading-tight">{category?.name}</p>
                       </div>
                     </td>
@@ -709,7 +732,13 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       {renderAssignedByCell(lead)}
                     </td>
 
-                    {/* 10. Assigned Time and Date */}
+                    {/* 10. Receive */}
+                    <td className="py-3.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap min-w-[160px]">
+                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{', '}
+                      <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                    </td>
+
+                    {/* 11. Assigned Time and Date */}
                     <td className="py-3.5 px-3 min-w-[180px] whitespace-nowrap">
                       {renderAssignedTimeAndDateCell(lead)}
                     </td>
@@ -741,6 +770,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           </tbody>
         </table>
       </div>
+
+      {patientDrawerLead && <PatientContactDrawer lead={patientDrawerLead} onClose={() => setPatientDrawerLeadId(null)} />}
 
       {noteLead && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4" onMouseDown={closeNotes}>

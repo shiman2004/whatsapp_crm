@@ -141,6 +141,17 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
   const isCras = company === 'CRAS';
   const coordinators = users.filter(u => u.role === 'coordinator');
+  const displayedLeads = treatmentSort
+    ? [...leads].sort((a, b) => {
+        const getTreatmentName = (lead: Lead) => {
+          const treatment = treatments.find(t => t.id === lead.treatmentId)?.name;
+          const category = categories.find(c => c.id === lead.categoryId)?.name;
+          return (treatment || category || '').toLocaleLowerCase();
+        };
+        const comparison = getTreatmentName(a).localeCompare(getTreatmentName(b));
+        return treatmentSort === 'asc' ? comparison : -comparison;
+      })
+    : leads;
   const noteLead = noteLeadId ? leads.find(lead => lead.id === noteLeadId) : null;
   const leadNotes = noteLeadId ? notes.filter(note => note.leadId === noteLeadId) : [];
   const patientDrawerLead = patientDrawerLeadId ? leads.find(lead => lead.id === patientDrawerLeadId) : null;
@@ -580,7 +591,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               </tr>
             ) : (
               displayedLeads.map((lead, index) => {
-              leads.map((lead) => {
                 const category = categories.find(c => c.id === lead.categoryId);
                 const treatment = treatments.find(t => t.id === lead.treatmentId);
                 const coordinator = users.find(u => u.id === lead.assignedTo);

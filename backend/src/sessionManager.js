@@ -9,7 +9,7 @@ import makeWASocketDefault, {
 } from '@whiskeysockets/baileys';
 import pino from 'pino';
 import fs from 'fs';
-import { getPrisma, getDbStatus } from './db.js';
+import { getPrisma, getDbStatus, allocateCompanyLeadSerial } from './db.js';
 import { useSupabaseAuthState } from './supabaseAuthState.js';
 import { saveMediaToSupabase } from './supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
@@ -488,6 +488,7 @@ class WhatsAppSessionManager {
 
           lead = await prisma.lead.create({
             data: {
+              serialNumber: await allocateCompanyLeadSerial(prisma, 'RWC'),
               customerId: customer.id,
               categoryId: firstCat?.id || 'cat-hair-care',
               treatmentId: firstTrt?.id || 'trt-hair-prp',

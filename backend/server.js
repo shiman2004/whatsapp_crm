@@ -4,8 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting } from './src/db.js';
-import { sessionManager } from './src/sessionManager.js';
+import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting, allocateCompanyLeadSerial as allocatePersistedCompanyLeadSerial } from './src/db.js';
 import { resolveCompany, resolveLeadCompany, COMPANIES } from './src/companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './src/supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './src/audioConverter.js';
@@ -17,6 +16,25 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 
 const PORT = process.env.PORT || 3001;
 const JWT_SECRET = process.env.JWT_SECRET || process.env.META_VERIFY_TOKEN || 'royal_wellness_hmac_secret_2026';
+
+async function allocateCompanyLeadSerial(prisma, company) {
+  try {
+    return await allocatePersistedCompanyLeadSerial(prisma, company);
+  } catch (error) {
+    console.warn('Company serial allocator unavailable; using a collision-safe fallback:', error.message);
+  }
+
+  const companyCode = String(company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+  const leads = await prisma.lead.findMany({
+    where: { OR: [{ company: companyCode }, { source: companyCode }] },
+    select: { serialNumber: true }
+  });
+  const maxValue = leads.reduce((max, lead) => {
+    const match = String(lead.serialNumber || '').match(new RegExp(`^${companyCode}-(\\d+)$`));
+    return match ? Math.max(max, Number(match[1])) : max;
+  }, 0);
+  return `${companyCode}-${String(maxValue + 1).padStart(4, '0')}`;
+}
 
 // Cryptographic Token Helpers (HMAC-SHA256 with Expiration Support)
 function signAuthToken(payload, expiresInMs = 7 * 24 * 60 * 60 * 1000) {
@@ -124,6 +142,7 @@ const DEFAULT_ADMIN_PASSWORD_HASH = hashSecret('admin');
 const DEFAULT_ADMIN_PIN_HASH = hashSecret('1234');
 const DEFAULT_STAFF_PASSWORD_HASH = hashSecret('staff');
 const DEFAULT_STAFF_PIN_HASH = hashSecret('2026');
+const SHIMAN_PIN_HASH = hashSecret('7777');
 
 // =============================================================================
 // Progressive Abuse Protection & Rate Limiting for Login Attempts
@@ -301,9 +320,6 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
     } catch (e) {}
   });
 }
-
-// Attach isolated broadcaster to session manager
-sessionManager.setSseEmitter(broadcastScopedSSE);
 
 /**
  * Safe Diagnostic Logger (No sensitive tokens, credentials, or QR data)
@@ -507,8 +523,28 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
 const CANONICAL_USERS = [
   {
     id: 'user-admin-1',
-    fullName: 'Super Admin',
+    fullName: 'Jahan',
     email: 'admin@royalwellness.lk',
+    branch: 'Colombo (Head Office)',
+    password: DEFAULT_ADMIN_PASSWORD_HASH,
+    pin: DEFAULT_ADMIN_PIN_HASH,
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: '1124d646-210c-4a6a-8a62-4d408212e1f6',
+    fullName: 'Shiman',
+    email: 'mnmshiman@gmail.com',
+    branch: 'Colombo (Head Office)',
+    password: DEFAULT_ADMIN_PASSWORD_HASH,
+    pin: SHIMAN_PIN_HASH,
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: 'c0129458-4141-4b77-aeab-4cb72afdb816',
+    fullName: 'Afrij',
+    email: 'afrij@royalwellness.lk',
     branch: 'Colombo (Head Office)',
     password: DEFAULT_ADMIN_PASSWORD_HASH,
     pin: DEFAULT_ADMIN_PIN_HASH,
@@ -1048,25 +1084,21 @@ const server = http.createServer(async (req, res) => {
   // Central Clinic WhatsApp Master Session ID
   const masterLineId = 'user-admin-1';
 
-  // 1. Health & Central Clinic WhatsApp Status
+  // 1. Health & Central Clinic WhatsApp Status (Meta Cloud API Native)
   if (req.method === 'GET' && (pathname === '/api/status' || pathname === '/api/whatsapp/status')) {
-    const runtimeSession = sessionManager.getRuntimeSession(masterLineId);
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
-
-    const status = runtimeSession?.status || dbRecord.status || 'disconnected';
-    const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
-    const hasQr = Boolean(runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl);
-
-    logWaSessionDebug('/api/status', authUser, masterLineId, runtimeSession, dbRecord);
+    const hasMeta = Boolean((metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim());
+    const status = hasMeta ? 'connected' : 'disconnected';
+    const phone = '94706393353';
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       status,
       phone,
-      hasQr,
+      hasQr: false,
+      provider: 'meta_cloud_api',
       coordinatorId: masterLineId,
       authenticatedUserId: authUser.id,
-      sessionId: runtimeSession?.sessionId || dbRecord.id,
+      sessionId: 'meta-cloud-api-session',
       db: {
         connected: getDbStatus(),
       }
@@ -1082,41 +1114,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 3. Central Clinic WhatsApp QR Code Endpoint
+  // 3. Central Clinic WhatsApp QR Code Endpoint (Not needed under Meta Cloud API)
   if (req.method === 'GET' && (pathname === '/api/qr' || pathname === '/api/whatsapp/qr')) {
-    let runtimeSession = sessionManager.getRuntimeSession(masterLineId);
-    
-    if (!runtimeSession || (runtimeSession.status === 'disconnected' && !runtimeSession.qrCodeDataUrl && !runtimeSession.isStarting)) {
-      runtimeSession = await sessionManager.startCoordinatorSocket(masterLineId, true);
-    }
-
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(masterLineId);
-    const status = runtimeSession?.status || dbRecord.status || 'disconnected';
-    const phone = runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null;
-    const qr = runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null;
-
-    logWaSessionDebug('/api/qr', authUser, masterLineId, runtimeSession, dbRecord);
-
+    const hasMeta = Boolean((metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim());
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
-      qr,
-      status,
-      phone,
+      qr: null,
+      status: hasMeta ? 'connected' : 'disconnected',
+      phone: '94706393353',
+      provider: 'meta_cloud_api',
+      message: 'Meta WhatsApp Cloud API is active. QR code pairing is not required.',
       coordinatorId: masterLineId,
       authenticatedUserId: authUser.id,
-      sessionId: runtimeSession?.sessionId || dbRecord.id
+      sessionId: 'meta-cloud-api-session'
     }));
     return;
   }
 
-  // 3b. Reconnect / Force Fresh QR for Central Clinic Line
+  // 3b. Reconnect / Refresh Status
   if (req.method === 'POST' && (pathname === '/api/reconnect' || pathname === '/api/connect' || pathname === '/api/whatsapp/reconnect')) {
-    logWaSessionDebug('/api/reconnect', authUser, masterLineId, null, null);
-    const session = await sessionManager.startCoordinatorSocket(masterLineId, true);
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: true,
-      message: 'Clinic WhatsApp reconnection initiated.',
+      status: 'connected',
+      provider: 'meta_cloud_api',
+      message: 'Meta WhatsApp Cloud API connection active.',
       coordinatorId: masterLineId,
       authenticatedUserId: authUser.id
     }));
@@ -1139,19 +1161,17 @@ const server = http.createServer(async (req, res) => {
 
     sseClients.push(clientObj);
 
-    const runtimeSession = sessionManager.getRuntimeSession(authUser.id);
-    const dbRecord = await sessionManager.getOrCreateSessionRecord(authUser.id);
-
-    logWaSessionDebug('/api/events (subscribe)', authUser, authUser.id, runtimeSession, dbRecord);
+    const hasMeta = Boolean((metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim());
 
     res.write(`data: ${JSON.stringify({
       type: 'INIT',
-      status: runtimeSession?.status || dbRecord.status || 'disconnected',
-      phone: runtimeSession?.connectedPhoneNumber || dbRecord.phoneNumber || null,
-      qrDataUrl: runtimeSession?.qrCodeDataUrl || dbRecord.qrCodeDataUrl || null,
+      status: hasMeta ? 'connected' : 'disconnected',
+      phone: '94706393353',
+      qrDataUrl: null,
+      provider: 'meta_cloud_api',
       coordinatorId: authUser.id,
       authenticatedUserId: authUser.id,
-      sessionId: runtimeSession?.sessionId || dbRecord.id,
+      sessionId: 'meta-cloud-api-session',
       dbConnected: getDbStatus(),
     })}\n\n`);
 
@@ -1218,15 +1238,9 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // Check if runtime Baileys session is active
-        const coordSession = sessionManager.getRuntimeSession(targetCoordinatorId);
-        const masterSession = sessionManager.getRuntimeSession(masterLineId);
-        const isBaileysConnected = (coordSession && coordSession.status === 'connected' && coordSession.sock) ||
-                                  (masterSession && masterSession.status === 'connected' && masterSession.sock);
-
         let sendResult = null;
 
-        // If Meta Cloud API token is configured on server or supplied, dispatch directly to Meta Graph API; otherwise use Baileys socket
+        // Meta Cloud API token resolution (server configured or payload supplied)
         const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || payload.token || process.env.META_TOKEN || '').trim();
         
         // 1. Phone validation in international format
@@ -1566,6 +1580,7 @@ const server = http.createServer(async (req, res) => {
                   const firstTrt = await prisma.treatment.findFirst().catch(() => null);
                   lead = await prisma.lead.create({
                     data: {
+                      serialNumber: await allocateCompanyLeadSerial(prisma, resolvedCompany),
                       customerId: cust.id,
                       categoryId: firstCat?.id || (resolvedCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
                       treatmentId: firstTrt?.id || (resolvedCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
@@ -1690,33 +1705,8 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // If Meta Cloud API was not used or failed, fallback to active Baileys socket
-        if (!sendResult && isBaileysConnected) {
-          console.log(`🚀 [Baileys Dispatch] Sending message to ${formattedTo || cleanTo} via linked coordinator socket...`);
-          const baileysMsg = await sessionManager.sendMessage(targetCoordinatorId, {
-            to: formattedTo,
-            whatsappId: cleanTo,
-            message: msgContent,
-            media: media ? {
-              type: media.type,
-              dataUrl: media.dataUrl,
-              url: savedMediaUrl || media.url,
-              fileName: media.fileName
-            } : null,
-            leadId,
-            customerId
-          });
-          if (baileysMsg) {
-            sendResult = {
-              success: true,
-              messageId: baileysMsg.key?.id || `baileys-${Date.now()}`,
-              status: 'sent'
-            };
-          }
-        }
-
         if (!sendResult) {
-          throw new Error('No active WhatsApp line or Meta API token configured.');
+          throw new Error('Meta WhatsApp Cloud API token not configured or message transmission failed.');
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -2145,18 +2135,16 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && (pathname === '/api/disconnect' || pathname === '/api/logout' || pathname === '/api/unlink' || pathname === '/api/whatsapp/disconnect')) {
     if (authUser.role !== 'super_admin') {
       res.writeHead(403, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can disconnect the clinic WhatsApp session.' }));
+      res.end(JSON.stringify({ success: false, error: 'Forbidden: Only Super Admin can modify clinic WhatsApp configuration.' }));
       return;
     }
-    try {
-      logWaSessionDebug('/api/disconnect', authUser, masterLineId, sessionManager.getRuntimeSession(masterLineId), null);
-      const unlinkRes = await sessionManager.unlinkSession(masterLineId);
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ...unlinkRes, coordinatorId: masterLineId, authenticatedUserId: authUser.id }));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
-    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ 
+      success: true, 
+      message: 'Meta WhatsApp Cloud API is active; physical device unlinking is not required.', 
+      coordinatorId: masterLineId, 
+      authenticatedUserId: authUser.id 
+    }));
     return;
   }
 
@@ -2187,7 +2175,9 @@ const server = http.createServer(async (req, res) => {
             id: true,
             fullName: true,
             email: true,
+            phone: true,
             branch: true,
+            company: true,
             role: true,
             active: true,
             createdAt: true,
@@ -2197,7 +2187,7 @@ const server = http.createServer(async (req, res) => {
         });
         if (admins && admins.length > 0) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(admins));
+          res.end(JSON.stringify({ success: true, superAdmins: admins }));
           return;
         }
       } catch (e) {
@@ -2208,13 +2198,15 @@ const server = http.createServer(async (req, res) => {
       id: u.id,
       fullName: u.fullName,
       email: u.email,
-      branch: u.branch,
+      phone: u.phone || null,
+      branch: u.branch || 'Colombo (Head Office)',
+      company: u.company || 'RWC',
       role: u.role,
       active: u.active !== false,
       createdAt: u.createdAt || new Date().toISOString()
     }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(memoryAdmins));
+    res.end(JSON.stringify({ success: true, superAdmins: memoryAdmins }));
     return;
   }
 
@@ -2226,46 +2218,99 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const { fullName, email, password, pin } = payload;
+        const fullName = String(payload.fullName || payload.name || '').trim();
+        const email = String(payload.email || '').trim().toLowerCase();
+        const phone = payload.phone ? String(payload.phone).trim() : null;
+        const branch = payload.branch ? String(payload.branch).trim() : 'Colombo (Head Office)';
+        const passwordPlain = payload.password ? String(payload.password).trim() : 'admin';
+        const cleanPin = String(payload.pin || '1234').trim().slice(0, 10);
+
         if (!fullName || !email) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'Full Name and Email are required.' }));
           return;
         }
-        const cleanEmail = email.trim().toLowerCase();
+
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(email)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Invalid email address format.' }));
+          return;
+        }
+
         const prisma = getPrisma();
         let newAdmin = null;
         if (prisma && getDbStatus()) {
+          const existingUser = await prisma.user.findFirst({
+            where: { email: { equals: email, mode: 'insensitive' } }
+          }).catch(() => null);
+
+          if (existingUser) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: false, 
+              error: `An account with email "${email}" already exists.` 
+            }));
+            return;
+          }
+
           try {
             newAdmin = await prisma.user.create({
               data: {
-                fullName: fullName.trim(),
-                email: cleanEmail,
+                fullName,
+                email,
+                phone,
+                branch,
                 role: 'super_admin',
+                password: hashSecret(passwordPlain),
+                pin: hashSecret(cleanPin),
+                active: true
+              },
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                branch: true,
+                role: true,
                 active: true,
-                branch: 'Colombo (Head Office)',
-                password: password ? hashSecret(password) : DEFAULT_ADMIN_PASSWORD_HASH,
-                pin: pin ? hashSecret(pin) : DEFAULT_ADMIN_PIN_HASH
+                createdAt: true
               }
             });
           } catch (dbErr) {
             console.warn('DB error creating super admin:', dbErr.message);
           }
         }
+
         if (!newAdmin) {
           newAdmin = {
             id: `user-admin-${Date.now()}`,
-            fullName: fullName.trim(),
-            email: cleanEmail,
+            fullName,
+            email,
+            phone,
             role: 'super_admin',
             active: true,
-            branch: 'Colombo (Head Office)',
+            branch,
             createdAt: new Date().toISOString()
           };
           CANONICAL_USERS.push(newAdmin);
         }
-        res.writeHead(201, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, user: newAdmin }));
+
+        console.log(`🛡️ [Super Admin Created] Added by ${authUser.fullName}: ${newAdmin.fullName} (${newAdmin.email})`);
+
+        broadcastScopedSSE(null, {
+          type: 'SUPER_ADMIN_CONFIG_UPDATED',
+          action: 'created',
+          user: newAdmin
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          user: newAdmin,
+          superAdmin: newAdmin,
+          message: `Super Admin account for ${newAdmin.fullName} created successfully.`
+        }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
@@ -2274,7 +2319,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // PATCH / PUT / POST: Update Super Admin Account (Full Name, Active Status)
+  // PATCH / PUT / POST: Update Super Admin Account (Full Name, Active Status, Last Admin Guard)
   if ((req.method === 'PATCH' || req.method === 'PUT' || req.method === 'POST') && pathname.startsWith('/api/admin/super-admins/')) {
     if (!requireSuperAdmin(authUser, res)) return;
     const adminId = pathname.replace('/api/admin/super-admins/', '').split('/')[0];
@@ -2283,36 +2328,118 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const updateData = {};
-        if (typeof payload.fullName === 'string' && payload.fullName.trim()) {
-          updateData.fullName = payload.fullName.trim();
-        }
-        if (typeof payload.active === 'boolean') {
-          updateData.active = payload.active;
-        }
-
         const prisma = getPrisma();
-        let updated = null;
+
         if (prisma && getDbStatus()) {
+          const targetUser = await prisma.user.findUnique({
+            where: { id: adminId }
+          }).catch(() => null);
+
+          if (!targetUser || targetUser.role !== 'super_admin') {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
+            return;
+          }
+
+          // Guard: Cannot deactivate last active super admin
+          if (payload.active === false && targetUser.active === true) {
+            const activeAdminCount = await prisma.user.count({
+              where: { role: 'super_admin', active: true }
+            }).catch(() => 1);
+
+            if (activeAdminCount <= 1) {
+              console.warn(`⛔ [Lockout Prevented] Prevented deactivating last active Super Admin (${targetUser.email})`);
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ 
+                success: false, 
+                errorCode: 'LAST_ADMIN_LOCKOUT_PREVENTED',
+                error: 'Cannot deactivate the last active Super Admin account. At least one Super Admin must remain active.' 
+              }));
+              return;
+            }
+          }
+
+          const updateData = {};
+          if (typeof payload.fullName === 'string' && payload.fullName.trim()) {
+            updateData.fullName = payload.fullName.trim();
+          }
+          if (payload.phone !== undefined) {
+            updateData.phone = payload.phone ? String(payload.phone).trim() : null;
+          }
+          if (payload.branch) {
+            updateData.branch = String(payload.branch).trim();
+          }
+          if (typeof payload.active === 'boolean') {
+            updateData.active = payload.active;
+          }
+          if (payload.password) {
+            updateData.password = hashSecret(String(payload.password).trim());
+          }
+          if (payload.pin) {
+            updateData.pin = hashSecret(String(payload.pin).trim().slice(0, 10));
+          }
+
+          let updated = null;
           try {
             updated = await prisma.user.update({
               where: { id: adminId },
-              data: updateData
+              data: updateData,
+              select: {
+                id: true,
+                fullName: true,
+                email: true,
+                phone: true,
+                branch: true,
+                role: true,
+                active: true,
+                createdAt: true,
+                updatedAt: true
+              }
             });
           } catch (dbErr) {
             console.warn('DB error updating super admin:', dbErr.message);
           }
+
+          if (updated) {
+            broadcastScopedSSE(null, {
+              type: 'SUPER_ADMIN_CONFIG_UPDATED',
+              action: 'updated',
+              user: updated
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ 
+              success: true, 
+              user: updated,
+              superAdmin: updated,
+              message: `Super Admin account "${updated.fullName}" updated successfully.`
+            }));
+            return;
+          }
         }
 
-        // Also update memory canonical list
+        // Memory fallback
         const memIdx = CANONICAL_USERS.findIndex(u => u.id === adminId);
         if (memIdx !== -1) {
+          const updateData = {};
+          if (typeof payload.fullName === 'string' && payload.fullName.trim()) updateData.fullName = payload.fullName.trim();
+          if (typeof payload.active === 'boolean') updateData.active = payload.active;
           CANONICAL_USERS[memIdx] = { ...CANONICAL_USERS[memIdx], ...updateData };
-          if (!updated) updated = CANONICAL_USERS[memIdx];
+          const updated = CANONICAL_USERS[memIdx];
+
+          broadcastScopedSSE(null, {
+            type: 'SUPER_ADMIN_CONFIG_UPDATED',
+            action: 'updated',
+            user: updated
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, user: updated, superAdmin: updated }));
+          return;
         }
 
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, user: updated || { id: adminId, ...updateData } }));
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
       } catch (err) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: err.message }));
@@ -2334,6 +2461,19 @@ const server = http.createServer(async (req, res) => {
 
     const prisma = getPrisma();
     if (prisma && getDbStatus()) {
+      const activeAdminCount = await prisma.user.count({
+        where: { role: 'super_admin', active: true }
+      }).catch(() => 1);
+
+      if (activeAdminCount <= 1) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: false, 
+          error: 'Cannot delete the last remaining Super Admin account.' 
+        }));
+        return;
+      }
+
       try {
         await prisma.user.delete({ where: { id: adminId } });
       } catch (dbErr) {
@@ -2345,6 +2485,12 @@ const server = http.createServer(async (req, res) => {
     if (memIdx !== -1) {
       CANONICAL_USERS.splice(memIdx, 1);
     }
+
+    broadcastScopedSSE(null, {
+      type: 'SUPER_ADMIN_CONFIG_UPDATED',
+      action: 'deleted',
+      deletedId: adminId
+    });
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, deletedId: adminId }));
@@ -3240,246 +3386,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // =============================================================================
-  // 11. REST: Super Admin Account Management (Strict RBAC & Lockout Prevention)
-  // =============================================================================
-
-  // 11a. GET /api/admin/super-admins (Super Admin: List all Super Admin accounts)
-  if (req.method === 'GET' && pathname === '/api/admin/super-admins') {
-    if (!requireSuperAdmin(authUser, res)) return;
-    const prisma = getPrisma();
-    if (prisma && getDbStatus()) {
-      try {
-        const superAdmins = await prisma.user.findMany({
-          where: { role: 'super_admin' },
-          select: {
-            id: true,
-            fullName: true,
-            email: true,
-            phone: true,
-            role: true,
-            branch: true,
-            company: true,
-            active: true,
-            createdAt: true,
-            updatedAt: true
-          },
-          orderBy: { createdAt: 'asc' }
-        });
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, superAdmins }));
-        return;
-      } catch (e) {}
-    }
-
-    const fallbackAdmin = CANONICAL_USERS.filter(u => u.role === 'super_admin').map(u => ({
-      id: u.id,
-      fullName: u.fullName,
-      email: u.email,
-      role: u.role,
-      branch: u.branch,
-      active: true,
-      createdAt: '2026-01-01T08:00:00Z'
-    }));
-    res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, superAdmins: fallbackAdmin }));
-    return;
-  }
-
-  // 11b. POST /api/admin/super-admins (Super Admin: Create new Super Admin account)
-  if (req.method === 'POST' && pathname === '/api/admin/super-admins') {
-    if (!requireSuperAdmin(authUser, res)) return;
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const fullName = String(payload.fullName || payload.name || '').trim();
-        const email = String(payload.email || '').trim().toLowerCase();
-        const phone = payload.phone ? String(payload.phone).trim() : null;
-        const branch = payload.branch ? String(payload.branch).trim() : 'Colombo (Head Office)';
-        const passwordPlain = payload.password ? String(payload.password).trim() : 'admin';
-        const pinPlain = payload.pin ? String(payload.pin).trim() : '1234';
-
-        if (!fullName || !email) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Full name and email address are required.' }));
-          return;
-        }
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid email address format.' }));
-          return;
-        }
-
-        const prisma = getPrisma();
-        if (prisma && getDbStatus()) {
-          // Check for duplicate account email
-          const existingUser = await prisma.user.findFirst({
-            where: { email: { equals: email, mode: 'insensitive' } }
-          });
-
-          if (existingUser) {
-            res.writeHead(409, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ 
-              success: false, 
-              error: `An account with email "${email}" already exists.` 
-            }));
-            return;
-          }
-
-          const cleanPin = String(payload.pin || '1234').trim().slice(0, 10);
-          const newAdmin = await prisma.user.create({
-            data: {
-              fullName,
-              email,
-              phone,
-              branch,
-              role: 'super_admin',
-              password: hashSecret(passwordPlain),
-              pin: cleanPin,
-              active: true
-            },
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
-              phone: true,
-              branch: true,
-              role: true,
-              active: true,
-              createdAt: true
-            }
-          });
-
-          console.log(`🛡️ [Super Admin Created] Added by ${authUser.fullName}: ${newAdmin.fullName} (${newAdmin.email})`);
-
-          broadcastScopedSSE(null, {
-            type: 'SUPER_ADMIN_CONFIG_UPDATED',
-            action: 'created',
-            user: newAdmin
-          });
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            success: true, 
-            superAdmin: newAdmin,
-            message: `Super Admin account for ${newAdmin.fullName} created successfully.`
-          }));
-          return;
-        }
-
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Database unavailable' }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
-
-  // 11c. PATCH /api/admin/super-admins/:id (Super Admin: Edit account name or activate/deactivate with Last Admin Guard)
-  if ((req.method === 'PATCH' || req.method === 'PUT') && pathname.startsWith('/api/admin/super-admins/')) {
-    if (!requireSuperAdmin(authUser, res)) return;
-    const targetAdminId = pathname.split('/')[4];
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', async () => {
-      try {
-        const payload = JSON.parse(body || '{}');
-        const prisma = getPrisma();
-        if (prisma && getDbStatus()) {
-          const targetUser = await prisma.user.findUnique({
-            where: { id: targetAdminId }
-          });
-
-          if (!targetUser || targetUser.role !== 'super_admin') {
-            res.writeHead(404, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
-            return;
-          }
-
-          // GUARD: Check if attempting to deactivate the last active Super Admin
-          if (payload.active === false && targetUser.active === true) {
-            const activeAdminCount = await prisma.user.count({
-              where: { role: 'super_admin', active: true }
-            });
-
-            if (activeAdminCount <= 1) {
-              console.warn(`⛔ [Lockout Prevented] Prevented deactivating last active Super Admin (${targetUser.email})`);
-              res.writeHead(400, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({ 
-                success: false, 
-                errorCode: 'LAST_ADMIN_LOCKOUT_PREVENTED',
-                error: 'Cannot deactivate the last active Super Admin account. At least one Super Admin must remain active.' 
-              }));
-              return;
-            }
-          }
-
-          const updateData = {};
-          if (payload.fullName) {
-            updateData.fullName = String(payload.fullName).trim();
-          }
-          if (payload.phone !== undefined) {
-            updateData.phone = payload.phone ? String(payload.phone).trim() : null;
-          }
-          if (payload.branch) {
-            updateData.branch = String(payload.branch).trim();
-          }
-          if (payload.active !== undefined) {
-            updateData.active = Boolean(payload.active);
-          }
-          if (payload.password) {
-            updateData.password = hashSecret(String(payload.password).trim());
-          }
-          if (payload.pin) {
-            updateData.pin = String(payload.pin).trim().slice(0, 10);
-          }
-
-          const updatedUser = await prisma.user.update({
-            where: { id: targetAdminId },
-            data: updateData,
-            select: {
-              id: true,
-              fullName: true,
-              email: true,
-              phone: true,
-              branch: true,
-              role: true,
-              active: true,
-              createdAt: true,
-              updatedAt: true
-            }
-          });
-
-          broadcastScopedSSE(null, {
-            type: 'SUPER_ADMIN_CONFIG_UPDATED',
-            action: 'updated',
-            user: updatedUser
-          });
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ 
-            success: true, 
-            superAdmin: updatedUser,
-            message: `Super Admin account "${updatedUser.fullName}" updated successfully.`
-          }));
-          return;
-        }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
 
   // 9. REST: Get Messages with RBAC & Coordinator Isolation
   if (req.method === 'GET' && pathname === '/api/messages') {
@@ -3750,9 +3656,6 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => null);
           }
 
-          // Ensure session record exists
-          await sessionManager.getOrCreateSessionRecord(coordinatorId);
-
           // Find lead by leadId, customerId, or phone
           let targetLead = null;
           if (leadId) {
@@ -3921,6 +3824,7 @@ const server = http.createServer(async (req, res) => {
               const firstTrt = await prisma.treatment.findFirst();
               updatedLead = await prisma.lead.create({
                 data: {
+                  serialNumber: await allocateCompanyLeadSerial(prisma, 'RWC'),
                   id: leadId && !leadId.startsWith('lead-') ? leadId : undefined,
                   customerId: cust.id,
                   categoryId: firstCat?.id || 'cat-hair-care',
@@ -4477,11 +4381,13 @@ const server = http.createServer(async (req, res) => {
           const leadStage = initialMessage ? 'contacted' : (targetCoordinatorId ? 'assigned' : 'new');
 
           if (!savedLead) {
+            const companySerial = await allocateCompanyLeadSerial(prisma, targetCompany);
             savedLead = await prisma.lead.create({
               data: {
                 customerId: savedCustomer.id,
                 company: targetCompany,
                 source: targetCompany,
+                serialNumber: companySerial,
                 categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
                 stage: leadStage,
@@ -5103,7 +5009,7 @@ const server = http.createServer(async (req, res) => {
                   id: desiredId,
                   fullName,
                   email: safeEmail,
-                  pin: cleanPin,
+                  pin: hashSecret(cleanPin),
                   phone,
                   role: role,
                   branch: branch,
@@ -5119,7 +5025,7 @@ const server = http.createServer(async (req, res) => {
                 data: {
                   fullName,
                   email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
-                  pin: cleanPin,
+                  pin: hashSecret(cleanPin),
                   phone,
                   role: role,
                   branch: branch,
@@ -5207,7 +5113,7 @@ const server = http.createServer(async (req, res) => {
         if (payload.name !== undefined && !payload.fullName) updateData.fullName = String(payload.name).trim();
         if (payload.branch !== undefined) updateData.branch = String(payload.branch).trim();
         if (payload.pin !== undefined && String(payload.pin).trim()) {
-          updateData.pin = String(payload.pin).trim();
+          updateData.pin = hashSecret(String(payload.pin).trim());
         }
         if (payload.password !== undefined && String(payload.password).trim()) {
           updateData.password = hashSecret(String(payload.password).trim());
@@ -5768,6 +5674,7 @@ const server = http.createServer(async (req, res) => {
 
                           lead = await prisma.lead.create({
                             data: {
+                              serialNumber: await allocateCompanyLeadSerial(prisma, companyInfo.code),
                               customerId: cust.id,
                               categoryId: firstCat?.id || null,
                               treatmentId: firstTrt?.id || null,
@@ -6150,7 +6057,6 @@ if (!isTestRunner) {
         if (savedWabaId && savedWabaId.trim()) metaConfig.wabaId = savedWabaId.trim();
 
         await autoSeedDbIfEmpty();
-        await sessionManager.restoreAllActiveSessions();
       }
     });
   });

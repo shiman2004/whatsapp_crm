@@ -39,7 +39,9 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
-  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  // Table view keeps the overall pipeline visible in one consolidated workspace;
+  // Kanban remains available from the existing view toggle.
+  const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
@@ -187,14 +189,20 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
         <div className="bg-white dark:bg-slate-900/90 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
           {/* Active Pipeline Title & Meta */}
           <div className="flex items-center gap-3">
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border font-bold text-lg shrink-0 shadow-sm transition-all ${
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center border shrink-0 shadow-sm transition-all overflow-hidden p-1 bg-white dark:bg-slate-800 ${
               selectedCompany === 'CRAS' 
-                ? 'bg-rose-50 dark:bg-[#800000]/30 border-rose-200 dark:border-rose-500/50 text-rose-600 dark:text-rose-300 ring-2 ring-rose-500/20' 
+                ? 'border-rose-200 dark:border-rose-500/50 ring-2 ring-rose-500/20'
                 : selectedCompany === 'RWC'
-                ? 'bg-emerald-50 dark:bg-[#008000]/25 border-emerald-200 dark:border-emerald-500/50 text-emerald-600 dark:text-emerald-300 ring-2 ring-emerald-500/20'
-                : 'bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300'
+                ? 'border-emerald-200 dark:border-emerald-500/50 ring-2 ring-emerald-500/20'
+                : 'border-slate-200 dark:border-slate-700'
             }`}>
-              {selectedCompany === 'CRAS' ? '🎓' : selectedCompany === 'RWC' ? '🌿' : '🏢'}
+              {selectedCompany === 'CRAS' ? (
+                <img src="/cras-logo.png" alt="CRAS College" className="w-full h-full object-contain" />
+              ) : selectedCompany === 'RWC' ? (
+                <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
+              ) : (
+                <img src="/logo.png" alt="Alpha Health Group" className="w-full h-full object-contain" />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
@@ -285,10 +293,14 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
             : 'bg-emerald-50 dark:bg-[#008000]/15 border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-200'
         }`}>
           <div className="flex items-center gap-2.5">
-            <div className={`w-9 h-9 rounded-xl flex items-center justify-center border font-bold text-base shrink-0 shadow-sm ${
-              isCrasUser ? 'bg-rose-100 dark:bg-rose-950/80 border-rose-300 dark:border-rose-500/50 text-rose-700 dark:text-rose-300' : 'bg-emerald-100 dark:bg-emerald-950/80 border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-300'
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 shadow-sm overflow-hidden p-1 bg-white dark:bg-slate-800 ${
+              isCrasUser ? 'border-rose-300 dark:border-rose-500/50' : 'border-emerald-300 dark:border-emerald-500/50'
             }`}>
-              {isCrasUser ? '🎓' : '🌿'}
+              {isCrasUser ? (
+                <img src="/cras-logo.png" alt="CRAS College" className="w-full h-full object-contain" />
+              ) : (
+                <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
+              )}
             </div>
             <div>
               <div className="flex items-center gap-2">

@@ -807,32 +807,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         </div>
       )}
 
-      {/* Bottom status footer */}
-      <div className="px-5 py-2.5 bg-slate-950/70 border-t border-slate-800 flex items-center justify-between text-xs text-slate-400">
-        <div className="flex items-center gap-4 flex-wrap">
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block shadow-xs" /> Active Window (&gt;6h)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-amber-400 inline-block shadow-xs" /> Expiring Soon (1-6h)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-rose-500 inline-block shadow-xs" /> Urgent (&lt;1h)
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-slate-500 inline-block shadow-xs" /> Expired (&gt;24h)
-          </span>
-        </div>
-
-        <button
-          type="button"
-          onClick={scrollToTop}
-          className="text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5 cursor-pointer text-xs font-medium"
-        >
-          <ArrowUp className="w-3.5 h-3.5" />
-          <span>Back to Top</span>
-        </button>
-      </div>
     </div>
   );
 };

@@ -4,8 +4,7 @@ import { FiltersBar } from './FiltersBar';
 import { KanbanBoard } from './KanbanBoard';
 import { TableView } from './TableView';
 import { Lead } from '../../types';
-import { Building2, GraduationCap, Lock, Sparkles, Layers, UserPlus } from 'lucide-react';
-import { AddContactModal } from '../chat/AddContactModal';
+import { Building2, GraduationCap, Lock, Sparkles, Layers } from 'lucide-react';
 
 interface LeadsViewProps {
   onSelectLead: (leadId: string) => void;
@@ -42,7 +41,6 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   // Table view keeps the overall pipeline visible in one consolidated workspace;
   // Kanban remains available from the existing view toggle.
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
-  const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
@@ -191,7 +189,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
           <div className="flex items-center gap-3">
             <div className={`w-11 h-11 rounded-xl flex items-center justify-center border shrink-0 shadow-sm transition-all overflow-hidden p-1 bg-white dark:bg-slate-800 ${
               selectedCompany === 'CRAS' 
-                ? 'border-rose-200 dark:border-rose-500/50 ring-2 ring-rose-500/20'
+                ? 'border-rose-200 dark:border-rose-500/50 ring-2 ring-rose-500/20' 
                 : selectedCompany === 'RWC'
                 ? 'border-emerald-200 dark:border-emerald-500/50 ring-2 ring-emerald-500/20'
                 : 'border-slate-200 dark:border-slate-700'
@@ -352,28 +350,12 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
         company={effectiveCompany}
       />
 
-      <div className="flex justify-end -mt-1">
-        <button
-          type="button"
-          onClick={() => setIsAddContactOpen(true)}
-          className="px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>New Contact</span>
-        </button>
-      </div>
-
       {/* Main Content Area: Kanban or Table */}
       {viewMode === 'kanban' ? (
         <KanbanBoard leads={filteredLeads} onSelectLead={onSelectLead} company={effectiveCompany} />
       ) : (
         <TableView leads={filteredLeads} onSelectLead={onSelectLead} company={effectiveCompany} />
       )}
-
-      <AddContactModal
-        isOpen={isAddContactOpen}
-        onClose={() => setIsAddContactOpen(false)}
-      />
     </div>
   );
 };

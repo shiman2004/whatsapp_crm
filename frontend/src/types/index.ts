@@ -206,6 +206,7 @@ export interface LeadNote {
   authorName: string;
   note: string;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export interface LeadStageHistory {

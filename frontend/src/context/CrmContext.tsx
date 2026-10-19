@@ -115,6 +115,7 @@ interface CrmContextType {
   updateLeadCompany: (leadId: string, company: CompanyCode) => void;
   updateLeadSource: (leadId: string, source: string) => Promise<boolean>;
   addLeadNote: (leadId: string, note: string) => void;
+  updateLeadNote: (noteId: string, note: string) => void;
   
   // Messaging actions
   replyingMessage: Message | null;
@@ -2305,6 +2306,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Note Saved', 'Internal note added to lead record', 'info');
   };
 
+  const updateLeadNote = (noteId: string, noteText: string) => {
+    if (!noteText.trim()) return;
+    setNotes(prev => prev.map(note => note.id === noteId ? {
+      ...note,
+      note: noteText.trim(),
+      updatedAt: new Date().toISOString()
+    } : note));
+    notify('Note Updated', 'Internal note updated on lead record', 'info');
+  };
+
   // Send WhatsApp message from CRM
   const sendMessage = (
     leadId: string, 
@@ -3210,8 +3221,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data)) {
-          setSuperAdmins(data);
+        const list = Array.isArray(data) ? data : (data?.superAdmins || data?.users || []);
+        if (Array.isArray(list)) {
+          setSuperAdmins(list);
         }
       }
     } catch (e) {
@@ -3250,9 +3262,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         body: JSON.stringify(data)
       });
       const resData = await res.json().catch(() => ({}));
-      if (res.ok && resData.user) {
-        setSuperAdmins(prev => prev.map(u => u.id === tempAdmin.id ? resData.user : u));
-        setUsers(prev => prev.map(u => u.id === tempAdmin.id ? resData.user : u));
+      const createdAdmin = resData.superAdmin || resData.user;
+      if (res.ok && createdAdmin) {
+        setSuperAdmins(prev => prev.map(u => u.id === tempAdmin.id ? createdAdmin : u));
+        setUsers(prev => prev.map(u => u.id === tempAdmin.id ? createdAdmin : u));
       }
     } catch (e: any) {
       console.warn('Backend createSuperAdmin network sync warning:', e.message);
@@ -4245,6 +4258,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updateLeadCompany,
     updateLeadSource,
     addLeadNote,
+    updateLeadNote,
     sendMessage,
     replyingMessage,
     setReplyingMessage,

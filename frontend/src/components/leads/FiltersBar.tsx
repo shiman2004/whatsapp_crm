@@ -92,7 +92,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   };
 
   return (
-    <div className="relative z-40 bg-white dark:bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm dark:shadow-md">
+    <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm dark:shadow-md">
       {/* Left: Search input */}
       <div className="flex items-center gap-2.5 flex-1 min-w-[260px] max-w-md">
         <div className="relative w-full">
@@ -130,7 +130,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             {activeFilterCount > 0 && <span className="min-w-4 h-4 px-1 rounded-full bg-teal-600 text-white text-[10px] leading-4 text-center">{activeFilterCount}</span>}
           </button>
           {isFilterOpen && (
-            <div className="absolute left-0 top-full z-50 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-xl">
+            <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-xl">
               <div className="flex items-center justify-between mb-2">
                 <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Date range</p>
                 {activeFilterCount > 0 && <button type="button" onClick={clearAllFilters} className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline">Clear filters</button>}

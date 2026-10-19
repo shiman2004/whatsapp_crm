@@ -554,9 +554,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
-              <th className="py-3.5 px-3 min-w-[130px]">Source</th>
-              <th className="py-3.5 px-2 text-center min-w-[65px]">Lang</th>
-              <th className="py-3.5 px-4 min-w-[220px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
               <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
               <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>

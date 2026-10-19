@@ -11,7 +11,9 @@ import {
   Code2,
   Megaphone,
   Sliders,
-  X
+  X,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -34,13 +36,17 @@ interface SidebarProps {
   setActiveTab: (tab: NavTab) => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  isCollapsed?: boolean;
+  onToggleCollapsed?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   activeTab, 
   setActiveTab, 
   isMobileOpen = false, 
-  onCloseMobile 
+  onCloseMobile,
+  isCollapsed = false,
+  onToggleCollapsed
 }) => {
   const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, unreadBroadcastsCount, markAllBroadcastsAsRead } = useCrm();
 
@@ -156,11 +162,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
       {/* Sidebar Container */}
       <aside className={`
-        w-72 md:w-56 border-r border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111b21] flex flex-col justify-between py-3 select-none shrink-0 transition-colors
+        relative w-72 ${isCollapsed ? 'md:w-16' : 'md:w-56'} bg-white dark:bg-[#111b21] flex flex-col justify-between py-3 select-none shrink-0 transition-all shadow-[4px_0_14px_rgba(15,23,42,0.06)] dark:shadow-[4px_0_18px_rgba(0,0,0,0.24)]
         fixed md:static inset-y-0 left-0 z-50 transition-transform duration-200 ease-in-out
         ${isMobileOpen ? 'translate-x-0 shadow-2xl ring-1 ring-slate-200 dark:ring-slate-800' : '-translate-x-full md:translate-x-0'}
       `}>
         <div className="space-y-2 overflow-y-auto">
+          {/* Desktop sidebar toggle */}
+          <div className="hidden md:flex absolute bottom-3 right-3 z-50">
+            <button type="button" onClick={onToggleCollapsed} className="w-8 h-8 rounded-full border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1b2a31] text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white shadow-md hover:shadow-lg flex items-center justify-center transition-all" aria-label={isCollapsed ? 'Open sidebar' : 'Close sidebar'} title={isCollapsed ? 'Open sidebar' : 'Close sidebar'}>
+              {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : <PanelLeftClose className="w-5 h-5" />}
+            </button>
+          </div>
+
           {/* Mobile Header with Brand & Close button */}
           <div className="md:hidden px-4 py-2 border-b border-slate-200 dark:border-slate-800/80 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -196,7 +209,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }
                       onCloseMobile?.();
                     }}
-                    className={`w-full flex items-center justify-between px-3 py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                    className={`w-full flex items-center ${isCollapsed ? 'md:justify-center' : 'justify-between'} px-3 py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                       isActive 
                         ? 'bg-emerald-50 text-emerald-800 dark:bg-[#202c33] dark:text-whatsapp font-bold shadow-xs' 
                         : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202c33]/60 active:bg-slate-200 dark:active:bg-[#202c33]'
@@ -204,9 +217,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   >
                     <div className="flex items-center gap-2.5">
                       <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-600 dark:text-whatsapp' : 'text-slate-400 dark:text-slate-400'}`} />
-                      <span className="truncate">{item.label}</span>
+                      <span className={`${isCollapsed ? 'md:hidden' : ''} truncate`}>{item.label}</span>
                     </div>
-                    {item.badge !== undefined && (
+                    {!isCollapsed && item.badge !== undefined && (
                       <span className={`px-2 py-0.5 text-[10px] font-black rounded-full shrink-0 ${item.badgeColor}`}>
                         {item.badge}
                       </span>

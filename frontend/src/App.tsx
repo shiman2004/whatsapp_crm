@@ -25,6 +25,7 @@ import { DesktopNotificationBanner } from './components/notifications/DesktopNot
 
 const MainLayout: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const { 
     currentUser, 
     setSelectedLeadId, 
@@ -83,6 +84,8 @@ const MainLayout: React.FC = () => {
           setActiveTab={setActiveTab} 
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapsed={() => setIsSidebarCollapsed(prev => !prev)}
         />
 
         {/* Dynamic Workspace Panel */}

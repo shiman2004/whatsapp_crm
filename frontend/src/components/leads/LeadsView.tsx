@@ -4,7 +4,8 @@ import { FiltersBar } from './FiltersBar';
 import { KanbanBoard } from './KanbanBoard';
 import { TableView } from './TableView';
 import { Lead } from '../../types';
-import { Building2, GraduationCap, Lock, Sparkles, Layers } from 'lucide-react';
+import { Building2, GraduationCap, Lock, Sparkles, Layers, UserPlus } from 'lucide-react';
+import { AddContactModal } from '../chat/AddContactModal';
 
 interface LeadsViewProps {
   onSelectLead: (leadId: string) => void;
@@ -39,6 +40,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   const [dateTo, setDateTo] = useState('');
   const [selectedStage, setSelectedStage] = useState('');
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('kanban');
+  const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
@@ -338,12 +340,28 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
         company={effectiveCompany}
       />
 
+      <div className="flex justify-end -mt-1">
+        <button
+          type="button"
+          onClick={() => setIsAddContactOpen(true)}
+          className="px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          <span>New Contact</span>
+        </button>
+      </div>
+
       {/* Main Content Area: Kanban or Table */}
       {viewMode === 'kanban' ? (
         <KanbanBoard leads={filteredLeads} onSelectLead={onSelectLead} company={effectiveCompany} />
       ) : (
         <TableView leads={filteredLeads} onSelectLead={onSelectLead} company={effectiveCompany} />
       )}
+
+      <AddContactModal
+        isOpen={isAddContactOpen}
+        onClose={() => setIsAddContactOpen(false)}
+      />
     </div>
   );
 };

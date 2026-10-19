@@ -8,7 +8,8 @@ import {
   Globe,
   Sparkles,
   UserCheck,
-  GraduationCap
+  GraduationCap,
+  UserPlus
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -30,6 +31,7 @@ interface FiltersBarProps {
   viewMode: 'kanban' | 'table';
   setViewMode: (mode: 'kanban' | 'table') => void;
   onExportCsv: () => void;
+  onAddContact: () => void;
   company?: 'RWC' | 'CRAS' | 'ALL';
 }
 
@@ -51,6 +53,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   viewMode,
   setViewMode,
   onExportCsv,
+  onAddContact,
   company = 'RWC'
 }) => {
   const [isFilterOpen, setIsFilterOpen] = React.useState(false);
@@ -267,7 +270,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
       </div>
 
       {/* Right: View mode & Export */}
-      <div className="flex items-center gap-2">
+      <div className="flex w-full items-center gap-2">
         {/* Toggle Kanban / Table */}
         <div className="bg-slate-100 dark:bg-slate-950 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center">
           <button
@@ -302,6 +305,17 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         >
           <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
           <span>Export CSV</span>
+        </button>
+
+        {/* New Contact Button */}
+        <button
+          type="button"
+          onClick={onAddContact}
+          className="ml-auto px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+          title="Add a new contact"
+        >
+          <UserPlus className="w-3.5 h-3.5" />
+          <span>New Contact</span>
         </button>
       </div>
     </div>

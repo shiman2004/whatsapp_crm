@@ -107,7 +107,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
   return (
     <>
-      <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111b21] px-2.5 sm:px-5 flex items-center justify-between sticky top-0 z-30 shrink-0 w-full transition-colors">
+      <header className="h-14 border-b border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111b21] px-2.5 sm:px-5 flex items-center justify-between sticky top-0 z-[60] shrink-0 w-full transition-colors">
         {/* Left: Mobile Menu Toggle + Brand Logo & Title */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           {onToggleMobileSidebar && (
@@ -178,7 +178,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
 
             {/* Dropdown Menu */}
             {userDropdownOpen && (
-              <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#111b21] border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-2 z-50 animate-in fade-in zoom-in-95 flex flex-col">
+              <div className="absolute right-0 mt-2 w-72 sm:w-80 bg-white dark:bg-[#111b21] border border-slate-200 dark:border-slate-700/90 rounded-2xl shadow-2xl p-2 z-[70] animate-in fade-in zoom-in-95 flex flex-col">
                 <div className="px-3 py-2 border-b border-slate-200 dark:border-slate-800 shrink-0">
                   <div className="flex items-center gap-1.5 flex-wrap">
                     <p className="text-xs font-bold text-slate-900 dark:text-white truncate">{currentUser?.fullName}</p>

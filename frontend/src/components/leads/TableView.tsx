@@ -12,7 +12,9 @@ import {
   Globe,
   ArrowDown,
   ArrowUp,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Flame,
+  CheckCircle2
 } from 'lucide-react';
 import { 
   getWindowStatus, 
@@ -88,6 +90,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   // Scroll container ref for direct "Scroll to Bottom" and "Scroll to Top"
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [treatmentSort, setTreatmentSort] = useState<'asc' | 'desc' | null>(null);
 
   // Real-time ticking clock (ticks every 1s for accurate 24h countdown)
   const [now, setNow] = useState<number>(Date.now());
@@ -124,6 +127,17 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
   const isCras = company === 'CRAS';
   const coordinators = users.filter(u => u.role === 'coordinator');
+  const displayedLeads = treatmentSort
+    ? [...leads].sort((a, b) => {
+        const getTreatmentName = (lead: Lead) => {
+          const treatment = treatments.find(t => t.id === lead.treatmentId)?.name;
+          const category = categories.find(c => c.id === lead.categoryId)?.name;
+          return (treatment || category || '').toLocaleLowerCase();
+        };
+        const comparison = getTreatmentName(a).localeCompare(getTreatmentName(b));
+        return treatmentSort === 'asc' ? comparison : -comparison;
+      })
+    : leads;
 
   /**
    * Resolves visual badge & icon for lead acquisition source (Facebook, Instagram, WhatsApp, Website)
@@ -444,26 +458,26 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[1780px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[1200px]">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
-            <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
-              <th className="py-3.5 px-4 min-w-[240px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
-              <th className="py-3.5 px-3 min-w-[130px]">Source</th>
-              <th className="py-3.5 px-2 text-center min-w-[65px]">Lang</th>
-              <th className="py-3.5 px-4 min-w-[220px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
-              <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
-              <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
-              <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
-              <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
-              <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
-              <th className="py-3.5 px-4 min-w-[160px]">Inquiry Time</th>
-              <th className="py-3.5 px-4 text-right min-w-[90px]">Action</th>
+            <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[10px]">
+              <th className="py-2.5 px-2.5 w-[135px]">Inquiry Time</th>
+              <th className="py-2.5 px-2.5 w-[210px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
+              <th className="py-2.5 px-2 w-[52px] text-center">Source</th>
+              <th className="py-2.5 px-2 text-center w-[55px]">Lang</th>
+              <th className="py-2.5 px-2.5 w-[170px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
+              <th className="py-2.5 px-2.5 w-[130px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
+              <th className="py-2.5 px-2.5 w-[190px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
+              <th className="py-2.5 px-2 w-[115px]">Assigned By</th>
+              <th className="py-2.5 px-2 w-[135px]">1st Response</th>
+              <th className="py-2.5 px-2 w-[125px]">24h Window</th>
+              <th className="py-2.5 px-2 text-right w-[75px]">Action</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={11} className="py-16 text-center text-slate-500">
+                <td colSpan={13} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -471,7 +485,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 </td>
               </tr>
             ) : (
-              leads.map((lead) => {
+              displayedLeads.map((lead, rowIndex) => {
                 const category = categories.find(c => c.id === lead.categoryId);
                 const treatment = treatments.find(t => t.id === lead.treatmentId);
                 const coordinator = users.find(u => u.id === lead.assignedTo);
@@ -487,9 +501,15 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       isSelected ? 'bg-teal-950/40' : ''
                     }`}
                   >
-                    {/* 1. Customer Contact & Authentic Avatar */}
-                    <td className="py-3.5 px-4 min-w-[240px]">
-                      <div className="flex items-center gap-3">
+                    {/* 1. Inquiry Time */}
+                    <td className="py-2.5 px-2.5 text-slate-400 font-mono text-[10px] whitespace-nowrap">
+                      {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric' })}{' '}
+                      {new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </td>
+
+                    {/* 2. Customer Contact & Authentic Avatar */}
+                    <td className="py-2.5 px-2.5">
+                      <div className="flex items-center gap-2.5">
                         {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
                         <div className="min-w-0 flex flex-col">
                           <div className="flex items-center gap-1.5 flex-wrap">
@@ -501,8 +521,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 2. Source Channel (Facebook, Instagram, WhatsApp, Website) */}
-                    <td className="py-3.5 px-3 min-w-[130px]" onClick={(e) => e.stopPropagation()}>
+                    {/* 3. Source Channel (icon-only) */}
+                    <td className="py-2.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <div 
                           className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border cursor-pointer transition-all shadow-xs whitespace-nowrap ${sourceInfo.badgeClass}`}
@@ -527,9 +547,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 3. Language */}
-                    <td className="py-3.5 px-2 text-center min-w-[65px]">
-                      <span className="px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] bg-slate-800 text-slate-300 border border-slate-700 whitespace-nowrap">
+                    {/* 4. Language */}
+                    <td className="py-2.5 px-2 text-center">
+                      <span className="px-1.5 py-0.5 rounded font-mono font-bold uppercase text-[9px] bg-slate-800 text-slate-300 border border-slate-700">
                         {lead.language}
                       </span>
                     </td>
@@ -542,7 +562,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                             {treatment?.name || category?.name || (isCrasLead ? 'Course Not Selected' : 'Treatment Not Selected')}
                           </p>
                           {lead.serialNumber && (
-                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border whitespace-nowrap ${
+                            <span className={`text-[10px] font-mono font-bold px-1.5 py-0.5 rounded border ${
                               isCrasLead 
                                 ? 'bg-rose-950/60 text-rose-300 border-rose-500/40' 
                                 : 'bg-teal-950/60 text-teal-300 border-teal-500/40'

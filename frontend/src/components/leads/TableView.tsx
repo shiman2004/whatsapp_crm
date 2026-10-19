@@ -141,17 +141,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
   const isCras = company === 'CRAS';
   const coordinators = users.filter(u => u.role === 'coordinator');
-  const displayedLeads = treatmentSort
-    ? [...leads].sort((a, b) => {
-        const getTreatmentName = (lead: Lead) => {
-          const treatment = treatments.find(t => t.id === lead.treatmentId)?.name;
-          const category = categories.find(c => c.id === lead.categoryId)?.name;
-          return (treatment || category || '').toLocaleLowerCase();
-        };
-        const comparison = getTreatmentName(a).localeCompare(getTreatmentName(b));
-        return treatmentSort === 'asc' ? comparison : -comparison;
-      })
-    : leads;
   const noteLead = noteLeadId ? leads.find(lead => lead.id === noteLeadId) : null;
   const leadNotes = noteLeadId ? notes.filter(note => note.leadId === noteLeadId) : [];
   const patientDrawerLead = patientDrawerLeadId ? leads.find(lead => lead.id === patientDrawerLeadId) : null;
@@ -262,7 +251,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     }
 
     return (
-      <div
+      <div 
         className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/10 shadow-xs ${colorClass}`}
         title={displayName || 'Customer'}
       >
@@ -554,6 +543,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
+              <th className="py-3.5 px-3 min-w-[130px]">Source</th>
+              <th className="py-3.5 px-2 text-center min-w-[65px]">Lang</th>
+              <th className="py-3.5 px-4 min-w-[220px]">{isCras ? 'Course / Program' : 'Treatment / Service'}</th>
               <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
               <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
@@ -588,6 +580,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               </tr>
             ) : (
               displayedLeads.map((lead, index) => {
+              leads.map((lead) => {
                 const category = categories.find(c => c.id === lead.categoryId);
                 const treatment = treatments.find(t => t.id === lead.treatmentId);
                 const coordinator = users.find(u => u.id === lead.assignedTo);

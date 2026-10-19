@@ -36,18 +36,15 @@ interface SidebarProps {
   setActiveTab: (tab: NavTab) => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
-  isCollapsed?: boolean;
-  onToggleCollapsed?: () => void;
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ 
   activeTab, 
   setActiveTab, 
   isMobileOpen = false, 
-  onCloseMobile,
-  isCollapsed = false,
-  onToggleCollapsed
+  onCloseMobile 
 }) => {
+  const [isCollapsed, setIsCollapsed] = React.useState(false);
   const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, unreadBroadcastsCount, markAllBroadcastsAsRead } = useCrm();
 
   const isCrasUser = !isSuperAdmin && !isLeadsOfficer && currentUser?.company === 'CRAS';
@@ -168,7 +165,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       `}>
         <div className="space-y-2 overflow-y-auto">
           <div className={`hidden md:flex absolute bottom-2 ${isCollapsed ? 'right-1' : 'right-2'} z-10`}>
-            <button type="button" onClick={onToggleCollapsed} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202c33] transition-colors" aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
+            <button type="button" onClick={() => setIsCollapsed((collapsed) => !collapsed)} className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202c33] transition-colors" aria-label={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'} title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
               {isCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
             </button>
           </div>

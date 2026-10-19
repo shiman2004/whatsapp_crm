@@ -5,6 +5,7 @@ import { KanbanBoard } from './KanbanBoard';
 import { TableView } from './TableView';
 import { Lead } from '../../types';
 import { Building2, GraduationCap, Lock, Sparkles, Layers } from 'lucide-react';
+import { AddContactModal } from '../chat/AddContactModal';
 
 interface LeadsViewProps {
   onSelectLead: (leadId: string) => void;
@@ -41,6 +42,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   // Table view keeps the overall pipeline visible in one consolidated workspace;
   // Kanban remains available from the existing view toggle.
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
+  const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
@@ -357,6 +359,11 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
       ) : (
         <TableView leads={filteredLeads} onSelectLead={onSelectLead} company={effectiveCompany} />
       )}
+
+      <AddContactModal
+        isOpen={isAddContactOpen}
+        onClose={() => setIsAddContactOpen(false)}
+      />
     </div>
   );
 };

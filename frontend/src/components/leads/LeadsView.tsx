@@ -349,19 +349,9 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
         viewMode={viewMode}
         setViewMode={setViewMode}
         onExportCsv={handleExportCsv}
+        onAddContact={() => setIsAddContactOpen(true)}
         company={effectiveCompany}
       />
-
-      <div className="flex justify-end -mt-1">
-        <button
-          type="button"
-          onClick={() => setIsAddContactOpen(true)}
-          className="px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-colors"
-        >
-          <UserPlus className="w-3.5 h-3.5" />
-          <span>New Contact</span>
-        </button>
-      </div>
 
       {/* Main Content Area: Kanban or Table */}
       {viewMode === 'kanban' ? (

@@ -797,9 +797,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
               <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
-              <th className="py-3.5 px-3 min-w-[160px]">In_Receive Time</th>
-              <th className="py-3.5 px-3 min-w-[180px]">Assign Time</th>
-              <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
+              <th className="py-3.5 px-3 min-w-[170px]">INQ Received Time</th>
+              <th className="py-3.5 px-3 min-w-[180px]">INQ Assigned Time</th>
+              <th className="py-3.5 px-3 min-w-[170px]">INQ Accept Time</th>
               <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
               <th className="py-3.5 px-4 text-center min-w-[90px]">Action</th>
               <th className="py-3.5 px-3 min-w-[170px]">Book Appointment</th>
@@ -985,18 +985,18 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       {renderAssignedByCell(lead)}
                     </td>
 
-                    {/* 10. Receive */}
-                    <td className="py-3.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap min-w-[160px]">
+                    {/* 10. INQ Received Time */}
+                    <td className="py-3.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap min-w-[170px]">
                       {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{', '}
                       <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </td>
 
-                    {/* 11. Assigned Time and Date */}
+                    {/* 11. INQ Assigned Time */}
                     <td className="py-3.5 px-3 min-w-[180px] whitespace-nowrap">
                       {renderAssignedTimeAndDateCell(lead)}
                     </td>
 
-                    {/* 11. 1st Response Time from Coordinator (Single-line timestamp + Latency Badge) */}
+                    {/* 12. INQ Accept Time (1st Response from Coordinator) */}
                     <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap">
                       {renderFirstResponseCell(lead)}
                     </td>

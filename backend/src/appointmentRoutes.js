@@ -303,13 +303,14 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
   }
 
   // ---------------------------------------------------------------------------
-  // 6. GET /api/appointments?branchId=...&date=... (or startDate/endDate)
+  // 6. GET /api/appointments?branchId=...&date=... (or startDate/endDate or patientId)
   // ---------------------------------------------------------------------------
   if (req.method === 'GET' && pathname === '/api/appointments') {
     const branchId = query.branchId;
     const dateStr = query.date;
     const startDateStr = query.startDate;
     const endDateStr = query.endDate;
+    const patientId = query.patientId;
 
     let rangeStart = null;
     let rangeEnd = null;
@@ -329,6 +330,8 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             a.id, a.branch_id AS "branchId", a.room_id AS "roomId", 
             a.patient_id AS "patientId", a.doctor_id AS "doctorId", a.treatment_id AS "treatmentId",
             a.start_time AS "startTime", a.end_time AS "endTime", a.status, a.notes,
+            a.created_by_id AS "createdById",
+            u_creator."fullName" AS "createdByName",
             a.cancellation_reason AS "cancellationReason", a.created_at AS "createdAt",
             c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone", c."avatarUrl" AS "patientAvatar",
             u."fullName" AS "doctorName", u."role" AS "doctorTitle",
@@ -337,6 +340,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
           FROM public.appointments a
           LEFT JOIN public.customers c ON a.patient_id = c.id
           LEFT JOIN public.users u ON a.doctor_id = u.id
+          LEFT JOIN public.users u_creator ON a.created_by_id = u_creator.id
           LEFT JOIN public.treatments t ON a.treatment_id = t.id
           LEFT JOIN public.rooms r ON a.room_id = r.id
           WHERE 1=1
@@ -346,6 +350,10 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
         if (branchId) {
           params.push(branchId);
           sql += ` AND a.branch_id = $${params.length}`;
+        }
+        if (patientId) {
+          params.push(patientId);
+          sql += ` AND a.patient_id = $${params.length}`;
         }
         if (rangeStart && rangeEnd) {
           params.push(rangeStart);
@@ -514,7 +522,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
               INSERT INTO public.appointments (
                 id, branch_id, room_id, patient_id, doctor_id, treatment_id,
                 start_time, end_time, status, notes, created_by_id, created_at, updated_at
-              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'confirmed', $9, $10, NOW(), NOW());
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'booked', $9, $10, NOW(), NOW());
             `, apptId, branchId, roomId, finalPatientId, doctorId, treatmentId, reqStart, reqEnd, notes || null, authUser?.id || null);
 
             // Insert initial status history
@@ -522,7 +530,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             await tx.$executeRawUnsafe(`
               INSERT INTO public.appointment_status_history (
                 id, appointment_id, previous_status, new_status, changed_by_id, changed_by_name, reason, changed_at
-              ) VALUES ($1, $2, NULL, 'confirmed', $3, $4, 'Initial Booking Confirmation', NOW());
+              ) VALUES ($1, $2, NULL, 'booked', $3, $4, 'Appointment successfully booked', NOW());
             `, histId, apptId, authUser?.id || null, authUser?.fullName || 'System');
 
             return { apptId, finalPatientId };
@@ -610,7 +618,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
         treatmentId,
         startTime: reqStart.toISOString(),
         endTime: reqEnd.toISOString(),
-        status: 'confirmed',
+        status: 'booked',
         notes,
         patientId: patientId || `cust-${Date.now()}`,
         patientName: patientName || 'Walk-in Patient',
@@ -723,10 +731,10 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
           });
         }
 
-        // Update appointment
+        // Update appointment with rescheduled status
         await prisma.$executeRawUnsafe(`
           UPDATE public.appointments
-          SET room_id = $1, start_time = $2, end_time = $3, updated_at = NOW()
+          SET room_id = $1, start_time = $2, end_time = $3, status = 'rescheduled', updated_at = NOW()
           WHERE id = $4;
         `, targetRoomId, reqStart, reqEnd, apptId);
 
@@ -734,8 +742,8 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
         await prisma.$executeRawUnsafe(`
           INSERT INTO public.appointment_status_history (
             id, appointment_id, previous_status, new_status, changed_by_id, changed_by_name, reason, changed_at
-          ) VALUES ($1, $2, $3, $3, $4, $5, $6, NOW());
-        `, `hist-${crypto.randomUUID()}`, apptId, appt.status, authUser?.id || null, authUser?.fullName || 'Staff', reason || 'Rescheduled appointment');
+          ) VALUES ($1, $2, $3, 'rescheduled', $4, $5, $6, NOW());
+        `, `hist-${crypto.randomUUID()}`, apptId, appt.status, authUser?.id || null, authUser?.fullName || 'Staff', reason || 'Appointment moved to another date or time');
 
         // Trigger WhatsApp Notification
         const customer = await prisma.customer.findUnique({ where: { id: appt.patient_id } }).catch(() => null);
@@ -841,7 +849,10 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
       const newStatus = payload.status;
       const reason = payload.reason || `Status updated to ${newStatus}`;
 
-      const validStatuses = ['pending', 'confirmed', 'checked_in', 'in_progress', 'completed', 'cancelled', 'no_show'];
+      const validStatuses = [
+        'booked', 'confirmed', 'arrived', 'paid', 'rescheduled', 'cancelled', 'no_answer',
+        'pending', 'checked_in', 'in_progress', 'completed', 'no_show'
+      ];
       if (!validStatuses.includes(newStatus)) {
         return sendJson(res, 400, { success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` });
       }

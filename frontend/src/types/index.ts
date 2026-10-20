@@ -335,12 +335,17 @@ export interface Room {
 }
 
 export type AppointmentStatus = 
-  | 'pending' 
+  | 'booked' 
   | 'confirmed' 
+  | 'arrived' 
+  | 'paid' 
+  | 'rescheduled' 
+  | 'cancelled' 
+  | 'no_answer'
+  | 'pending' 
   | 'checked_in' 
   | 'in_progress' 
   | 'completed' 
-  | 'cancelled' 
   | 'no_show';
 
 export interface AppointmentStatusHistory {
@@ -377,6 +382,8 @@ export interface Appointment {
   endTime: string;   // ISO String
   status: AppointmentStatus;
   notes?: string;
+  createdById?: string;
+  createdByName?: string;
   cancellationReason?: string;
   statusHistory?: AppointmentStatusHistory[];
   createdAt: string;

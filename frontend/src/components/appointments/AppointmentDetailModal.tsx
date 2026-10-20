@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { Appointment, AppointmentStatus, Room } from '../../types';
 import { appointmentService } from '../../services/appointmentService';
+import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
 
 interface AppointmentDetailModalProps {
   isOpen: boolean;
@@ -25,6 +26,7 @@ interface AppointmentDetailModalProps {
   onClose: () => void;
   onUpdated: () => void;
   rooms: Room[];
+  initialMode?: 'view' | 'reschedule';
   onOpenWhatsAppChat?: (patientPhone: string) => void;
 }
 
@@ -34,6 +36,7 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
   onClose,
   onUpdated,
   rooms,
+  initialMode = 'view',
   onOpenWhatsAppChat
 }) => {
   const [appointment, setAppointment] = useState<Appointment | null>(null);
@@ -76,12 +79,12 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
   useEffect(() => {
     if (isOpen && appointmentId) {
       setActionError(null);
-      setIsRescheduling(false);
+      setIsRescheduling(initialMode === 'reschedule');
       setIsCancelling(false);
       setActiveTab('details');
       fetchDetails();
     }
-  }, [isOpen, appointmentId]);
+  }, [isOpen, appointmentId, initialMode]);
 
   if (!isOpen) return null;
 
@@ -155,22 +158,16 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
   };
 
   const getStatusBadge = (status: AppointmentStatus) => {
-    switch (status) {
-      case 'confirmed':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-blue-500/20 text-blue-300 border border-blue-500/40">Confirmed</span>;
-      case 'checked_in':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">Checked In</span>;
-      case 'in_progress':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-teal-500/20 text-teal-300 border border-teal-500/40 animate-pulse">In Progress</span>;
-      case 'completed':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">Completed</span>;
-      case 'cancelled':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-rose-500/20 text-rose-300 border border-rose-500/40">Cancelled</span>;
-      case 'no_show':
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300 border border-slate-600">No Show</span>;
-      default:
-        return <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-slate-700 text-slate-300 border border-slate-600">{status}</span>;
-    }
+    const config = getAppointmentStatusConfig(status);
+    return (
+      <span 
+        className={`px-3 py-1 rounded-full text-xs font-bold inline-flex items-center gap-1.5 shadow-sm transition-all ${config.badgeClass}`}
+        title={config.description}
+      >
+        <span className={`w-2 h-2 rounded-full ${config.dotClass}`} />
+        <span>{config.label}</span>
+      </span>
+    );
   };
 
   return (
@@ -490,75 +487,83 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
               )}
 
               {/* Clinical Workflow Status Actions */}
-              {appointment.status !== 'cancelled' && appointment.status !== 'completed' && (
+              {appointment.status !== 'cancelled' && appointment.status !== 'paid' && (
                 <div className="pt-2 border-t border-slate-800 space-y-2">
                   <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
                     Workflow Actions
                   </label>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    {appointment.status === 'confirmed' && (
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {/* Confirm (Green) */}
+                    {(appointment.status === 'booked' || appointment.status === 'rescheduled' || appointment.status === 'no_answer') && (
                       <button
                         type="button"
-                        onClick={() => handleStatusChange('checked_in', 'Patient arrived at clinic front desk')}
+                        onClick={() => handleStatusChange('confirmed', 'Customer confirmed the appointment')}
                         disabled={isSubmitting}
-                        className="p-2 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="p-2 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Check In</span>
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Confirm (🟢)</span>
                       </button>
                     )}
 
-                    {(appointment.status === 'confirmed' || appointment.status === 'checked_in') && (
+                    {/* Arrived (Purple) */}
+                    {(appointment.status === 'booked' || appointment.status === 'confirmed' || appointment.status === 'rescheduled') && (
                       <button
                         type="button"
-                        onClick={() => handleStatusChange('in_progress', 'Doctor started clinical session')}
+                        onClick={() => handleStatusChange('arrived', 'Customer arrived at the location')}
                         disabled={isSubmitting}
-                        className="p-2 rounded-xl text-xs font-bold bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 border border-teal-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="p-2 rounded-xl text-xs font-bold bg-purple-500/20 text-purple-300 hover:bg-purple-500/30 border border-purple-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       >
-                        <Play className="w-3.5 h-3.5" />
-                        <span>Start Session</span>
+                        <User className="w-3.5 h-3.5 text-purple-400" />
+                        <span>Arrived (🟣)</span>
                       </button>
                     )}
 
-                    {appointment.status === 'in_progress' && (
+                    {/* Paid (Yellow) */}
+                    {(appointment.status === 'confirmed' || appointment.status === 'arrived') && (
                       <button
                         type="button"
-                        onClick={() => handleStatusChange('completed', 'Treatment completed successfully')}
+                        onClick={() => handleStatusChange('paid', 'Customer completed payment')}
                         disabled={isSubmitting}
-                        className="p-2 rounded-xl text-xs font-bold bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30 border border-emerald-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                        className="p-2 rounded-xl text-xs font-bold bg-amber-500/20 text-amber-300 hover:bg-amber-500/30 border border-amber-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       >
-                        <CheckCircle2 className="w-3.5 h-3.5" />
-                        <span>Complete</span>
+                        <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                        <span>Mark Paid (🟡)</span>
                       </button>
                     )}
 
-                    <button
-                      type="button"
-                      onClick={() => handleStatusChange('no_show', 'Patient did not attend appointment')}
-                      disabled={isSubmitting}
-                      className="p-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                    >
-                      <span>No Show</span>
-                    </button>
+                    {/* No Answer (Gray) */}
+                    {appointment.status !== 'no_answer' && appointment.status !== 'arrived' && (
+                      <button
+                        type="button"
+                        onClick={() => handleStatusChange('no_answer', 'Customer did not respond')}
+                        disabled={isSubmitting}
+                        className="p-2 rounded-xl text-xs font-bold bg-slate-800 text-slate-300 hover:bg-slate-700 border border-slate-700 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
+                      >
+                        <span>No Answer (⚫)</span>
+                      </button>
+                    )}
 
+                    {/* Reschedule (Orange) */}
                     <button
                       type="button"
                       onClick={() => setIsRescheduling(true)}
                       disabled={isSubmitting}
-                      className="p-2 rounded-xl text-xs font-bold bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 border border-indigo-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="p-2 rounded-xl text-xs font-bold bg-orange-500/20 text-orange-300 hover:bg-orange-500/30 border border-orange-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                     >
-                      <RotateCcw className="w-3.5 h-3.5" />
-                      <span>Reschedule</span>
+                      <RotateCcw className="w-3.5 h-3.5 text-orange-400" />
+                      <span>Reschedule (🟠)</span>
                     </button>
 
+                    {/* Cancel (Red) */}
                     <button
                       type="button"
                       onClick={() => setIsCancelling(true)}
                       disabled={isSubmitting}
-                      className="p-2 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      className="p-2 rounded-xl text-xs font-bold bg-rose-500/20 text-rose-300 hover:bg-rose-500/30 border border-rose-500/30 transition-all flex items-center justify-center gap-1.5 cursor-pointer active:scale-95"
                     >
-                      <XCircle className="w-3.5 h-3.5" />
-                      <span>Cancel</span>
+                      <XCircle className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Cancel (🔴)</span>
                     </button>
                   </div>
                 </div>

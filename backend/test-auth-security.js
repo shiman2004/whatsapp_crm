@@ -65,8 +65,8 @@ assert.strictEqual(isPublicRoute({ method: 'POST' }, '/api/auth/login'), true, '
 assert.strictEqual(isPublicRoute({ method: 'GET' }, '/api/webhook'), true, 'Meta webhook GET must be public');
 assert.strictEqual(isPublicRoute({ method: 'POST' }, '/api/webhook'), true, 'Meta webhook POST must be public');
 assert.strictEqual(isPublicRoute({ method: 'GET' }, '/api/db/status'), true, 'GET /api/db/status must be public');
-assert.strictEqual(isPublicRoute({ method: 'GET' }, '/api/meta/config'), true, 'GET /api/meta/config must be public');
-assert.strictEqual(isPublicRoute({ method: 'GET' }, '/uploads/sample.jpg'), true, 'Static /uploads/ must be public');
+assert.strictEqual(isPublicRoute({ method: 'GET' }, '/api/meta/config'), false, 'GET /api/meta/config must be protected');
+assert.strictEqual(isPublicRoute({ method: 'GET' }, '/uploads/sample.jpg'), false, 'Static /uploads/ must be protected');
 assert.strictEqual(isPublicRoute({ method: 'GET' }, '/api/categories'), true, 'GET /api/categories catalog must be public');
 
 // Protected CRM endpoints (Denied to unauthenticated callers by default)
@@ -134,9 +134,8 @@ console.log('  ✅ 3.5 Token signed with non-existent user ID rejected with 401'
 // 3.6 Query Parameter Token Support (for SSE EventSource)
 const queryAuthReq = { headers: {} };
 const queryRes = await authenticateRequest(queryAuthReq, { query: { token: adminToken } });
-assert(queryRes.user !== null, 'Valid token in query param must be authenticated');
-assert.strictEqual(queryRes.user.id, 'user-admin-1');
-assert.strictEqual(queryRes.user.role, 'super_admin');
+assert.strictEqual(queryRes.user, null, 'JWT in query param must not authenticate requests');
+assert.strictEqual(queryRes.status, 401);
 console.log('  ✅ 3.6 Query parameter token authenticated for SSE keep-alive stream');
 
 // -----------------------------------------------------------------------------

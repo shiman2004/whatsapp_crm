@@ -6,10 +6,12 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test-meta-token-security.js && node test-bell-notification.js && node test-sender-audit.js && node test-24h-window.js && npx tsx test-phonetic-composer.js && node test-company-switching.js && node test-cras-contact-creation.js && node test-company-pipelines.js && node test-super-admin-settings.js && node test-meta-message-status.js && node test-appointments.js",
+    "test": "node test-security-hardening.js && node test-meta-token-security.js && node test-bell-notification.js && node test-sender-audit.js && node test-24h-window.js && node test-company-switching.js && node test-cras-contact-creation.js && node test-company-pipelines.js && node test-super-admin-settings.js && node test-meta-message-status.js && node test-appointments.js",
+    "test:phonetic": "npx tsx test-phonetic-composer.js",
     "build": "prisma generate",
     "postinstall": "prisma generate",
     "webhook": "node webhook-standalone.js",
+    "media:migrate-private": "node scripts/migrate-media-private.js",
     "prisma:generate": "prisma generate",
     "prisma:push": "prisma db push",
     "prisma:migrate": "prisma migrate dev",

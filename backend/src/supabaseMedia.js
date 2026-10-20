@@ -1,6 +1,12 @@
 import { getPrisma } from './db.js';
 import fs from 'fs';
 import path from 'path';
+import { createClient } from '@supabase/supabase-js';
+
+const storageBucket = process.env.SUPABASE_MEDIA_BUCKET || 'whatsapp-media';
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, { auth: { persistSession: false } })
+  : null;
 
 /**
  * Persist media file directly into Supabase PostgreSQL (public.media_files)
@@ -19,6 +25,16 @@ export async function saveMediaToSupabase(fileName, mimeType, buffer) {
     const mediaId = `media_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
     const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
     const mime = mimeType || 'application/octet-stream';
+
+    if (supabase) {
+      const { error } = await supabase.storage.from(storageBucket).upload(cleanFileName, buf, {
+        contentType: mime,
+        upsert: true,
+        cacheControl: '3600'
+      });
+      if (error) throw error;
+      return true;
+    }
 
     await prisma.$executeRawUnsafe(`
       INSERT INTO public.media_files (id, file_name, mime_type, data, size, created_at)
@@ -41,6 +57,17 @@ export async function saveMediaToSupabase(fileName, mimeType, buffer) {
 export async function getMediaFromSupabase(fileName) {
   if (!fileName) return null;
   try {
+    if (supabase) {
+      const { data, error } = await supabase.storage.from(storageBucket).download(path.basename(fileName));
+      if (!error && data) {
+        return {
+          fileName: path.basename(fileName),
+          mimeType: data.type || 'application/octet-stream',
+          buffer: Buffer.from(await data.arrayBuffer()),
+          size: data.size || 0
+        };
+      }
+    }
     const prisma = getPrisma();
     if (!prisma) return null;
 
@@ -76,6 +103,10 @@ export async function getMediaFromSupabase(fileName) {
 export async function deleteMediaFromSupabase(fileName) {
   if (!fileName) return false;
   try {
+    if (supabase) {
+      const { error } = await supabase.storage.from(storageBucket).remove([path.basename(fileName)]);
+      return !error;
+    }
     const prisma = getPrisma();
     if (!prisma) return false;
 

@@ -96,6 +96,7 @@ model User {
   stageChanges        LeadStageHistory[]
   whatsappSession     WhatsAppSession?   @relation("CoordinatorWhatsAppSession")
   messagesAuthored    Message[]          @relation("CoordinatorAuthoredMessages")
+  doctorAppointments  Appointment[]      @relation("DoctorAppointments")
 
   @@map("users")
 }
@@ -183,6 +184,8 @@ model Treatment {
   // Relations
   category        TreatmentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
   leads           Lead[]
+  appointments    Appointment[]
+  roomTreatments  RoomTreatment[]
 
   @@index([categoryId])
   @@index([company])
@@ -224,6 +227,7 @@ model Customer {
   // Relations
   leads             Lead[]
   messages          Message[]
+  appointments      Appointment[]
 
   @@index([whatsappNumber])
   @@index([whatsappId])
@@ -469,3 +473,125 @@ model TeamBroadcast {
   @@index([createdAt])
   @@map("team_broadcasts")
 }
+
+// 15. Branches (Alpha Health Group Multi-Branch Network)
+model Branch {
+  id        String   @id @db.VarChar(50)
+  name      String   @db.VarChar(255)
+  code      String   @unique @db.VarChar(50)
+  address   String?  @db.Text
+  phone     String?  @db.VarChar(50)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  rooms        Room[]
+  appointments Appointment[]
+
+  @@map("branches")
+}
+
+// 16. Clinic Rooms / Treatment Suites
+model Room {
+  id             String   @id @db.VarChar(50)
+  branchId       String   @map("branch_id") @db.VarChar(50)
+  name           String   @db.VarChar(255)
+  roomNumber     String   @map("room_number") @db.VarChar(50)
+  description    String?  @db.Text
+  color          String?  @default("#0d9488") @db.VarChar(50)
+  operatingStart String?  @default("08:00") @map("operating_start") @db.VarChar(10)
+  operatingEnd   String?  @default("20:00") @map("operating_end") @db.VarChar(10)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  branch       Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  treatments   RoomTreatment[]
+  appointments Appointment[]
+
+  @@index([branchId])
+  @@map("rooms")
+}
+
+// 17. Room Treatments Junction
+model RoomTreatment {
+  roomId      String @map("room_id") @db.VarChar(50)
+  treatmentId String @map("treatment_id") @db.VarChar(50)
+
+  room      Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  treatment Treatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, treatmentId])
+  @@index([roomId])
+  @@map("room_treatments")
+}
+
+// 18. Appointments
+model Appointment {
+  id                 String    @id @db.VarChar(50)
+  branchId           String    @map("branch_id") @db.VarChar(50)
+  roomId             String    @map("room_id") @db.VarChar(50)
+  patientId          String    @map("patient_id") @db.VarChar(50)
+  doctorId           String    @map("doctor_id") @db.VarChar(50)
+  treatmentId        String    @map("treatment_id") @db.VarChar(50)
+  startTime          DateTime  @map("start_time")
+  endTime            DateTime  @map("end_time")
+  status             String    @default("confirmed") @db.VarChar(50)
+  notes              String?   @db.Text
+  createdById        String?   @map("created_by_id") @db.VarChar(50)
+  updatedById        String?   @map("updated_by_id") @db.VarChar(50)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason") @db.Text
+
+  branch        Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  room          Room                       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  patient       Customer                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        User                       @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
+  treatment     Treatment                  @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  statusHistory AppointmentStatusHistory[]
+
+  @@index([branchId, startTime])
+  @@index([roomId, startTime, endTime])
+  @@index([doctorId, startTime, endTime])
+  @@index([patientId])
+  @@index([status])
+  @@map("appointments")
+}
+
+// 19. Appointment Status Audit History
+model AppointmentStatusHistory {
+  id             String   @id @db.VarChar(50)
+  appointmentId  String   @map("appointment_id") @db.VarChar(50)
+  previousStatus String?  @map("previous_status") @db.VarChar(50)
+  newStatus      String   @map("new_status") @db.VarChar(50)
+  changedById    String?  @map("changed_by_id") @db.VarChar(50)
+  changedByName  String?  @map("changed_by_name") @db.VarChar(255)
+  reason         String?  @db.Text
+  changedAt      DateTime @default(now()) @map("changed_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@map("appointment_status_history")
+}
+
+// 20. Availability Blocks
+model AvailabilityBlock {
+  id          String   @id @db.VarChar(50)
+  branchId    String   @map("branch_id") @db.VarChar(50)
+  roomId      String?  @map("room_id") @db.VarChar(50)
+  doctorId    String?  @map("doctor_id") @db.VarChar(50)
+  startTime   DateTime @map("start_time")
+  endTime     DateTime @map("end_time")
+  reason      String   @db.VarChar(255)
+  createdById String?  @map("created_by_id") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([branchId, startTime, endTime])
+  @@index([roomId])
+  @@index([doctorId])
+  @@map("availability_blocks")
+}
+

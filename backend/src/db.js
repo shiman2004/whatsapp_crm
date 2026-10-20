@@ -203,6 +203,130 @@ export const checkDbConnection = async () => {
       `).catch(() => null);
     }
 
+    // Provision Appointment Booking & Room Scheduling Tables
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.branches (
+        id VARCHAR(50) PRIMARY KEY,
+        name VARCHAR(255) NOT NULL,
+        code VARCHAR(50) UNIQUE NOT NULL,
+        address TEXT,
+        phone VARCHAR(50),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+
+    // Seed default branches if empty
+    await prisma.$executeRawUnsafe(`
+      INSERT INTO public.branches (id, name, code, address, phone, is_active)
+      VALUES
+        ('branch-colombo', 'Colombo (Head Office)', 'COLOMBO', 'Colombo, Sri Lanka', '+94 70 639 3353', TRUE),
+        ('branch-maruthamunai', 'Maruthamunai Branch', 'MARUTHAMUNAI', 'Maruthamunai, Sri Lanka', '+94 70 637 3353', TRUE)
+      ON CONFLICT (code) DO NOTHING;
+    `).catch(() => null);
+
+    // Provision Rooms Table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.rooms (
+        id VARCHAR(50) PRIMARY KEY,
+        branch_id VARCHAR(50) NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        room_number VARCHAR(50) NOT NULL,
+        description TEXT,
+        color VARCHAR(50) DEFAULT '#0d9488',
+        operating_start VARCHAR(10) DEFAULT '08:00',
+        operating_end VARCHAR(10) DEFAULT '20:00',
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_rooms_branch ON public.rooms(branch_id);`).catch(() => null);
+
+    // Seed initial clinical rooms if empty
+    const roomCount = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.rooms;`).catch(() => [{ count: 0 }]);
+    if ((roomCount[0]?.count || 0) === 0) {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public.rooms (id, branch_id, name, room_number, description, color, operating_start, operating_end, is_active)
+        VALUES
+          ('room-col-1', 'branch-colombo', 'Consultation Suite 1', 'R-101', 'General aesthetic consultation & triage', '#0d9488', '08:00', '20:00', TRUE),
+          ('room-col-2', 'branch-colombo', 'Laser & Skin Therapy Suite', 'R-102', 'Laser facial, carbon peel & anti-aging', '#6366f1', '08:00', '20:00', TRUE),
+          ('room-col-3', 'branch-colombo', 'IV Wellness & Infusion Lounge', 'R-103', 'Glutathione IV drips & cellular hydration', '#ec4899', '08:00', '20:00', TRUE),
+          ('room-col-4', 'branch-colombo', 'Hair Restoration Clinic', 'R-104', 'PRP therapy & scalp mesotherapy', '#f59e0b', '08:00', '20:00', TRUE),
+          ('room-mar-1', 'branch-maruthamunai', 'Consultation Room A', 'M-201', 'Primary clinical assessment', '#0d9488', '08:00', '20:00', TRUE),
+          ('room-mar-2', 'branch-maruthamunai', 'Aesthetic & IV Suite B', 'M-202', 'Clinical procedures & IV drips', '#6366f1', '08:00', '20:00', TRUE)
+        ON CONFLICT (id) DO NOTHING;
+      `).catch(() => null);
+    }
+
+    // Provision Room Treatments junction table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.room_treatments (
+        room_id VARCHAR(50) NOT NULL,
+        treatment_id VARCHAR(50) NOT NULL,
+        PRIMARY KEY (room_id, treatment_id)
+      );
+    `).catch(() => null);
+
+    // Provision Appointments Table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.appointments (
+        id VARCHAR(50) PRIMARY KEY,
+        branch_id VARCHAR(50) NOT NULL,
+        room_id VARCHAR(50) NOT NULL,
+        patient_id VARCHAR(50) NOT NULL,
+        doctor_id VARCHAR(50) NOT NULL,
+        treatment_id VARCHAR(50) NOT NULL,
+        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        status VARCHAR(50) DEFAULT 'confirmed',
+        notes TEXT,
+        created_by_id VARCHAR(50),
+        updated_by_id VARCHAR(50),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        cancelled_at TIMESTAMP WITH TIME ZONE,
+        cancellation_reason TEXT
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_branch_time ON public.appointments(branch_id, start_time);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_room_time ON public.appointments(room_id, start_time, end_time);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_doctor_time ON public.appointments(doctor_id, start_time, end_time);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_patient ON public.appointments(patient_id);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appointments_status ON public.appointments(status);`).catch(() => null);
+
+    // Provision Appointment Status History Table
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.appointment_status_history (
+        id VARCHAR(50) PRIMARY KEY,
+        appointment_id VARCHAR(50) NOT NULL,
+        previous_status VARCHAR(50),
+        new_status VARCHAR(50) NOT NULL,
+        changed_by_id VARCHAR(50),
+        changed_by_name VARCHAR(255),
+        reason TEXT,
+        changed_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_appt_hist_appointment ON public.appointment_status_history(appointment_id);`).catch(() => null);
+
+    // Provision Availability Blocks Table (maintenance / doctor leave)
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.availability_blocks (
+        id VARCHAR(50) PRIMARY KEY,
+        branch_id VARCHAR(50) NOT NULL,
+        room_id VARCHAR(50),
+        doctor_id VARCHAR(50),
+        start_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        end_time TIMESTAMP WITH TIME ZONE NOT NULL,
+        reason VARCHAR(255) NOT NULL,
+        created_by_id VARCHAR(50),
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_avail_blocks_branch ON public.availability_blocks(branch_id, start_time, end_time);`).catch(() => null);
+
     return { connected: true, message: 'Supabase Postgres Connected' };
   } catch (err) {
     isDbConnected = false;

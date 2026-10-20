@@ -16,6 +16,7 @@ import { ArchitectureBlueprint } from './components/admin/ArchitectureBlueprint'
 import { WebhookSimulatorPlayground } from './components/admin/WebhookSimulatorPlayground';
 import { SuperAdminSettingsView } from './components/admin/SuperAdminSettings/SuperAdminSettingsView';
 import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
+import { AppointmentSchedulerView } from './components/appointments/AppointmentSchedulerView';
 import { LoginScreen } from './components/auth/LoginScreen';
 
 import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
@@ -87,11 +88,14 @@ const MainLayout: React.FC = () => {
 
         {/* Dynamic Workspace Panel */}
         <main className={`flex-1 min-h-0 flex flex-col overflow-hidden ${
-          activeTab === 'chat' ? 'p-0 bg-[#efeae2] dark:bg-[#0b141a]' : 'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/30'
+          activeTab === 'chat' ? 'p-0 bg-[#efeae2] dark:bg-[#0b141a]' : 
+          activeTab === 'appointment-rooms' ? 'p-0 overflow-hidden bg-slate-950' : 
+          'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/30'
         }`}>
           {activeTab === 'dashboard' && <DashboardOverview />}
           {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
           {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
+          {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
           {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
           {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}

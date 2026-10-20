@@ -416,7 +416,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => 
-    Boolean(localStorage.getItem('meta_access_token') || localStorage.getItem('rw_has_meta_config') === 'true')
+    Boolean(localStorage.getItem('rw_has_meta_config') === 'true')
   );
   const initialLeadLoadedRef = useRef<boolean>(false);
 
@@ -679,13 +679,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const token = await ensureValidAuthToken();
       const authHeaders = {
         'Authorization': token ? `Bearer ${token}` : '',
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
       const [leadsRes, msgsRes, metaRes, coordsRes, broadcastsRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/leads`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/messages`, { headers: authHeaders }).catch(() => null),
-        fetch(`${API_BASE_URL}/api/meta/config`).catch(() => null),
+        fetch(`${API_BASE_URL}/api/meta/config`, { headers: { Authorization: token ? `Bearer ${token}` : '' } }).catch(() => null),
         fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/broadcasts`, { headers: authHeaders }).catch(() => null)
       ]);
@@ -914,7 +913,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const res = await fetch(`${API_BASE_URL}/api/status?coordinatorId=${currentUser.id}`, {
           headers: {
             'Authorization': token ? `Bearer ${token}` : '',
-            'x-coordinator-id': currentUser.id
           }
         });
         if (res.ok) {
@@ -997,14 +995,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handledMsgIds = new Set<string>();
 
     try {
-      const coordId = currentUser?.id || 'user-admin-1';
       const token = getAuthToken();
       if (!token) {
         return;
       }
-      eventSource = new EventSource(`${API_BASE_URL}/api/events?token=${encodeURIComponent(token)}&coordinatorId=${coordId}`);
+      const connectSse = async () => {
+        const ticketResponse = await fetch(`${API_BASE_URL}/api/events/ticket`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const ticketData = await ticketResponse.json();
+        if (!ticketResponse.ok || !ticketData?.ticket) return;
+        eventSource = new EventSource(`${API_BASE_URL}/api/events?ticket=${encodeURIComponent(ticketData.ticket)}`);
       
-      eventSource.onmessage = (event) => {
+      eventSource!.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
 
@@ -1707,6 +1711,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.error('Error handling SSE message:', err);
         }
       };
+      };
+      connectSse().catch(error => console.warn('Webhook SSE connection unavailable:', error));
     } catch (e) {
       console.warn('Webhook SSE connection unavailable:', e);
     }
@@ -1884,8 +1890,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1',
-          'x-user-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
@@ -2005,7 +2009,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2058,7 +2061,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
@@ -2114,7 +2116,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2159,7 +2160,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2218,7 +2218,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2267,7 +2266,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
@@ -2328,7 +2326,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!lead) return;
 
     // Enforce WhatsApp connection requirement for CRM sending (Supports Linked Device OR Meta Cloud API)
-    const hasMetaToken = hasMetaConfig || !!localStorage.getItem('meta_access_token');
+    const hasMetaToken = hasMetaConfig;
     if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected' && !hasMetaToken) {
       notify('WhatsApp Disconnected', 'Please link your WhatsApp or configure Meta API first to send messages.', 'warning');
       setQrModalOpen(true);
@@ -2380,8 +2378,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Dispatch to WhatsApp bridge (Supports both linked QR session & Meta API)
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const isSuperAdmin = currentUser?.role === 'super_admin';
-    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
     
     if ((recipientPhone || recipientWaId) && !leadId.startsWith('lead-sim')) {
       fetch(`${API_BASE_URL}/api/send-message`, {
@@ -2389,7 +2385,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           to: recipientPhone,
@@ -2404,7 +2399,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           senderRole: auditSenderRole,
           messageSource: auditSource,
           sentAt: nowUtc,
-          token: savedToken || undefined,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701')
         })
@@ -2656,8 +2650,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const isSuperAdmin = currentUser?.role === 'super_admin';
-    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/send-template`, {
@@ -2683,7 +2675,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sentAt: nowUtc,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
-          token: savedToken || undefined,
           retryMessageId: retryMessageId || undefined
         })
       });
@@ -2735,7 +2726,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
     const isSuperAdmin = currentUser?.role === 'super_admin';
-    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/send-message`, {
@@ -2752,7 +2742,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           media: msg.media || undefined,
           leadId: lead.id,
           customerId: lead.customerId,
-          token: savedToken || undefined,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
           retryMessageId: failedMessageId
@@ -3396,7 +3385,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         customerId: id,
@@ -3452,7 +3440,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : '',
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           id: newCoordId,
@@ -3559,7 +3546,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         }
       });
     } catch (err) {
@@ -3612,7 +3598,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           fullName: cleanName,
@@ -3683,7 +3668,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           ...data,
@@ -3734,7 +3718,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         }
       });
 
@@ -4115,7 +4098,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const authHeaders = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
       const res = await fetch(`${API_BASE_URL}/api/contacts`, {

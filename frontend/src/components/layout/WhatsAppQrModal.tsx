@@ -32,7 +32,6 @@ export const WhatsAppQrModal: React.FC<WhatsAppQrModalProps> = ({ isOpen, onClos
   const authHeaders = {
     'Content-Type': 'application/json',
     'Authorization': token ? `Bearer ${token}` : '',
-    'x-coordinator-id': currentUser?.id || 'user-admin-1'
   };
 
   // Poll or listen for central clinic QR code & status

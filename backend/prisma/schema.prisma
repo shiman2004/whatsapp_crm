@@ -96,7 +96,7 @@ model User {
   stageChanges        LeadStageHistory[]
   whatsappSession     WhatsAppSession?   @relation("CoordinatorWhatsAppSession")
   messagesAuthored    Message[]          @relation("CoordinatorAuthoredMessages")
-  doctorAppointments  Appointment[]      @relation("DoctorAppointments")
+
 
   @@map("users")
 }
@@ -526,7 +526,26 @@ model RoomTreatment {
   @@map("room_treatments")
 }
 
-// 18. Appointments
+// 18. Doctors / Consultants assigned to appointments
+model Doctor {
+  id        String   @id @default(uuid()) @db.VarChar(50)
+  fullName  String   @db.VarChar(255)
+  title     String?  @db.VarChar(255)
+  branch    String?  @db.VarChar(100)
+  phone     String?  @db.VarChar(50)
+  avatar    String?  @db.VarChar(500)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+
+  @@index([branch])
+  @@index([isActive])
+  @@map("doctors")
+}
+
+// 19. Appointments
 model Appointment {
   id                 String    @id @db.VarChar(50)
   branchId           String    @map("branch_id") @db.VarChar(50)
@@ -548,7 +567,7 @@ model Appointment {
   branch        Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
   room          Room                       @relation(fields: [roomId], references: [id], onDelete: Cascade)
   patient       Customer                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor        User                       @relation("DoctorAppointments", fields: [doctorId], references: [id], onDelete: Cascade)
+  doctor        Doctor                     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   treatment     Treatment                  @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
   statusHistory AppointmentStatusHistory[]
 
@@ -560,7 +579,7 @@ model Appointment {
   @@map("appointments")
 }
 
-// 19. Appointment Status Audit History
+// 20. Appointment Status Audit History
 model AppointmentStatusHistory {
   id             String   @id @db.VarChar(50)
   appointmentId  String   @map("appointment_id") @db.VarChar(50)
@@ -577,7 +596,7 @@ model AppointmentStatusHistory {
   @@map("appointment_status_history")
 }
 
-// 20. Availability Blocks
+// 21. Availability Blocks
 model AvailabilityBlock {
   id          String   @id @db.VarChar(50)
   branchId    String   @map("branch_id") @db.VarChar(50)

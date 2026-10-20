@@ -6,6 +6,9 @@ import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { PatientContactDrawer } from './PatientContactDrawer';
 import { 
   ChevronRight, 
+  ChevronLeft,
+  ChevronsLeft,
+  ChevronsRight,
   Clock, 
   UserCheck, 
   AlertTriangle,
@@ -152,6 +155,45 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         return treatmentSort === 'asc' ? comparison : -comparison;
       })
     : leads;
+
+  // Pagination state (defaults to 10 rows per page matching CRM standards)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Reset to first page when filtering, sorting or leads change
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [leads.length, treatmentSort, company]);
+
+  const totalPages = Math.max(1, Math.ceil(displayedLeads.length / pageSize));
+
+  // Keep currentPage in valid range
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  const paginatedLeads = displayedLeads.slice(
+    (currentPage - 1) * pageSize,
+    currentPage * pageSize
+  );
+
+  const getPageNumbers = () => {
+    const pages: number[] = [];
+    const maxVisible = 5;
+    let start = Math.max(1, currentPage - Math.floor(maxVisible / 2));
+    let end = start + maxVisible - 1;
+    if (end > totalPages) {
+      end = totalPages;
+      start = Math.max(1, end - maxVisible + 1);
+    }
+    for (let i = start; i <= end; i++) {
+      pages.push(i);
+    }
+    return pages;
+  };
+
   const noteLead = noteLeadId ? leads.find(lead => lead.id === noteLeadId) : null;
   const leadNotes = noteLeadId ? notes.filter(note => note.leadId === noteLeadId) : [];
   const patientDrawerLead = patientDrawerLeadId ? leads.find(lead => lead.id === patientDrawerLeadId) : null;
@@ -587,13 +629,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 </td>
               </tr>
             ) : (
-              displayedLeads.map((lead, index) => {
+              paginatedLeads.map((lead, index) => {
                 const category = categories.find(c => c.id === lead.categoryId);
                 const treatment = treatments.find(t => t.id === lead.treatmentId);
                 const coordinator = users.find(u => u.id === lead.assignedTo);
                 const isSelected = selectedLeadId === lead.id;
                 const isCrasLead = lead.company === 'CRAS';
                 const sourceInfo = resolveSourceInfo(lead.source);
+                const globalRowNumber = (currentPage - 1) * pageSize + index + 1;
 
                 return (
                   <tr
@@ -605,7 +648,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   >
                     {/* 1. Sequential row number for the current displayed order */}
                     <td className="py-3.5 px-3 text-center min-w-[60px] whitespace-nowrap">
-                      <span className="font-mono font-bold text-slate-300">{String(index + 1).padStart(3, '0')}</span>
+                      <span className="font-mono font-bold text-slate-300">{String(globalRowNumber).padStart(3, '0')}</span>
                     </td>
 
                     {/* 2. Company-scoped unique lead serial */}
@@ -769,6 +812,120 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Table Pagination Bar (Matching Dark Theme CRM Design) */}
+      <div className="px-5 py-3 bg-slate-950/90 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs select-none">
+        {/* Left: Range and Total indicator */}
+        <div className="flex items-center gap-3 text-slate-400">
+          <span>
+            Showing{' '}
+            <span className="font-semibold text-slate-200 font-mono">
+              {displayedLeads.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
+            </span>
+            {' '}-{' '}
+            <span className="font-semibold text-slate-200 font-mono">
+              {Math.min(currentPage * pageSize, displayedLeads.length)}
+            </span>
+            {' '}of{' '}
+            <span className="font-semibold text-slate-200 font-mono">
+              {displayedLeads.length}
+            </span>
+            {' '}leads
+          </span>
+
+          <span className="text-slate-700 hidden sm:inline">•</span>
+
+          {/* Page size dropdown */}
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] text-slate-500">Rows per page:</span>
+            <select
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.target.value));
+                setCurrentPage(1);
+              }}
+              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-teal-500 cursor-pointer transition-colors"
+            >
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+        </div>
+
+        {/* Center: Pagination Button Group */}
+        <div className="flex items-center gap-1.5">
+          {/* First Page button (<<) */}
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(1)}
+            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            title="First Page"
+          >
+            <ChevronsLeft className="w-4 h-4" />
+          </button>
+
+          {/* Previous Page button (<) */}
+          <button
+            type="button"
+            disabled={currentPage === 1}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            title="Previous Page"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+
+          {/* Numbered Page buttons */}
+          {getPageNumbers().map(pageNum => {
+            const isActive = currentPage === pageNum;
+            return (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => setCurrentPage(pageNum)}
+                className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 ${
+                  isActive
+                    ? 'bg-teal-500 text-white border border-teal-400 shadow-md shadow-teal-500/30'
+                    : 'bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white'
+                }`}
+              >
+                {pageNum}
+              </button>
+            );
+          })}
+
+          {/* Next Page button (>) */}
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            title="Next Page"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+
+          {/* Last Page button (>>) */}
+          <button
+            type="button"
+            disabled={currentPage === totalPages}
+            onClick={() => setCurrentPage(totalPages)}
+            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            title="Last Page"
+          >
+            <ChevronsRight className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Right: Page indicator */}
+        <div className="text-xs text-slate-400 font-mono hidden sm:block">
+          Page <span className="font-semibold text-slate-200">{currentPage}</span> of{' '}
+          <span className="font-semibold text-slate-200">{totalPages}</span>
+        </div>
       </div>
 
       {patientDrawerLead && <PatientContactDrawer lead={patientDrawerLead} onClose={() => setPatientDrawerLeadId(null)} />}

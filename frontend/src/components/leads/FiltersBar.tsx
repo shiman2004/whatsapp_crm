@@ -311,7 +311,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         <button
           type="button"
           onClick={onAddContact}
-          className="ml-auto px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors"
+          className="ml-auto px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
           title="Add a new contact"
         >
           <UserPlus className="w-3.5 h-3.5" />

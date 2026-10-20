@@ -1,9 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Lead } from '../../types';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { Lead, LeadStage, Branch, Room, Appointment, AppointmentStatus } from '../../types';
 import { StageBadge } from './StageBadge';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { PatientContactDrawer } from './PatientContactDrawer';
+import { appointmentService } from '../../services/appointmentService';
+import { BookUpdateAppointmentModal } from '../appointments/BookUpdateAppointmentModal';
+import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
 import { 
   ChevronRight, 
   ChevronLeft,
@@ -23,7 +26,9 @@ import {
   Pencil,
   Save,
   User,
-  Clock as NoteClock
+  Clock as NoteClock,
+  Calendar,
+  RotateCcw
 } from 'lucide-react';
 import { 
   getWindowStatus, 
@@ -94,6 +99,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     canModifyAssignment, 
     assignLead,
     updateLeadSource,
+    updateLeadStage,
+    stages,
     notes,
     addLeadNote,
     updateLeadNote
@@ -115,6 +122,71 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Appointment Data State & Modals
+  const [appointments, setAppointments] = useState<Appointment[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
+  const [doctors, setDoctors] = useState<any[]>([]);
+  const [bookingModalLead, setBookingModalLead] = useState<Lead | null>(null);
+  const [selectedApptId, setSelectedApptId] = useState<string | null>(null);
+  const [detailModalMode, setDetailModalMode] = useState<'view' | 'reschedule'>('view');
+
+  const fetchAppointmentsData = useCallback(async () => {
+    try {
+      const [apptList, branchList, roomList, doctorList] = await Promise.all([
+        appointmentService.getAppointments({}).catch(() => []),
+        appointmentService.getBranches().catch(() => []),
+        appointmentService.getRooms().catch(() => []),
+        appointmentService.getDoctors().catch(() => [])
+      ]);
+      setAppointments(apptList || []);
+      setBranches(branchList || []);
+      setRooms(roomList || []);
+      setDoctors(doctorList || []);
+    } catch (err: any) {
+      console.warn('Failed to load appointments for Lead Table:', err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchAppointmentsData();
+  }, [fetchAppointmentsData]);
+
+  // Fast O(1) patientId / customerId / phone lookup map for appointments
+  const appointmentsByPatient = useMemo(() => {
+    const map = new Map<string, Appointment>();
+    // Sort appointments descending by startTime so latest / active appointment takes precedence
+    const sorted = [...appointments].sort((a, b) => new Date(b.startTime).getTime() - new Date(a.startTime).getTime());
+    for (const appt of sorted) {
+      if (appt.patientId && !map.has(appt.patientId)) {
+        map.set(appt.patientId, appt);
+      }
+      if (appt.patientPhone) {
+        const clean = appt.patientPhone.replace(/[^0-9]/g, '');
+        if (clean && !map.has(clean)) {
+          map.set(clean, appt);
+        }
+      }
+    }
+    return map;
+  }, [appointments]);
+
+  const getLeadAppointment = useCallback((lead: Lead): Appointment | undefined => {
+    if (lead.customerId && appointmentsByPatient.has(lead.customerId)) {
+      return appointmentsByPatient.get(lead.customerId);
+    }
+    if (lead.customer?.id && appointmentsByPatient.has(lead.customer.id)) {
+      return appointmentsByPatient.get(lead.customer.id);
+    }
+    if (lead.customer?.whatsappNumber) {
+      const clean = lead.customer.whatsappNumber.replace(/[^0-9]/g, '');
+      if (clean && appointmentsByPatient.has(clean)) {
+        return appointmentsByPatient.get(clean);
+      }
+    }
+    return undefined;
+  }, [appointmentsByPatient]);
 
   // Monitor scroll position to show back to top helper
   const handleScroll = () => {
@@ -155,6 +227,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         return treatmentSort === 'asc' ? comparison : -comparison;
       })
     : leads;
+
+  const activeStages = [...stages]
+    .filter((stage) => stage.isActive)
+    .sort((a, b) => a.orderIndex - b.orderIndex);
 
   // Pagination state (defaults to 10 rows per page matching CRM standards)
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -474,6 +550,128 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   };
 
   /**
+   * Renders Column 1: Book Appointment Action / Booked Date Indicator
+   */
+  const renderBookAppointmentCell = (lead: Lead, appt?: Appointment) => {
+    if (appt) {
+      const startD = new Date(appt.startTime);
+      const formattedDate = startD.toLocaleDateString([], { month: 'short', day: 'numeric' });
+      const formattedTime = startD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+
+      return (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedApptId(appt.id);
+            setDetailModalMode('view');
+          }}
+          className="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-teal-300 border border-slate-700/80 hover:border-teal-500/50 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+          title={`Booked on ${startD.toLocaleString()} in ${appt.roomName || 'Room'}. Click to view details.`}
+        >
+          <Calendar className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+          <span>{formattedDate}, {formattedTime}</span>
+          {appt.roomNumber && (
+            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono">
+              {appt.roomNumber}
+            </span>
+          )}
+        </button>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setBookingModalLead(lead);
+        }}
+        className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
+        title="Book clinical appointment for this lead"
+      >
+        <Plus className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+        <span>Book Appointment</span>
+      </button>
+    );
+  };
+
+  /**
+   * Renders Column 2: Appointment Status Badge (Booked, Confirmed, Arrived, Paid, Rescheduled, Cancelled, No Answer)
+   */
+  const renderAppointmentStatusCell = (lead: Lead, appt?: Appointment) => {
+    if (!appt) {
+      return <span className="text-slate-500 font-mono text-xs select-none">—</span>;
+    }
+
+    const config = getAppointmentStatusConfig(appt.status);
+
+    return (
+      <button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          setSelectedApptId(appt.id);
+          setDetailModalMode('view');
+        }}
+        className={`px-2.5 py-1 rounded-full text-[11px] font-bold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer hover:brightness-110 active:scale-95 whitespace-nowrap ${config.badgeClass}`}
+        title={`${config.label}: ${config.description} (Click to open appointment workspace)`}
+      >
+        <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${config.dotClass}`} />
+        <span>{config.label}</span>
+      </button>
+    );
+  };
+
+  /**
+   * Renders Column 3: Appointment Assign By in Re-assign
+   */
+  const renderAppointmentAssignByCell = (lead: Lead, appt?: Appointment) => {
+    if (!appt) {
+      return <span className="text-slate-500 font-mono text-xs select-none">—</span>;
+    }
+
+    const creatorName = appt.createdByName || 'Staff';
+
+    return (
+      <div className="flex items-center justify-between gap-2.5 whitespace-nowrap">
+        {/* Assigner Profile info */}
+        <div 
+          className="flex items-center gap-2 min-w-0" 
+          title={`Appointment assigned by ${creatorName} • Attending: ${appt.doctorName || 'Doctor'}`}
+        >
+          <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-400 shrink-0 shadow-xs">
+            {creatorName.charAt(0).toUpperCase()}
+          </div>
+          <div className="min-w-0 flex flex-col">
+            <span className="font-semibold text-slate-200 text-xs truncate leading-tight">
+              {creatorName}
+            </span>
+            <span className="text-[10px] text-slate-400 truncate">
+              👨‍⚕️ {appt.doctorName || 'Doctor'}
+            </span>
+          </div>
+        </div>
+
+        {/* Direct Re-assign / Reschedule Action Button */}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setSelectedApptId(appt.id);
+            setDetailModalMode('reschedule');
+          }}
+          className="px-2 py-1 rounded-lg bg-orange-500/15 hover:bg-orange-500/25 text-orange-300 border border-orange-500/30 text-[10px] font-bold inline-flex items-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95 shrink-0"
+          title="Re-assign doctor, room, or time window"
+        >
+          <RotateCcw className="w-3 h-3 text-orange-400" />
+          <span>Re-assign</span>
+        </button>
+      </div>
+    );
+  };
+
+  /**
    * Renders Assigner info (Assigned By)
    */
   const renderAssignedByCell = (lead: Lead) => {
@@ -576,7 +774,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[2040px]">
+        <table className="w-full text-left border-collapse text-xs min-w-[2600px]">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
             <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
               <th className="py-3.5 px-3 min-w-[60px] text-center">No.</th>
@@ -603,25 +801,16 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3.5 px-3 min-w-[180px]">Assign Time</th>
               <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
               <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
-              <th className="py-3.5 px-4 text-right min-w-[90px]">Action</th>
-              {/* Treatment / Service remains available through the existing sort state but is omitted from this compact table order. */}
-              {/*
-                <button
-                  type="button"
-                  onClick={() => setTreatmentSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null)}
-                  className="inline-flex items-center gap-1 hover:text-white transition-colors"
-                  title="Sort by treatment or service"
-                >
-                  {isCras ? 'Course / Program' : 'Treatment / Service'}
-                  <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
-                </button>
-              */}
+              <th className="py-3.5 px-4 text-center min-w-[90px]">Action</th>
+              <th className="py-3.5 px-3 min-w-[170px]">Book Appointment</th>
+              <th className="py-3.5 px-3 min-w-[140px]">Appointment Status</th>
+              <th className="py-3.5 px-3 min-w-[240px]">Appointment Assign By in Re-assign</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={15} className="py-16 text-center text-slate-500">
+                <td colSpan={18} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -637,6 +826,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 const isCrasLead = lead.company === 'CRAS';
                 const sourceInfo = resolveSourceInfo(lead.source);
                 const globalRowNumber = (currentPage - 1) * pageSize + index + 1;
+                const appt = getLeadAppointment(lead);
 
                 return (
                   <tr
@@ -724,8 +914,28 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     </td>
 
                     {/* 7. Stage */}
-                    <td className="py-3.5 px-4 min-w-[150px] whitespace-nowrap">
-                      <StageBadge stage={lead.stage} />
+                    <td className="py-3.5 px-4 min-w-[150px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative inline-block">
+                        <StageBadge stage={lead.stage} />
+                        <select
+                          value={lead.stage}
+                          onChange={(e) => {
+                            const nextStage = e.target.value as LeadStage;
+                            if (nextStage !== lead.stage) {
+                              updateLeadStage(lead.id, nextStage, `Changed from ${lead.stage} to ${nextStage} via Pipeline table`);
+                            }
+                          }}
+                          aria-label={`Change stage for ${lead.customer?.displayName || 'lead'}`}
+                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                          title="Change lead stage"
+                        >
+                          {activeStages.map((stage) => (
+                            <option key={stage.id} value={stage.key} className="bg-white text-slate-900">
+                              {stage.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
 
                     {/* 8. Coordinator (Wide, Clear, Never Truncated) */}
@@ -797,7 +1007,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     </td>
 
                     {/* 12. Action */}
-                    <td className="py-3.5 px-4 text-right min-w-[90px] whitespace-nowrap">
+                    <td className="py-3.5 px-4 text-center min-w-[90px] whitespace-nowrap">
                       <button
                         onClick={() => onSelectLead(lead.id)}
                         className="px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
@@ -805,6 +1015,21 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         <span>Chat</span>
                         <ChevronRight className="w-3.5 h-3.5" />
                       </button>
+                    </td>
+
+                    {/* 13. Book Appointment */}
+                    <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {renderBookAppointmentCell(lead, appt)}
+                    </td>
+
+                    {/* 14. Appointment Status (Booked, Confirmed, Arrived, Paid, Rescheduled, Cancelled, No Answer) */}
+                    <td className="py-3.5 px-3 min-w-[140px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {renderAppointmentStatusCell(lead, appt)}
+                    </td>
+
+                    {/* 15. Appointment Assign By in Re-assign */}
+                    <td className="py-3.5 px-3 min-w-[240px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      {renderAppointmentAssignByCell(lead, appt)}
                     </td>
                   </tr>
                 );
@@ -962,6 +1187,35 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             </form>
           </div>
         </div>
+      )}
+
+      {/* Book / Update Clinical Appointment Modal */}
+      {(bookingModalLead || selectedApptId) && (
+        <BookUpdateAppointmentModal
+          isOpen={Boolean(bookingModalLead || selectedApptId)}
+          onClose={() => {
+            setBookingModalLead(null);
+            setSelectedApptId(null);
+            setDetailModalMode('view');
+          }}
+          onSuccess={() => {
+            setBookingModalLead(null);
+            setSelectedApptId(null);
+            setDetailModalMode('view');
+            fetchAppointmentsData();
+          }}
+          lead={bookingModalLead || leads.find(l => {
+            const appt = appointments.find(a => a.id === selectedApptId);
+            return appt && (l.customerId === appt.patientId || l.customer?.id === appt.patientId);
+          }) || null}
+          appointmentId={selectedApptId}
+          initialMode={detailModalMode}
+          branches={branches}
+          rooms={rooms}
+          treatments={treatments}
+          doctors={doctors}
+          users={users}
+        />
       )}
 
     </div>

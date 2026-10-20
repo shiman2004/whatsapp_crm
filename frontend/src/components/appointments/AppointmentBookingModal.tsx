@@ -26,6 +26,13 @@ interface AppointmentBookingModalProps {
   rooms: Room[];
   selectedDate: string; // YYYY-MM-DD
   initialStartTime?: string; // HH:mm e.g. "10:00"
+  initialPatient?: {
+    id?: string;
+    customerId?: string;
+    name?: string;
+    phone?: string;
+  } | null;
+  initialTreatmentId?: string;
   treatments: any[];
   doctors: any[];
 }
@@ -39,6 +46,8 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
   rooms,
   selectedDate,
   initialStartTime = '09:00',
+  initialPatient = null,
+  initialTreatmentId = '',
   treatments,
   doctors,
 }) => {
@@ -70,20 +79,32 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
       setDate(selectedDate);
       setStartTime(initialStartTime);
       setErrorMessage(null);
-      setSelectedPatient(null);
-      setSearchQuery('');
+      if (initialPatient) {
+        setSelectedPatient({
+          id: initialPatient.id || initialPatient.customerId,
+          displayName: initialPatient.name,
+          whatsappNumber: initialPatient.phone,
+          phoneNumber: initialPatient.phone
+        });
+        setSearchQuery(initialPatient.name || initialPatient.phone || '');
+      } else {
+        setSelectedPatient(null);
+        setSearchQuery('');
+      }
       setIsQuickRegister(false);
       setQuickName('');
       setQuickPhone('');
       setNotes('');
-      if (treatments.length > 0 && !selectedTreatmentId) {
+      if (initialTreatmentId) {
+        setSelectedTreatmentId(initialTreatmentId);
+      } else if (treatments.length > 0 && !selectedTreatmentId) {
         setSelectedTreatmentId(treatments[0].id);
       }
       if (doctors.length > 0 && !selectedDoctorId) {
         setSelectedDoctorId(doctors[0].id);
       }
     }
-  }, [isOpen, room, selectedDate, initialStartTime, treatments, doctors]);
+  }, [isOpen, room, selectedDate, initialStartTime, initialPatient, initialTreatmentId, treatments, doctors]);
 
   // Selected Treatment & auto-calculated duration
   const activeTreatment = treatments.find(t => t.id === selectedTreatmentId) || treatments[0];

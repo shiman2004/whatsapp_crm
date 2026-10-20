@@ -1,9 +1,14 @@
 import http from 'http';
 import { spawn } from 'child_process';
 import { getPrisma } from './src/db.js';
+import { signAuthToken } from './server.js';
 
 const TEST_PORT = 3008;
 const BASE_URL = `http://127.0.0.1:${TEST_PORT}`;
+
+function authHeaders(userId) {
+  return { Authorization: `Bearer ${signAuthToken({ userId })}` };
+}
 
 // Helper: Make HTTP request
 function request({ method, path, headers = {}, body = null }) {
@@ -183,7 +188,7 @@ async function runTests() {
     const res1 = await request({
       method: 'POST',
       path: '/api/leads/assign',
-      headers: { 'x-user-id': testOfficer1Id },
+      headers: authHeaders(testOfficer1Id),
       body: {
         leadId: testLeadId,
         coordinatorId: testCoord1Id,
@@ -205,7 +210,7 @@ async function runTests() {
     const res2 = await request({
       method: 'POST',
       path: '/api/leads/assign',
-      headers: { 'x-user-id': testOfficer1Id },
+      headers: authHeaders(testOfficer1Id),
       body: {
         leadId: testLeadId,
         coordinatorId: testCoord2Id,
@@ -227,7 +232,7 @@ async function runTests() {
     const res3 = await request({
       method: 'POST',
       path: '/api/leads/assign',
-      headers: { 'x-user-id': testOfficer2Id },
+      headers: authHeaders(testOfficer2Id),
       body: {
         leadId: testLeadId,
         coordinatorId: testCoord2Id,
@@ -249,7 +254,7 @@ async function runTests() {
     const res4 = await request({
       method: 'POST',
       path: '/api/leads/assign',
-      headers: { 'x-user-id': testOfficer1Id },
+      headers: authHeaders(testOfficer1Id),
       body: {
         leadId: testLeadId,
         unassign: true
@@ -270,7 +275,7 @@ async function runTests() {
     const res5 = await request({
       method: 'POST',
       path: '/api/leads/assign',
-      headers: { 'x-user-id': testAdminId },
+      headers: authHeaders(testAdminId),
       body: {
         leadId: testLeadId,
         coordinatorId: testCoord2Id,
@@ -292,7 +297,7 @@ async function runTests() {
     const res6 = await request({
       method: 'POST',
       path: '/api/leads/assign',
-      headers: { 'x-user-id': testCoord1Id },
+      headers: authHeaders(testCoord1Id),
       body: {
         leadId: testLeadId,
         coordinatorId: testCoord1Id,
@@ -328,7 +333,7 @@ async function runTests() {
       request({
         method: 'POST',
         path: '/api/leads/assign',
-        headers: { 'x-user-id': testOfficer1Id },
+        headers: authHeaders(testOfficer1Id),
         body: {
           leadId: testLead2Id,
           coordinatorId: testCoord1Id,
@@ -338,7 +343,7 @@ async function runTests() {
       request({
         method: 'POST',
         path: '/api/leads/assign',
-        headers: { 'x-user-id': testOfficer2Id },
+        headers: authHeaders(testOfficer2Id),
         body: {
           leadId: testLead2Id,
           coordinatorId: testCoord2Id,
@@ -369,14 +374,14 @@ async function runTests() {
     const ahmedLeadsRes = await request({
       method: 'GET',
       path: '/api/leads',
-      headers: { 'x-user-id': testCoord1Id }
+      headers: authHeaders(testCoord1Id)
     });
 
     // Sara (testCoord2Id) requests /api/leads -> SHOULD include testLeadId
     const saraLeadsRes = await request({
       method: 'GET',
       path: '/api/leads',
-      headers: { 'x-user-id': testCoord2Id }
+      headers: authHeaders(testCoord2Id)
     });
 
     const ahmedHasLead = Array.isArray(ahmedLeadsRes.body) && ahmedLeadsRes.body.some(l => l.id === testLeadId);

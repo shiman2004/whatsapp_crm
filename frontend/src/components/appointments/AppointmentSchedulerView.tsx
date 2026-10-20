@@ -19,10 +19,10 @@ import {
 } from 'lucide-react';
 import { Branch, Room, Appointment, AvailabilityBlock } from '../../types';
 import { appointmentService } from '../../services/appointmentService';
-import { AppointmentBookingModal } from './AppointmentBookingModal';
+import { BookUpdateAppointmentModal } from './BookUpdateAppointmentModal';
 import { RoomManagerModal } from './RoomManagerModal';
-import { AppointmentDetailModal } from './AppointmentDetailModal';
 import { useCrm } from '../../context/CrmContext';
+import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
 
 // 30-Minute Visual Slots from 08:00 to 20:00 (24 slots of 30 mins)
 const TIME_SLOTS: string[] = [];
@@ -185,22 +185,8 @@ export const AppointmentSchedulerView: React.FC = () => {
   };
 
   const getStatusColor = (status: string, roomColor?: string) => {
-    switch (status) {
-      case 'confirmed':
-        return 'bg-blue-900/50 border-blue-500/70 text-blue-100 hover:border-blue-400';
-      case 'checked_in':
-        return 'bg-amber-900/50 border-amber-500/70 text-amber-100 hover:border-amber-400';
-      case 'in_progress':
-        return 'bg-teal-900/60 border-teal-400 text-teal-100 shadow-md shadow-teal-900/40 hover:border-teal-300';
-      case 'completed':
-        return 'bg-emerald-950/60 border-emerald-600/70 text-emerald-200 hover:border-emerald-500';
-      case 'cancelled':
-        return 'bg-rose-950/40 border-rose-600/50 text-rose-300 line-through opacity-60';
-      case 'no_show':
-        return 'bg-slate-900 border-slate-700 text-slate-400 line-through opacity-75';
-      default:
-        return 'bg-indigo-950/50 border-indigo-600/70 text-indigo-100';
-    }
+    const config = getAppointmentStatusConfig(status);
+    return config.schedulerCardClass || 'bg-blue-950/70 border-blue-500/70 text-blue-100 hover:border-blue-400';
   };
 
   return (
@@ -537,8 +523,9 @@ export const AppointmentSchedulerView: React.FC = () => {
                                   {' - '}
                                   {new Date(appt.endTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                 </span>
-                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.2 rounded-full bg-black/40">
-                                  {appt.status.replace('_', ' ')}
+                                <span className="text-[9px] font-black uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-black/50 border border-white/10 flex items-center gap-1">
+                                  <span>{getAppointmentStatusConfig(appt.status).iconEmoji}</span>
+                                  <span>{getAppointmentStatusConfig(appt.status).label}</span>
                                 </span>
                               </div>
 
@@ -589,19 +576,25 @@ export const AppointmentSchedulerView: React.FC = () => {
         )}
       </div>
 
-      {/* 3. Booking Modal */}
-      {isBookingOpen && (
-        <AppointmentBookingModal
-          isOpen={isBookingOpen}
-          onClose={() => setIsBookingOpen(false)}
+      {/* 3. Book / Update Appointment Modal */}
+      {(isBookingOpen || selectedApptId) && (
+        <BookUpdateAppointmentModal
+          isOpen={Boolean(isBookingOpen || selectedApptId)}
+          onClose={() => {
+            setIsBookingOpen(false);
+            setSelectedApptId(null);
+          }}
           onSuccess={() => {
+            setIsBookingOpen(false);
+            setSelectedApptId(null);
             fetchSchedule();
           }}
-          branch={selectedBranch}
-          room={bookingRoom}
+          appointmentId={selectedApptId}
+          defaultBranchId={selectedBranchId}
+          defaultDate={selectedDate}
+          defaultStartTime={bookingStartTime}
+          branches={branches}
           rooms={rooms}
-          selectedDate={selectedDate}
-          initialStartTime={bookingStartTime}
           treatments={treatments}
           doctors={doctors}
         />
@@ -620,24 +613,6 @@ export const AppointmentSchedulerView: React.FC = () => {
           roomToEdit={selectedRoomToEdit}
           rooms={rooms}
           treatments={treatments}
-        />
-      )}
-
-      {/* 5. Appointment Details Workspace & Lifecycle Modal */}
-      {selectedApptId && (
-        <AppointmentDetailModal
-          isOpen={!!selectedApptId}
-          appointmentId={selectedApptId}
-          onClose={() => setSelectedApptId(null)}
-          onUpdated={() => {
-            fetchSchedule();
-          }}
-          rooms={rooms}
-          onOpenWhatsAppChat={(phone) => {
-            setSelectedApptId(null);
-            // Navigate to WhatsApp Chat tab if phone matches a lead
-            setActiveNavTab('chat');
-          }}
         />
       )}
     </div>

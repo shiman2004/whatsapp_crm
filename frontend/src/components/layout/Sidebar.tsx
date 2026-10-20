@@ -13,7 +13,8 @@ import {
   Sliders,
   X,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  CalendarDays
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -22,6 +23,7 @@ export type NavTab =
   | 'leads-kanban' 
   | 'chat' 
   | 'broadcast'
+  | 'appointment-rooms'
   | 'settings'
   | 'treatments' 
   | 'coordinators' 
@@ -88,6 +90,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       badge: unreadBroadcastsCount > 0 ? unreadBroadcastsCount : undefined,
       badgeColor: 'bg-amber-500 text-slate-950 font-black',
       adminOnly: false, // Visible to all team members
+    },
+    {
+      id: 'appointment-rooms' as NavTab,
+      label: 'Appointment Room',
+      icon: CalendarDays,
+      adminOnly: false,
     },
     {
       id: 'settings' as NavTab,

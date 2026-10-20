@@ -22,7 +22,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   const { notify } = useCrm() as any;
   const [phoneNumberId, setPhoneNumberId] = useState('1358157244046701');
   const [wabaId, setWabaId] = useState('2332922997481634');
-  const [accessToken, setAccessToken] = useState(() => localStorage.getItem('meta_access_token') || '');
+  const [accessToken, setAccessToken] = useState('');
   const [hasServerToken, setHasServerToken] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showToken, setShowToken] = useState(false);
@@ -36,14 +36,13 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
 
   React.useEffect(() => {
     if (isOpen) {
-      fetch(`${API_BASE_URL}/api/meta/config`)
+      const authToken = localStorage.getItem('rw_crm_auth_token') || '';
+      fetch(`${API_BASE_URL}/api/meta/config`, {
+        headers: authToken ? { Authorization: `Bearer ${authToken}` } : {}
+      })
         .then(res => res.json())
         .then(data => {
           if (data.hasToken) setHasServerToken(true);
-          if (data.accessToken && !localStorage.getItem('meta_access_token')) {
-            setAccessToken(data.accessToken);
-            localStorage.setItem('meta_access_token', data.accessToken);
-          }
           if (data.phoneNumberId) setPhoneNumberId(data.phoneNumberId);
           if (data.wabaId) setWabaId(data.wabaId);
         })
@@ -54,11 +53,6 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
   if (!isOpen) return null;
 
   const handleSaveToken = async () => {
-    const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '').replace(/["']/g, '');
-    setAccessToken(cleanToken);
-    if (cleanToken) {
-      localStorage.setItem('meta_access_token', cleanToken);
-    }
     setIsSaving(true);
     const authToken = localStorage.getItem('rw_crm_auth_token') || '';
     try {
@@ -69,20 +63,19 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
           'Authorization': authToken ? `Bearer ${authToken}` : ''
         },
         body: JSON.stringify({
-          accessToken: cleanToken,
           phoneNumberId,
           wabaId
         })
       });
       if (res.ok) {
-        setHasServerToken(Boolean(cleanToken));
-        if (notify) notify('Settings Saved', 'Meta Access Token saved and activated globally for all staff members.', 'success');
+        setHasServerToken(Boolean((await res.clone().json().catch(() => ({}))).hasToken));
+        if (notify) notify('Settings Saved', 'Meta identifiers saved. Keep the access token in the server secret manager.', 'success');
       } else {
         const err = await res.json().catch(() => ({}));
         if (notify) notify('Save Error', err.error || 'Failed to update Meta configuration', 'warning');
       }
     } catch (e) {
-      if (notify) notify('Settings Saved', 'Meta Access Token saved locally in browser', 'info');
+      if (notify) notify('Save Error', 'Unable to save Meta configuration on the server.', 'warning');
     } finally {
       setIsSaving(false);
     }
@@ -99,12 +92,6 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
       alert('Please enter a recipient WhatsApp number (with country code)');
       return;
     }
-    const cleanToken = accessToken.trim().replace(/^Bearer\s+/i, '').replace(/["']/g, '');
-    if (!cleanToken) {
-      alert('Please paste your Meta Access Token first');
-      return;
-    }
-
     setIsSending(true);
     setSendResult(null);
 
@@ -116,29 +103,20 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
         cleanTo = '94' + cleanTo;
       }
 
-      const payload = useTemplate ? {
-        messaging_product: 'whatsapp',
-        to: cleanTo,
-        type: 'template',
-        template: {
-          name: 'hello_world',
-          language: { code: 'en_US' }
-        }
-      } : {
-        messaging_product: 'whatsapp',
-        recipient_type: 'individual',
-        to: cleanTo,
-        type: 'text',
-        text: { body: testMessage }
-      };
-
-      const response = await fetch(`https://graph.facebook.com/v20.0/${phoneNumberId || '1358157244046701'}/messages`, {
+      const authToken = localStorage.getItem('rw_crm_auth_token') || '';
+      const response = await fetch(`${API_BASE_URL}/api/send-template`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${cleanToken}`,
+          'Authorization': authToken ? `Bearer ${authToken}` : '',
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+          to: cleanTo,
+          templateName: useTemplate ? 'hello_world' : undefined,
+          language: 'en_US',
+          parameters: [],
+          message: useTemplate ? undefined : testMessage
+        })
       });
 
       const result = await response.json();

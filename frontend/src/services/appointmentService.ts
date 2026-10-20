@@ -5,14 +5,8 @@ function getAuthHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' 
     ? (localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('royal_crm_token') || '')
     : '';
-  const userId = typeof window !== 'undefined'
-    ? (localStorage.getItem('rw_crm_auth_user_id') || 'user-admin-1')
-    : 'user-admin-1';
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    'x-user-id': userId,
-    'x-coordinator-id': userId,
   };
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;

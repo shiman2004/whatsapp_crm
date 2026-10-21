@@ -73,6 +73,7 @@ export interface Lead {
   assignedById?: string;
   assignedByName?: string;
   assignedAt?: string;
+  acceptedAt?: string;
   assignmentHistories?: LeadAssignmentHistory[];
   stage: LeadStage;
   source: string; // 'whatsapp' | 'RWC' | 'CRAS'

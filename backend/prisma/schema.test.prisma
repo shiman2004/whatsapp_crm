@@ -288,6 +288,7 @@ model Lead {
   assignedById          String?            @db.VarChar(36)
   assignedByName        String?            @db.VarChar(255)
   assignedAt            DateTime?
+  acceptedAt            DateTime?
   whatsappSessionId     String?            @db.VarChar(50)
   stage                 LeadStage          @default(new)
   source                String             @default("whatsapp") @db.VarChar(50)

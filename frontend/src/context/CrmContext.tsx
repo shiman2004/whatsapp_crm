@@ -2039,7 +2039,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    if (lead.stage === newStage) return;
+    if (lead.stage === newStage && !(newStage === 'assigned' && !lead.acceptedAt)) return;
 
     const prevStage = lead.stage;
 
@@ -2061,6 +2061,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         return {
           ...l,
           stage: newStage,
+          acceptedAt: newStage === 'assigned' ? (lead.acceptedAt || new Date().toISOString()) : (newStage === 'lost' ? undefined : lead.acceptedAt),
           updatedAt: new Date().toISOString(),
         };
       }
@@ -2083,6 +2084,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         phone: lead.customer?.whatsappNumber,
         whatsappId: lead.customer?.whatsappId,
         stage: newStage,
+        acceptedAt: newStage === 'assigned' ? (lead.acceptedAt || new Date().toISOString()) : (newStage === 'lost' ? null : lead.acceptedAt),
         reason: reason || `Stage changed from ${prevStage} to ${newStage}`
       })
     }).catch(err => console.warn('Could not sync lead stage update to backend:', err));

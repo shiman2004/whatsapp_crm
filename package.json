@@ -15,7 +15,8 @@
     "build": "npm run build --prefix frontend",
     "preview": "npm run preview --prefix frontend",
     "lint": "npm run lint --prefix frontend",
-    "test": "node backend/test-meta-token-security.js && node backend/test-bell-notification.js && node backend/test-sender-audit.js && node backend/test-auth-security.js && node backend/test-login-security.js",
+    "test": "npm test --prefix backend",
+    "test:setup": "npm run test:setup --prefix backend",
     "start": "node backend/server.js",
     "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend"
   },
@@ -26,18 +27,14 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@prisma/client": "^6.4.1",
     "@supabase/supabase-js": "^2.49.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc14",
-    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "prisma": "^6.4.1",
-    "qrcode": "^1.5.4"
+    "prisma": "^6.4.1"
   },
   "devDependencies": {},
   "allowScripts": {
     "@prisma/client@6.19.3": true,
     "@prisma/engines@6.19.3": true,
     "prisma@6.19.3": true,
-    "@whiskeysockets/baileys@7.0.0-rc14": true,
     "protobufjs@7.6.6": true
   }
 }

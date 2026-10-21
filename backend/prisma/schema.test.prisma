@@ -1,0 +1,888 @@
+// Royal Wellness CRM — Supabase PostgreSQL Prisma Schema
+// Database Provider: PostgreSQL with UTF-8 support
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  // HARDCODED local test database. Not env-driven on purpose: `prisma` CLI reads
+  // backend/.env and would otherwise target production.
+  provider = "postgresql"
+  url      = "postgresql://postgres:postgres@localhost:5432/crm_test"
+}
+
+enum UserRole {
+  super_admin
+  leads_officer
+  coordinator
+  marketing_officer
+  marketing_admin
+}
+
+enum MarketingConsentStatus {
+  unknown
+  verified
+  denied
+  opted_out
+}
+
+enum MarketingImportStatus {
+  queued
+  processing
+  completed
+  partially_completed
+  failed
+}
+
+enum MarketingRowStatus {
+  pending
+  saved
+  duplicate
+  invalid
+  failed
+}
+
+enum MarketingTaskStatus {
+  pending
+  contacted
+  interested
+  not_interested
+  follow_up
+  completed
+}
+
+enum MarketingCampaignApprovalStatus {
+  draft
+  pending_approval
+  approved
+  rejected
+  archived
+}
+
+enum LanguageCode {
+  en
+  si
+  ta
+}
+
+enum LeadStage {
+  new
+  assigned
+  contacted
+  potential
+  under_discussion
+  not_relevant
+  not_eligible
+  converted
+  lost
+  interested
+  follow_up
+}
+
+enum MessageDirection {
+  inbound
+  outbound
+}
+
+enum SenderType {
+  customer
+  coordinator
+  system
+  ai
+}
+
+enum MessageStatus {
+  pending
+  sent
+  delivered
+  read
+  failed
+}
+
+enum FollowupStatus {
+  pending
+  sent
+  cancelled
+  paused
+}
+
+enum TemplateStatus {
+  APPROVED
+  PENDING
+  REJECTED
+}
+
+// 1. Users / Staff / Coordinators
+model User {
+  id                  String             @id @default(uuid()) @db.VarChar(36)
+  fullName            String             @db.VarChar(255)
+  email               String             @unique @db.VarChar(255)
+  password            String?            @db.VarChar(255)
+  pin                 String?            @db.VarChar(255)
+  phone               String?            @db.VarChar(50)
+  role                UserRole           @default(coordinator)
+  branch              String?            @default("Colombo") @db.VarChar(100)
+  company             String?            @default("RWC") @db.VarChar(50)
+  treatmentCategoryId String?            @db.VarChar(50)
+  language            LanguageCode       @default(en)
+  avatar              String?            @db.VarChar(500)
+  active              Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+
+  // Relations
+  category            TreatmentCategory? @relation(fields: [treatmentCategoryId], references: [id], onDelete: SetNull)
+  assignedLeads       Lead[]             @relation("AssignedCoordinator")
+  notesWritten        LeadNote[]
+  stageChanges        LeadStageHistory[]
+  whatsappSession     WhatsAppSession?   @relation("CoordinatorWhatsAppSession")
+  messagesAuthored    Message[]          @relation("CoordinatorAuthoredMessages")
+
+
+  @@map("users")
+}
+
+// 2. WhatsApp Multi-Session Architecture
+model WhatsAppSession {
+  id               String               @id @default(uuid()) @db.VarChar(50)
+  coordinatorId    String               @unique @db.VarChar(36)
+  phoneNumber      String?              @db.VarChar(50) // Canonical E.164 e.g. +94771234567
+  whatsappJid      String?              @db.VarChar(100) // e.g. 94771234567@s.whatsapp.net
+  status           String               @default("disconnected") @db.VarChar(30) // connecting, qr_ready, connected, disconnected
+  qrCodeDataUrl    String?              @db.Text
+  accountName      String?              @db.VarChar(255) // Push name from WhatsApp
+  lastConnectedAt  DateTime?
+  lastActiveAt     DateTime             @default(now())
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  // Relations
+  coordinator      User                 @relation("CoordinatorWhatsAppSession", fields: [coordinatorId], references: [id], onDelete: Cascade)
+  sessionKeys      WhatsAppSessionKey[] @relation("SessionToKeys")
+  leads            Lead[]               @relation("SessionLeads")
+  messages         Message[]            @relation("SessionMessages")
+
+  @@index([coordinatorId])
+  @@index([status])
+  @@map("whatsapp_sessions")
+}
+
+// 2b. Granular Cloud Baileys Auth State Keys (PostgreSQL persistence)
+model WhatsAppSessionKey {
+  id               String          @id @default(uuid()) @db.VarChar(100)
+  sessionId        String          @db.VarChar(50)
+  keyType          String          @db.VarChar(50) // creds, pre-key, session, sender-key, app-state-sync-key
+  keyId            String          @db.VarChar(150)
+  value            Json            // Serialized Baileys Key/Creds Data
+  updatedAt        DateTime        @default(now()) @updatedAt
+
+  // Relations
+  session          WhatsAppSession @relation("SessionToKeys", fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, keyType, keyId])
+  @@index([sessionId, keyType])
+  @@map("whatsapp_session_keys")
+}
+
+// 3. Treatment Categories (e.g., Hair Care, Skin Care, IV Wellness)
+model TreatmentCategory {
+  id          String      @id @db.VarChar(50)
+  name        String      @db.VarChar(255)
+  nameEn      String      @db.VarChar(255)
+  nameSi      String      @db.VarChar(255)
+  nameTa      String      @db.VarChar(255)
+  active      Boolean     @default(true)
+  iconName    String      @default("Sparkles") @db.VarChar(100)
+  description String?     @db.Text
+  createdAt   DateTime    @default(now())
+
+  // Relations
+  treatments  Treatment[]
+  leads       Lead[]
+  coordinators User[]
+
+  @@map("treatment_categories")
+}
+
+// 4. Treatment Catalog
+model Treatment {
+  id              String            @id @db.VarChar(50)
+  categoryId      String            @db.VarChar(50)
+  code            String?           @db.VarChar(50)
+  company         String?           @default("RWC") @db.VarChar(50)
+  name            String            @db.VarChar(255)
+  nameEn          String            @db.VarChar(255)
+  nameSi          String            @db.VarChar(255)
+  nameTa          String            @db.VarChar(255)
+  startingPrice   Decimal           @default(0.00) @db.Decimal(10, 2)
+  currency        String            @default("LKR") @db.VarChar(10)
+  durationMinutes Int               @default(60)
+  active          Boolean           @default(true)
+  benefits        String?           @db.Text
+  description     String?           @db.Text
+  createdAt       DateTime          @default(now())
+
+  // Relations
+  category        TreatmentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  leads           Lead[]
+  appointments    Appointment[]
+  roomTreatments  RoomTreatment[]
+
+  @@index([categoryId])
+  @@index([company])
+  @@index([code])
+  @@map("treatments")
+}
+
+// 4b. Dynamic Lead Stages Configuration
+model LeadStageConfig {
+  id          String   @id @db.VarChar(50)
+  key         String   @unique @db.VarChar(50)
+  label       String   @db.VarChar(100)
+  description String?  @db.Text
+  color       String?  @default("teal") @db.VarChar(50)
+  orderIndex  Int      @default(0) @map("order_index")
+  isActive    Boolean  @default(true) @map("is_active")
+  isSystem    Boolean  @default(false) @map("is_system")
+  company     String?  @default("ALL") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([orderIndex])
+  @@index([isActive])
+  @@map("lead_stages")
+}
+
+// 5. WhatsApp Customers / Patients
+model Customer {
+  id                String        @id @default(uuid()) @db.VarChar(50)
+  whatsappNumber    String        @unique @db.VarChar(50) // Canonical E.164: +94771234567
+  whatsappId        String?       @db.VarChar(100)        // Meta/Baileys ID
+  phoneNumber       String?       @db.VarChar(50)         // Display formatting
+  displayName       String        @db.VarChar(255)
+  preferredLanguage LanguageCode  @default(en)
+  avatarUrl         String?       @db.VarChar(500)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  leads             Lead[]
+  messages          Message[]
+  appointments      Appointment[]
+
+  @@index([whatsappNumber])
+  @@index([whatsappId])
+  @@map("customers")
+}
+
+// 6. CRM Leads / Patient Inquiries
+model Lead {
+  id                    String             @id @default(uuid()) @db.VarChar(50)
+  customerId            String             @db.VarChar(50)
+  categoryId            String?            @db.VarChar(50)
+  treatmentId           String?            @db.VarChar(50)
+  serialNumber          String?            @db.VarChar(50)
+  assignedTo            String?            @db.VarChar(36)
+  assignedById          String?            @db.VarChar(36)
+  assignedByName        String?            @db.VarChar(255)
+  assignedAt            DateTime?
+  whatsappSessionId     String?            @db.VarChar(50)
+  stage                 LeadStage          @default(new)
+  source                String             @default("whatsapp") @db.VarChar(50)
+  company               String?            @default("RWC") @db.VarChar(50)
+  language              LanguageCode       @default(en)
+  lastCustomerMessageAt DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  // Relations
+  customer              Customer           @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  category              TreatmentCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  treatment             Treatment?         @relation(fields: [treatmentId], references: [id], onDelete: SetNull)
+  assignedCoordinator   User?             @relation("AssignedCoordinator", fields: [assignedTo], references: [id], onDelete: SetNull)
+  whatsappSession       WhatsAppSession?  @relation("SessionLeads", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
+  messages              Message[]
+  followups             Followup[]
+  notes                 LeadNote[]
+  stageHistories        LeadStageHistory[]
+  assignmentHistories   LeadAssignmentHistory[]
+
+  @@index([customerId])
+  @@index([categoryId])
+  @@index([treatmentId])
+  @@index([assignedTo])
+  @@index([whatsappSessionId])
+  @@index([stage])
+  @@map("leads")
+}
+
+// 7. WhatsApp Messages
+model Message {
+  id                  String            @id @db.VarChar(100) // WhatsApp Message ID e.g. wamid.HBg...
+  leadId              String            @db.VarChar(50)
+  customerId          String            @db.VarChar(50)
+  whatsappSessionId   String?           @db.VarChar(50)
+  coordinatorId       String?           @db.VarChar(36)
+  direction           MessageDirection
+  senderType          SenderType
+  content             String            @db.Text
+  status              MessageStatus     @default(sent)
+  timestamp           DateTime          @default(now())
+  reaction            String?           @db.VarChar(50)
+  starred             Boolean           @default(false)
+  pinned              Boolean           @default(false)
+  replyToId           String?           @db.VarChar(100)
+  replyToContent      String?           @db.Text
+  replyToSender       String?           @db.VarChar(255)
+  mediaUrl            String?           @db.VarChar(500)
+  mediaType           String?           @db.VarChar(50)
+  errorCode           Int?
+  errorMessage        String?           @db.Text
+  senderName          String?           @db.VarChar(255)
+  senderRole          String?           @db.VarChar(50)
+  messageSource       String?           @default("CRM User") @db.VarChar(50) // 'CRM User' | 'Automation' | 'API' | 'System'
+  sentAt              DateTime?         @default(now())
+  deliveredAt         DateTime?         @map("delivered_at")
+  readAt              DateTime?         @map("read_at")
+
+  // Relations
+  lead                Lead              @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  customer            Customer          @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  whatsappSession     WhatsAppSession?  @relation("SessionMessages", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
+  coordinator         User?             @relation("CoordinatorAuthoredMessages", fields: [coordinatorId], references: [id], onDelete: SetNull)
+
+  @@index([leadId])
+  @@index([customerId])
+  @@index([whatsappSessionId])
+  @@index([coordinatorId])
+  @@index([timestamp])
+  @@map("messages")
+}
+
+// 7b. Message Sender Audit Record (Protected Super Admin Audit Trail)
+model MessageAudit {
+  id              String   @id @default(uuid()) @db.VarChar(50)
+  messageId       String   @unique @map("message_id") @db.VarChar(100)
+  leadId          String   @map("lead_id") @db.VarChar(50)
+  customerId      String?  @map("customer_id") @db.VarChar(50)
+  company         String?  @db.VarChar(50)
+  whatsappNumber  String?  @map("whatsapp_number") @db.VarChar(50)
+  senderId        String?  @map("sender_id") @db.VarChar(36)
+  senderName      String   @map("sender_name") @db.VarChar(255)
+  senderRole      String   @map("sender_role") @db.VarChar(50)
+  messageSource   String   @default("CRM User") @map("message_source") @db.VarChar(50)
+  deliveryStatus  String   @default("sent") @map("delivery_status") @db.VarChar(50)
+  sentAt          DateTime @default(now()) @map("sent_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  readAt          DateTime? @map("read_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([leadId])
+  @@index([senderId])
+  @@index([sentAt])
+  @@map("message_audits")
+}
+
+// 8. Automated Follow-up Tasks (BullMQ / Cron)
+model Followup {
+  id                  String          @id @default(uuid()) @db.VarChar(50)
+  leadId              String          @db.VarChar(50)
+  sequenceId          String?         @db.VarChar(50)
+  stepNumber          Int             @default(1)
+  templateId          String?         @db.VarChar(50)
+  scheduledAt         DateTime
+  status              FollowupStatus  @default(pending)
+  cancellationReason  String?         @db.VarChar(255)
+  sentAt              DateTime?
+  createdAt           DateTime        @default(now())
+
+  // Relations
+  lead                Lead            @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([status, scheduledAt])
+  @@map("followups")
+}
+
+// 9. Lead Notes & Clinical Annotations
+model LeadNote {
+  id          String    @id @default(uuid()) @db.VarChar(50)
+  leadId      String    @db.VarChar(50)
+  authorId    String    @db.VarChar(36)
+  authorName  String    @db.VarChar(255)
+  note        String    @db.Text
+  createdAt   DateTime  @default(now())
+
+  // Relations
+  lead        Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  author      User      @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([authorId])
+  @@map("lead_notes")
+}
+
+// 10. Lead Stage Audit & Pipeline History
+model LeadStageHistory {
+  id            String    @id @default(uuid()) @db.VarChar(50)
+  leadId        String    @db.VarChar(50)
+  fromStage     LeadStage
+  toStage       LeadStage
+  changedById   String    @db.VarChar(36)
+  changedByName String    @db.VarChar(255)
+  reason        String?   @db.VarChar(500)
+  timestamp     DateTime  @default(now())
+
+  // Relations
+  lead          Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  changedBy     User      @relation(fields: [changedById], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([changedById])
+  @@map("lead_stage_histories")
+}
+
+// 11. System Audit Logs
+model AuditLog {
+  id              String    @id @default(uuid()) @db.VarChar(50)
+  action          String    @db.VarChar(100)
+  entityType      String    @db.VarChar(100)
+  entityId        String    @db.VarChar(100)
+  performedById   String?   @db.VarChar(36)
+  performedByName String?   @db.VarChar(255)
+  previousValue   String?   @db.Text // JSON string
+  newValue        String?   @db.Text // JSON string
+  timestamp       DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([timestamp])
+  @@map("audit_logs")
+}
+
+// 12. WhatsApp Pre-Approved HSM Templates
+model WhatsAppTemplate {
+  id          String          @id @db.VarChar(50)
+  name        String          @db.VarChar(255)
+  category    String          @db.VarChar(100)
+  language    LanguageCode    @default(en)
+  content     String          @db.Text
+  header      String?         @db.VarChar(255)
+  footer      String?         @db.VarChar(255)
+  buttonsJson String?         @db.Text // JSON array of buttons
+  status      TemplateStatus  @default(APPROVED)
+  createdAt   DateTime        @default(now())
+
+  @@map("whatsapp_templates")
+}
+
+// 13. Lead Assignment Audit & Complete History
+model LeadAssignmentHistory {
+  id              String    @id @default(uuid()) @db.VarChar(50)
+  leadId          String    @db.VarChar(50)
+  assignedToId    String?   @db.VarChar(36)
+  assignedToName  String?   @db.VarChar(255)
+  assignedById    String?   @db.VarChar(36)
+  assignedByName  String?   @db.VarChar(255)
+  assignedAt      DateTime  @default(now())
+
+  // Relations
+  lead            Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+
+  @@index([leadId])
+  @@index([assignedAt])
+  @@map("lead_assignment_histories")
+}
+
+// 14. Internal Team Broadcast Messages (Super Admin & Leads Officer to all staff)
+model TeamBroadcast {
+  id          String    @id @default(uuid()) @db.VarChar(50)
+  senderId    String    @map("sender_id") @db.VarChar(36)
+  senderName  String    @map("sender_name") @db.VarChar(255)
+  senderRole  String    @map("sender_role") @db.VarChar(50)
+  company     String?   @default("ALL") @db.VarChar(50) // 'ALL', 'RWC', 'CRAS'
+  title       String?   @db.VarChar(255)
+  content     String    @db.Text
+  mediaType   String?   @map("media_type") @db.VarChar(50) // 'image' | 'video' | 'document' | 'audio'
+  mediaUrl    String?   @map("media_url") @db.Text
+  fileName    String?   @map("file_name") @db.VarChar(255)
+  fileSize    Int?      @map("file_size")
+  isPinned        Boolean   @default(false) @map("is_pinned")
+  targetStaffId   String?   @map("target_staff_id") @db.VarChar(50)
+  targetStaffName String?   @map("target_staff_name") @db.VarChar(255)
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("team_broadcasts")
+}
+
+// 15. Branches (Alpha Health Group Multi-Branch Network)
+model Branch {
+  id        String   @id @db.VarChar(50)
+  name      String   @db.VarChar(255)
+  code      String   @unique @db.VarChar(50)
+  address   String?  @db.Text
+  phone     String?  @db.VarChar(50)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  rooms        Room[]
+  appointments Appointment[]
+
+  @@map("branches")
+}
+
+// 16. Clinic Rooms / Treatment Suites
+model Room {
+  id             String   @id @db.VarChar(50)
+  branchId       String   @map("branch_id") @db.VarChar(50)
+  name           String   @db.VarChar(255)
+  roomNumber     String   @map("room_number") @db.VarChar(50)
+  description    String?  @db.Text
+  color          String?  @default("#0d9488") @db.VarChar(50)
+  operatingStart String?  @default("08:00") @map("operating_start") @db.VarChar(10)
+  operatingEnd   String?  @default("20:00") @map("operating_end") @db.VarChar(10)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  branch       Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  treatments   RoomTreatment[]
+  appointments Appointment[]
+
+  @@index([branchId])
+  @@map("rooms")
+}
+
+// 17. Room Treatments Junction
+model RoomTreatment {
+  roomId      String @map("room_id") @db.VarChar(50)
+  treatmentId String @map("treatment_id") @db.VarChar(50)
+
+  room      Room      @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  treatment Treatment @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+
+  @@id([roomId, treatmentId])
+  @@index([roomId])
+  @@map("room_treatments")
+}
+
+// 18. Doctors / Consultants assigned to appointments
+model Doctor {
+  id        String   @id @default(uuid()) @db.VarChar(50)
+  fullName  String   @db.VarChar(255)
+  title     String?  @db.VarChar(255)
+  branch    String?  @db.VarChar(100)
+  phone     String?  @db.VarChar(50)
+  avatar    String?  @db.VarChar(500)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  appointments Appointment[]
+
+  @@index([branch])
+  @@index([isActive])
+  @@map("doctors")
+}
+
+// 19. Appointments
+model Appointment {
+  id                 String    @id @db.VarChar(50)
+  branchId           String    @map("branch_id") @db.VarChar(50)
+  roomId             String    @map("room_id") @db.VarChar(50)
+  patientId          String    @map("patient_id") @db.VarChar(50)
+  doctorId           String    @map("doctor_id") @db.VarChar(50)
+  treatmentId        String    @map("treatment_id") @db.VarChar(50)
+  startTime          DateTime  @map("start_time")
+  endTime            DateTime  @map("end_time")
+  status             String    @default("confirmed") @db.VarChar(50)
+  notes              String?   @db.Text
+  createdById        String?   @map("created_by_id") @db.VarChar(50)
+  updatedById        String?   @map("updated_by_id") @db.VarChar(50)
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+  cancelledAt        DateTime? @map("cancelled_at")
+  cancellationReason String?   @map("cancellation_reason") @db.Text
+
+  branch        Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  room          Room                       @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  patient       Customer                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor        Doctor                     @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  treatment     Treatment                  @relation(fields: [treatmentId], references: [id], onDelete: Cascade)
+  statusHistory AppointmentStatusHistory[]
+
+  @@index([branchId, startTime])
+  @@index([roomId, startTime, endTime])
+  @@index([doctorId, startTime, endTime])
+  @@index([patientId])
+  @@index([status])
+  @@map("appointments")
+}
+
+// 20. Appointment Status Audit History
+model AppointmentStatusHistory {
+  id             String   @id @db.VarChar(50)
+  appointmentId  String   @map("appointment_id") @db.VarChar(50)
+  previousStatus String?  @map("previous_status") @db.VarChar(50)
+  newStatus      String   @map("new_status") @db.VarChar(50)
+  changedById    String?  @map("changed_by_id") @db.VarChar(50)
+  changedByName  String?  @map("changed_by_name") @db.VarChar(255)
+  reason         String?  @db.Text
+  changedAt      DateTime @default(now()) @map("changed_at")
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@map("appointment_status_history")
+}
+
+// 21. Availability Blocks
+model AvailabilityBlock {
+  id          String   @id @db.VarChar(50)
+  branchId    String   @map("branch_id") @db.VarChar(50)
+  roomId      String?  @map("room_id") @db.VarChar(50)
+  doctorId    String?  @map("doctor_id") @db.VarChar(50)
+  startTime   DateTime @map("start_time")
+  endTime     DateTime @map("end_time")
+  reason      String   @db.VarChar(255)
+  createdById String?  @map("created_by_id") @db.VarChar(50)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([branchId, startTime, endTime])
+  @@index([roomId])
+  @@index([doctorId])
+  @@map("availability_blocks")
+}
+
+// 22. Public Contact Marketing (independent from sales leads and customers)
+model MarketingContact {
+  id                String                 @id @default(uuid()) @db.VarChar(36)
+  serialNumber      String                 @unique @map("serial_number") @db.VarChar(50)
+  normalizedPhone   String                 @unique @map("normalized_phone") @db.VarChar(32)
+  company           String                 @db.VarChar(50)
+  originalSource    String                 @map("original_source") @db.VarChar(100)
+  sourceGroupName   String?                @map("source_group_name") @db.VarChar(255)
+  firstAddedById    String                 @map("first_added_by_id") @db.VarChar(36)
+  firstAddedAt      DateTime               @default(now()) @map("first_added_at")
+  consentStatus     MarketingConsentStatus @default(unknown) @map("consent_status")
+  currentOwnerId    String?                @map("current_owner_id") @db.VarChar(36)
+  assignedById      String?                @map("assigned_by_id") @db.VarChar(36)
+  assignedAt        DateTime?              @map("assigned_at")
+  lastUpdatedById   String?                @map("last_updated_by_id") @db.VarChar(36)
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  @@index([company, createdAt])
+  @@index([company, consentStatus, currentOwnerId])
+  @@index([currentOwnerId, assignedAt])
+  @@map("marketing_contacts")
+}
+
+model MarketingImportBatch {
+  id               String                @id @default(uuid()) @db.VarChar(36)
+  batchNumber      String                @unique @map("batch_number") @db.VarChar(50)
+  company          String                @db.VarChar(50)
+  uploadedById     String                @map("uploaded_by_id") @db.VarChar(36)
+  source           String                @db.VarChar(100)
+  sourceGroupName  String?               @map("source_group_name") @db.VarChar(255)
+  fileName         String?               @map("file_name") @db.VarChar(255)
+  fileStorageKey   String?               @map("file_storage_key") @db.Text
+  idempotencyKey   String                @unique @map("idempotency_key") @db.VarChar(100)
+  totalSubmitted   Int                   @default(0) @map("total_submitted")
+  validNewCount    Int                   @default(0) @map("valid_new_count")
+  duplicateCount   Int                   @default(0) @map("duplicate_count")
+  invalidCount     Int                   @default(0) @map("invalid_count")
+  savedCount       Int                   @default(0) @map("saved_count")
+  failedCount      Int                   @default(0) @map("failed_count")
+  status           MarketingImportStatus @default(queued)
+  startedAt        DateTime?             @map("started_at")
+  completedAt      DateTime?             @map("completed_at")
+  errorSummary     String?               @map("error_summary") @db.Text
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@index([company, uploadedById, createdAt])
+  @@index([status, createdAt])
+  @@map("marketing_import_batches")
+}
+
+model MarketingImportRow {
+  id              String             @id @default(uuid()) @db.VarChar(36)
+  batchId         String             @map("batch_id") @db.VarChar(36)
+  rowNumber       Int                @map("row_number")
+  rawPhone        String?            @map("raw_phone") @db.VarChar(255)
+  normalizedPhone String?            @map("normalized_phone") @db.VarChar(32)
+  status          MarketingRowStatus @default(pending)
+  contactId       String?            @map("contact_id") @db.VarChar(36)
+  errorCode       String?            @map("error_code") @db.VarChar(100)
+  errorMessage    String?            @map("error_message") @db.Text
+  processedAt     DateTime?          @map("processed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@index([normalizedPhone])
+  @@map("marketing_import_rows")
+}
+
+model MarketingContactContribution {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  contactId       String?  @map("contact_id") @db.VarChar(36)
+  batchId         String?  @map("batch_id") @db.VarChar(36)
+  importRowId     String?  @map("import_row_id") @db.VarChar(36)
+  contributedById String   @map("contributed_by_id") @db.VarChar(36)
+  company         String   @db.VarChar(50)
+  source          String   @db.VarChar(100)
+  sourceGroupName String?  @map("source_group_name") @db.VarChar(255)
+  outcome         String   @db.VarChar(30)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([contactId, createdAt])
+  @@index([contributedById, createdAt])
+  @@map("marketing_contact_contributions")
+}
+
+model MarketingConsentEvent {
+  id            String                 @id @default(uuid()) @db.VarChar(36)
+  contactId     String                 @map("contact_id") @db.VarChar(36)
+  status        MarketingConsentStatus
+  purpose       String?                @db.VarChar(255)
+  channel       String?                @db.VarChar(100)
+  evidence      String?                @db.Text
+  recordedById  String                 @map("recorded_by_id") @db.VarChar(36)
+  recordedAt    DateTime               @default(now()) @map("recorded_at")
+
+  @@index([contactId, recordedAt])
+  @@map("marketing_consent_events")
+}
+
+model MarketingSuppression {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  contactId    String   @unique @map("contact_id") @db.VarChar(36)
+  reason       String   @db.VarChar(255)
+  recordedById String   @map("recorded_by_id") @db.VarChar(36)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("marketing_suppressions")
+}
+
+model MarketingAssignmentHistory {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  contactId      String   @map("contact_id") @db.VarChar(36)
+  previousOwnerId String? @map("previous_owner_id") @db.VarChar(36)
+  newOwnerId     String?  @map("new_owner_id") @db.VarChar(36)
+  assignedById   String   @map("assigned_by_id") @db.VarChar(36)
+  reason         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([contactId, createdAt])
+  @@index([newOwnerId, createdAt])
+  @@map("marketing_assignment_history")
+}
+
+model MarketingTask {
+  id             String              @id @default(uuid()) @db.VarChar(36)
+  contactId      String              @map("contact_id") @db.VarChar(36)
+  ownerId        String              @map("owner_id") @db.VarChar(36)
+  status         MarketingTaskStatus @default(pending)
+  notes          String?             @db.Text
+  followUpAt     DateTime?           @map("follow_up_at")
+  closedAt       DateTime?           @map("closed_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  @@unique([contactId, ownerId])
+  @@index([ownerId, status, followUpAt])
+  @@map("marketing_tasks")
+}
+
+model MarketingNotification {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      String   @map("user_id") @db.VarChar(36)
+  type        String   @db.VarChar(100)
+  payload     Json
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, readAt, createdAt])
+  @@map("marketing_notifications")
+}
+
+model MarketingAuditLog {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  company       String   @db.VarChar(50)
+  actorId       String?  @map("actor_id") @db.VarChar(36)
+  action        String   @db.VarChar(100)
+  entityType    String   @map("entity_type") @db.VarChar(100)
+  entityId      String   @map("entity_id") @db.VarChar(36)
+  correlationId String?  @map("correlation_id") @db.VarChar(100)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([company, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@map("marketing_audit_logs")
+}
+
+model MarketingImportJob {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  batchId      String   @unique @map("batch_id") @db.VarChar(36)
+  status       String   @default("queued") @db.VarChar(30)
+  attempts     Int      @default(0)
+  leaseOwner   String?  @map("lease_owner") @db.VarChar(100)
+  leaseUntil   DateTime? @map("lease_until")
+  lastError    String?  @map("last_error") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([status, leaseUntil, createdAt])
+  @@map("marketing_import_jobs")
+}
+
+model MarketingCampaign {
+  id              String                          @id @default(uuid()) @db.VarChar(36)
+  company         String                          @db.VarChar(50)
+  title           String                          @db.VarChar(255)
+  description     String?                         @db.Text
+  targetAudience  String?                         @map("target_audience") @db.Text
+  instructions    String?                         @db.Text
+  approvedText    String?                         @map("approved_text") @db.Text
+  startDate       DateTime?                       @map("start_date")
+  endDate         DateTime?                       @map("end_date")
+  status          MarketingCampaignApprovalStatus @default(draft)
+  createdById     String                          @map("created_by_id") @db.VarChar(36)
+  approvedById    String?                         @map("approved_by_id") @db.VarChar(36)
+  approvedAt      DateTime?                       @map("approved_at")
+  createdAt       DateTime                        @default(now()) @map("created_at")
+  updatedAt       DateTime                        @updatedAt @map("updated_at")
+
+  @@index([company, status, startDate])
+  @@map("marketing_campaigns")
+}
+
+model MarketingCampaignAsset {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  campaignId  String   @map("campaign_id") @db.VarChar(36)
+  storageKey  String   @map("storage_key") @db.Text
+  fileName    String   @map("file_name") @db.VarChar(255)
+  mimeType    String   @map("mime_type") @db.VarChar(100)
+  sizeBytes   Int      @map("size_bytes")
+  uploadedById String  @map("uploaded_by_id") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([campaignId, createdAt])
+  @@map("marketing_campaign_assets")
+}
+
+model MarketingCampaignOfficer {
+  campaignId String   @map("campaign_id") @db.VarChar(36)
+  userId     String   @map("user_id") @db.VarChar(36)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([campaignId, userId])
+  @@index([userId])
+  @@map("marketing_campaign_officers")
+}

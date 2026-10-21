@@ -19,14 +19,14 @@ export const STAGE_CONFIG: Record<LeadStage, { label: string; shortLabel: string
     pillBorder: 'border-[#fb7185]/40'
   },
   assigned: {
-    label: 'Assigned',
-    shortLabel: 'ASSIGNED',
-    bg: 'bg-amber-500/15',
-    text: 'text-amber-400',
-    border: 'border-amber-500/30',
-    pillBg: 'bg-[#d97706]/20',
-    pillText: 'text-[#fbbf24]',
-    pillBorder: 'border-[#fbbf24]/40'
+    label: 'Accepted',
+    shortLabel: 'ACCEPTED',
+    bg: 'bg-green-500/15',
+    text: 'text-green-400',
+    border: 'border-green-500/30',
+    pillBg: 'bg-[#16a34a]/20',
+    pillText: 'text-[#4ade80]',
+    pillBorder: 'border-[#4ade80]/40'
   },
   contacted: {
     label: 'Contacted',

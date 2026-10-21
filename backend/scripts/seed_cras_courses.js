@@ -1,4 +1,7 @@
 import { getPrisma } from '../src/db.js';
+import { assertDatabaseOperationAllowed } from '../src/databasePolicy.js';
+
+assertDatabaseOperationAllowed('utility');
 
 const CRAS_CATEGORY = {
   id: 'cat-cras-courses',

@@ -774,15 +774,75 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         onScroll={handleScroll}
         className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
-        <table className="w-full text-left border-collapse text-xs min-w-[2600px]">
+        <style>{`
+          /* One grid definition keeps header and every row aligned while scrolling. */
+          .pipeline-table { display: block; width: max-content; min-width: 2655px; }
+          .pipeline-table thead, .pipeline-table tbody { display: block; }
+          .pipeline-table thead tr, .pipeline-table tbody tr {
+            display: grid;
+            grid-template-columns: 60px 120px 280px 150px 150px 220px 160px 160px 180px 170px 170px 140px 90px 65px 220px 70px 160px 90px;
+            min-width: 2655px;
+          }
+          .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
+          .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
+          .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { grid-column: 1; }
+          .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { grid-column: 2; }
+          .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { grid-column: 3; }
+          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 13; }
+          .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 14; }
+          .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 16; }
+          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 15; }
+          .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 4; }
+          .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 5; }
+          .pipeline-table th:nth-child(10), .pipeline-table td:nth-child(10) { grid-column: 6; }
+          .pipeline-table th:nth-child(11), .pipeline-table td:nth-child(11) { grid-column: 17; }
+          .pipeline-table th:nth-child(12), .pipeline-table td:nth-child(12) { grid-column: 8; }
+          .pipeline-table th:nth-child(13), .pipeline-table td:nth-child(13) { grid-column: 9; }
+          .pipeline-table th:nth-child(14), .pipeline-table td:nth-child(14) { grid-column: 10; }
+          .pipeline-table th:nth-child(15), .pipeline-table td:nth-child(15) { grid-column: 7; }
+          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 18; }
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 11; }
+          .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 12; }
+
+          /* Sticky cells are deliberately limited to No., Serial No., Contact, and Actions. */
+          .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1),
+          .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2),
+          .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) {
+            position: sticky;
+            z-index: 4;
+            background: rgb(2 6 23);
+          }
+          .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { left: 0; }
+          .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { left: 60px; }
+          .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { left: 180px; }
+          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) {
+            position: sticky;
+            right: 0;
+            z-index: 5;
+            background: rgb(2 6 23);
+          }
+          /* Header cells own the vertical sticky position. This keeps the left
+             identity headers visible at the top while their columns are fixed horizontally. */
+          .pipeline-table thead th {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: rgb(2 6 23);
+          }
+          .pipeline-table thead th:nth-child(1),
+          .pipeline-table thead th:nth-child(2),
+          .pipeline-table thead th:nth-child(3),
+          .pipeline-table thead th:nth-child(16) { z-index: 30; }
+        `}</style>
+        <table className="pipeline-table text-left text-xs">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
             <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
-              <th className="py-3.5 px-3 min-w-[60px] text-center">No.</th>
-              <th className="py-3.5 px-3 min-w-[120px]">Serial No.</th>
-              <th className="py-3.5 px-4 min-w-[240px]">{isCras ? 'Student / Contact' : 'Patient / Contact'}</th>
-              <th className="py-3.5 px-2 min-w-[90px]">Source</th>
-              <th className="py-3.5 px-2 text-center min-w-[65px] max-w-[120px]">Lang</th>
-              <th className="py-3.5 px-2 text-center min-w-[70px]">Notes</th>
+              <th className="py-3.5 px-3 text-center">No.</th>
+              <th className="py-3.5 px-3">Serial No.</th>
+              <th className="py-3.5 px-4">Contact</th>
+              <th className="py-3.5 px-2">Source</th>
+              <th className="py-3.5 px-2 text-center">Lang</th>
+              <th className="py-3.5 px-2 text-center">Note</th>
               <th className="py-3.5 px-4 min-w-[220px]">
                 <button
                   type="button"
@@ -790,21 +850,21 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   className="inline-flex items-center gap-1 hover:text-white transition-colors"
                   title="Sort by treatment or service"
                 >
-                  {isCras ? 'Course / Program' : 'Treatment / Service'}
+                  {isCras ? 'TREATMENT / SERVICE' : 'TREATMENT / SERVICE'}
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
-              <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
-              <th className="py-3.5 px-4 min-w-[220px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
-              <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
-              <th className="py-3.5 px-3 min-w-[160px]">In_Receive Time</th>
-              <th className="py-3.5 px-3 min-w-[180px]">Assign Time</th>
-              <th className="py-3.5 px-3 min-w-[170px]">1st Response</th>
-              <th className="py-3.5 px-3 min-w-[160px]">24h Window</th>
-              <th className="py-3.5 px-4 text-center min-w-[90px]">Action</th>
-              <th className="py-3.5 px-3 min-w-[170px]">Book Appointment</th>
-              <th className="py-3.5 px-3 min-w-[140px]">Appointment Status</th>
-              <th className="py-3.5 px-3 min-w-[240px]">Appointment Assign By in Re-assign</th>
+              <th className="py-3.5 px-4">Current Status</th>
+              <th className="py-3.5 px-3">Assign Status</th>
+              <th className="py-3.5 px-4">Assign Coordinator</th>
+              <th className="py-3.5 px-3">Assign By</th>
+              <th className="py-3.5 px-3">INQ Receive</th>
+              <th className="py-3.5 px-3">INQ Assigned</th>
+              <th className="py-3.5 px-3">INQ Accept Time</th>
+              <th className="py-3.5 px-3">24 Windows</th>
+              <th className="py-3.5 px-4 text-center">Actions</th>
+              <th className="py-3.5 px-3">Task</th>
+              <th className="py-3.5 px-3">Output</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
@@ -848,8 +908,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </span>
                     </td>
 
-                    {/* 5. Customer Contact & Authentic Avatar */}
-                    <td className="py-3.5 px-4 min-w-[240px]" onClick={(event) => { event.stopPropagation(); handlePatientClick(lead.id); }} onDoubleClick={(event) => { event.stopPropagation(); handlePatientDoubleClick(lead.id); }}>
+                    {/* 3. Name */}
+                    <td className="py-3.5 px-4" onClick={(event) => { event.stopPropagation(); handlePatientClick(lead.id); }} onDoubleClick={(event) => { event.stopPropagation(); handlePatientDoubleClick(lead.id); }}>
                       <div className="flex items-center gap-3">
                         {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
                         <div className="min-w-0 flex flex-col">
@@ -857,7 +917,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                             <p className="font-bold text-slate-100 text-xs truncate">{lead.customer?.displayName}</p>
                             <CompanyTagBadge lead={lead} size="xs" />
                           </div>
-                          <p className="text-[11px] text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber}</p>
+                          <p className="text-[11px] text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber || 'No contact'}</p>
                         </div>
                       </div>
                     </td>
@@ -913,7 +973,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 7. Stage */}
+                    {/* 6. Assignment Status */}
+                    <td className="py-3.5 px-3 whitespace-nowrap">
+                      <span className={`inline-flex rounded-md border px-2 py-1 text-[10px] font-semibold ${lead.assignedTo ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'}`}>
+                        {lead.assignedTo ? (lead.assignmentHistories && lead.assignmentHistories.length > 1 ? 'Reassigned' : 'Assigned') : 'Unassigned'}
+                      </span>
+                    </td>
+
+                    {/* 7. Current Status */}
                     <td className="py-3.5 px-4 min-w-[150px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <StageBadge stage={lead.stage} />
@@ -1030,10 +1097,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       {renderAppointmentStatusCell(lead, appt)}
                     </td>
 
-                    {/* 15. Appointment Assign By in Re-assign */}
-                    <td className="py-3.5 px-3 min-w-[240px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {renderAppointmentAssignByCell(lead, appt)}
-                    </td>
                   </tr>
                 );
               })

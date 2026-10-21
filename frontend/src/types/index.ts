@@ -1,4 +1,18 @@
-export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator';
+export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator' | 'marketing_officer' | 'marketing_admin';
+
+export type MarketingCapability =
+  | 'dashboard'
+  | 'collect'
+  | 'view_own_uploads'
+  | 'view_assigned_tasks'
+  | 'update_assigned_tasks'
+  | 'manage_campaign_drafts'
+  | 'view_reports'
+  | 'assign'
+  | 'reassign'
+  | 'export'
+  | 'approve_campaigns'
+  | 'audit';
 
 export type LeadStage = 
   | 'new' 

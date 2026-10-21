@@ -21,6 +21,7 @@ import {
 import { Branch, Room, Appointment, AppointmentStatus, Lead, User as CrmUser, Treatment } from '../../types';
 import { appointmentService } from '../../services/appointmentService';
 import { getAppointmentStatusConfig, APPOINTMENT_STATUS_CONFIG } from '../../utils/appointmentStatusUtils';
+import { getLeadCompany } from '../../utils/companyUtils';
 
 export interface BookUpdateAppointmentModalProps {
   isOpen: boolean;
@@ -135,7 +136,8 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
           setClientName(data.patientName || lead?.customer?.displayName || '');
           setContactNumber(data.patientPhone || lead?.customer?.whatsappNumber || '');
           setInqSerialNo(lead?.serialNumber || `APT-${data.id.slice(-6)}`);
-          setCompany((lead?.company as any) || 'RWC');
+          const detectedCompany = (lead?.company as any) || (lead ? getLeadCompany(lead).code : 'RWC');
+          setCompany(detectedCompany === 'CRAS' ? 'CRAS' : 'RWC');
 
           setCreatedBy(data.createdByName || 'Staff');
           setCreatedAt(data.createdAt ? new Date(data.createdAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : new Date().toLocaleString());
@@ -159,7 +161,8 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
       setInqSerialNo(lead?.serialNumber || `INQ-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`);
       setClientName(lead?.customer?.displayName || '');
       setContactNumber(lead?.customer?.whatsappNumber || '');
-      setCompany(lead?.company || 'RWC');
+      const detectedCompany = (lead?.company as any) || (lead ? getLeadCompany(lead).code : 'RWC');
+      setCompany(detectedCompany === 'CRAS' ? 'CRAS' : 'RWC');
       setSelectedTreatmentId(lead?.treatmentId || treatments[0]?.id || '');
       setAssignedCoordinatorId(lead?.assignedTo || '');
 
@@ -330,7 +333,7 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
               <Calendar className="w-5 h-5 text-teal-400" />
             </div>
             <h3 className="font-bold text-base text-white tracking-wide">
-              {isEditMode ? 'Book / Update Appointment' : 'Book / Update Appointment'}
+              {isEditMode ? 'Book / Update Appointment' : (company === 'CRAS' ? 'Enrollment Student' : 'Book Appointment')}
             </h3>
           </div>
           <button
@@ -786,7 +789,7 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
                 disabled={isSubmitting}
                 className="px-5 py-2 rounded-xl text-xs font-bold bg-blue-600 hover:bg-blue-500 text-white transition-all shadow-md active:scale-95 cursor-pointer disabled:opacity-50"
               >
-                {isSubmitting ? 'Saving...' : 'Save Appointment'}
+                {isSubmitting ? 'Saving...' : (company === 'CRAS' ? 'Enroll Student' : 'Save Appointment')}
               </button>
             )}
           </div>

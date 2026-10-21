@@ -16,6 +16,48 @@ enum UserRole {
   super_admin
   leads_officer
   coordinator
+  marketing_officer
+  marketing_admin
+}
+
+enum MarketingConsentStatus {
+  unknown
+  verified
+  denied
+  opted_out
+}
+
+enum MarketingImportStatus {
+  queued
+  processing
+  completed
+  partially_completed
+  failed
+}
+
+enum MarketingRowStatus {
+  pending
+  saved
+  duplicate
+  invalid
+  failed
+}
+
+enum MarketingTaskStatus {
+  pending
+  contacted
+  interested
+  not_interested
+  follow_up
+  completed
+}
+
+enum MarketingCampaignApprovalStatus {
+  draft
+  pending_approval
+  approved
+  rejected
+  archived
 }
 
 enum LanguageCode {
@@ -77,7 +119,7 @@ model User {
   fullName            String             @db.VarChar(255)
   email               String             @unique @db.VarChar(255)
   password            String?            @db.VarChar(255)
-  pin                 String?            @db.VarChar(10)
+  pin                 String?            @db.VarChar(255)
   phone               String?            @db.VarChar(50)
   role                UserRole           @default(coordinator)
   branch              String?            @default("Colombo") @db.VarChar(100)
@@ -612,5 +654,235 @@ model AvailabilityBlock {
   @@index([roomId])
   @@index([doctorId])
   @@map("availability_blocks")
+}
+
+// 22. Public Contact Marketing (independent from sales leads and customers)
+model MarketingContact {
+  id                String                 @id @default(uuid()) @db.VarChar(36)
+  serialNumber      String                 @unique @map("serial_number") @db.VarChar(50)
+  normalizedPhone   String                 @unique @map("normalized_phone") @db.VarChar(32)
+  company           String                 @db.VarChar(50)
+  originalSource    String                 @map("original_source") @db.VarChar(100)
+  sourceGroupName   String?                @map("source_group_name") @db.VarChar(255)
+  firstAddedById    String                 @map("first_added_by_id") @db.VarChar(36)
+  firstAddedAt      DateTime               @default(now()) @map("first_added_at")
+  consentStatus     MarketingConsentStatus @default(unknown) @map("consent_status")
+  currentOwnerId    String?                @map("current_owner_id") @db.VarChar(36)
+  assignedById      String?                @map("assigned_by_id") @db.VarChar(36)
+  assignedAt        DateTime?              @map("assigned_at")
+  lastUpdatedById   String?                @map("last_updated_by_id") @db.VarChar(36)
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  @@index([company, createdAt])
+  @@index([company, consentStatus, currentOwnerId])
+  @@index([currentOwnerId, assignedAt])
+  @@map("marketing_contacts")
+}
+
+model MarketingImportBatch {
+  id               String                @id @default(uuid()) @db.VarChar(36)
+  batchNumber      String                @unique @map("batch_number") @db.VarChar(50)
+  company          String                @db.VarChar(50)
+  uploadedById     String                @map("uploaded_by_id") @db.VarChar(36)
+  source           String                @db.VarChar(100)
+  sourceGroupName  String?               @map("source_group_name") @db.VarChar(255)
+  fileName         String?               @map("file_name") @db.VarChar(255)
+  fileStorageKey   String?               @map("file_storage_key") @db.Text
+  idempotencyKey   String                @unique @map("idempotency_key") @db.VarChar(100)
+  totalSubmitted   Int                   @default(0) @map("total_submitted")
+  validNewCount    Int                   @default(0) @map("valid_new_count")
+  duplicateCount   Int                   @default(0) @map("duplicate_count")
+  invalidCount     Int                   @default(0) @map("invalid_count")
+  savedCount       Int                   @default(0) @map("saved_count")
+  failedCount      Int                   @default(0) @map("failed_count")
+  status           MarketingImportStatus @default(queued)
+  startedAt        DateTime?             @map("started_at")
+  completedAt      DateTime?             @map("completed_at")
+  errorSummary     String?               @map("error_summary") @db.Text
+  createdAt        DateTime              @default(now()) @map("created_at")
+  updatedAt        DateTime              @updatedAt @map("updated_at")
+
+  @@index([company, uploadedById, createdAt])
+  @@index([status, createdAt])
+  @@map("marketing_import_batches")
+}
+
+model MarketingImportRow {
+  id              String             @id @default(uuid()) @db.VarChar(36)
+  batchId         String             @map("batch_id") @db.VarChar(36)
+  rowNumber       Int                @map("row_number")
+  rawPhone        String?            @map("raw_phone") @db.VarChar(255)
+  normalizedPhone String?            @map("normalized_phone") @db.VarChar(32)
+  status          MarketingRowStatus @default(pending)
+  contactId       String?            @map("contact_id") @db.VarChar(36)
+  errorCode       String?            @map("error_code") @db.VarChar(100)
+  errorMessage    String?            @map("error_message") @db.Text
+  processedAt     DateTime?          @map("processed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+
+  @@unique([batchId, rowNumber])
+  @@index([batchId, status])
+  @@index([normalizedPhone])
+  @@map("marketing_import_rows")
+}
+
+model MarketingContactContribution {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  contactId       String?  @map("contact_id") @db.VarChar(36)
+  batchId         String?  @map("batch_id") @db.VarChar(36)
+  importRowId     String?  @map("import_row_id") @db.VarChar(36)
+  contributedById String   @map("contributed_by_id") @db.VarChar(36)
+  company         String   @db.VarChar(50)
+  source          String   @db.VarChar(100)
+  sourceGroupName String?  @map("source_group_name") @db.VarChar(255)
+  outcome         String   @db.VarChar(30)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([contactId, createdAt])
+  @@index([contributedById, createdAt])
+  @@map("marketing_contact_contributions")
+}
+
+model MarketingConsentEvent {
+  id            String                 @id @default(uuid()) @db.VarChar(36)
+  contactId     String                 @map("contact_id") @db.VarChar(36)
+  status        MarketingConsentStatus
+  purpose       String?                @db.VarChar(255)
+  channel       String?                @db.VarChar(100)
+  evidence      String?                @db.Text
+  recordedById  String                 @map("recorded_by_id") @db.VarChar(36)
+  recordedAt    DateTime               @default(now()) @map("recorded_at")
+
+  @@index([contactId, recordedAt])
+  @@map("marketing_consent_events")
+}
+
+model MarketingSuppression {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  contactId    String   @unique @map("contact_id") @db.VarChar(36)
+  reason       String   @db.VarChar(255)
+  recordedById String   @map("recorded_by_id") @db.VarChar(36)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("marketing_suppressions")
+}
+
+model MarketingAssignmentHistory {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  contactId      String   @map("contact_id") @db.VarChar(36)
+  previousOwnerId String? @map("previous_owner_id") @db.VarChar(36)
+  newOwnerId     String?  @map("new_owner_id") @db.VarChar(36)
+  assignedById   String   @map("assigned_by_id") @db.VarChar(36)
+  reason         String?  @db.Text
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([contactId, createdAt])
+  @@index([newOwnerId, createdAt])
+  @@map("marketing_assignment_history")
+}
+
+model MarketingTask {
+  id             String              @id @default(uuid()) @db.VarChar(36)
+  contactId      String              @map("contact_id") @db.VarChar(36)
+  ownerId        String              @map("owner_id") @db.VarChar(36)
+  status         MarketingTaskStatus @default(pending)
+  notes          String?             @db.Text
+  followUpAt     DateTime?           @map("follow_up_at")
+  closedAt       DateTime?           @map("closed_at")
+  createdAt      DateTime            @default(now()) @map("created_at")
+  updatedAt      DateTime            @updatedAt @map("updated_at")
+
+  @@unique([contactId, ownerId])
+  @@index([ownerId, status, followUpAt])
+  @@map("marketing_tasks")
+}
+
+model MarketingNotification {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  userId      String   @map("user_id") @db.VarChar(36)
+  type        String   @db.VarChar(100)
+  payload     Json
+  readAt      DateTime? @map("read_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([userId, readAt, createdAt])
+  @@map("marketing_notifications")
+}
+
+model MarketingAuditLog {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  company       String   @db.VarChar(50)
+  actorId       String?  @map("actor_id") @db.VarChar(36)
+  action        String   @db.VarChar(100)
+  entityType    String   @map("entity_type") @db.VarChar(100)
+  entityId      String   @map("entity_id") @db.VarChar(36)
+  correlationId String?  @map("correlation_id") @db.VarChar(100)
+  metadata      Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([company, createdAt])
+  @@index([entityType, entityId, createdAt])
+  @@map("marketing_audit_logs")
+}
+
+model MarketingImportJob {
+  id           String   @id @default(uuid()) @db.VarChar(36)
+  batchId      String   @unique @map("batch_id") @db.VarChar(36)
+  status       String   @default("queued") @db.VarChar(30)
+  attempts     Int      @default(0)
+  leaseOwner   String?  @map("lease_owner") @db.VarChar(100)
+  leaseUntil   DateTime? @map("lease_until")
+  lastError    String?  @map("last_error") @db.Text
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@index([status, leaseUntil, createdAt])
+  @@map("marketing_import_jobs")
+}
+
+model MarketingCampaign {
+  id              String                          @id @default(uuid()) @db.VarChar(36)
+  company         String                          @db.VarChar(50)
+  title           String                          @db.VarChar(255)
+  description     String?                         @db.Text
+  targetAudience  String?                         @map("target_audience") @db.Text
+  instructions    String?                         @db.Text
+  approvedText    String?                         @map("approved_text") @db.Text
+  startDate       DateTime?                       @map("start_date")
+  endDate         DateTime?                       @map("end_date")
+  status          MarketingCampaignApprovalStatus @default(draft)
+  createdById     String                          @map("created_by_id") @db.VarChar(36)
+  approvedById    String?                         @map("approved_by_id") @db.VarChar(36)
+  approvedAt      DateTime?                       @map("approved_at")
+  createdAt       DateTime                        @default(now()) @map("created_at")
+  updatedAt       DateTime                        @updatedAt @map("updated_at")
+
+  @@index([company, status, startDate])
+  @@map("marketing_campaigns")
+}
+
+model MarketingCampaignAsset {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  campaignId  String   @map("campaign_id") @db.VarChar(36)
+  storageKey  String   @map("storage_key") @db.Text
+  fileName    String   @map("file_name") @db.VarChar(255)
+  mimeType    String   @map("mime_type") @db.VarChar(100)
+  sizeBytes   Int      @map("size_bytes")
+  uploadedById String  @map("uploaded_by_id") @db.VarChar(36)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([campaignId, createdAt])
+  @@map("marketing_campaign_assets")
+}
+
+model MarketingCampaignOfficer {
+  campaignId String   @map("campaign_id") @db.VarChar(36)
+  userId     String   @map("user_id") @db.VarChar(36)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@id([campaignId, userId])
+  @@index([userId])
+  @@map("marketing_campaign_officers")
 }
 

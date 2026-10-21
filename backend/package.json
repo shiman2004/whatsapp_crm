@@ -6,13 +6,20 @@
   "scripts": {
     "start": "node server.js",
     "dev": "node --watch server.js",
-    "test": "node test-meta-token-security.js && node test-bell-notification.js && node test-sender-audit.js && node test-24h-window.js && npx tsx test-phonetic-composer.js && node test-company-switching.js && node test-cras-contact-creation.js && node test-company-pipelines.js && node test-super-admin-settings.js && node test-meta-message-status.js",
+    "test": "node scripts/run-tests.js",
+    "test:setup": "node scripts/setup-test-db.js",
+    "test:phonetic": "npx tsx test-phonetic-composer.js",
+    "bench:leads:seed": "node scripts/seed-bench-data.mjs 2000",
+    "bench:leads:clear": "node scripts/seed-bench-data.mjs --clear",
+    "bench:leads": "node scripts/bench-leads.mjs",
     "build": "prisma generate",
     "postinstall": "prisma generate",
     "webhook": "node webhook-standalone.js",
+    "media:migrate-private": "node scripts/migrate-media-private.js",
     "prisma:generate": "prisma generate",
-    "prisma:push": "prisma db push",
-    "prisma:migrate": "prisma migrate dev",
+    "prisma:push": "node scripts/run-prisma-operation.js push",
+    "prisma:migrate": "node scripts/run-prisma-operation.js migrate-dev",
+    "prisma:migrate:deploy": "node scripts/run-prisma-operation.js migrate-deploy",
     "prisma:studio": "prisma studio",
     "seed": "node prisma/seed.js"
   },
@@ -20,10 +27,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@prisma/client": "^6.4.1",
     "@supabase/supabase-js": "^2.49.1",
-    "@whiskeysockets/baileys": "^7.0.0-rc14",
-    "cors": "^2.8.5",
     "dotenv": "^16.4.7",
-    "prisma": "^6.4.1",
-    "qrcode": "^1.5.4"
+    "prisma": "^6.4.1"
   }
 }

@@ -151,18 +151,14 @@ export const LoginScreen: React.FC = () => {
     u.id.toLowerCase() === identifierInput.toLowerCase()
   );
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const res = login(identifierInput.trim(), passwordInput);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Invalid credentials.');
-      }
-      setIsSubmitting(false);
-    }, 250);
+    const res = await login(identifierInput.trim(), passwordInput);
+    if (!res.success) setErrorMsg(res.error || 'Invalid credentials.');
+    setIsSubmitting(false);
   };
 
   const handlePinKey = useCallback((digit: string) => {
@@ -176,8 +172,8 @@ export const LoginScreen: React.FC = () => {
       if (next.length === 4) {
         const fullPin = next.join('');
         setIsSubmitting(true);
-        setTimeout(() => {
-          const res = login(identifierInput.trim(), fullPin);
+        setTimeout(async () => {
+          const res = await login(identifierInput.trim(), fullPin);
           if (!res.success) {
             setErrorMsg(res.error || 'Incorrect 4-digit PIN. Please try again.');
             setPinDigits([]);

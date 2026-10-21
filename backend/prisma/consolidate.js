@@ -1,6 +1,8 @@
 import { PrismaClient } from '@prisma/client';
 import dotenv from 'dotenv';
+import { assertDatabaseOperationAllowed } from '../src/databasePolicy.js';
 dotenv.config();
+assertDatabaseOperationAllowed('utility');
 
 const prisma = new PrismaClient();
 

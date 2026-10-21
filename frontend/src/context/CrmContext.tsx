@@ -62,7 +62,7 @@ interface NotificationToast {
 
 export const DEFAULT_STAGES: LeadStageConfig[] = [
   { id: 'stage-new', key: 'new', label: 'New Inquiry', orderIndex: 0, isActive: true, isSystem: true, color: '#f43f5e' },
-  { id: 'stage-assigned', key: 'assigned', label: 'Assigned', orderIndex: 1, isActive: true, isSystem: false, color: '#f59e0b' },
+  { id: 'stage-assigned', key: 'assigned', label: 'Accepted', orderIndex: 1, isActive: true, isSystem: false, color: '#22c55e' },
   { id: 'stage-contacted', key: 'contacted', label: 'Contacted', orderIndex: 2, isActive: true, isSystem: false, color: '#10b981' },
   { id: 'stage-potential', key: 'potential', label: 'Potential', orderIndex: 3, isActive: true, isSystem: false, color: '#a855f7' },
   { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', orderIndex: 4, isActive: true, isSystem: false, color: '#0ea5e9' },
@@ -75,7 +75,7 @@ export const DEFAULT_STAGES: LeadStageConfig[] = [
 interface CrmContextType {
   // Authentication & RBAC
   isAuthenticated: boolean;
-  login: (identifier: string, secret?: string) => { success: boolean; error?: string };
+  login: (identifier: string, secret?: string) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   updateUserCredentials: (userId: string, updates: { password?: string; pin?: string }) => void;
   currentUser: User;
@@ -92,6 +92,9 @@ interface CrmContextType {
   leads: Lead[];
   customers: Customer[];
   messages: Message[];
+  // Loads the next older page of conversation history; resolves true when more remain.
+  loadOlderMessages: () => Promise<boolean>;
+  hasOlderMessages: boolean;
   categories: TreatmentCategory[];
   treatments: Treatment[];
   templates: WhatsAppTemplate[];
@@ -267,6 +270,39 @@ const getStored = <T,>(key: string, fallback: T): T => {
   }
 };
 
+// Maps a raw API/SSE message row into the client Message shape.
+// Shared by the initial load and by older-history pagination.
+const toClientMessage = (m: any): Message => ({
+  id: m.id,
+  leadId: m.leadId,
+  customerId: m.customerId,
+  direction: m.direction,
+  senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
+  senderId: m.senderId || m.audit?.senderId,
+  senderName: m.senderName || m.audit?.senderName,
+  senderRole: m.senderRole || m.audit?.senderRole,
+  messageSource: m.messageSource || m.audit?.messageSource,
+  sentAt: m.sentAt || m.audit?.sentAt,
+  content: m.content || '',
+  status: (m.status === 'read' && !(m.readAt || m.read_at)) ? 'delivered' : (m.status || 'delivered'),
+  deliveredAt: m.deliveredAt || m.delivered_at,
+  readAt: m.readAt || m.read_at,
+  createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
+  media: m.mediaUrl ? {
+    type: m.mediaType || 'image',
+    url: m.mediaUrl
+  } : undefined,
+  reactions: m.reaction ? [m.reaction] : [],
+  starred: m.starred || false,
+  pinned: m.pinned || false,
+  replyTo: m.replyToId ? {
+    id: m.replyToId,
+    content: m.replyToContent || '',
+    senderName: m.replyToSender || ''
+  } : undefined,
+  waMessageId: m.id,
+});
+
 export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load state with localStorage persistence across refreshes
   const [users, setUsers] = useState<User[]>(() => {
@@ -304,10 +340,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }));
   });
 
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    const authId = localStorage.getItem('rw_crm_auth_user_id');
-    return !!authId;
-  });
+  // Stored browser data is only a restoration hint. Authentication becomes true
+  // after /api/auth/session verifies the bearer token and resolves the user server-side.
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const authId = localStorage.getItem('rw_crm_auth_user_id');
@@ -338,16 +373,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   
   const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', []));
   const [leads, setLeads] = useState<Lead[]>(() => getStored('rw_crm_leads', []));
-  const [messages, setMessages] = useState<Message[]>(() => {
-    const raw = getStored<Message[]>('rw_crm_messages', []);
-    return raw.map(m => {
-      const readAt = m.readAt || (m as any).read_at;
-      if (m.status === 'read' && !readAt) {
-        return { ...m, status: 'delivered' };
-      }
-      return m;
-    });
-  });
+  // Starts empty: messages are loaded from the paginated API rather than a cached
+  // localStorage copy, which is removed below so existing bloat is reclaimed.
+  const [messages, setMessages] = useState<Message[]>([]);
+  // Cursor for walking backwards through older conversation history.
+  const [messagesCursor, setMessagesCursor] = useState<string | null>(null);
+  // Reclaim quota from previous versions that mirrored the full message history.
+  useEffect(() => {
+    try { localStorage.removeItem('rw_crm_messages'); } catch { /* ignore */ }
+  }, []);
+
   const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
   const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
   const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
@@ -416,7 +451,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => 
-    Boolean(localStorage.getItem('meta_access_token') || localStorage.getItem('rw_has_meta_config') === 'true')
+    Boolean(localStorage.getItem('rw_has_meta_config') === 'true')
   );
   const initialLeadLoadedRef = useRef<boolean>(false);
 
@@ -448,47 +483,72 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }
     }
 
-    if (!token || isExpired) {
-      try {
-        const isSuper = currentUser?.role === 'super_admin' || currentUser?.id === 'user-admin-1';
-        const identifier = currentUser?.email || currentUser?.id || (isSuper ? 'user-admin-1' : 'admin@royalwellness.lk');
-        const pin = currentUser?.pin || (isSuper ? '1234' : '2026');
-        const password = currentUser?.password || (isSuper ? 'admin' : 'staff');
-
-        const authRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ identifier, pin, password })
-        });
-        if (authRes.ok) {
-          const authData = await authRes.json();
-          if (authData.token) {
-            token = authData.token;
-            localStorage.setItem('rw_crm_auth_token', token);
-            setAuthToken(token);
-          }
-        } else if (isSuper && identifier !== 'user-admin-1') {
-          // If custom user login failed, fallback attempt with standard user-admin-1
-          const fallbackRes = await fetch(`${API_BASE_URL}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ identifier: 'user-admin-1', pin: '1234', password: 'admin' })
-          });
-          if (fallbackRes.ok) {
-            const fbData = await fallbackRes.json();
-            if (fbData.token) {
-              token = fbData.token;
-              localStorage.setItem('rw_crm_auth_token', token);
-              setAuthToken(token);
-            }
-          }
-        }
-      } catch (e) {
-        console.warn('Failed to resolve auth token:', e);
-      }
-    }
-    return token;
+    // Never renew with cached credentials or a default administrator account.
+    // An expired session must be re-authenticated interactively.
+    return !token || isExpired ? '' : token;
   };
+
+  const clearAuthenticatedSession = useCallback(() => {
+    setIsAuthenticated(false);
+    setAuthToken('');
+    localStorage.removeItem('rw_crm_auth_user_id');
+    localStorage.removeItem('rw_crm_auth_token');
+    localStorage.removeItem('royal_crm_token');
+    localStorage.removeItem('rw_crm_auth_user');
+    localStorage.removeItem('rw_crm_current_user');
+    setSelectedLeadId(null);
+    setMessages([]);
+    setMessagesCursor(null);
+    setLeads([]);
+    setCustomers([]);
+    setFollowups([]);
+    setNotes([]);
+    setStageHistories([]);
+    setReadBroadcastIds([]);
+  }, []);
+
+  const verifyServerSession = useCallback(async (token: string): Promise<User | null> => {
+    if (!token) return null;
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/session`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!response.ok) return null;
+      const payload = await response.json();
+      const user = payload?.user;
+      if (!user?.id || !user?.email || !user?.fullName || !user?.role) return null;
+      return {
+        ...user,
+        active: true,
+        branch: user.branch || 'Colombo',
+        company: user.role === 'leads_officer' ? undefined : (user.company || 'RWC'),
+        roleTitle: user.role === 'super_admin' ? 'Super Admin' : (user.role === 'leads_officer' ? 'Leads Officer' : (user.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'))
+      } as User;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // Restore only a server-verified session. A stale or inaccessible token leaves
+  // the CRM on the sign-in screen instead of rendering cached staff data.
+  useEffect(() => {
+    let cancelled = false;
+    const restore = async () => {
+      const token = localStorage.getItem('rw_crm_auth_token') || '';
+      const user = await verifyServerSession(token);
+      if (cancelled) return;
+      if (!user) {
+        clearAuthenticatedSession();
+        return;
+      }
+      setAuthToken(token);
+      setCurrentUser(user);
+      setIsAuthenticated(true);
+      localStorage.setItem('rw_crm_auth_user_id', user.id);
+    };
+    restore();
+    return () => { cancelled = true; };
+  }, [clearAuthenticatedSession, verifyServerSession]);
 
   // Desktop Notification Settings & Active Popups
   const DEFAULT_NOTIFICATION_SETTINGS: NotificationSettings = {
@@ -603,11 +663,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {}
   }, [leads]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('rw_crm_messages', JSON.stringify(messages));
-    } catch (e) {}
-  }, [messages]);
+  // Conversation history is intentionally NOT mirrored to localStorage: it grows
+  // without bound and reliably blows the ~5 MB quota on long-lived accounts.
+  // Messages are re-fetched from the paginated API on load instead.
 
   // Sync users to localStorage
   useEffect(() => {
@@ -622,13 +680,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem('rw_crm_stage_histories', JSON.stringify(stageHistories));
   }, [stageHistories]);
 
-  // Simulator state
-  const [simulatorSession, setSimulatorSession] = useState<OnboardingSession>({
+  // Simulator state. Lazy initializer: `Math.random()` during render is impure (the
+  // session id would differ between renders under the React Compiler), so it runs once
+  // on first mount instead.
+  const [simulatorSession, setSimulatorSession] = useState<OnboardingSession>(() => ({
     waId: '+9470' + Math.floor(1000000 + Math.random() * 9000000),
     name: 'WhatsApp Tester',
     state: 'AwaitingLanguage',
     updatedAt: new Date().toISOString(),
-  });
+  }));
 
   // Automatically remove any legacy mock/fake leads on initial load
   useEffect(() => {
@@ -679,13 +739,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const token = await ensureValidAuthToken();
       const authHeaders = {
         'Authorization': token ? `Bearer ${token}` : '',
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
+      // Paginated fetch: lead summaries + the most recent message page only.
+      // Older history is loaded on demand (see loadOlderMessages).
       const [leadsRes, msgsRes, metaRes, coordsRes, broadcastsRes] = await Promise.all([
-        fetch(`${API_BASE_URL}/api/leads`, { headers: authHeaders }).catch(() => null),
-        fetch(`${API_BASE_URL}/api/messages`, { headers: authHeaders }).catch(() => null),
-        fetch(`${API_BASE_URL}/api/meta/config`).catch(() => null),
+        fetch(`${API_BASE_URL}/api/leads?paginate=1&pageSize=200`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/api/messages?paginate=1&limit=200`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/api/meta/config`, { headers: { Authorization: token ? `Bearer ${token}` : '' } }).catch(() => null),
         fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/broadcasts`, { headers: authHeaders }).catch(() => null)
       ]);
@@ -768,7 +829,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       let fetchedDbLeads: any[] = [];
       if (leadsRes && leadsRes.ok) {
-        fetchedDbLeads = await leadsRes.json().catch(() => []);
+        const leadsPayload = await leadsRes.json().catch(() => []);
+        fetchedDbLeads = Array.isArray(leadsPayload) ? leadsPayload : (leadsPayload?.leads || []);
         if (Array.isArray(fetchedDbLeads)) {
           const dbCustomers: Customer[] = [];
           const hydratedLeads: Lead[] = [];
@@ -836,19 +898,18 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       }
 
+      // Leads no longer embed their message history; the conversation comes from the
+      // paginated message endpoint.
       const collectedRawMessages: any[] = [];
-      if (Array.isArray(fetchedDbLeads)) {
-        fetchedDbLeads.forEach(l => {
-          if (Array.isArray(l.messages)) {
-            l.messages.forEach((m: any) => collectedRawMessages.push(m));
-          }
-        });
-      }
 
       if (msgsRes && msgsRes.ok) {
-        const dbMessages: any[] = await msgsRes.json().catch(() => []);
+        const msgsPayload = await msgsRes.json().catch(() => []);
+        const dbMessages: any[] = Array.isArray(msgsPayload) ? msgsPayload : (msgsPayload?.messages || []);
         if (Array.isArray(dbMessages)) {
           dbMessages.forEach((m: any) => collectedRawMessages.push(m));
+        }
+        if (!Array.isArray(msgsPayload) && msgsPayload?.nextCursor) {
+          setMessagesCursor(msgsPayload.nextCursor);
         }
       }
 
@@ -856,36 +917,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       collectedRawMessages
         .filter(m => (m.content && m.content.trim().length > 0) || Boolean(m.mediaUrl))
         .forEach(m => {
-          const formatted: Message = {
-            id: m.id,
-            leadId: m.leadId,
-            customerId: m.customerId,
-            direction: m.direction,
-            senderType: m.senderType || (m.direction === 'outbound' ? 'coordinator' : 'customer'),
-            senderId: m.senderId || m.audit?.senderId,
-            senderName: m.senderName || m.audit?.senderName,
-            senderRole: m.senderRole || m.audit?.senderRole,
-            messageSource: m.messageSource || m.audit?.messageSource,
-            sentAt: m.sentAt || m.audit?.sentAt,
-            content: m.content || '',
-            status: (m.status === 'read' && !(m.readAt || m.read_at)) ? 'delivered' : (m.status || 'delivered'),
-            deliveredAt: m.deliveredAt || m.delivered_at,
-            readAt: m.readAt || m.read_at,
-            createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
-            media: m.mediaUrl ? {
-              type: m.mediaType || 'image',
-              url: m.mediaUrl
-            } : undefined,
-            reactions: m.reaction ? [m.reaction] : [],
-            starred: m.starred || false,
-            pinned: m.pinned || false,
-            replyTo: m.replyToId ? {
-              id: m.replyToId,
-              content: m.replyToContent || '',
-              senderName: m.replyToSender || ''
-            } : undefined,
-            waMessageId: m.id,
-          };
+          const formatted = toClientMessage(m);
           msgMap.set(formatted.id, formatted);
         });
 
@@ -894,17 +926,51 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
         );
         setMessages(finalMessages);
-        localStorage.setItem('rw_crm_messages', JSON.stringify(finalMessages));
       } else {
-        console.warn('⚠️ No messages collected from backend; preserving cached conversation state');
+        console.warn('⚠️ No messages collected from backend; preserving in-memory conversation state');
       }
     } catch (e) {
       console.warn('Could not fetch persistent database state:', e);
     }
   };
 
-  // Hydrate on mount & whenever logged-in staff switches
+  // Loads one older page of conversation history using the server cursor.
+  // Messages are merged by id so nothing is duplicated or dropped when new
+  // messages arrive over SSE while a page is in flight.
+  const loadOlderMessages = async () => {
+    if (!messagesCursor) return false;
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(
+        `${API_BASE_URL}/api/messages?paginate=1&limit=200&before=${encodeURIComponent(messagesCursor)}`,
+        { headers: { Authorization: token ? `Bearer ${token}` : '' } }
+      );
+      if (!res.ok) return false;
+      const payload = await res.json().catch(() => null);
+      const older: any[] = payload?.messages || [];
+      setMessagesCursor(payload?.nextCursor || null);
+      if (older.length === 0) return false;
+
+      setMessages(prev => {
+        const byId = new Map(prev.map(m => [m.id, m]));
+        older.forEach(m => {
+          if (!byId.has(m.id)) byId.set(m.id, toClientMessage(m));
+        });
+        return Array.from(byId.values()).sort(
+          (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      });
+      return Boolean(payload?.hasMore);
+    } catch (e) {
+      console.warn('Could not load older messages:', e);
+      return false;
+    }
+  };
+
+  // Hydrate only after a server-verified session exists. This prevents unauthenticated
+  // requests and stops one user's cached records being displayed to another user.
   useEffect(() => {
+    if (!isAuthenticated) return;
     fetchInitialData();
 
     // Fetch this coordinator's specific WhatsApp line status
@@ -914,7 +980,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const res = await fetch(`${API_BASE_URL}/api/status?coordinatorId=${currentUser.id}`, {
           headers: {
             'Authorization': token ? `Bearer ${token}` : '',
-            'x-coordinator-id': currentUser.id
           }
         });
         if (res.ok) {
@@ -944,7 +1009,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         }
       })
       .catch(() => {});
-  }, [currentUser?.id]);
+  }, [currentUser?.id, isAuthenticated]);
 
   const isSuperAdmin = currentUser.role === 'super_admin';
   const isLeadsOfficer = currentUser.role === 'leads_officer';
@@ -997,14 +1062,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const handledMsgIds = new Set<string>();
 
     try {
-      const coordId = currentUser?.id || 'user-admin-1';
       const token = getAuthToken();
       if (!token) {
         return;
       }
-      eventSource = new EventSource(`${API_BASE_URL}/api/events?token=${encodeURIComponent(token)}&coordinatorId=${coordId}`);
+      const connectSse = async () => {
+        const ticketResponse = await fetch(`${API_BASE_URL}/api/events/ticket`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const ticketData = await ticketResponse.json();
+        if (!ticketResponse.ok || !ticketData?.ticket) return;
+        eventSource = new EventSource(`${API_BASE_URL}/api/events?ticket=${encodeURIComponent(ticketData.ticket)}`);
       
-      eventSource.onmessage = (event) => {
+      eventSource!.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
 
@@ -1707,6 +1778,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.error('Error handling SSE message:', err);
         }
       };
+      };
+      connectSse().catch(error => console.warn('Webhook SSE connection unavailable:', error));
     } catch (e) {
       console.warn('Webhook SSE connection unavailable:', e);
     }
@@ -1884,8 +1957,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1',
-          'x-user-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
@@ -2005,7 +2076,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2058,7 +2128,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
@@ -2114,7 +2183,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2159,7 +2227,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2218,7 +2285,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         leadId,
@@ -2267,7 +2333,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           leadId,
@@ -2328,7 +2393,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!lead) return;
 
     // Enforce WhatsApp connection requirement for CRM sending (Supports Linked Device OR Meta Cloud API)
-    const hasMetaToken = hasMetaConfig || !!localStorage.getItem('meta_access_token');
+    const hasMetaToken = hasMetaConfig;
     if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected' && !hasMetaToken) {
       notify('WhatsApp Disconnected', 'Please link your WhatsApp or configure Meta API first to send messages.', 'warning');
       setQrModalOpen(true);
@@ -2380,8 +2445,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Dispatch to WhatsApp bridge (Supports both linked QR session & Meta API)
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const isSuperAdmin = currentUser?.role === 'super_admin';
-    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
     
     if ((recipientPhone || recipientWaId) && !leadId.startsWith('lead-sim')) {
       fetch(`${API_BASE_URL}/api/send-message`, {
@@ -2389,7 +2452,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           to: recipientPhone,
@@ -2404,7 +2466,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           senderRole: auditSenderRole,
           messageSource: auditSource,
           sentAt: nowUtc,
-          token: savedToken || undefined,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701')
         })
@@ -2656,8 +2717,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
-    const isSuperAdmin = currentUser?.role === 'super_admin';
-    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/send-template`, {
@@ -2683,7 +2742,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           sentAt: nowUtc,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
-          token: savedToken || undefined,
           retryMessageId: retryMessageId || undefined
         })
       });
@@ -2735,7 +2793,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const recipientPhone = lead.customer?.whatsappNumber;
     const recipientWaId = lead.customer?.whatsappId;
     const isSuperAdmin = currentUser?.role === 'super_admin';
-    const savedToken = isSuperAdmin ? localStorage.getItem('meta_access_token') : undefined;
 
     try {
       const res = await fetch(`${API_BASE_URL}/api/send-message`, {
@@ -2752,7 +2809,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           media: msg.media || undefined,
           leadId: lead.id,
           customerId: lead.customerId,
-          token: savedToken || undefined,
           company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
           phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
           retryMessageId: failedMessageId
@@ -3396,7 +3452,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       headers: {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       },
       body: JSON.stringify({
         customerId: id,
@@ -3452,7 +3507,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': token ? `Bearer ${token}` : '',
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           id: newCoordId,
@@ -3543,14 +3597,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
     });
 
-    // 4. If current logged in user was this coordinator, fallback to admin
+    // 4. Deleting the active account ends its session. Never fall back to an
+    // administrator identity without a fresh server-verified authentication.
     if (currentUser.id === id) {
-      setCurrentUser(prev => {
-        const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS).filter(u => u.id !== id);
-        const fallback = storedUsers[0] || INITIAL_USERS[0];
-        localStorage.setItem('rw_crm_auth_user_id', fallback.id);
-        return fallback;
-      });
+      clearAuthenticatedSession();
     }
 
     // 5. Notify backend to permanently remove coordinator & unassign database records
@@ -3559,7 +3609,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         }
       });
     } catch (err) {
@@ -3612,7 +3661,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           fullName: cleanName,
@@ -3683,7 +3731,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         },
         body: JSON.stringify({
           ...data,
@@ -3734,7 +3781,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
-          'x-coordinator-id': currentUser?.id || 'user-admin-1'
         }
       });
 
@@ -3765,85 +3811,43 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const login = (identifier: string, secret?: string) => {
+  const login = async (identifier: string, secret?: string) => {
     const cleanId = (identifier || '').trim().toLowerCase();
     const cleanSecret = (secret || '').trim();
+    if (!cleanId || !cleanSecret) return { success: false, error: 'Enter your email or staff ID and password/PIN.' };
 
-    const userPool = [...users];
-    for (const initU of INITIAL_USERS) {
-      if (!userPool.some(u => u.id === initU.id)) {
-        userPool.push(initU);
+    // Account changes deliberately discard the previous bearer before credentials
+    // are submitted. A server response is the only source of the new identity.
+    clearAuthenticatedSession();
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: cleanId, pin: cleanSecret, password: cleanSecret })
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok || !payload?.token) {
+        return { success: false, error: payload?.error || (response.status === 401 ? 'Invalid credentials.' : 'Unable to sign in.') };
       }
-    }
-
-    const matchedUser = userPool.find(u => 
-      u.email.toLowerCase() === cleanId || 
-      u.id.toLowerCase() === cleanId ||
-      u.fullName.toLowerCase() === cleanId ||
-      (u.fullName.toLowerCase().replace(/\s+/g, '') === cleanId.replace(/\s+/g, '')) ||
-      (u.phone && u.phone.includes(cleanId))
-    );
-
-    if (matchedUser && !users.some(u => u.id === matchedUser.id)) {
-      setUsers(prev => [...prev, matchedUser]);
-      try {
-        const stored = JSON.parse(localStorage.getItem('rw_crm_users') || '[]');
-        if (!stored.some((u: any) => u.id === matchedUser.id)) {
-          localStorage.setItem('rw_crm_users', JSON.stringify([...stored, matchedUser]));
-        }
-      } catch (e) {}
-    }
-
-    if (!matchedUser) {
-      return { success: false, error: 'Staff account not found. Check email or select profile.' };
-    }
-
-    if (!matchedUser.active) {
-      return { success: false, error: 'This staff account has been deactivated.' };
-    }
-
-    // Verify PIN or Password
-    const userPassword = matchedUser.password || (matchedUser.role === 'super_admin' ? 'admin' : 'staff');
-    const userPin = matchedUser.pin || (matchedUser.role === 'super_admin' ? '1234' : '2026');
-
-    if (cleanSecret) {
-      const isPinMatch = cleanSecret === userPin;
-      const isPassMatch = cleanSecret === userPassword;
-      if (!isPinMatch && !isPassMatch) {
-        return { success: false, error: cleanSecret.length === 4 ? 'Incorrect 4-digit PIN.' : 'Incorrect password.' };
+      const verifiedUser = await verifyServerSession(payload.token);
+      if (!verifiedUser || (payload.user?.id && payload.user.id !== verifiedUser.id)) {
+        return { success: false, error: 'Unable to verify this account session. Please try again.' };
       }
+      setAuthToken(payload.token);
+      localStorage.setItem('rw_crm_auth_token', payload.token);
+      localStorage.setItem('rw_crm_auth_user_id', verifiedUser.id);
+      setCurrentUser(verifiedUser);
+      setIsAuthenticated(true);
+      logAudit('USER_LOGIN', 'User', verifiedUser.id, null, { email: verifiedUser.email, role: verifiedUser.role });
+      notify('Welcome Back', `Signed in as ${verifiedUser.fullName}`, 'success');
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Login service is unavailable. Check your connection and try again.' };
     }
-
-    // Obtain cryptographically signed HMAC token from backend
-    fetch(`${API_BASE_URL}/api/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        identifier: matchedUser.id,
-        pin: cleanSecret || userPin,
-        password: cleanSecret || userPassword
-      })
-    })
-      .then(res => res.json())
-      .then(data => {
-        if (data.token) {
-          localStorage.setItem('rw_crm_auth_token', data.token);
-        }
-      })
-      .catch(() => {});
-
-    setCurrentUser(matchedUser);
-    setIsAuthenticated(true);
-    localStorage.setItem('rw_crm_auth_user_id', matchedUser.id);
-    logAudit('USER_LOGIN', 'User', matchedUser.id, null, { email: matchedUser.email, role: matchedUser.role });
-    notify('Welcome Back', `Signed in as ${matchedUser.fullName}`, 'success');
-    return { success: true };
   };
 
   const logout = () => {
-    setIsAuthenticated(false);
-    localStorage.removeItem('rw_crm_auth_user_id');
-    localStorage.removeItem('rw_crm_auth_token');
+    clearAuthenticatedSession();
     logAudit('USER_LOGOUT', 'User', currentUser.id, null, null);
     notify('Signed Out', 'You have securely signed out of the CRM session.', 'info');
   };
@@ -4115,7 +4119,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const authHeaders = {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${getAuthToken()}`,
-        'x-coordinator-id': currentUser?.id || 'user-admin-1'
       };
 
       const res = await fetch(`${API_BASE_URL}/api/contacts`, {
@@ -4273,6 +4276,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     clearChat,
     sendWhatsAppTemplate,
     retryFailedMessage,
+    loadOlderMessages,
+    hasOlderMessages: messagesCursor !== null,
     markChatAsRead,
     markChatAsUnread,
     cancelFollowup,

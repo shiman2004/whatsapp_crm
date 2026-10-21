@@ -95,9 +95,10 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md p-3 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-sm dark:shadow-md">
+    <div className="bg-white dark:bg-slate-900/80 backdrop-blur-md p-3 sm:px-4 rounded-[10px] border border-slate-200 dark:border-slate-800 shadow-sm">
+      <div className="flex flex-wrap xl:flex-nowrap items-center gap-2">
       {/* Left: Search input */}
-      <div className="flex items-center gap-2.5 flex-1 min-w-[260px] max-w-md">
+      <div className="flex items-center flex-1 min-w-[min(100%,240px)] xl:flex-none xl:w-[240px]">
         <div className="relative w-full">
           <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
           <input
@@ -105,7 +106,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={searchPlaceholder}
-            className={`w-full bg-slate-50 dark:bg-slate-950/80 border rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors ${
+            className={`h-9 w-full bg-slate-50 dark:bg-slate-950/80 border rounded-lg pl-9 pr-3 text-[13px] text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none transition-colors ${
               isCras 
                 ? 'border-rose-200 dark:border-rose-500/30 focus:border-rose-500' 
                 : 'border-slate-200 dark:border-slate-700/80 focus:border-teal-500'
@@ -115,14 +116,14 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
       </div>
 
       {/* Middle: Filter Dropdowns */}
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap xl:flex-nowrap items-center gap-2 flex-1 min-w-0">
         <div className="relative">
           <button
             type="button"
             onClick={() => setIsFilterOpen((open) => !open)}
             aria-expanded={isFilterOpen}
             aria-haspopup="dialog"
-            className={`px-2.5 py-1.5 rounded-lg border text-xs font-medium flex items-center gap-1.5 transition-colors ${
+            className={`h-9 px-2.5 rounded-lg border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${
               activeFilterCount > 0
                 ? 'bg-teal-50 dark:bg-teal-500/15 border-teal-300 dark:border-teal-500/40 text-teal-700 dark:text-teal-300'
                 : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
@@ -150,13 +151,13 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           )}
         </div>
         {/* Lead Stage Filter */}
-        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+        <div className="h-9 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[13px]">
           <Filter className={`w-3.5 h-3.5 ${selectedStage ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400'}`} />
           <select
             value={selectedStage}
             onChange={(e) => setSelectedStage(e.target.value)}
             aria-label="Filter by lead stage"
-            className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[150px] truncate"
+            className="min-w-0 bg-transparent text-slate-700 dark:text-slate-300 text-[13px] outline-none cursor-pointer max-w-[100px] lg:max-w-[100px] truncate"
           >
             <option value="" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Lead Stages</option>
             {stages.filter((stage) => stage.isActive).sort((a, b) => a.orderIndex - b.orderIndex).map((stage) => (
@@ -167,7 +168,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           </select>
         </div>
         {/* Category / Course Filter */}
-        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+        <div className="h-9 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[13px]">
           {isCras ? (
             <GraduationCap className="w-3.5 h-3.5 text-rose-500 dark:text-rose-400" />
           ) : (
@@ -176,7 +177,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           <select
             value={selectedCategory}
             onChange={(e) => setSelectedCategory(e.target.value)}
-            className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[180px] truncate"
+            className="min-w-0 bg-transparent text-slate-700 dark:text-slate-300 text-[13px] outline-none cursor-pointer max-w-[125px] lg:max-w-[125px] truncate"
           >
             {isCras ? (
               <>
@@ -228,12 +229,12 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         </div>
 
         {/* Language Filter */}
-        <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+        <div className="h-9 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[13px]">
           <Globe className="w-3.5 h-3.5 text-amber-500 dark:text-amber-400" />
           <select
             value={selectedLanguage}
             onChange={(e) => setSelectedLanguage(e.target.value)}
-            className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer"
+            className="bg-transparent text-slate-700 dark:text-slate-300 text-[13px] outline-none cursor-pointer"
           >
             <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Languages</option>
             <option value="en" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">🇬🇧 English</option>
@@ -244,12 +245,12 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
 
         {/* Coordinator / Counsellor Filter (Super Admin & Leads Officer) */}
         {(isSuperAdmin || isLeadsOfficer) && (
-          <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800 text-xs">
+          <div className="h-9 flex items-center gap-1.5 bg-slate-50 dark:bg-slate-950/60 px-2.5 rounded-lg border border-slate-200 dark:border-slate-800 text-[13px] max-w-full">
             <UserCheck className={`w-3.5 h-3.5 ${isCras ? 'text-rose-500 dark:text-rose-400' : 'text-sky-500 dark:text-sky-400'}`} />
             <select
               value={selectedCoordinator}
               onChange={(e) => setSelectedCoordinator(e.target.value)}
-              className="bg-transparent text-slate-700 dark:text-slate-300 text-xs outline-none cursor-pointer max-w-[210px] truncate"
+              className="min-w-0 bg-transparent text-slate-700 dark:text-slate-300 text-[13px] outline-none cursor-pointer max-w-[130px] lg:max-w-[130px] truncate"
             >
               <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                 {isCras 
@@ -269,13 +270,15 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         )}
       </div>
 
-      {/* Right: View mode & Export */}
-      <div className="flex w-full items-center gap-2">
+      </div>
+
+      {/* Actions remain distinct from filters, with the primary contact action pinned right. */}
+      <div className="mt-2.5 pt-2.5 border-t border-slate-200 dark:border-slate-800 flex flex-wrap items-center gap-2">
         {/* Toggle Kanban / Table */}
-        <div className="bg-slate-100 dark:bg-slate-950 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center">
+        <div className="h-9 bg-slate-100 dark:bg-slate-950 p-0.5 rounded-lg border border-slate-200 dark:border-slate-800 flex items-center">
           <button
             onClick={() => setViewMode('kanban')}
-            className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition-all ${
+            className={`h-7 px-2.5 rounded text-[13px] font-medium flex items-center gap-1 transition-all ${
               viewMode === 'kanban' 
                 ? 'bg-white dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-slate-200 dark:border-teal-500/40 shadow-sm' 
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -286,7 +289,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           </button>
           <button
             onClick={() => setViewMode('table')}
-            className={`px-2.5 py-1 rounded text-xs font-medium flex items-center gap-1 transition-all ${
+            className={`h-7 px-2.5 rounded text-[13px] font-medium flex items-center gap-1 transition-all ${
               viewMode === 'table' 
                 ? 'bg-white dark:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-slate-200 dark:border-teal-500/40 shadow-sm' 
                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
@@ -300,7 +303,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         {/* CSV Export Button */}
         <button
           onClick={onExportCsv}
-          className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+          className="h-9 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[13px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
           title="Export Filtered Leads as CSV"
         >
           <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
@@ -311,7 +314,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
         <button
           type="button"
           onClick={onAddContact}
-          className="ml-auto px-3 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer"
+          className="h-9 w-full justify-end px-3 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-[13px] font-bold flex items-center gap-1.5 shadow-sm transition-colors cursor-pointer sm:ml-auto sm:w-auto"
           title="Add a new contact"
         >
           <UserPlus className="w-3.5 h-3.5" />

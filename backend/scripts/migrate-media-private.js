@@ -2,6 +2,9 @@ import fs from 'fs/promises';
 import path from 'path';
 import { createClient } from '@supabase/supabase-js';
 import { getPrisma, checkDbConnection } from '../src/db.js';
+import { assertDatabaseOperationAllowed } from '../src/databasePolicy.js';
+
+assertDatabaseOperationAllowed('utility');
 
 const bucket = process.env.SUPABASE_MEDIA_BUCKET || 'whatsapp-media';
 const root = path.resolve(process.env.MEDIA_UPLOAD_DIR || path.join(process.cwd(), 'public', 'uploads'));

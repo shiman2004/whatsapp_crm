@@ -27,13 +27,18 @@ let schemaBootstrapPromise = null;
 export const waitForSchemaBootstrap = () => schemaBootstrapPromise || Promise.resolve();
 
 export const getPrisma = () => {
-  if (!process.env.DATABASE_URL) {
+  const databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+  if (!databaseUrl) {
     return null;
   }
 
   if (!prismaInstance) {
     try {
       prismaInstance = new PrismaClient({
+        // The pooled endpoint can be unavailable to long-running local workers.
+        // Use the configured direct URL for runtime queries when it is present;
+        // testDbGuard promotes the isolated test URL into both variables first.
+        datasources: { db: { url: databaseUrl } },
         log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
       });
     } catch (e) {

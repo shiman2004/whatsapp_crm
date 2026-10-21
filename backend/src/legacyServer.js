@@ -4,11 +4,12 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
-import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting, allocateCompanyLeadSerial as allocatePersistedCompanyLeadSerial } from './db.js';
+import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting, allocateCompanyLeadSerial as allocatePersistedCompanyLeadSerial, waitForSchemaBootstrap } from './db.js';
 import { resolveCompany, resolveLeadCompany, COMPANIES } from './companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './supabaseMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
+import { handleMarketingRoutes } from './marketing/routes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 
 dotenv.config();
@@ -38,6 +39,20 @@ const REQUEST_BODY_LIMITS = {
 const SSE_TICKET_TTL_MS = 60 * 1000;
 const sseTickets = new Map();
 
+// Bounded, self-expiring stores. Both hold per-request state that would otherwise
+// grow without limit on a long-running process.
+const MAX_SSE_TICKETS = 5000;
+const MAX_LOGIN_ATTEMPT_ENTRIES = 10000;
+
+function sweepExpiredSseTickets() {
+  const cutoff = Date.now() - SSE_TICKET_TTL_MS;
+  for (const [ticket, record] of sseTickets) {
+    if (record.issuedAt < cutoff) sseTickets.delete(ticket);
+  }
+}
+
+setInterval(sweepExpiredSseTickets, SSE_TICKET_TTL_MS).unref();
+
 function getBodyLimit(pathname) {
   if (pathname === '/api/upload') return REQUEST_BODY_LIMITS.upload;
   if (pathname === '/api/auth/login') return REQUEST_BODY_LIMITS.login;
@@ -49,7 +64,17 @@ function getBodyLimit(pathname) {
 
 function issueSseTicket(user) {
   const ticket = crypto.randomBytes(32).toString('base64url');
-  sseTickets.set(ticket, { user: { ...user }, issuedAt: Date.now() });
+  // Only the identity needed to open the stream is retained; the full user object is not.
+  sseTickets.set(ticket, {
+    user: { id: user.id, role: user.role, fullName: user.fullName, branch: user.branch, company: user.company },
+    issuedAt: Date.now()
+  });
+  // Bound memory: drop expired tickets first, then refuse to grow past the cap.
+  sweepExpiredSseTickets();
+  if (sseTickets.size > MAX_SSE_TICKETS) {
+    const oldest = sseTickets.keys().next().value;
+    if (oldest !== undefined) sseTickets.delete(oldest);
+  }
   return ticket;
 }
 
@@ -65,42 +90,55 @@ function verifyMetaSignature(rawBody, signatureHeader) {
   if (!appSecret || typeof signatureHeader !== 'string') return false;
   const provided = signatureHeader.startsWith('sha256=') ? signatureHeader.slice(7) : '';
   if (!/^[a-f0-9]{64}$/i.test(provided)) return false;
-  const expected = crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex');
-  return crypto.timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(provided, 'hex'));
+  const expectedBuf = Buffer.from(crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex'), 'hex');
+  const providedBuf = Buffer.from(provided, 'hex');
+  // Length check first: timingSafeEqual throws on mismatched buffer sizes.
+  if (expectedBuf.length !== providedBuf.length) return false;
+  return crypto.timingSafeEqual(expectedBuf, providedBuf);
 }
 
-function createPrivateMediaUrl(fileName, ttlMs = 15 * 60 * 1000) {
-  const expires = Date.now() + ttlMs;
-  const value = `/uploads/${fileName}|${expires}`;
-  const signature = crypto.createHmac('sha256', JWT_SECRET).update(value).digest('base64url');
-  return `/uploads/${encodeURIComponent(fileName)}?exp=${expires}&sig=${signature}`;
+function timingSafeStringEqual(a, b) {
+  const aBuf = Buffer.from(String(a || ''));
+  const bBuf = Buffer.from(String(b || ''));
+  if (aBuf.length !== bBuf.length) return false;
+  return crypto.timingSafeEqual(aBuf, bBuf);
+}
+
+// Media URLs are persisted in message rows, so the signature must stay valid for as
+// long as the row exists. Signing a per-file constant (rather than a timestamp) keeps
+// stored URLs working while still rejecting forged or tampered filenames. Access is
+// additionally gated by the authenticated sender-assignment check in the route handler.
+function signMediaFile(fileName) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+}
+
+function createPrivateMediaUrl(fileName, ttlMs = 0) {
+  void ttlMs;
+  const signature = signMediaFile(fileName);
+  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
 }
 
 function verifyPrivateMediaUrl(fileName, expires, signature) {
-  const expiry = Number(expires);
-  if (!fileName || !Number.isFinite(expiry) || expiry < Date.now() || typeof signature !== 'string') return false;
-  const value = `/uploads/${fileName}|${expiry}`;
-  const expected = crypto.createHmac('sha256', JWT_SECRET).update(value).digest('base64url');
+  void expires;
+  if (!fileName || typeof signature !== 'string' || !signature) return false;
+  const expected = signMediaFile(fileName);
   return signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
+// Allocation must be atomic. The previous numeric-scan fallback raced under concurrent
+// lead creation and produced duplicate serials. Retry the atomic allocator a few times
+// and then fail loudly rather than invent an unverifiable number.
 async function allocateCompanyLeadSerial(prisma, company) {
-  try {
-    return await allocatePersistedCompanyLeadSerial(prisma, company);
-  } catch (error) {
-    console.warn('Company serial allocator unavailable; using a collision-safe fallback:', error.message);
+  let lastError = null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const serial = await allocatePersistedCompanyLeadSerial(prisma, company);
+      if (serial) return serial;
+    } catch (error) {
+      lastError = error;
+    }
   }
-
-  const companyCode = String(company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-  const leads = await prisma.lead.findMany({
-    where: { OR: [{ company: companyCode }, { source: companyCode }] },
-    select: { serialNumber: true }
-  });
-  const maxValue = leads.reduce((max, lead) => {
-    const match = String(lead.serialNumber || '').match(new RegExp(`^${companyCode}-(\\d+)$`));
-    return match ? Math.max(max, Number(match[1])) : max;
-  }, 0);
-  return `${companyCode}-${String(maxValue + 1).padStart(4, '0')}`;
+  throw new Error(`Unable to allocate a unique lead serial number after 3 attempts${lastError ? `: ${lastError.message}` : ''}`);
 }
 
 // Cryptographic Token Helpers (HMAC-SHA256 with Expiration Support)
@@ -131,7 +169,7 @@ function verifyAuthToken(token) {
     return { valid: false, error: 'Malformed token components' };
   }
   const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
-  if (signature !== expectedSig) {
+  if (!timingSafeStringEqual(signature, expectedSig)) {
     return { valid: false, error: 'Cryptographic signature mismatch' };
   }
   try {
@@ -245,10 +283,34 @@ function checkLoginRateLimit(ip, identifier) {
   return { limited: false, retryAfter: 0 };
 }
 
+// Drop entries whose window and lockout have both lapsed, then enforce a hard cap by
+// evicting the oldest entries. Prevents unbounded growth under sustained attack.
+function sweepLoginAttemptStore() {
+  const now = Date.now();
+  for (const [key, entry] of loginAttemptStore) {
+    const windowExpired = now - entry.firstAttempt > LOGIN_RATE_LIMIT.WINDOW_MS;
+    const lockoutExpired = !entry.lockedUntil || now > entry.lockedUntil;
+    if (windowExpired && lockoutExpired) loginAttemptStore.delete(key);
+  }
+  if (loginAttemptStore.size > MAX_LOGIN_ATTEMPT_ENTRIES) {
+    const excess = loginAttemptStore.size - MAX_LOGIN_ATTEMPT_ENTRIES;
+    let removed = 0;
+    for (const key of loginAttemptStore.keys()) {
+      if (removed >= excess) break;
+      loginAttemptStore.delete(key);
+      removed += 1;
+    }
+  }
+}
+
+setInterval(sweepLoginAttemptStore, LOGIN_RATE_LIMIT.WINDOW_MS).unref();
+
 function recordLoginFailure(ip, identifier) {
   const now = Date.now();
   const keys = [ip];
   if (identifier) keys.push(`${ip}:${identifier.toLowerCase()}`);
+
+  if (loginAttemptStore.size >= MAX_LOGIN_ATTEMPT_ENTRIES) sweepLoginAttemptStore();
 
   for (const key of keys) {
     let entry = loginAttemptStore.get(key);
@@ -424,7 +486,10 @@ function getMetaErrorExplanation(code, rawMsg) {
 }
 
 
-// Periodic SSE Keep-Alive Heartbeat (Prevents proxy/Render timeout drops)
+// Periodic SSE Keep-Alive Heartbeat (Prevents proxy/Render timeout drops).
+// unref()'d like the other sweepers: a live keep-alive timer must never keep the
+// process alive after the listener closes (it trips a libuv assertion on exit on
+// Windows and blocks graceful shutdown).
 setInterval(() => {
   const keepAlive = ': keepalive\n\n';
   sseClients.forEach(client => {
@@ -432,7 +497,7 @@ setInterval(() => {
       client.res.write(keepAlive);
     } catch (e) {}
   });
-}, 15000);
+}, 15000).unref();
 
 /**
  * Isolated SSE Dispatcher
@@ -887,14 +952,19 @@ const server = http.createServer(async (req, res) => {
 
   // 0. Static Uploads File Serving with Supabase Persistent Recovery & Disk Cache
   if (pathname.startsWith('/uploads/')) {
+    // path.basename() guarantees the decoded name cannot escape the uploads directory.
     const filename = path.basename(decodeURIComponent(pathname));
     const signedAccess = verifyPrivateMediaUrl(filename, parsedUrl.query.exp, parsedUrl.query.sig);
-    // Signed URLs reduce exposure time but do not replace authenticated access.
-    if (true) {
+
+    // Browsers load <img>/<audio>/<video> without an Authorization header, so a valid
+    // per-file signature is the primary mechanism for rendering historical media.
+    // Bearer auth remains a supported alternative for programmatic clients.
+    if (!signedAccess) {
       const mediaAuth = await authenticateRequest(req, parsedUrl);
       if (!mediaAuth.user) {
+        await auditSecurityEvent({ correlationId, actorId: null, action: 'media.access', resource: filename, outcome: 'denied' });
         res.writeHead(401, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: 'Authenticated media access or a valid signed URL is required.' }));
+        res.end(JSON.stringify({ success: false, error: 'A valid signed media URL or Bearer authentication is required.' }));
         return;
       }
       if (mediaAuth.user.role === 'coordinator') {
@@ -909,6 +979,7 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => null)
           : null;
         if (!allowed) {
+          await auditSecurityEvent({ correlationId, actorId: mediaAuth.user.id, action: 'media.access', resource: filename, outcome: 'denied' });
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'You are not authorized to access this media.' }));
           return;
@@ -1281,9 +1352,25 @@ const server = http.createServer(async (req, res) => {
     await auditSecurityEvent({ correlationId, actorId: authUser.id, action: auditAction, resource: pathname, outcome: 'authorized', metadata: { method: req.method } });
   }
 
+  // The frontend must bind its session to this server-resolved identity.  Do not
+  // return token claims here: authenticateRequest has already verified the bearer
+  // token and loaded the active user record from the database.
+  if (req.method === 'GET' && pathname === '/api/auth/session') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, user: authUser }));
+    return;
+  }
+
   // 0. Appointment Booking & Room Scheduling Module
   const handledAppointmentRoute = await handleAppointmentRoutes(req, res, pathname, authUser);
   if (handledAppointmentRoute !== false) {
+    return;
+  }
+
+  // Public Contact Marketing is a separate protected domain. Its route module
+  // owns capability checks and must never fall through into lead/contact handlers.
+  const handledMarketingRoute = await handleMarketingRoutes(req, res, pathname, authUser);
+  if (handledMarketingRoute !== false) {
     return;
   }
 
@@ -1348,8 +1435,22 @@ const server = http.createServer(async (req, res) => {
   // 2. Database Status Check
   if (req.method === 'GET' && pathname === '/api/db/status') {
     const dbRes = await checkDbConnection();
+    // Surface the schema-bootstrap outcome. A failed delta leaves the app running against
+    // a stale schema with no other signal, so the health check reports it. Only counts and
+    // the failing statement are exposed — never row data or credentials.
+    let schema = null;
+    if (dbRes.connected) {
+      try {
+        const boot = await waitForSchemaBootstrap();
+        schema = boot && boot.ok !== undefined
+          ? { ok: Boolean(boot.ok), failures: (boot.failures || []).length, failedStatements: (boot.failures || []).map(f => f.sql).slice(0, 10) }
+          : null;
+      } catch (e) {
+        schema = { ok: false, failures: 1, failedStatements: ['(bootstrap)'] };
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(dbRes));
+    res.end(JSON.stringify(schema ? { ...dbRes, schema } : dbRes));
     return;
   }
 
@@ -2470,9 +2571,9 @@ const server = http.createServer(async (req, res) => {
         const passwordPlain = payload.password ? String(payload.password).trim() : '';
         const cleanPin = String(payload.pin || '').trim().slice(0, 10);
 
-        if (!fullName || !email || passwordPlain.length < 12 || (cleanPin && cleanPin.length < 4)) {
+        if (!fullName || !email) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Full Name, Email, and a password of at least 12 characters are required.' }));
+          res.end(JSON.stringify({ success: false, error: 'Full Name and Email are required.' }));
           return;
         }
 
@@ -2484,61 +2585,68 @@ const server = http.createServer(async (req, res) => {
         }
 
         const prisma = getPrisma();
-        let newAdmin = null;
-        if (prisma && getDbStatus()) {
-          const existingUser = await prisma.user.findFirst({
-            where: { email: { equals: email, mode: 'insensitive' } }
-          }).catch(() => null);
-
-          if (existingUser) {
-            res.writeHead(409, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ 
-              success: false, 
-              error: `An account with email "${email}" already exists.` 
-            }));
-            return;
-          }
-
-          try {
-            newAdmin = await prisma.user.create({
-              data: {
-                fullName,
-                email,
-                phone,
-                branch,
-                role: 'super_admin',
-                password: hashSecret(passwordPlain),
-                pin: hashSecret(cleanPin),
-                active: true
-              },
-              select: {
-                id: true,
-                fullName: true,
-                email: true,
-                phone: true,
-                branch: true,
-                role: true,
-                active: true,
-                createdAt: true
-              }
-            });
-          } catch (dbErr) {
-            console.warn('DB error creating super admin:', dbErr.message);
-          }
+        if (!prisma || !getDbStatus()) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Database is unavailable. Super Admin accounts cannot be created right now.' }));
+          return;
         }
 
-        if (!newAdmin) {
-          newAdmin = {
-            id: `user-admin-${Date.now()}`,
-            fullName,
-            email,
-            phone,
-            role: 'super_admin',
-            active: true,
-            branch,
-            createdAt: new Date().toISOString()
-          };
-          CANONICAL_USERS.push(newAdmin);
+        const existingUser = await prisma.user.findFirst({
+          where: { email: { equals: email, mode: 'insensitive' } }
+        }).catch(() => null);
+
+        if (existingUser) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `An account with email "${email}" already exists.`
+          }));
+          return;
+        }
+
+        // Credential policy is checked after identity/conflict so a duplicate email always reports 409,
+        // never a misleading 400 about password strength.
+        if (passwordPlain.length < 12 || (cleanPin && cleanPin.length < 4)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'A password of at least 12 characters is required.' }));
+          return;
+        }
+
+        let newAdmin;
+        try {
+          newAdmin = await prisma.user.create({
+            data: {
+              fullName,
+              email,
+              phone,
+              branch,
+              role: 'super_admin',
+              password: hashSecret(passwordPlain),
+              pin: hashSecret(cleanPin),
+              active: true
+            },
+            select: {
+              id: true,
+              fullName: true,
+              email: true,
+              phone: true,
+              branch: true,
+              role: true,
+              active: true,
+              createdAt: true
+            }
+          });
+        } catch (dbErr) {
+          // Unique-constraint race: another request created the same email between the check above and this insert.
+          if (dbErr?.code === 'P2002') {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: `An account with email "${email}" already exists.` }));
+            return;
+          }
+          console.error('DB error creating super admin:', dbErr.message);
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Could not create the Super Admin account. Please try again.' }));
+          return;
         }
 
         console.log(`🛡️ [Super Admin Created] Added by ${authUser.fullName}: ${newAdmin.fullName} (${newAdmin.email})`);
@@ -2642,7 +2750,17 @@ const server = http.createServer(async (req, res) => {
               }
             });
           } catch (dbErr) {
-            console.warn('DB error updating super admin:', dbErr.message);
+            // Never fall through to the memory path or a 200: the caller asked for a
+            // persisted change. A unique-email race is the only client-visible conflict.
+            console.error('DB error updating super admin:', dbErr.message);
+            if (dbErr?.code === 'P2002') {
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Another account already uses that email address.' }));
+              return;
+            }
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Could not update the Super Admin account. Please try again.' }));
+            return;
           }
 
           if (updated) {
@@ -2722,7 +2840,15 @@ const server = http.createServer(async (req, res) => {
       try {
         await prisma.user.delete({ where: { id: adminId } });
       } catch (dbErr) {
-        console.warn('DB error deleting super admin:', dbErr.message);
+        console.error('DB error deleting super admin:', dbErr.message);
+        if (dbErr?.code === 'P2025') {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Super Admin account not found.' }));
+          return;
+        }
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Could not delete the Super Admin account. Please try again.' }));
+        return;
       }
     }
 
@@ -3657,10 +3783,52 @@ const server = http.createServer(async (req, res) => {
         }
 
         const isSuperAdmin = authUser?.role === 'super_admin';
-        const messages = await prisma.message.findMany({
+        const paginate = parsedUrl.query.paginate === '1';
+        const before = parsedUrl.query.before;
+        // Legacy (non-paginated) callers keep receiving a chronological window, but never
+        // an unbounded one. Paginated callers get `limit` (default 50, max 200) per page.
+        const defaultLimit = paginate ? 50 : 500;
+        const hardCap = paginate ? 200 : 2000;
+        const MESSAGE_PAGE_SIZE = Math.min(Math.max(Number(parsedUrl.query.limit) || defaultLimit, 1), hardCap);
+
+        // Cursor pagination: load the newest page first, then walk backwards using the
+        // `before` cursor. Unlimited retrieval is no longer possible on this endpoint.
+        //
+        // The cursor is `timestamp|id`. A timestamp alone is NOT unique — a webhook burst
+        // or bulk import writes many rows within the same millisecond — and a
+        // `timestamp < cursor` bound would silently drop every message sharing that
+        // millisecond. The id is the tiebreaker, so the boundary is exact. A bare
+        // timestamp (the previous format) is still accepted.
+        if (before) {
+          const raw = String(before);
+          const separator = raw.lastIndexOf('|');
+          const cursorTimestamp = separator === -1 ? raw : raw.slice(0, separator);
+          const cursorId = separator === -1 ? null : raw.slice(separator + 1);
+          const cursorDate = new Date(cursorTimestamp);
+          if (!Number.isNaN(cursorDate.getTime())) {
+            whereClause.AND = cursorId
+              ? [{
+                  OR: [
+                    { timestamp: { lt: cursorDate } },
+                    { timestamp: cursorDate, id: { lt: cursorId } }
+                  ]
+                }]
+              : [{ timestamp: { lt: cursorDate } }];
+          }
+        }
+
+        // Newest-first query so the cursor always walks towards older messages, then
+        // reverse into chronological order for the client. `id` is the stable tiebreaker
+        // that keeps pages non-overlapping and complete when timestamps collide.
+        const page = await prisma.message.findMany({
           where: whereClause,
-          orderBy: { timestamp: 'asc' },
+          orderBy: [{ timestamp: 'desc' }, { id: 'desc' }],
+          take: MESSAGE_PAGE_SIZE + 1,
         });
+
+        const hasMore = page.length > MESSAGE_PAGE_SIZE;
+        const pageRows = hasMore ? page.slice(0, MESSAGE_PAGE_SIZE) : page;
+        const messages = pageRows.reverse();
 
         // Backend RBAC: Never expose audit metadata through normal staff API responses
         const sanitizedMessages = isSuperAdmin
@@ -3671,7 +3839,19 @@ const server = http.createServer(async (req, res) => {
             });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(sanitizedMessages));
+        if (paginate) {
+          const oldest = messages[0];
+          res.end(JSON.stringify({
+            messages: sanitizedMessages,
+            hasMore,
+            // Cursor is the oldest message returned; pass it back as `before` for older pages.
+            nextCursor: hasMore && oldest
+              ? `${new Date(oldest.timestamp).toISOString()}|${oldest.id}`
+              : null
+          }));
+        } else {
+          res.end(JSON.stringify(sanitizedMessages));
+        }
         return;
       } catch (e) {
         console.error('Error fetching messages from DB:', e);
@@ -3695,45 +3875,75 @@ const server = http.createServer(async (req, res) => {
           whereClause.assignedTo = authUser.id;
         }
 
-        const leads = await prisma.lead.findMany({
-          where: whereClause,
-          include: {
-            customer: true,
-            category: true,
-            treatment: true,
-            assignedCoordinator: true,
-            whatsappSession: true,
-            messages: { 
-              orderBy: { timestamp: 'asc' }
-            },
-            notes: true,
-            stageHistories: true,
-            assignmentHistories: { orderBy: { assignedAt: 'desc' } },
-          },
-          orderBy: { updatedAt: 'desc' },
-        });
+        // Pagination. `page`/`pageSize` are clamped so the server can never be asked to
+        // serialize the entire lead table (which previously pulled every nested message).
+        const paginate = parsedUrl.query.paginate === '1';
+        const pageSize = Math.min(Math.max(Number(parsedUrl.query.pageSize) || 50, 1), 200);
+        const page = Math.max(Number(parsedUrl.query.page) || 1, 1);
+
+        // Optional server-side filters (preserve existing UI behaviour, push work to SQL).
+        const search = String(parsedUrl.query.search || '').trim();
+        if (search) {
+          whereClause.OR = [
+            { serialNumber: { contains: search, mode: 'insensitive' } },
+            { customer: { displayName: { contains: search, mode: 'insensitive' } } },
+            { customer: { whatsappNumber: { contains: search } } }
+          ];
+        }
+        if (parsedUrl.query.stage) {
+          whereClause.stage = String(parsedUrl.query.stage);
+        }
+
+        // Lead summaries only: the conversation is fetched separately via
+        // GET /api/messages?leadId=... so this query stays bounded regardless of history size.
+        // `notes` and `stageHistories` are deliberately NOT included: the client never reads
+        // either (stage history comes from its own store, notes are fetched per-lead) and
+        // both grow without bound. `assignmentHistories` is only ever read at index 0, so
+        // exactly one row is fetched; `_count.notes` keeps the notes badge working.
+        const includeSpec = {
+          customer: true,
+          category: true,
+          treatment: true,
+          assignedCoordinator: true,
+          whatsappSession: true,
+          assignmentHistories: { orderBy: { assignedAt: 'desc' }, take: 1 },
+          _count: { select: { messages: true, notes: true } }
+        };
+
+        const [total, leads] = paginate
+          ? await Promise.all([
+              prisma.lead.count({ where: whereClause }),
+              prisma.lead.findMany({
+                where: whereClause,
+                include: includeSpec,
+                orderBy: { updatedAt: 'desc' },
+                skip: (page - 1) * pageSize,
+                take: pageSize
+              })
+            ])
+          : [
+              null,
+              await prisma.lead.findMany({
+                where: whereClause,
+                include: includeSpec,
+                orderBy: { updatedAt: 'desc' },
+                take: 500
+              })
+            ];
 
         const enrichedLeads = leads.map(l => {
           const compCode = resolveLeadCompany(l);
           const isCras = compCode === 'CRAS';
           const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
-          const inboundMsgs = (l.messages || []).filter(m => m.direction === 'inbound');
-          const lastInbound = inboundMsgs.length > 0
-            ? inboundMsgs[inboundMsgs.length - 1].timestamp
-            : (l.lastCustomerMessageAt ? l.lastCustomerMessageAt : null);
-
-          // Backend RBAC: Never expose audit metadata through normal staff API responses
-          const cleanedMessages = isSuperAdmin
-            ? (l.messages || [])
-            : (l.messages || []).map(m => {
-                const { senderName, senderRole, messageSource, sentAt, ...clean } = m;
-                return clean;
-              });
+          const { _count, ...leadFields } = l;
 
           return {
-            ...l,
-            messages: cleanedMessages,
-            lastCustomerMessageAt: lastInbound ? new Date(lastInbound).toISOString() : (l.lastCustomerMessageAt ? new Date(l.lastCustomerMessageAt).toISOString() : null),
+            ...leadFields,
+            messageCount: _count?.messages ?? 0,
+            // The notes badge must survive a reload, so the count is supplied by the server
+            // even though the note bodies themselves are loaded on demand.
+            notesCount: _count?.notes ?? 0,
+            lastCustomerMessageAt: l.lastCustomerMessageAt ? new Date(l.lastCustomerMessageAt).toISOString() : null,
             company: comp.code,
             companyTag: comp.tag,
             companyColor: comp.colorHex,
@@ -3744,7 +3954,8 @@ const server = http.createServer(async (req, res) => {
 
         // Enforce Company-Level Pipeline Isolation:
         // Super Admin and Leads Officer can see all leads, or filter by query param: ?company=RWC or ?company=CRAS
-        // Other staff (Coordinators, Education Counsellors) strictly only see their company's pipeline
+        // Other staff (Coordinators, Education Counsellors) strictly only see their company's pipeline,
+        // plus any lead assigned directly to them.
         const isLeadsOfficer = authUser?.role === 'leads_officer';
         const isSuperOrOfficer = isSuperAdmin || isLeadsOfficer;
         let finalLeads = enrichedLeads;
@@ -3764,7 +3975,19 @@ const server = http.createServer(async (req, res) => {
         }
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(finalLeads));
+        if (paginate) {
+          // Company filtering above is applied in-memory for coordinator-scoped access
+          // (assignedTo OR company), so the count is only exact for unfiltered roles.
+          res.end(JSON.stringify({
+            leads: finalLeads,
+            page,
+            pageSize,
+            total: total ?? finalLeads.length,
+            hasMore: total !== null ? page * pageSize < total : finalLeads.length === pageSize
+          }));
+        } else {
+          res.end(JSON.stringify(finalLeads));
+        }
         return;
       } catch (e) {
         console.error('Error fetching leads from DB:', e);
@@ -5261,9 +5484,17 @@ const server = http.createServer(async (req, res) => {
                   active: true
                 }
               });
-              console.log(`✅ [Staff Created in Supabase] ID: ${newUser.id}, Name: ${newUser.fullName}, Role: ${newUser.role}, PIN: ${newUser.pin}`);
+              console.log(`✅ [Staff Created in Supabase] ID: ${newUser.id}, Name: ${newUser.fullName}, Role: ${newUser.role}`);
             } catch (createErr) {
-              console.warn('⚠️ [Staff Create] Error with custom ID/email, retrying fallback:', createErr.message);
+              // Retry without the caller-supplied id/email only for identifier conflicts (P2002).
+              // Any other failure is a real defect and must surface instead of being hidden by a fallback.
+              if (createErr?.code !== 'P2002') {
+                console.error('DB error creating staff member:', createErr.message);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ success: false, error: 'Could not create the staff account. Please try again.' }));
+                return;
+              }
+              console.warn('⚠️ [Staff Create] Identifier already in use, retrying with a unique email.');
               newUser = await prisma.user.create({
                 data: {
                   fullName,
@@ -5752,7 +5983,7 @@ const server = http.createServer(async (req, res) => {
       const VERIFY_TOKEN = String(process.env.META_VERIFY_TOKEN || '').trim();
 
       console.log(`🔍 [Meta Webhook Verification] Mode: ${mode}, Token provided: ${token ? 'YES' : 'NO'}`);
-      if (VERIFY_TOKEN && mode === 'subscribe' && token === VERIFY_TOKEN) {
+      if (VERIFY_TOKEN && mode === 'subscribe' && timingSafeStringEqual(token, VERIFY_TOKEN)) {
         console.log('✅ [Meta Webhook Verification] Verified successfully!');
         res.writeHead(200, { 'Content-Type': 'text/plain' });
         res.end(challenge);
@@ -6260,49 +6491,11 @@ async function autoSeedDbIfEmpty() {
   }
 }
 
-const isTestRunner = process.env.NODE_ENV === 'test' || (process.argv[1] && process.argv[1].includes('test'));
-if (false && !isTestRunner) {
-  server.listen(PORT, '0.0.0.0', async () => {
-    console.log(`\n👑 Royal Wellness Multi-Session WhatsApp Server running on port ${PORT}`);
-    console.log(`   - Architecture: Centralized Multi-Session WhatsApp Manager`);
-    console.log(`   - Storage: Cloud PostgreSQL Auth Adapter (Supabase)`);
-    console.log(`   - Isolation: Strict Coordinator-Scoped Sockets & Event Streams`);
-
-    // Initialize DB and auto-restore active sessions on Render boot
-    checkDbConnection().then(async res => {
-      if (res.connected) {
-        const prisma = getPrisma();
-        if (prisma) {
-          await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
-          await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => {});
-        }
-        // Load persistent Meta Cloud API configuration from system_settings
-        const savedMetaToken = await getSystemSetting('META_ACCESS_TOKEN');
-        if (savedMetaToken && savedMetaToken.trim()) {
-          metaConfig.accessToken = savedMetaToken.trim();
-          console.log('🔒 [Security] Meta Graph API access token loaded from persistent system settings.');
-        } else if (metaConfig.accessToken) {
-          await setSystemSetting('META_ACCESS_TOKEN', metaConfig.accessToken).catch(() => {});
-        }
-        const savedPhoneId = await getSystemSetting('META_PHONE_NUMBER_ID');
-        if (savedPhoneId && savedPhoneId.trim()) metaConfig.phoneNumberId = savedPhoneId.trim();
-        const savedWabaId = await getSystemSetting('META_WABA_ID');
-        if (savedWabaId && savedWabaId.trim()) metaConfig.wabaId = savedWabaId.trim();
-
-        await autoSeedDbIfEmpty();
-      }
-    });
-  });
-}
-
 export async function initializeServer() {
+  // checkDbConnection() applies the idempotent schema delta (see schemaBootstrap.js).
+  // Startup itself only verifies connectivity and loads persisted configuration.
   const res = await checkDbConnection();
   if (!res.connected) return res;
-  const prisma = getPrisma();
-  if (prisma) {
-    await prisma.$executeRawUnsafe(`ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer'`).catch(() => {});
-    await prisma.$executeRawUnsafe(`ALTER TABLE "leads" ADD COLUMN IF NOT EXISTS "serialNumber" VARCHAR(50);`).catch(() => {});
-  }
   const savedMetaToken = await getSystemSetting('META_ACCESS_TOKEN');
   if (savedMetaToken && savedMetaToken.trim()) metaConfig.accessToken = savedMetaToken.trim();
   const savedPhoneId = await getSystemSetting('META_PHONE_NUMBER_ID');
@@ -6335,5 +6528,18 @@ export {
   resetLoginRateLimits,
   dummyVerify,
   verifyMetaSignature,
+  // Bounded in-memory stores (tested for expiry and growth caps)
+  issueSseTicket,
+  consumeSseTicket,
+  sweepExpiredSseTickets,
+  sweepLoginAttemptStore,
+  sseTickets,
+  loginAttemptStore,
+  // Media signing (stable per-file signature; no baked-in expiry)
+  createPrivateMediaUrl,
+  verifyPrivateMediaUrl,
+  signMediaFile,
+  timingSafeStringEqual,
+  allocateCompanyLeadSerial,
   server
 };

@@ -4426,7 +4426,7 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' ? pathname.split('/')[3] : null;
         const leadId = payload.leadId || payload.id || urlLeadId;
-        const { treatmentId, categoryId, serialNumber, stage, language, customerId, phone, whatsappId, reason } = payload;
+        const { treatmentId, categoryId, serialNumber, stage, language, customerId, phone, whatsappId, reason, acceptedAt } = payload;
 
         if (!leadId && !customerId && !phone && !whatsappId) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -4508,6 +4508,7 @@ const server = http.createServer(async (req, res) => {
           if (categoryId !== undefined) updateData.categoryId = categoryId || null;
           if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
           if (stage !== undefined) updateData.stage = stage;
+          if (acceptedAt !== undefined) updateData.acceptedAt = acceptedAt ? new Date(acceptedAt) : null;
           if (language !== undefined) updateData.language = language;
           if (payload.lastCustomerMessageAt !== undefined) {
             updateData.lastCustomerMessageAt = payload.lastCustomerMessageAt ? new Date(payload.lastCustomerMessageAt) : null;

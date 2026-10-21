@@ -21,6 +21,7 @@ import {
   ArrowUp,
   SlidersHorizontal,
   StickyNote,
+  MessageCircle,
   Plus,
   X,
   Pencil,
@@ -397,13 +398,25 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     const hasCustomerMessage = lastCustomerMsgTime > 0 && !isNaN(lastCustomerMsgTime);
     const expiresAt = hasCustomerMessage ? lastCustomerMsgTime + (24 * 60 * 60 * 1000) : 0;
     const remainingMs = expiresAt > 0 ? Math.max(0, expiresAt - now) : 0;
-    const isExpired = !hasCustomerMessage || remainingMs <= 0;
+    const isExpired = hasCustomerMessage && remainingMs <= 0;
+
+    if (!hasCustomerMessage) {
+      return (
+        <div
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-800/80 border-slate-700 text-slate-400 whitespace-nowrap shadow-xs"
+          title="No inbound customer message timestamp is available"
+        >
+          <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
+          <span>Not Started</span>
+        </div>
+      );
+    }
 
     if (isExpired) {
       return (
-        <div 
+        <div
           className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-800/80 border-slate-700 text-slate-400 whitespace-nowrap shadow-xs"
-          title={hasCustomerMessage ? `24H Window Expired.\nCustomer last replied: ${formatWindowTimestamp(lastCustomerMsgTime)}` : 'No customer messages received yet'}
+          title={`24H Window Expired.\nCustomer last replied: ${formatWindowTimestamp(lastCustomerMsgTime)}`}
         >
           <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
           <span>Expired</span>
@@ -588,10 +601,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           setBookingModalLead(lead);
         }}
         className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-        title="Book clinical appointment for this lead"
+        title={lead.company === 'CRAS' ? 'Open enrollment workflow for this lead' : 'Book clinical appointment for this lead'}
       >
         <Plus className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-        <span>Book Appointment</span>
+        <span>{lead.company === 'CRAS' ? 'Enrollment' : 'Book Appointment'}</span>
       </button>
     );
   };
@@ -776,33 +789,34 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       >
         <style>{`
           /* One grid definition keeps header and every row aligned while scrolling. */
-          .pipeline-table { display: block; width: max-content; min-width: 2655px; }
+          .pipeline-table { display: block; width: max-content; min-width: 2985px; }
           .pipeline-table thead, .pipeline-table tbody { display: block; }
           .pipeline-table thead tr, .pipeline-table tbody tr {
             display: grid;
-            grid-template-columns: 60px 120px 280px 150px 150px 220px 160px 160px 180px 170px 170px 140px 90px 65px 220px 70px 160px 90px;
-            min-width: 2655px;
+            grid-template-columns: 60px 120px 280px 220px 150px 150px 220px 160px 180px 180px 180px 160px 150px 170px 220px 90px 65px 90px 90px;
+            min-width: 2985px;
           }
           .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
           .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { grid-column: 1; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { grid-column: 2; }
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { grid-column: 3; }
-          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 13; }
-          .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 14; }
-          .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 16; }
-          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 15; }
-          .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 4; }
+          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 16; }
+          .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 17; }
+          .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 18; }
+          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 4; }
+          .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 6; }
           .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 5; }
-          .pipeline-table th:nth-child(10), .pipeline-table td:nth-child(10) { grid-column: 6; }
-          .pipeline-table th:nth-child(11), .pipeline-table td:nth-child(11) { grid-column: 17; }
-          .pipeline-table th:nth-child(12), .pipeline-table td:nth-child(12) { grid-column: 8; }
-          .pipeline-table th:nth-child(13), .pipeline-table td:nth-child(13) { grid-column: 9; }
-          .pipeline-table th:nth-child(14), .pipeline-table td:nth-child(14) { grid-column: 10; }
-          .pipeline-table th:nth-child(15), .pipeline-table td:nth-child(15) { grid-column: 7; }
-          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 18; }
-          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 11; }
-          .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 12; }
+          .pipeline-table th:nth-child(10), .pipeline-table td:nth-child(10) { grid-column: 7; }
+          .pipeline-table th:nth-child(11), .pipeline-table td:nth-child(11) { grid-column: 8; }
+          .pipeline-table th:nth-child(12), .pipeline-table td:nth-child(12) { grid-column: 9; }
+          .pipeline-table th:nth-child(13), .pipeline-table td:nth-child(13) { grid-column: 10; }
+          .pipeline-table th:nth-child(14), .pipeline-table td:nth-child(14) { grid-column: 11; }
+          .pipeline-table th:nth-child(15), .pipeline-table td:nth-child(15) { grid-column: 12; }
+          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 19; }
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 14; }
+          .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 13; }
+          .pipeline-table th:nth-child(19), .pipeline-table td:nth-child(19) { grid-column: 15; }
 
           /* Sticky cells are deliberately limited to No., Serial No., Contact, and Actions. */
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1),
@@ -850,27 +864,28 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   className="inline-flex items-center gap-1 hover:text-white transition-colors"
                   title="Sort by treatment or service"
                 >
-                  {isCras ? 'TREATMENT / SERVICE' : 'TREATMENT / SERVICE'}
+                  Description (Treatment / Service)
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
               <th className="py-3.5 px-4">Current Status</th>
-              <th className="py-3.5 px-3">Assign Status</th>
+              <th className="py-3.5 px-3">Assigned Status</th>
               <th className="py-3.5 px-4">Assign Coordinator</th>
               <th className="py-3.5 px-3">Assign By</th>
-              <th className="py-3.5 px-3">INQ Receive</th>
+              <th className="py-3.5 px-3">INQ Received Time</th>
               <th className="py-3.5 px-3">INQ Assigned</th>
               <th className="py-3.5 px-3">INQ Accept Time</th>
-              <th className="py-3.5 px-3">24 Windows</th>
-              <th className="py-3.5 px-4 text-center">Actions</th>
+              <th className="py-3.5 px-3">24H Window</th>
+              <th className="py-3.5 px-4 text-center">Action</th>
               <th className="py-3.5 px-3">Task</th>
+              <th className="py-3.5 px-3">Action</th>
               <th className="py-3.5 px-3">Output</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={18} className="py-16 text-center text-slate-500">
+                <td colSpan={19} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -976,36 +991,31 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 6. Assignment Status */}
-                    <td className="py-3.5 px-3 whitespace-nowrap">
-                      <span className={`inline-flex rounded-md border px-2 py-1 text-[10px] font-semibold ${lead.assignedTo ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300' : 'border-amber-500/30 bg-amber-500/10 text-amber-300'}`}>
-                        {lead.assignedTo ? (lead.assignmentHistories && lead.assignmentHistories.length > 1 ? 'Reassigned' : 'Assigned') : 'Unassigned'}
-                      </span>
+                    {/* 5. Assignment Status */}
+                    <td className="py-3.5 px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <select
+                        value={lead.assignedTo ? 'reassign' : 'assign'}
+                        onChange={(e) => { if (e.target.value === 'assign' && lead.assignedTo) assignLead(lead.id, ''); }}
+                        className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-slate-100 outline-none focus:border-teal-500 cursor-pointer"
+                        aria-label={`Assignment status for ${lead.customer?.displayName || 'lead'}`}
+                      >
+                        <option value="assign">Assign</option>
+                        <option value="reassign">Re-Assign</option>
+                      </select>
                     </td>
 
-                    {/* 7. Current Status */}
+                    {/* 6. Current Status */}
                     <td className="py-3.5 px-4 min-w-[150px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <div className="relative inline-block">
-                        <StageBadge stage={lead.stage} />
-                        <select
-                          value={lead.stage}
-                          onChange={(e) => {
-                            const nextStage = e.target.value as LeadStage;
-                            if (nextStage !== lead.stage) {
-                              updateLeadStage(lead.id, nextStage, `Changed from ${lead.stage} to ${nextStage} via Pipeline table`);
-                            }
-                          }}
-                          aria-label={`Change stage for ${lead.customer?.displayName || 'lead'}`}
-                          className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                          title="Change lead stage"
-                        >
-                          {activeStages.map((stage) => (
-                            <option key={stage.id} value={stage.key} className="bg-white text-slate-900">
-                              {stage.label}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      <select
+                        value={lead.stage === 'assigned' ? 'accepted' : lead.stage === 'lost' ? 'rejected' : 'new'}
+                        onChange={(e) => updateLeadStage(lead.id, e.target.value === 'accepted' ? 'assigned' : e.target.value === 'rejected' ? 'lost' : 'new', 'Current status changed via Pipeline table')}
+                        aria-label={`Change current status for ${lead.customer?.displayName || 'lead'}`}
+                        className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-slate-100 outline-none focus:border-teal-500 cursor-pointer"
+                      >
+                        <option value="new">New</option>
+                        <option value="accepted">Accept</option>
+                        <option value="rejected">Reject</option>
+                      </select>
                     </td>
 
                     {/* 8. Coordinator (Wide, Clear, Never Truncated) */}
@@ -1069,9 +1079,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       {renderAssignedTimeAndDateCell(lead)}
                     </td>
 
-                    {/* 11. 1st Response Time from Coordinator (Single-line timestamp + Latency Badge) */}
+                    {/* 11. INQ Accept Time */}
                     <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap">
-                      {renderFirstResponseCell(lead)}
+                      {lead.acceptedAt ? new Date(lead.acceptedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : <span className="text-slate-500">—</span>}
                     </td>
 
                     {/* 11. Real 24h Window Remaining Time */}
@@ -1086,7 +1096,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         className="px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                       >
                         <span>Chat</span>
-                        <ChevronRight className="w-3.5 h-3.5" />
+                        <MessageCircle className="w-3.5 h-3.5" />
                       </button>
                     </td>
 
@@ -1098,6 +1108,26 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     {/* 14. Appointment Status (Booked, Confirmed, Arrived, Paid, Rescheduled, Cancelled, No Answer) */}
                     <td className="py-3.5 px-3 min-w-[140px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       {renderAppointmentStatusCell(lead, appt)}
+                    </td>
+
+                    {/* 15. Output */}
+                    <td className="py-3.5 px-3 min-w-[220px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="relative inline-block">
+                        <StageBadge stage={lead.stage} />
+                        <select
+                          value={lead.stage}
+                          onChange={(e) => updateLeadStage(lead.id, e.target.value as LeadStage, 'Output changed via Pipeline table')}
+                          aria-label={`Change output stage for ${lead.customer?.displayName || 'lead'}`}
+                          className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent text-transparent [color-scheme:dark]"
+                          title="Change lead output stage"
+                        >
+                          {activeStages.map((stage) => (
+                            <option key={stage.id} value={stage.key} style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>
+                              {stage.label}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
                     </td>
 
                   </tr>

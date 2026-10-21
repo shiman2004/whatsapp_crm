@@ -184,7 +184,7 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
             </div>
             <div className="flex items-center gap-1.5 text-slate-400">
               <Link2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-[11px] font-mono">Port 3001</span>
+              <span className="text-[11px] font-mono">Port 3000</span>
             </div>
           </div>
 

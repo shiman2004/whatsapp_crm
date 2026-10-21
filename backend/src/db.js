@@ -82,6 +82,33 @@ export const checkDbConnection = async () => {
     `).catch(() => null);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_media_files_name ON public.media_files(file_name);`).catch(() => null);
 
+    // Shared authentication throttling state. The primary key makes updates
+    // atomic across backend instances and survives process restarts.
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.auth_rate_limits (
+        rate_key VARCHAR(512) PRIMARY KEY,
+        attempt_count INTEGER NOT NULL DEFAULT 0,
+        first_attempt_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+        locked_until TIMESTAMP WITH TIME ZONE,
+        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+    `).catch((err) => console.warn('Shared auth rate limiter unavailable:', err.message));
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_auth_rate_limits_expiry ON public.auth_rate_limits(locked_until, updated_at);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.security_audit_events (
+        id VARCHAR(50) PRIMARY KEY,
+        correlation_id VARCHAR(100) NOT NULL,
+        actor_id VARCHAR(100),
+        action VARCHAR(100) NOT NULL,
+        resource VARCHAR(255) NOT NULL,
+        outcome VARCHAR(40) NOT NULL,
+        metadata TEXT,
+        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+      );
+    `).catch((err) => console.warn('Security audit table unavailable:', err.message));
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_security_audit_created ON public.security_audit_events(created_at DESC);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON public.security_audit_events(actor_id, created_at DESC);`).catch(() => null);
+
     // Ensure team_broadcasts table exists for staff announcements & multimedia broadcasts
     await prisma.$executeRawUnsafe(`
       CREATE TABLE IF NOT EXISTS public.team_broadcasts (
@@ -243,6 +270,24 @@ export const checkDbConnection = async () => {
       );
     `).catch(() => null);
     await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_rooms_branch ON public.rooms(branch_id);`).catch(() => null);
+
+    // Provision dedicated doctors / consultants table. Appointment doctors are
+    // intentionally kept separate from CRM users/coordinators.
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS public.doctors (
+        id VARCHAR(50) PRIMARY KEY,
+        full_name VARCHAR(255) NOT NULL,
+        title VARCHAR(255),
+        branch VARCHAR(100),
+        phone VARCHAR(50),
+        avatar VARCHAR(500),
+        is_active BOOLEAN DEFAULT TRUE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+      );
+    `).catch((err) => console.warn('⚠️ Doctors table provisioning skipped:', err.message));
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_doctors_branch ON public.doctors(branch);`).catch(() => null);
+    await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS idx_doctors_active ON public.doctors(is_active);`).catch(() => null);
 
     // Seed initial clinical rooms if empty
     const roomCount = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.rooms;`).catch(() => [{ count: 0 }]);

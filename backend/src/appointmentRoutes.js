@@ -334,12 +334,12 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             u_creator."fullName" AS "createdByName",
             a.cancellation_reason AS "cancellationReason", a.created_at AS "createdAt",
             c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone", c."avatarUrl" AS "patientAvatar",
-            u."fullName" AS "doctorName", u."role" AS "doctorTitle",
+            u."full_name" AS "doctorName", u."title" AS "doctorTitle",
             t.name AS "treatmentName", t."durationMinutes" AS "treatmentDuration", t."startingPrice" AS "treatmentPrice",
             r.name AS "roomName", r.room_number AS "roomNumber", r.color AS "roomColor"
           FROM public.appointments a
           LEFT JOIN public.customers c ON a.patient_id = c.id
-          LEFT JOIN public.users u ON a.doctor_id = u.id
+          LEFT JOIN public.doctors u ON a.doctor_id = u.id
           LEFT JOIN public.users u_creator ON a.created_by_id = u_creator.id
           LEFT JOIN public.treatments t ON a.treatment_id = t.id
           LEFT JOIN public.rooms r ON a.room_id = r.id
@@ -543,13 +543,13 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
               a.patient_id AS "patientId", a.doctor_id AS "doctorId", a.treatment_id AS "treatmentId",
               a.start_time AS "startTime", a.end_time AS "endTime", a.status, a.notes,
               c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone",
-              u."fullName" AS "doctorName",
+              u."full_name" AS "doctorName",
               t.name AS "treatmentName",
               r.name AS "roomName", r.room_number AS "roomNumber", r.color AS "roomColor",
               b.name AS "branchName"
             FROM public.appointments a
             LEFT JOIN public.customers c ON a.patient_id = c.id
-            LEFT JOIN public.users u ON a.doctor_id = u.id
+            LEFT JOIN public.doctors u ON a.doctor_id = u.id
             LEFT JOIN public.treatments t ON a.treatment_id = t.id
             LEFT JOIN public.rooms r ON a.room_id = r.id
             LEFT JOIN public.branches b ON a.branch_id = b.id
@@ -646,13 +646,13 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             a.start_time AS "startTime", a.end_time AS "endTime", a.status, a.notes,
             a.cancellation_reason AS "cancellationReason", a.created_at AS "createdAt",
             c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone", c."avatarUrl" AS "patientAvatar",
-            u."fullName" AS "doctorName",
+            u."full_name" AS "doctorName",
             t.name AS "treatmentName", t."durationMinutes" AS "treatmentDuration", t."startingPrice" AS "treatmentPrice",
             r.name AS "roomName", r.room_number AS "roomNumber", r.color AS "roomColor",
             b.name AS "branchName"
           FROM public.appointments a
           LEFT JOIN public.customers c ON a.patient_id = c.id
-          LEFT JOIN public.users u ON a.doctor_id = u.id
+          LEFT JOIN public.doctors u ON a.doctor_id = u.id
           LEFT JOIN public.treatments t ON a.treatment_id = t.id
           LEFT JOIN public.rooms r ON a.room_id = r.id
           LEFT JOIN public.branches b ON a.branch_id = b.id
@@ -748,7 +748,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
         // Trigger WhatsApp Notification
         const customer = await prisma.customer.findUnique({ where: { id: appt.patient_id } }).catch(() => null);
         const treatment = await prisma.treatment.findUnique({ where: { id: appt.treatment_id } }).catch(() => null);
-        const doctor = await prisma.user.findUnique({ where: { id: appt.doctor_id } }).catch(() => null);
+        const doctor = await prisma.doctor.findUnique({ where: { id: appt.doctor_id } }).catch(() => null);
 
         sendAppointmentNotification({
           eventType: 'rescheduled',
@@ -896,19 +896,23 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
     const branchId = query.branchId;
     if (dbOk) {
       try {
-        const users = await prisma.user.findMany({
-          where: { active: true },
+        const doctors = await prisma.doctor.findMany({
+          where: { isActive: true },
           select: {
             id: true,
             fullName: true,
-            role: true,
+            title: true,
             branch: true,
-            treatmentCategoryId: true,
             phone: true,
             avatar: true
-          }
+          },
+          orderBy: { fullName: 'asc' }
         });
-        return sendJson(res, 200, users);
+        return sendJson(res, 200, doctors.map((doctor) => ({
+          ...doctor,
+          role: 'doctor',
+          roleTitle: doctor.title
+        })));
       } catch (e) {
         console.warn('DB doctors query fallback:', e.message);
       }
@@ -1023,10 +1027,10 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             ab.id, ab.branch_id AS "branchId", ab.room_id AS "roomId", 
             ab.doctor_id AS "doctorId", ab.start_time AS "startTime", 
             ab.end_time AS "endTime", ab.reason, ab.created_at AS "createdAt",
-            r.name AS "roomName", u."fullName" AS "doctorName"
+            r.name AS "roomName", u."full_name" AS "doctorName"
           FROM public.availability_blocks ab
           LEFT JOIN public.rooms r ON ab.room_id = r.id
-          LEFT JOIN public.users u ON ab.doctor_id = u.id
+          LEFT JOIN public.doctors u ON ab.doctor_id = u.id
           WHERE ab.branch_id = $1
           ORDER BY ab.start_time ASC;
         `, branchId || 'branch-colombo');

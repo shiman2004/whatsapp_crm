@@ -75,7 +75,7 @@ export const DEFAULT_STAGES: LeadStageConfig[] = [
 interface CrmContextType {
   // Authentication & RBAC
   isAuthenticated: boolean;
-  login: (identifier: string, secret?: string) => Promise<{ success: boolean; error?: string }>;
+  login: (identifier: string, secret?: string) => Promise<{ success: boolean; error?: string; retryAfter?: number }>;
   logout: () => void;
   updateUserCredentials: (userId: string, updates: { password?: string; pin?: string }) => void;
   currentUser: User;
@@ -3827,7 +3827,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       });
       const payload = await response.json().catch(() => null);
       if (!response.ok || !payload?.token) {
-        return { success: false, error: payload?.error || (response.status === 401 ? 'Invalid credentials.' : 'Unable to sign in.') };
+        const retryAfter = Number(payload?.retryAfter ?? response.headers.get('Retry-After') ?? 0);
+        return {
+          success: false,
+          error: payload?.error || (response.status === 401 ? 'Invalid credentials.' : 'Unable to sign in.'),
+          retryAfter: Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : undefined,
+        };
       }
       const verifiedUser = await verifyServerSession(payload.token);
       if (!verifiedUser || (payload.user?.id && payload.user.id !== verifiedUser.id)) {

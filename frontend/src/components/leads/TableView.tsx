@@ -795,7 +795,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 </button>
               </th>
               <th className="py-3.5 px-4 min-w-[150px]">{isCras ? 'Admissions Stage' : 'Stage'}</th>
-              <th className="py-3.5 px-4 min-w-[260px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
+              <th className="py-3.5 px-4 min-w-[220px]">{isCras ? 'Assigned Counsellor' : 'Assigned Coordinator'}</th>
               <th className="py-3.5 px-3 min-w-[160px]">Assigned By</th>
               <th className="py-3.5 px-3 min-w-[160px]">In_Receive Time</th>
               <th className="py-3.5 px-3 min-w-[180px]">Assign Time</th>
@@ -832,7 +832,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <tr
                     key={lead.id}
                     onClick={() => onSelectLead(lead.id)}
-                    className={`hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                    className={`[&>td]:py-2 hover:bg-slate-800/50 cursor-pointer transition-colors ${
                       isSelected ? 'bg-teal-950/40' : ''
                     }`}
                   >
@@ -939,17 +939,20 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     </td>
 
                     {/* 8. Coordinator (Wide, Clear, Never Truncated) */}
-                    <td className="py-3.5 px-4 min-w-[260px]" onClick={(e) => e.stopPropagation()}>
+                    <td className="py-3.5 px-4 min-w-[220px]" onClick={(e) => e.stopPropagation()}>
                       {canModifyAssignment(lead) ? (
                         <select
                           value={lead.assignedTo || ''}
                           onChange={(e) => assignLead(lead.id, e.target.value)}
-                          className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-teal-500 cursor-pointer w-full min-w-[240px] shadow-sm"
+                          className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-teal-500 cursor-pointer w-full min-w-0 shadow-sm"
                         >
                           <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCrasLead ? '-- Assign Counsellor --' : '-- Assign Coordinator --')}</option>
-                          {coordinators.filter(c => isCrasLead ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company)).map((c) => (
+                          {[...coordinators]
+                            .filter(c => isCrasLead ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company))
+                            .sort((a, b) => a.fullName.localeCompare(b.fullName))
+                            .map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.fullName} ({c.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'})
+                              {c.fullName}
                             </option>
                           ))}
                         </select>

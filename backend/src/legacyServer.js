@@ -347,7 +347,10 @@ function sharedRateLimitKeys(ip, identifier) {
 async function checkSharedLoginRateLimit(ip, identifier) {
   if (IS_TEST_ENV) return checkLoginRateLimit(ip, identifier);
   const prisma = getPrisma();
-  if (!prisma || !getDbStatus()) return { limited: true, retryAfter: LOGIN_RATE_LIMIT.LOCKOUT_MS / 1000, unavailable: true };
+  // A database outage is not a login lockout. Returning `limited: true` here
+  // made every local login attempt look like a brute-force block and prevented
+  // the client from reporting the actual dependency failure.
+  if (!prisma || !getDbStatus()) return { limited: false, retryAfter: 0, unavailable: true };
   try {
     for (const key of sharedRateLimitKeys(ip, identifier)) {
       const rows = await prisma.$queryRawUnsafe(`
@@ -363,7 +366,7 @@ async function checkSharedLoginRateLimit(ip, identifier) {
     return { limited: false, retryAfter: 0 };
   } catch (error) {
     console.error('[Security] Shared login limiter unavailable:', error.message);
-    return { limited: true, retryAfter: LOGIN_RATE_LIMIT.LOCKOUT_MS / 1000, unavailable: true };
+    return { limited: false, retryAfter: 0, unavailable: true };
   }
 }
 
@@ -1171,6 +1174,14 @@ const server = http.createServer(async (req, res) => {
           res.end(JSON.stringify({ 
             success: false, 
             error: 'Too many failed login attempts. Please try again later.' 
+          }));
+          return;
+        }
+        if (rateCheck.unavailable) {
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: 'Authentication service is unavailable because the database cannot be reached.'
           }));
           return;
         }

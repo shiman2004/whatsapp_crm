@@ -951,7 +951,11 @@ const server = http.createServer(async (req, res) => {
   }
 
   const parsedUrl = url.parse(req.url, true);
-  const pathname = parsedUrl.pathname;
+  // Older/cached frontend bundles may still send `/api/api/...` when their
+  // configured API URL already includes `/api`. Collapse duplicate prefixes
+  // before public-route and authentication checks so login remains reachable.
+  const pathname = String(parsedUrl.pathname || '/').replace(/^\/api(?:\/api)+(?=\/|$)/i, '/api');
+  parsedUrl.pathname = pathname;
 
   // 0. Static Uploads File Serving with Supabase Persistent Recovery & Disk Cache
   if (pathname.startsWith('/uploads/')) {

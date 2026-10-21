@@ -18,7 +18,9 @@ export const WhatsApp24hWindowInfo: React.FC<WhatsApp24hWindowInfoProps> = ({
   lead, 
   messages
 }) => {
-  const [now, setNow] = useState<number>(Date.now());
+  // Lazy initializer: Date.now() during render is impure under the React Compiler. The
+  // interval below keeps it current, so evaluating once on mount is enough.
+  const [now, setNow] = useState<number>(() => Date.now());
   const [showDetails, setShowDetails] = useState(false);
 
   // Update every second automatically

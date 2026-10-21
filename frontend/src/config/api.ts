@@ -1,17 +1,28 @@
 /**
  * API Base Configuration
- * Automatically switches between local development (http://localhost:3000)
- * and production Render URL (https://whatsapp-crm-60v6.onrender.com).
+ * Development uses local backend (http://localhost:3001).
+ * Production defaults to https://royal-wellness-backend.onrender.com.
  */
 const isLocal = typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || 
   window.location.hostname === '127.0.0.1' ||
-  window.location.hostname.startsWith('192.168.')
+  window.location.hostname.startsWith('192.168.') ||
+  window.location.hostname === '[::1]'
 );
 
-const envUrl = (import.meta.env.VITE_API_URL as string)?.replace(/\/$/, '');
+// Keep the base URL free of trailing slashes and redundant `/api` path
+const envUrl = (import.meta.env.VITE_API_URL as string)
+  ?.trim()
+  .replace(/\/+$/, '')
+  .replace(/\/api$/i, '');
 
-// If envUrl is pointing to localhost or the typo '00v6', automatically fix to live royal-wellness-backend
-export const API_BASE_URL: string = (envUrl && !envUrl.includes('00v6') && !envUrl.includes('whatsapp-crm-60v6')) 
-  ? envUrl 
-  : (isLocal ? 'http://localhost:3000' : 'https://royal-wellness-backend.onrender.com');
+// Ignore outdated or dead Render services (like whatsapp-crm-60v6 or localhost when deployed in production)
+const isOutdatedOrInvalid = !envUrl || 
+  envUrl.includes('00v6') || 
+  envUrl.includes('60v6') || 
+  envUrl.includes('whatsapp-crm') ||
+  (!isLocal && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')));
+
+export const API_BASE_URL: string = (import.meta.env.DEV || isLocal)
+  ? (envUrl && !envUrl.includes('onrender.com') ? envUrl : 'http://localhost:3001')
+  : (isOutdatedOrInvalid ? 'https://royal-wellness-backend.onrender.com' : envUrl);

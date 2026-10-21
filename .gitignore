@@ -23,6 +23,7 @@ frontend/dist-ssr/
 .env
 .env.*
 !.env.example
+!.env.*.example
 frontend/.env
 backend/.env
 

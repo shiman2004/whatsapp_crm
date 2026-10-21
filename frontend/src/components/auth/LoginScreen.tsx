@@ -73,6 +73,27 @@ export const LoginScreen: React.FC = () => {
   // Feedback
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [lockoutSeconds, setLockoutSeconds] = useState(0);
+
+  useEffect(() => {
+    if (lockoutSeconds <= 0) return;
+    const timer = window.setInterval(() => {
+      setLockoutSeconds((seconds) => Math.max(0, seconds - 1));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [lockoutSeconds]);
+
+  const applyLoginResult = (result: { success: boolean; error?: string; retryAfter?: number }) => {
+    if (result.success) return;
+    if (result.retryAfter) {
+      setLockoutSeconds(Math.ceil(result.retryAfter));
+      const minutes = Math.floor(result.retryAfter / 60);
+      const seconds = Math.ceil(result.retryAfter % 60);
+      setErrorMsg(`Too many failed attempts. Try again in ${minutes}:${String(seconds).padStart(2, '0')}.`);
+      return;
+    }
+    setErrorMsg(result.error || 'Invalid credentials.');
+  };
 
   // Listen for URL changes or stealth shortcut (Ctrl+Shift+A or Alt+A)
   useEffect(() => {
@@ -151,18 +172,14 @@ export const LoginScreen: React.FC = () => {
     u.id.toLowerCase() === identifierInput.toLowerCase()
   );
 
-  const handlePasswordSubmit = (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setIsSubmitting(true);
 
-    setTimeout(() => {
-      const res = login(identifierInput.trim(), passwordInput);
-      if (!res.success) {
-        setErrorMsg(res.error || 'Invalid credentials.');
-      }
-      setIsSubmitting(false);
-    }, 250);
+    const res = await login(identifierInput.trim(), passwordInput);
+    applyLoginResult(res);
+    setIsSubmitting(false);
   };
 
   const handlePinKey = useCallback((digit: string) => {
@@ -176,10 +193,10 @@ export const LoginScreen: React.FC = () => {
       if (next.length === 4) {
         const fullPin = next.join('');
         setIsSubmitting(true);
-        setTimeout(() => {
-          const res = login(identifierInput.trim(), fullPin);
+        setTimeout(async () => {
+          const res = await login(identifierInput.trim(), fullPin);
           if (!res.success) {
-            setErrorMsg(res.error || 'Incorrect 4-digit PIN. Please try again.');
+            applyLoginResult(res);
             setPinDigits([]);
           }
           setIsSubmitting(false);
@@ -667,11 +684,11 @@ export const LoginScreen: React.FC = () => {
                 </div>
                 <button
                   type="submit"
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || lockoutSeconds > 0}
                   style={{ backgroundColor: currentMeta.accentColor }}
                   className="w-full py-2.5 text-white font-bold text-xs rounded-xl transition-all shadow-md active:scale-95 disabled:opacity-50 cursor-pointer"
                 >
-                  {isSubmitting ? 'Verifying...' : `Sign In to ${currentMeta.title}`}
+                  {isSubmitting ? 'Verifying...' : lockoutSeconds > 0 ? `Try again in ${Math.ceil(lockoutSeconds / 60)} min` : `Sign In to ${currentMeta.title}`}
                 </button>
               </form>
             ) : (
@@ -708,7 +725,7 @@ export const LoginScreen: React.FC = () => {
                     <button
                       key={digit}
                       type="button"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || lockoutSeconds > 0}
                       onClick={() => handlePinKey(digit)}
                       className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
                         pressedKey === digit ? 'bg-slate-600 scale-95 ring-2 ring-white/60 text-white' : ''
@@ -728,7 +745,7 @@ export const LoginScreen: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    disabled={isSubmitting}
+                    disabled={isSubmitting || lockoutSeconds > 0}
                     onClick={() => handlePinKey('0')}
                     className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
                       pressedKey === '0' ? 'bg-slate-600 scale-95 ring-2 ring-white/60 text-white' : ''

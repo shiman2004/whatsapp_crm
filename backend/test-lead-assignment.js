@@ -68,11 +68,12 @@ async function runTests() {
     // console.error(`[Server err] ${d.toString()}`);
   });
 
-  // Wait for server ready
+  // Wait for server ready. `/api/status` requires auth (401 without a token), so the
+  // public health endpoint is the correct readiness probe.
   let serverReady = false;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 60; i++) {
     try {
-      const res = await request({ method: 'GET', path: '/api/status' });
+      const res = await request({ method: 'GET', path: '/api/db/status' });
       if (res.status === 200) {
         serverReady = true;
         break;
@@ -85,7 +86,7 @@ async function runTests() {
 
   if (!serverReady) {
     serverProcess.kill();
-    throw new Error('❌ Test server failed to start within 15 seconds.');
+    throw new Error('❌ Test server failed to start within 30 seconds.');
   }
   console.log('✅ Test server started successfully.\n');
 

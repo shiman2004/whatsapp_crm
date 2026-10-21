@@ -70,7 +70,6 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
   const { 
     currentUser, 
     users, 
-    setCurrentUser, 
     logout, 
     isSuperAdmin, 
     simulatorOpen, 
@@ -207,7 +206,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar }) => {
                           <button
                             key={u.id}
                             onClick={() => {
-                              setCurrentUser(u);
+                              // Never impersonate a coordinator with the current
+                              // bearer token. Sign out so the selected staff member
+                              // must complete their own server-verified login.
+                              logout();
                               setUserDropdownOpen(false);
                             }}
                             className={`w-full text-left px-2.5 py-1.5 rounded-lg text-xs flex items-center justify-between gap-1.5 transition-all cursor-pointer ${

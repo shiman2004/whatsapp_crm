@@ -248,6 +248,25 @@ server.listen(testPort, '127.0.0.1', async () => {
     assert.strictEqual(dataCrmContext.success, true);
     console.log('  ✅ 4.6 Frontend CrmContext dual-payload format ({ identifier, pin, password }) verified');
 
+    // A browser session is authoritative only after the protected endpoint resolves
+    // its bearer token to the server-side user record.
+    const sessionRes = await fetch(`${baseUrl}/api/auth/session`, {
+      headers: { Authorization: `Bearer ${dataCoordPin.token}` }
+    });
+    assert.strictEqual(sessionRes.status, 200, 'Verified coordinator token must resolve a session');
+    const sessionData = await sessionRes.json();
+    assert.strictEqual(sessionData.success, true);
+    assert.strictEqual(sessionData.user.id, dataCoordPin.user.id);
+    assert.strictEqual(sessionData.user.role, 'coordinator');
+    assert.strictEqual(sessionData.user.password, undefined);
+    assert.strictEqual(sessionData.user.pin, undefined);
+
+    const invalidSessionRes = await fetch(`${baseUrl}/api/auth/session`, {
+      headers: { Authorization: 'Bearer invalid.token' }
+    });
+    assert.strictEqual(invalidSessionRes.status, 401, 'Invalid session token must be rejected');
+    console.log('  ✅ 4.7 Session route returns only server-verified identity and rejects invalid bearer tokens');
+
     // =========================================================================
     // SECTION 5: Login Rate Limiting & Abuse Protection (429 Too Many Requests)
     // =========================================================================

@@ -28,19 +28,39 @@ async function runTests() {
   const testWamid = `wamid.TEST_${Date.now()}`;
   let passedCount = 0;
 
+  // Fixtures owned by this suite, so a fresh test database (with no customers or leads)
+  // works and repeat runs leave nothing behind. Reusing `findFirst()` previously attached
+  // the test message to whichever customer happened to exist.
+  const fixtureCustomerNumber = '+94700000001';
+  let fixtureLeadId = null;
+  let fixtureCustomerId = null;
+
+  async function cleanupFixtures() {
+    await prisma.message.deleteMany({ where: { id: testWamid } }).catch(() => {});
+    await prisma.messageAudit.deleteMany({ where: { messageId: testWamid } }).catch(() => {});
+    if (fixtureLeadId) {
+      await prisma.message.deleteMany({ where: { leadId: fixtureLeadId } }).catch(() => {});
+      await prisma.lead.delete({ where: { id: fixtureLeadId } }).catch(() => {});
+    }
+    if (fixtureCustomerId) {
+      await prisma.customer.delete({ where: { id: fixtureCustomerId } }).catch(() => {});
+    }
+  }
+
   try {
-    // 0. Setup: Ensure a test lead & customer exist
-    let customer = await prisma.customer.findFirst();
+    // 0. Setup: dedicated test customer + lead
+    let customer = await prisma.customer.findUnique({ where: { whatsappNumber: fixtureCustomerNumber } });
     if (!customer) {
       customer = await prisma.customer.create({
         data: {
-          whatsappNumber: '+94700000001',
+          whatsappNumber: fixtureCustomerNumber,
           whatsappId: '94700000001',
           displayName: 'Test Status Customer',
           preferredLanguage: 'en'
         }
       });
     }
+    fixtureCustomerId = customer.id;
 
     let lead = await prisma.lead.findFirst({ where: { customerId: customer.id } });
     if (!lead) {
@@ -53,6 +73,7 @@ async function runTests() {
         }
       });
     }
+    fixtureLeadId = lead.id;
 
     // 1. Initial State: Message Sent
     const initialSentAt = new Date('2026-10-15T10:00:00Z');
@@ -177,15 +198,13 @@ async function runTests() {
     }
 
     // Clean up test records
-    await prisma.message.delete({ where: { id: testWamid } }).catch(() => {});
-    await prisma.messageAudit.deleteMany({ where: { messageId: testWamid } }).catch(() => {});
+    await cleanupFixtures();
 
     console.log(`\n🎉 ALL ${passedCount} META MESSAGE STATUS & BLUE TICK TESTS PASSED SUCCESSFULLY!`);
     process.exit(0);
   } catch (err) {
     console.error('❌ Test failed with error:', err.message);
-    await prisma.message.delete({ where: { id: testWamid } }).catch(() => {});
-    await prisma.messageAudit.deleteMany({ where: { messageId: testWamid } }).catch(() => {});
+    await cleanupFixtures();
     process.exit(1);
   }
 }

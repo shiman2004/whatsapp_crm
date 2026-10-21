@@ -182,14 +182,14 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 space-y-3.5">
+    <div className="flex-1 flex flex-col min-w-0 gap-2.5">
       {/* Top Company Pipeline Switcher / Header Card */}
       {canSeeBothCompanies ? (
         /* Super Admin & Leads Officer Interactive Company Pipeline Switcher */
-        <div className="bg-white dark:bg-slate-900/90 backdrop-blur-md p-2.5 sm:p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div className="bg-white dark:bg-slate-900/90 backdrop-blur-md px-3 py-2.5 sm:px-4 rounded-[10px] border border-slate-200 dark:border-slate-800 shadow-sm flex flex-col lg:flex-row lg:items-center lg:justify-between gap-2 min-h-16">
           {/* Active Pipeline Title & Meta */}
-          <div className="flex items-center gap-3">
-            <div className={`w-11 h-11 rounded-xl flex items-center justify-center border shrink-0 shadow-sm transition-all overflow-hidden p-1 bg-white dark:bg-slate-800 ${
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center border shrink-0 shadow-sm transition-all overflow-hidden p-1 bg-white dark:bg-slate-800 ${
               selectedCompany === 'CRAS' 
                 ? 'border-rose-200 dark:border-rose-500/50 ring-2 ring-rose-500/20' 
                 : selectedCompany === 'RWC'
@@ -206,7 +206,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h2 className="text-sm font-extrabold text-slate-900 dark:text-white tracking-tight">
+                <h2 className="text-[13px] font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {selectedCompany === 'CRAS' 
                     ? 'CRAS College Admissions Pipeline' 
                     : selectedCompany === 'RWC'
@@ -223,7 +223,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
                   {filteredLeads.length} {selectedCompany === 'CRAS' ? 'Inquiries' : 'Leads'}
                 </span>
               </div>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+              <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                 {selectedCompany === 'CRAS' 
                   ? 'College of Royal Aesthetic Studies • Academic Courses & Students • WhatsApp +94 70 637 3353' 
                   : selectedCompany === 'RWC'
@@ -234,12 +234,12 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
           </div>
 
           {/* Company Pipeline Switcher Tabs */}
-          <div className="flex items-center bg-slate-100 dark:bg-slate-950/90 p-1 rounded-xl border border-slate-200 dark:border-slate-800 gap-1 self-start lg:self-auto shrink-0 shadow-inner">
+          <div className="flex items-center bg-slate-100 dark:bg-slate-950/90 p-1 rounded-[10px] border border-slate-200 dark:border-slate-800 gap-1 self-start lg:self-auto shrink-0 shadow-inner">
             {/* RWC Wellness Pipeline Tab */}
             <button
               type="button"
               onClick={() => handleCompanyChange('RWC')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+              className={`h-9 px-3 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-all ${
                 selectedCompany === 'RWC'
                   ? 'bg-emerald-500/15 dark:bg-[#008000]/30 border border-emerald-500/60 text-emerald-700 dark:text-emerald-200 shadow-sm dark:shadow-md ring-1 ring-emerald-500/30'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-900 border border-transparent'
@@ -256,7 +256,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
             <button
               type="button"
               onClick={() => handleCompanyChange('CRAS')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-all ${
+              className={`h-9 px-3 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-all ${
                 selectedCompany === 'CRAS'
                   ? 'bg-rose-500/15 dark:bg-[#800000]/35 border border-rose-500/60 text-rose-700 dark:text-rose-200 shadow-sm dark:shadow-md ring-1 ring-rose-500/30'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-900 border border-transparent'
@@ -273,7 +273,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
             <button
               type="button"
               onClick={() => handleCompanyChange('ALL')}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all ${
+              className={`h-9 px-2.5 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-all ${
                 selectedCompany === 'ALL'
                   ? 'bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-sm'
                   : 'text-slate-600 dark:text-slate-500 hover:text-slate-900 dark:hover:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-900 border border-transparent'
@@ -287,7 +287,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
         </div>
       ) : (
         /* Coordinator / Counsellor: Strictly Locked Single-Company Pipeline Indicator */
-        <div className={`p-2.5 sm:p-3 rounded-2xl border shadow-sm dark:shadow-md flex items-center justify-between gap-3 ${
+        <div className={`min-h-16 px-3 py-2.5 sm:px-4 rounded-[10px] border shadow-sm flex items-center justify-between gap-3 ${
           isCrasUser 
             ? 'bg-rose-50 dark:bg-[#800000]/20 border-rose-200 dark:border-rose-500/40 text-rose-800 dark:text-rose-200' 
             : 'bg-emerald-50 dark:bg-[#008000]/15 border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-200'

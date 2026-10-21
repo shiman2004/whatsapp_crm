@@ -1,4 +1,18 @@
-export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator';
+export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator' | 'marketing_officer' | 'marketing_admin';
+
+export type MarketingCapability =
+  | 'dashboard'
+  | 'collect'
+  | 'view_own_uploads'
+  | 'view_assigned_tasks'
+  | 'update_assigned_tasks'
+  | 'manage_campaign_drafts'
+  | 'view_reports'
+  | 'assign'
+  | 'reassign'
+  | 'export'
+  | 'approve_campaigns'
+  | 'audit';
 
 export type LeadStage = 
   | 'new' 
@@ -308,3 +322,97 @@ export interface TeamBroadcast {
   targetStaffName?: string;
   createdAt: string;
 }
+
+export interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  address?: string;
+  phone?: string;
+  isActive: boolean;
+  createdAt?: string;
+}
+
+export interface Room {
+  id: string;
+  branchId: string;
+  name: string;
+  roomNumber: string;
+  description?: string;
+  color?: string;
+  operatingStart?: string;
+  operatingEnd?: string;
+  isActive: boolean;
+  treatmentIds?: string[];
+  treatments?: Array<{ id: string; name: string }>;
+  createdAt?: string;
+}
+
+export type AppointmentStatus = 
+  | 'booked' 
+  | 'confirmed' 
+  | 'arrived' 
+  | 'paid' 
+  | 'rescheduled' 
+  | 'cancelled' 
+  | 'no_answer'
+  | 'pending' 
+  | 'checked_in' 
+  | 'in_progress' 
+  | 'completed' 
+  | 'no_show';
+
+export interface AppointmentStatusHistory {
+  id: string;
+  appointmentId: string;
+  previousStatus?: AppointmentStatus | string;
+  newStatus: AppointmentStatus | string;
+  changedById?: string;
+  changedByName: string;
+  reason?: string;
+  changedAt: string;
+}
+
+export interface Appointment {
+  id: string;
+  branchId: string;
+  branchName?: string;
+  roomId: string;
+  roomName?: string;
+  roomNumber?: string;
+  roomColor?: string;
+  patientId: string;
+  patientName?: string;
+  patientPhone?: string;
+  patientAvatar?: string;
+  doctorId: string;
+  doctorName?: string;
+  doctorTitle?: string;
+  treatmentId: string;
+  treatmentName?: string;
+  treatmentDuration?: number;
+  treatmentPrice?: number;
+  startTime: string; // ISO String
+  endTime: string;   // ISO String
+  status: AppointmentStatus;
+  notes?: string;
+  createdById?: string;
+  createdByName?: string;
+  cancellationReason?: string;
+  statusHistory?: AppointmentStatusHistory[];
+  createdAt: string;
+}
+
+export interface AvailabilityBlock {
+  id: string;
+  branchId: string;
+  roomId?: string;
+  roomName?: string;
+  doctorId?: string;
+  doctorName?: string;
+  startTime: string;
+  endTime: string;
+  reason: string;
+  createdAt?: string;
+}
+

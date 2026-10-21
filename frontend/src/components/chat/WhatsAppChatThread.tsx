@@ -51,10 +51,14 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   setCrmPanelOpen,
   onBack
 }) => {
-  const { messages, deleteChat, clearChat, setSelectedLeadId } = useCrm();
+  const { messages, deleteChat, clearChat, setSelectedLeadId, loadOlderMessages, hasOlderMessages } = useCrm();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isAtBottomRef = useRef(true);
+  const loadingOlderRef = useRef(false);
+  // True while an older-history page is being prepended, so the arrival effect below
+  // does not mistake that growth for an incoming message.
+  const prependingHistoryRef = useRef(false);
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const prevLeadIdRef = useRef(lead.id);
   const prevMsgLengthRef = useRef(0);
@@ -254,6 +258,45 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     const nearBottom = distanceFromBottom < 100;
     isAtBottomRef.current = nearBottom;
     setShowScrollBottomBtn(distanceFromBottom > 160);
+
+    // Reaching the top pulls in the next older page of history.
+    if (scrollTop < 80) void loadOlderHistory();
+  };
+
+  // Loads older history while holding the scroll position steady, so the view
+  // does not jump when the new page is prepended.
+  const loadOlderHistory = async () => {
+    const container = messagesContainerRef.current;
+    if (!container || loadingOlderRef.current || !hasOlderMessages) return;
+    loadingOlderRef.current = true;
+    // Prepending older messages also grows leadMessages, which the arrival effect would
+    // read as "a new message arrived" and auto-scroll to the bottom — overriding the
+    // position restore below. The flag is cleared on a later frame than the restore,
+    // because React commits the prepended page after this function returns.
+    prependingHistoryRef.current = true;
+    const previousHeight = container.scrollHeight;
+    const previousTop = container.scrollTop;
+    const clearPrependFlag = () => {
+      requestAnimationFrame(() => { prependingHistoryRef.current = false; });
+    };
+    try {
+      const more = await loadOlderMessages();
+      if (!more) {
+        clearPrependFlag();
+        return;
+      }
+      requestAnimationFrame(() => {
+        if (!messagesContainerRef.current) return;
+        messagesContainerRef.current.scrollTop =
+          messagesContainerRef.current.scrollHeight - previousHeight + previousTop;
+        clearPrependFlag();
+      });
+    } catch (e) {
+      clearPrependFlag();
+      throw e;
+    } finally {
+      loadingOlderRef.current = false;
+    }
   };
 
   // Scroll to bottom helper
@@ -297,7 +340,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
     prevMsgLengthRef.current = leadMessages.length;
 
-    if (isNewMessageAdded) {
+    if (isNewMessageAdded && !prependingHistoryRef.current) {
       if (isOwnOutbound || isAtBottomRef.current) {
         scrollToBottom('smooth');
       }
@@ -517,6 +560,13 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           <Lock className="w-3 h-3 text-[#00a884] shrink-0" />
           <span>Messages are end-to-end encrypted. No one outside of this chat can read or listen to them.</span>
         </div>
+
+        {/* Older-history affordance: shows whether more pages exist above */}
+        {leadMessages.length > 0 && (
+          <div className="text-center text-[#667781] dark:text-[#8696a0] text-[11px] py-1">
+            {hasOlderMessages ? 'Scroll up to load earlier messages' : 'Beginning of conversation'}
+          </div>
+        )}
 
         {/* Message Bubbles with Dynamic WhatsApp Date Dividers ("Today", "Yesterday", etc.) */}
         {filteredMessages.length === 0 ? (

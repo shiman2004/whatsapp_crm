@@ -86,7 +86,16 @@ for (const suite of suites) {
     const child = spawn(process.execPath, [suite], {
       cwd: backendDir,
       stdio: ['ignore', 'pipe', 'pipe'],
-      env: { ...process.env, NODE_ENV: 'test' },
+      // Pin every child to the exact URL approved by the runner.  This avoids
+      // inheriting DATABASE_URL or DIRECT_URL from a developer's `.env` file.
+      env: {
+        ...process.env,
+        NODE_ENV: 'test',
+        DB_ENVIRONMENT: 'test',
+        DATABASE_URL: testUrl,
+        DIRECT_URL: testUrl,
+        TEST_DATABASE_URL: testUrl,
+      },
     });
     child.stdout.on('data', (d) => process.stdout.write(d));
     child.stderr.on('data', (d) => process.stderr.write(d));

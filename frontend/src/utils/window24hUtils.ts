@@ -132,21 +132,16 @@ export function getLatestCustomerMessageTime(lead: Lead, messages?: Message[]): 
     return isMatch && m.direction === 'inbound';
   });
 
-  if (leadInbound.length > 0) {
-    const latest = leadInbound.reduce((latestMsg: Message, m: Message) => {
-      const t = new Date(m.createdAt || (m as any).timestamp || 0).getTime();
-      const curLatest = new Date(latestMsg.createdAt || (latestMsg as any).timestamp || 0).getTime();
-      return t > curLatest ? m : latestMsg;
-    });
-    const ts = new Date(latest.createdAt || (latest as any).timestamp || 0).getTime();
-    if (!isNaN(ts) && ts > 0) return ts;
-  }
+  const messageTimes = leadInbound
+    .map((m: Message) => new Date(m.createdAt || (m as any).timestamp || 0).getTime())
+    .filter((timestamp) => Number.isFinite(timestamp) && timestamp > 0);
 
-  // Fallback to lead-level recorded lastCustomerMessageAt
-  if (lead.lastCustomerMessageAt) {
-    const t = new Date(lead.lastCustomerMessageAt).getTime();
-    if (!isNaN(t) && t > 0) return t;
-  }
+  // The API returns this persisted value even when the messages endpoint is
+  // paginated. Use the newest valid source so an older page cannot reopen an
+  // already-expired window or make a recent window appear expired.
+  const leadTimestamp = lead.lastCustomerMessageAt
+    ? new Date(lead.lastCustomerMessageAt).getTime()
+    : 0;
 
-  return 0;
+  return Math.max(leadTimestamp > 0 && Number.isFinite(leadTimestamp) ? leadTimestamp : 0, ...messageTimes, 0);
 }

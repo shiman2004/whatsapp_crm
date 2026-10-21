@@ -1,6 +1,6 @@
 /**
  * API Base Configuration
- * Development uses local backend (http://localhost:3001).
+ * Development uses local backend (http://localhost:3000).
  * Production defaults to https://royal-wellness-backend.onrender.com.
  */
 const isLocal = typeof window !== 'undefined' && (
@@ -24,5 +24,5 @@ const isOutdatedOrInvalid = !envUrl ||
   (!isLocal && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')));
 
 export const API_BASE_URL: string = (import.meta.env.DEV || isLocal)
-  ? (envUrl && !envUrl.includes('onrender.com') ? envUrl : 'http://localhost:3001')
+  ? (envUrl && !envUrl.includes('onrender.com') ? envUrl : 'http://localhost:3000')
   : (isOutdatedOrInvalid ? 'https://royal-wellness-backend.onrender.com' : envUrl);

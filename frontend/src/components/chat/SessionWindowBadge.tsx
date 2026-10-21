@@ -9,7 +9,8 @@ interface SessionWindowBadgeProps {
 }
 
 export const SessionWindowBadge: React.FC<SessionWindowBadgeProps> = ({ lastCustomerMessageAt }) => {
-  const [now, setNow] = useState<number>(Date.now());
+  // Lazy initializer: Date.now() during render is impure under the React Compiler.
+  const [now, setNow] = useState<number>(() => Date.now());
 
   useEffect(() => {
     const timer = setInterval(() => setNow(Date.now()), 1000);

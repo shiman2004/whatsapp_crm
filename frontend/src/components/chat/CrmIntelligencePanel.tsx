@@ -55,7 +55,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     updateLeadTreatment,
     updateLeadLanguage,
     updateLeadCompany,
-    updateCustomer
+    updateCustomer,
+    stages
   } = useCrm();
 
   const leadMessages = (messages || []).filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
@@ -87,6 +88,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
   // Treatment & Serial state
   const [treatmentDropdownOpen, setTreatmentDropdownOpen] = useState(false);
+  const [stageDropdownOpen, setStageDropdownOpen] = useState(false);
   const [treatmentSearchQuery, setTreatmentSearchQuery] = useState('');
   const [isRegeneratingSerial, setIsRegeneratingSerial] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -209,6 +211,10 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       (t.code && t.code.toLowerCase().includes(q))
     );
   });
+
+  const activeStages = stages.filter(stage => stage.isActive || stage.key === lead.stage).sort((a, b) => a.orderIndex - b.orderIndex);
+  const currentStage = activeStages.find(stage => stage.key === lead.stage) || stages.find(stage => stage.key === lead.stage);
+  const stageColor = currentStage?.color || (isCras ? '#fb7185' : '#fbbf24');
 
   return (
     <div className="w-full sm:w-96 md:w-96 shrink-0 border-l border-slate-200 dark:border-slate-800 bg-white dark:bg-[#111b21] flex flex-col h-full overflow-hidden select-none fixed md:static inset-y-0 right-0 z-40 md:z-auto shadow-2xl md:shadow-none animate-in slide-in-from-right duration-200 transition-colors">

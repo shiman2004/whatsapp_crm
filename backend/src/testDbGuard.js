@@ -77,10 +77,6 @@ export function assertIsolatedTestDatabase() {
     // only means "already promoted". The dangerous case — TEST_DATABASE_URL set to the
     // production URL — is caught by the isLocalOrMarkedTest check below, because a
     // production hostname never satisfies it.
-    if (testUrl !== productionUrl) {
-      process.env.DATABASE_URL = testUrl;
-      if (process.env.DIRECT_URL) process.env.DIRECT_URL = testUrl;
-    }
     if (!isLocalOrMarkedTest(testUrl)) {
       throw new ProductionDatabaseRefusedError(
         `Refusing to run tests against ${describeTarget(testUrl)}: TEST_DATABASE_URL does not look like ` +
@@ -88,6 +84,12 @@ export function assertIsolatedTestDatabase() {
         'See backend/.env.test.example.'
       );
     }
+    // Test configuration is authoritative.  Do not leave a direct URL inherited
+    // from `.env`, because Prisma would otherwise prefer it and could connect a
+    // test process to a different database target.
+    process.env.DATABASE_URL = testUrl;
+    process.env.DIRECT_URL = testUrl;
+    process.env.DB_ENVIRONMENT = 'test';
     // The policy adds an explicit environment identity and exact URL binding;
     // name/host heuristics remain only a second safety check for legacy setups.
     const { assertDatabaseOperationAllowed } = awaitPolicy();

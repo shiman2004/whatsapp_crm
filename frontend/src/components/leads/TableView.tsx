@@ -936,13 +936,16 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                             value={sourceInfo.key}
                             onChange={(e) => updateLeadSource(lead.id, e.target.value)}
                             aria-label="Change Lead Source"
-                            className="absolute inset-0 opacity-0 cursor-pointer w-full h-full"
+                            // Do not use opacity: 0 here. Chromium applies that opacity
+                            // to the native option popup as well, making non-selected
+                            // sources nearly invisible on the dark table.
+                            className="absolute inset-0 w-full h-full cursor-pointer appearance-none border-0 bg-transparent text-transparent [color-scheme:dark]"
                             title={`Current Source: ${sourceInfo.label}. Click to change (WhatsApp, Facebook, Instagram, Website).`}
                           >
-                            <option value="whatsapp">WhatsApp</option>
-                            <option value="facebook">Facebook</option>
-                            <option value="instagram">Instagram</option>
-                            <option value="website">Website</option>
+                            <option value="whatsapp" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>WhatsApp</option>
+                            <option value="facebook" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>Facebook</option>
+                            <option value="instagram" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>Instagram</option>
+                            <option value="website" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>Website</option>
                           </select>
                         )}
                       </div>

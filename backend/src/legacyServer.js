@@ -24,10 +24,42 @@ if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be configured before starting the backend.');
 }
 
-const TRUSTED_ORIGINS = String(process.env.FRONTEND_URL || '')
-  .split(',')
-  .map(origin => origin.trim())
-  .filter(Boolean);
+const DEFAULT_TRUSTED_ORIGINS = [
+  'https://royal-wellness-crm.onrender.com',
+  'http://localhost:3000',
+  'http://localhost:3001',
+  'http://localhost:5173',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:3001',
+  'http://127.0.0.1:5173'
+];
+
+const TRUSTED_ORIGINS = [
+  ...DEFAULT_TRUSTED_ORIGINS,
+  ...String(process.env.FRONTEND_URL || '')
+    .split(',')
+    .map(origin => origin.trim().replace(/\/+$/, ''))
+    .filter(Boolean)
+];
+
+function isAllowedOrigin(origin) {
+  if (!origin) return false;
+  const clean = String(origin).trim().replace(/\/+$/, '');
+  if (TRUSTED_ORIGINS.includes(clean)) return true;
+  try {
+    const { hostname } = new URL(clean);
+    if (
+      hostname.endsWith('.onrender.com') ||
+      hostname.endsWith('.vercel.app') ||
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname === '[::1]'
+    ) {
+      return true;
+    }
+  } catch (_) {}
+  return false;
+}
 const TRUST_PROXY = String(process.env.TRUST_PROXY || '').toLowerCase() === 'true';
 const META_APP_SECRET = String(process.env.META_APP_SECRET || '').trim();
 const REQUEST_BODY_LIMITS = {
@@ -929,12 +961,16 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('X-Correlation-Id', correlationId);
   // CORS Headers
   const requestOrigin = req.headers.origin;
-  if (requestOrigin && TRUSTED_ORIGINS.includes(requestOrigin)) {
+  if (requestOrigin && isAllowedOrigin(requestOrigin)) {
     res.setHeader('Access-Control-Allow-Origin', requestOrigin);
     res.setHeader('Vary', 'Origin');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
+  } else if (!requestOrigin) {
+    res.setHeader('Access-Control-Allow-Origin', '*');
   }
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Hub-Signature-256');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Hub-Signature-256, x-coordinator-id, x-user-id');
+  res.setHeader('Access-Control-Max-Age', '86400');
 
   const requestLimit = getBodyLimit(url.parse(req.url || '/', true).pathname || '/');
   const declaredLength = Number(req.headers['content-length'] || 0);

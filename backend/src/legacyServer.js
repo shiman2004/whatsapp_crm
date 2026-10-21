@@ -5953,16 +5953,35 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // This destructive development utility must never be available to a
+    // production runtime, even to a privileged application account.
+    if (String(process.env.DB_ENVIRONMENT || '').toLowerCase() === 'production') {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Database clearing is disabled in production.' }));
+      return;
+    }
+
     const prisma = getPrisma();
-    if (prisma && getDbStatus()) {
-      try {
-        await prisma.message.deleteMany({});
-        await prisma.leadNote.deleteMany({});
-        await prisma.leadStageHistory.deleteMany({});
-        await prisma.followup.deleteMany({});
-        await prisma.lead.deleteMany({});
-        await prisma.customer.deleteMany({});
-      } catch (e) {}
+    if (!prisma || !getDbStatus()) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Database is unavailable; no records were changed.' }));
+      return;
+    }
+
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.message.deleteMany({});
+        await tx.leadNote.deleteMany({});
+        await tx.leadStageHistory.deleteMany({});
+        await tx.followup.deleteMany({});
+        await tx.lead.deleteMany({});
+        await tx.customer.deleteMany({});
+      });
+    } catch (error) {
+      console.error('Database clear failed:', error.message);
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Database clear failed; the transaction was rolled back.' }));
+      return;
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, message: 'Database cleared successfully.' }));

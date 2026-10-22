@@ -59,7 +59,7 @@ const MainLayout: React.FC = () => {
     if (currentUser?.role !== 'super_admin' && adminOnlyTabs.includes(activeTab)) {
       setActiveTab('dashboard');
     }
-  }, [currentUser?.role, activeTab]);
+  }, [currentUser?.role, activeTab, setActiveTab]);
 
   const handleSelectLead = (leadId: string) => {
     setSelectedLeadId(leadId);

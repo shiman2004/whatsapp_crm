@@ -27,7 +27,7 @@ export function formatSriLankaDateTime(dateInput?: string | Date | number): stri
 
     // en-GB produces: "12 Oct 2026, 10:06 pm" -> convert pm/am to uppercase PM/AM
     return formatted.replace(/\bam\b/gi, 'AM').replace(/\bpm\b/gi, 'PM');
-  } catch (e) {
+  } catch {
     return new Date(dateInput).toLocaleString();
   }
 }

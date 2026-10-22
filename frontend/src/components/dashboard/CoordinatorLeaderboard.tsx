@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { Award, Calendar, CheckCircle2, Building2, PieChart, BarChart3, Clock, Layers } from 'lucide-react';
+import { Award, Calendar, CheckCircle2, Building2, PieChart, BarChart3, Clock } from 'lucide-react';
 import { CompanyCode, Lead, LeadStageConfig } from '../../types';
 import { getDayKey } from '../../utils/dateUtils';
 import { getLeadCompany } from '../../utils/companyUtils';

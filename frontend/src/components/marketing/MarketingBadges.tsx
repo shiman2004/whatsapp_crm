@@ -123,3 +123,4 @@ export const ConsentBadge: React.FC<ConsentBadgeProps> = ({ status, size = 'sm' 
       );
   }
 };
+

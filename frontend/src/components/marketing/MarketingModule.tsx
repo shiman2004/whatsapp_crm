@@ -183,30 +183,7 @@ export const MarketingModule: React.FC = () => {
       />
 
       {/* 3. Module Workspace with Sub-Navigation */}
-      <div className="flex-1 min-h-0 grid grid-cols-1 md:grid-cols-[210px_minmax(0,1fr)] gap-4 items-start">
-        {/* Left Sub-Navigation Menu */}
-        <nav className="rounded-xl border border-slate-800 bg-[#0D1526]/90 p-2 grid grid-cols-1 gap-1 shadow-sm shrink-0">
-          {pages.map(item => {
-            const Icon = item.icon;
-            const isActive = page === item.id;
-            return (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => navigateToPage(item.id)}
-                className={`flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-xs whitespace-nowrap transition-all ${
-                  isActive
-                    ? 'bg-teal-500/15 text-teal-300 font-bold ring-1 ring-teal-500/30 shadow-xs'
-                    : 'text-slate-400 hover:bg-slate-800 hover:text-slate-200'
-                }`}
-              >
-                <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-teal-400' : 'text-slate-400'}`} />
-                <span className="truncate">{item.label}</span>
-              </button>
-            );
-          })}
-        </nav>
-
+      <div className="flex-1 min-h-0 grid grid-cols-1 gap-4 items-start">
         {/* Main Content Pane */}
         <main className="min-w-0 rounded-xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden shadow-lg flex flex-col">
           {/* Main Sub-header */}

@@ -71,3 +71,4 @@ export const MarketingHeader: React.FC = () => {
     </header>
   );
 };
+

@@ -14,11 +14,11 @@ const CAPABILITIES = Object.freeze({
 });
 
 const ROLE_CAPABILITIES = Object.freeze({
-  leads_officer: new Set([CAPABILITIES.dashboard, CAPABILITIES.collect, CAPABILITIES.viewOwnUploads]),
+  leads_officer: new Set([CAPABILITIES.dashboard, CAPABILITIES.collect, CAPABILITIES.viewOwnUploads, CAPABILITIES.viewAssignedTasks, CAPABILITIES.updateAssignedTasks]),
   marketing_officer: new Set([CAPABILITIES.dashboard, CAPABILITIES.viewAssignedTasks, CAPABILITIES.updateAssignedTasks]),
   marketing_admin: new Set([CAPABILITIES.dashboard, CAPABILITIES.manageCampaignDrafts, CAPABILITIES.viewReports]),
   super_admin: new Set(Object.values(CAPABILITIES)),
-  coordinator: new Set()
+  coordinator: new Set([CAPABILITIES.viewAssignedTasks, CAPABILITIES.updateAssignedTasks])
 });
 
 export { CAPABILITIES };

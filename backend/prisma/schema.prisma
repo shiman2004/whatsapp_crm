@@ -60,6 +60,25 @@ enum MarketingCampaignApprovalStatus {
   archived
 }
 
+enum MarketingContactStatus {
+  new
+  assigned
+  follow_up_pending
+  contacted
+  interested
+  not_interested
+  no_response
+  converted
+  do_not_contact
+}
+
+enum MarketingConversionStatus {
+  pending
+  approved
+  linked_existing
+  rejected
+}
+
 enum LanguageCode {
   en
   si
@@ -668,6 +687,10 @@ model MarketingContact {
   firstAddedById    String                 @map("first_added_by_id") @db.VarChar(36)
   firstAddedAt      DateTime               @default(now()) @map("first_added_at")
   consentStatus     MarketingConsentStatus @default(unknown) @map("consent_status")
+  lifecycleStatus   MarketingContactStatus @default(new) @map("lifecycle_status")
+  convertedLeadId   String?                @map("converted_lead_id") @db.VarChar(50)
+  lastActivityAt    DateTime?              @map("last_activity_at")
+  qualificationNote String?                @map("qualification_note") @db.Text
   currentOwnerId    String?                @map("current_owner_id") @db.VarChar(36)
   assignedById      String?                @map("assigned_by_id") @db.VarChar(36)
   assignedAt        DateTime?              @map("assigned_at")
@@ -678,7 +701,45 @@ model MarketingContact {
   @@index([company, createdAt])
   @@index([company, consentStatus, currentOwnerId])
   @@index([currentOwnerId, assignedAt])
+  @@index([company, lifecycleStatus, convertedLeadId])
   @@map("marketing_contacts")
+}
+
+model MarketingContactActivity {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  contactId  String   @map("contact_id") @db.VarChar(36)
+  actorId    String   @map("actor_id") @db.VarChar(36)
+  type       String   @db.VarChar(60)
+  note       String?  @db.Text
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([contactId, createdAt])
+  @@map("marketing_contact_activities")
+}
+
+model MarketingLeadConversion {
+  id                    String                    @id @default(uuid()) @db.VarChar(36)
+  contactId             String                    @unique @map("contact_id") @db.VarChar(36)
+  leadId                String?                   @map("lead_id") @db.VarChar(50)
+  company               String                    @db.VarChar(50)
+  status                MarketingConversionStatus @default(pending)
+  requestedById         String                    @map("requested_by_id") @db.VarChar(36)
+  requestedAt           DateTime                  @default(now()) @map("requested_at")
+  reviewedById          String?                   @map("reviewed_by_id") @db.VarChar(36)
+  reviewedAt            DateTime?                 @map("reviewed_at")
+  rejectionReason       String?                   @map("rejection_reason") @db.Text
+  duplicateLeadId       String?                   @map("duplicate_lead_id") @db.VarChar(50)
+  officerNote           String?                   @map("officer_note") @db.Text
+  consentEvidence       String?                   @map("consent_evidence") @db.Text
+  sourceBatchId         String?                   @map("source_batch_id") @db.VarChar(36)
+  campaignId            String?                   @map("campaign_id") @db.VarChar(36)
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  updatedAt             DateTime                  @updatedAt @map("updated_at")
+
+  @@index([company, status, requestedAt])
+  @@index([leadId])
+  @@map("marketing_lead_conversions")
 }
 
 model MarketingImportBatch {

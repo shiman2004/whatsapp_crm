@@ -43,6 +43,7 @@ async function createImport(req, res, authUser) {
     status: 'processing', startedAt: new Date()
   }});
   let validNewCount = 0, duplicateCount = 0, invalidCount = 0, savedCount = 0;
+  try {
   for (const row of rows) {
     if (!row.normalizedPhone) { invalidCount++; await prisma.marketingImportRow.create({ data: { id: id(), batchId, rowNumber: row.rowNumber, rawPhone: row.rawPhone, status: 'invalid', errorCode: 'INVALID_PHONE', errorMessage: 'Not a valid international phone number.', processedAt: new Date() } }); continue; }
     const existing = await prisma.marketingContact.findUnique({ where: { normalizedPhone: row.normalizedPhone } });
@@ -65,6 +66,10 @@ async function createImport(req, res, authUser) {
   const status = invalidCount || duplicateCount ? (savedCount ? 'partially_completed' : 'failed') : 'completed';
   const summary = await prisma.marketingImportBatch.update({ where: { id: batchId }, data: { validNewCount, duplicateCount, invalidCount, savedCount, status, completedAt: new Date() } });
   return sendJson(res, 201, { success: true, data: summary });
+  } catch (err) {
+    await prisma.marketingImportBatch.update({ where: { id: batchId }, data: { status: 'failed', errorSummary: err?.message || 'Processing error', completedAt: new Date() } }).catch(() => {});
+    throw err;
+  }
 }
 
 async function listUploads(req, res, authUser) {

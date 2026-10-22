@@ -267,14 +267,14 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
             {mode === 'round_robin' ? (
               <div className="space-y-2">
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-300 font-semibold">Active Officers for Pool:</span>
+                  <span className="text-slate-300 font-semibold">Active Coordinators & Staff:</span>
                   <span className="text-teal-400 font-mono font-bold">
                     {selectedOfficerIds.size} of {officers.length}
                   </span>
                 </div>
                 <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                   {officers.length === 0 ? (
-                    <p className="text-xs text-slate-500">No active marketing officers found.</p>
+                    <p className="text-xs text-slate-500">No active patient coordinators or staff found.</p>
                   ) : (
                     officers.map(officer => {
                       const isChecked = selectedOfficerIds.has(officer.id);
@@ -299,7 +299,13 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                               <p className="text-[10px] text-slate-500">{officer.email}</p>
                             </div>
                           </div>
-                          <span className="text-[10px] uppercase font-bold text-teal-400/80">Officer</span>
+                          <span className="text-[10px] uppercase font-bold text-teal-400/80">
+                            {officer.role === 'coordinator'
+                              ? (officer.company === 'CRAS' ? 'Counsellor' : 'Coordinator')
+                              : officer.role === 'leads_officer'
+                              ? 'Leads Officer'
+                              : 'Staff'}
+                          </span>
                         </label>
                       );
                     })
@@ -308,7 +314,7 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
               </div>
             ) : (
               <label className="block space-y-1.5">
-                <span className="text-xs font-semibold text-slate-300">Assign to Single Officer:</span>
+                <span className="text-xs font-semibold text-slate-300">Assign to Coordinator / Staff:</span>
                 <select
                   value={singleOfficerId}
                   onChange={e => setSingleOfficerId(e.target.value)}

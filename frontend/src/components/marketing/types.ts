@@ -135,6 +135,7 @@ export interface MarketingOfficer {
   fullName: string;
   email: string;
   role?: string;
+  company?: string | null;
   active?: boolean;
 }
 

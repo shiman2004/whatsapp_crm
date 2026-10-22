@@ -18,6 +18,7 @@ import { SuperAdminSettingsView } from './components/admin/SuperAdminSettings/Su
 import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
 import { AppointmentSchedulerView } from './components/appointments/AppointmentSchedulerView';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { MarketingModule } from './components/marketing/MarketingModule';
 
 import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
 import { NotificationContainer } from './components/notifications/NotificationContainer';
@@ -96,6 +97,7 @@ const MainLayout: React.FC = () => {
           {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
           {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
           {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
+          {activeTab === 'marketing' && <MarketingModule />}
           {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
           {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}

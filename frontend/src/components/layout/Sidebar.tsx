@@ -31,7 +31,8 @@ export type NavTab =
   | 'reports' 
   | 'audit'
   | 'webhook-sandbox'
-  | 'architecture';
+  | 'architecture'
+  | 'marketing';
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -47,6 +48,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onCloseMobile 
 }) => {
   const [isCollapsed, setIsCollapsed] = React.useState(false);
+  const [marketingExpanded, setMarketingExpanded] = React.useState(activeTab === 'marketing');
+  const [currentMarketingPage, setCurrentMarketingPage] = React.useState('dashboard');
+
+  React.useEffect(() => {
+    if (activeTab === 'marketing') {
+      setMarketingExpanded(true);
+    }
+  }, [activeTab]);
+
+  React.useEffect(() => {
+    const handleMarketingPage = (event: Event) => {
+      const page = (event as CustomEvent<string>).detail;
+      if (page) setCurrentMarketingPage(page);
+    };
+    window.addEventListener('marketing-page-change', handleMarketingPage);
+    return () => window.removeEventListener('marketing-page-change', handleMarketingPage);
+  }, []);
   const { isSuperAdmin, isLeadsOfficer, canAssignLeads, currentUser, leads, followups, unreadBroadcastsCount, markAllBroadcastsAsRead } = useCrm();
 
   const isCrasUser = !isSuperAdmin && !isLeadsOfficer && currentUser?.company === 'CRAS';
@@ -95,6 +113,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
       id: 'appointment-rooms' as NavTab,
       label: 'Appointment Room',
       icon: CalendarDays,
+      adminOnly: false,
+    },
+    {
+      id: 'marketing' as NavTab,
+      label: 'Public Contact Marketing',
+      icon: Megaphone,
       adminOnly: false,
     },
     {
@@ -203,11 +227,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
                 return (
+                  <React.Fragment key={item.id}>
                   <button
-                    key={item.id}
                     type="button"
                     onClick={() => {
                       setActiveTab(item.id);
+                      if (item.id === 'marketing') setMarketingExpanded(value => !value);
                       if (item.id === 'broadcast') {
                         markAllBroadcastsAsRead();
                       }
@@ -234,6 +259,42 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       </span>
                     )}
                   </button>
+                  {item.id === 'marketing' && marketingExpanded && !isCollapsed && (
+                    <div className="ml-7 border-l border-slate-700/70 pl-2 space-y-0.5 py-1">
+                      {[
+                        { id: 'dashboard', label: 'Overview' },
+                        { id: 'add', label: 'Add numbers' },
+                        { id: 'uploads', label: 'My uploads' },
+                        { id: 'contacts', label: 'Contact database' },
+                        { id: 'assignment', label: 'Assignment' },
+                        { id: 'tasks', label: 'My tasks' },
+                        { id: 'content', label: 'Campaign content' },
+                        { id: 'reports', label: 'Reports' },
+                      ].map(sub => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => {
+                            setActiveTab('marketing');
+                            setCurrentMarketingPage(sub.id);
+                            window.dispatchEvent(new CustomEvent('marketing-page-change', { detail: sub.id }));
+                            onCloseMobile?.();
+                          }}
+                          className={`w-full rounded-lg px-2.5 py-1.5 text-left text-[11px] transition-colors flex items-center justify-between ${
+                            activeTab === 'marketing' && currentMarketingPage === sub.id
+                              ? 'bg-teal-500/20 text-teal-300 font-bold'
+                              : 'text-slate-400 hover:bg-slate-800/70 hover:text-teal-300'
+                          }`}
+                        >
+                          <span>{sub.label}</span>
+                          {activeTab === 'marketing' && currentMarketingPage === sub.id && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  </React.Fragment>
                 );
               })}
             </nav>

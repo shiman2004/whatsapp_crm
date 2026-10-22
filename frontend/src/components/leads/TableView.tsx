@@ -116,6 +116,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   const [patientDrawerLeadId, setPatientDrawerLeadId] = useState<string | null>(null);
   const patientClickTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [treatmentSort, setTreatmentSort] = useState<'asc' | 'desc' | null>(null);
+  const [contactSort, setContactSort] = useState<'asc' | 'desc' | null>(null);
 
   // Real-time ticking clock (ticks every 1s for accurate 24h countdown)
   const [now, setNow] = useState<number>(Date.now());
@@ -217,8 +218,12 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
   const isCras = company === 'CRAS';
   const coordinators = users.filter(u => u.role === 'coordinator');
-  const displayedLeads = treatmentSort
+  const displayedLeads = contactSort || treatmentSort
     ? [...leads].sort((a, b) => {
+        if (contactSort) {
+          const comparison = (a.customer?.displayName || '').localeCompare(b.customer?.displayName || '', undefined, { sensitivity: 'base' });
+          return contactSort === 'asc' ? comparison : -comparison;
+        }
         const getTreatmentName = (lead: Lead) => {
           const treatment = treatments.find(t => t.id === lead.treatmentId)?.name;
           const category = categories.find(c => c.id === lead.categoryId)?.name;
@@ -233,14 +238,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     .filter((stage) => stage.isActive)
     .sort((a, b) => a.orderIndex - b.orderIndex);
 
-  // Pagination state (defaults to 10 rows per page matching CRM standards)
+  // Show all loaded leads by default; the API still loads them in safe pages.
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [pageSize, setPageSize] = useState<number>(10);
+  const [pageSize, setPageSize] = useState<number>(500);
 
   // Reset to first page when filtering, sorting or leads change
   useEffect(() => {
     setCurrentPage(1);
-  }, [leads.length, treatmentSort, company]);
+    }, [leads.length, treatmentSort, contactSort, company]);
 
   const totalPages = Math.max(1, Math.ceil(displayedLeads.length / pageSize));
 
@@ -789,21 +794,21 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       >
         <style>{`
           /* One grid definition keeps header and every row aligned while scrolling. */
-          .pipeline-table { display: block; width: max-content; min-width: 2985px; }
+          .pipeline-table { display: block; width: max-content; min-width: 2835px; }
           .pipeline-table thead, .pipeline-table tbody { display: block; }
           .pipeline-table thead tr, .pipeline-table tbody tr {
             display: grid;
-            grid-template-columns: 60px 120px 280px 220px 150px 150px 220px 160px 180px 180px 180px 160px 150px 170px 220px 90px 65px 90px 90px;
-            min-width: 2985px;
+            grid-template-columns: 60px 120px 280px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
+            min-width: 2835px;
           }
           .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
           .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { grid-column: 1; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { grid-column: 2; }
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { grid-column: 3; }
-          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 16; }
-          .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 17; }
-          .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 18; }
+          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 15; }
+          .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 16; }
+          .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 17; }
           .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 4; }
           .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 6; }
           .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 5; }
@@ -813,10 +818,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(13), .pipeline-table td:nth-child(13) { grid-column: 10; }
           .pipeline-table th:nth-child(14), .pipeline-table td:nth-child(14) { grid-column: 11; }
           .pipeline-table th:nth-child(15), .pipeline-table td:nth-child(15) { grid-column: 12; }
-          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 19; }
-          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 14; }
-          .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 13; }
-          .pipeline-table th:nth-child(19), .pipeline-table td:nth-child(19) { grid-column: 15; }
+          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 18; }
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 13; }
+          .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 14; }
 
           /* Sticky cells are deliberately limited to No., Serial No., Contact, and Actions. */
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1),
@@ -853,14 +857,30 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
               <th className="py-3.5 px-3 text-center">No.</th>
               <th className="py-3.5 px-3">Serial No.</th>
-              <th className="py-3.5 px-4">Contact</th>
+              <th className="py-3.5 px-4">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setContactSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null);
+                    setTreatmentSort(null);
+                  }}
+                  className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  title="Sort contacts by name"
+                >
+                  Contact
+                  <span className="text-[9px]">{contactSort === 'asc' ? 'â†‘' : contactSort === 'desc' ? 'â†“' : 'â†•'}</span>
+                </button>
+              </th>
               <th className="py-3.5 px-2">Source</th>
               <th className="py-3.5 px-2 text-center">Lang</th>
               <th className="py-3.5 px-2 text-center">Note</th>
               <th className="py-3.5 px-4 min-w-[220px]">
                 <button
                   type="button"
-                  onClick={() => setTreatmentSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null)}
+                  onClick={() => {
+                    setTreatmentSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null);
+                    setContactSort(null);
+                  }}
                   className="inline-flex items-center gap-1 hover:text-white transition-colors"
                   title="Sort by treatment or service"
                 >
@@ -878,14 +898,13 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3.5 px-3">24H Window</th>
               <th className="py-3.5 px-4 text-center">Action</th>
               <th className="py-3.5 px-3">Task</th>
-              <th className="py-3.5 px-3">Action</th>
               <th className="py-3.5 px-3">Output</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={19} className="py-16 text-center text-slate-500">
+                <td colSpan={18} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -1081,7 +1100,17 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
                     {/* 11. INQ Accept Time */}
                     <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap">
-                      {lead.acceptedAt ? new Date(lead.acceptedAt).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' }) : <span className="text-slate-500">—</span>}
+                      {lead.acceptedAt ? (() => {
+                        const acceptedDate = new Date(lead.acceptedAt);
+                        return Number.isNaN(acceptedDate.getTime()) ? (
+                          <span className="text-slate-500">—</span>
+                        ) : (
+                          <span className="font-mono text-xs text-slate-300">
+                            {acceptedDate.toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{', '}
+                            <span className="text-slate-400">{acceptedDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                          </span>
+                        );
+                      })() : <span className="text-slate-500">—</span>}
                     </td>
 
                     {/* 11. Real 24h Window Remaining Time */}
@@ -1105,12 +1134,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       {renderBookAppointmentCell(lead, appt)}
                     </td>
 
-                    {/* 14. Appointment Status (Booked, Confirmed, Arrived, Paid, Rescheduled, Cancelled, No Answer) */}
-                    <td className="py-3.5 px-3 min-w-[140px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {renderAppointmentStatusCell(lead, appt)}
-                    </td>
-
-                    {/* 15. Output */}
+                    {/* 14. Output */}
                     <td className="py-3.5 px-3 min-w-[220px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <StageBadge stage={lead.stage} />
@@ -1175,6 +1199,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <option value={20}>20</option>
               <option value={50}>50</option>
               <option value={100}>100</option>
+              <option value={500}>All</option>
             </select>
           </div>
         </div>
@@ -1252,7 +1277,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         </div>
       </div>
 
-      {patientDrawerLead && <PatientContactDrawer lead={patientDrawerLead} onClose={() => setPatientDrawerLeadId(null)} />}
+      {patientDrawerLead && <PatientContactDrawer lead={patientDrawerLead} onClose={() => setPatientDrawerLeadId(null)} onOpenWhatsApp={() => { setPatientDrawerLeadId(null); onSelectLead(patientDrawerLead.id); }} />}
 
       {noteLead && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4" onMouseDown={closeNotes}>

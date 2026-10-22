@@ -136,7 +136,7 @@ export class WhatsAppVoiceRecorder {
         if (this.mediaRecorder.state !== 'inactive') {
           this.mediaRecorder.stop();
         }
-      } catch (e) {}
+      } catch {}
       this.mediaRecorder = null;
     }
 

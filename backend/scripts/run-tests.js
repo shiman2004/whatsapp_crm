@@ -42,6 +42,7 @@ const ALL_SUITES = [
   'test-meta-message-status.js',
   'test-appointments.js',
   'test-phonetic-composer.js',
+  'test-e2e-workflow-matrix.js',
 ];
 
 if (!fs.existsSync(path.join(backendDir, '.env.test'))) {

@@ -122,3 +122,4 @@ async function applyMigrations() {
 }
 
 applyMigrations();
+

@@ -96,7 +96,7 @@ async function listContacts(req, res, authUser) {
 
   const where = {
     company: companyOf(authUser),
-    ...(authUser.role === 'marketing_officer' ? { currentOwnerId: authUser.id } : {}),
+    ...(authUser.role === 'marketing_officer' || authUser.role === 'coordinator' ? { currentOwnerId: authUser.id } : {}),
     ...(consent && consent !== 'all' ? { consentStatus: consent } : {}),
     ...(status && status !== 'all' ? { lifecycleStatus: status } : {}),
     ...(assigned === 'true' ? { currentOwnerId: { not: null } } : assigned === 'false' ? { currentOwnerId: null } : {}),
@@ -119,7 +119,14 @@ async function listAssignable(req, res, authUser) {
   const prisma = getPrisma();
   const [contacts, officers] = await Promise.all([
     prisma.marketingContact.findMany({ where: { company: companyOf(authUser), currentOwnerId: null }, orderBy: { createdAt: 'asc' }, take: 500 }),
-    prisma.user.findMany({ where: { active: true, role: 'marketing_officer', company: companyOf(authUser) }, select: { id: true, fullName: true, email: true } })
+    prisma.user.findMany({
+      where: {
+        active: true,
+        OR: [{ company: companyOf(authUser) }, { company: null }],
+        role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] }
+      },
+      select: { id: true, fullName: true, email: true, role: true, company: true }
+    })
   ]);
   return sendJson(res, 200, { success: true, data: { contacts, officers } });
 }
@@ -135,7 +142,14 @@ async function assignContacts(req, res, authUser) {
   const result = await prisma.$transaction(async tx => {
     const contacts = await tx.marketingContact.findMany({ where: { id: { in: contactIds }, company: companyOf(authUser), currentOwnerId: null }, select: { id: true } });
     if (contacts.length !== contactIds.length) throw Object.assign(new Error('Some contacts are already assigned or unavailable.'), { status: 409 });
-    const officers = await tx.user.findMany({ where: { id: { in: officerIds }, role: 'marketing_officer', active: true, company: companyOf(authUser) }, select: { id: true } });
+    const officers = await tx.user.findMany({
+      where: {
+        id: { in: officerIds },
+        active: true,
+        role: { in: ['coordinator', 'marketing_officer', 'leads_officer', 'super_admin'] }
+      },
+      select: { id: true }
+    });
     if (officers.length !== officerIds.length) throw Object.assign(new Error('One or more officers are unavailable.'), { status: 400 });
     const assignments = [];
     for (let index = 0; index < contacts.length; index++) {

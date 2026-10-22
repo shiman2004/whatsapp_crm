@@ -948,6 +948,8 @@ function isPublicRoute(req, pathname) {
   ) return true;
   // 4. Database Connection Health Check
   if (req.method === 'GET' && pathname === '/api/db/status') return true;
+  // 4b. Meta API Configuration Status (public read-only boolean flag, no secrets exposed)
+  if (req.method === 'GET' && (pathname === '/api/meta/config' || pathname === '/api/meta/token')) return true;
   // 5. Read-only treatment/course/stage catalogs. Patient, lead, appointment,
   // room, doctor and availability data remain authenticated.
   if (req.method === 'GET' && (

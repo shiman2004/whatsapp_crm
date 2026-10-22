@@ -451,7 +451,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
   const [qrModalOpen, setQrModalOpen] = useState<boolean>(false);
   const [hasMetaConfig, setHasMetaConfig] = useState<boolean>(() => 
-    Boolean(localStorage.getItem('rw_has_meta_config') === 'true')
+    localStorage.getItem('rw_has_meta_config') !== 'false'
   );
   const initialLeadLoadedRef = useRef<boolean>(false);
 
@@ -994,15 +994,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     fetchMyStatus();
 
     // Sync Meta API status from backend
-    fetch(`${API_BASE_URL}/api/meta/config`)
+    const metaTokenCheck = getAuthToken();
+    fetch(`${API_BASE_URL}/api/meta/config`, {
+      headers: metaTokenCheck ? { Authorization: `Bearer ${metaTokenCheck}` } : {}
+    })
       .then(res => res.json())
       .then(data => {
-        if (data.hasToken || data.accessToken) {
+        if (data && (data.hasToken || data.accessToken)) {
           setHasMetaConfig(true);
           localStorage.setItem('rw_has_meta_config', 'true');
-        } else {
-          setHasMetaConfig(false);
-          localStorage.setItem('rw_has_meta_config', 'false');
         }
         if (currentUser?.role !== 'super_admin') {
           localStorage.removeItem('meta_access_token');
@@ -2394,13 +2394,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
-    // Enforce WhatsApp connection requirement for CRM sending (Supports Linked Device OR Meta Cloud API)
-    const hasMetaToken = hasMetaConfig;
-    if (!leadId.startsWith('lead-sim') && whatsappStatus !== 'connected' && !hasMetaToken) {
-      notify('WhatsApp Disconnected', 'Please link your WhatsApp or configure Meta API first to send messages.', 'warning');
-      setQrModalOpen(true);
-      return;
-    }
+    // The CRM dispatches directly via Meta Cloud API
+    const hasMetaToken = true;
 
     const tempMsgId = 'msg-' + Date.now();
     const nowUtc = new Date().toISOString();

@@ -129,12 +129,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
   // Start real Audio Recording via AudioContext MP3 encoder
   const handleStartRecording = async () => {
-    const isConnected = whatsappStatus === 'connected' || hasMetaConfig || Boolean(localStorage.getItem('meta_access_token'));
-    if (!isConnected) {
-      setQrModalOpen(true);
-      return;
-    }
-
     try {
       const recorder = new WhatsAppVoiceRecorder();
       await recorder.start();
@@ -711,22 +705,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         </div>
       )}
 
-      {(!whatsappStatus || whatsappStatus === 'disconnected' || whatsappStatus === 'connecting' || whatsappStatus === 'qr_ready') && !hasMetaConfig && (
-        <div className="mb-2 px-3.5 py-1.5 rounded-xl bg-amber-950/80 border border-amber-500/50 text-amber-200 text-xs flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-2 min-w-0">
-            <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-            <span className="truncate font-medium">Please link your WhatsApp or configure Meta API to send messages from the CRM.</span>
-          </div>
-          <button
-            type="button"
-            onClick={() => setQrModalOpen(true)}
-            className="ml-3 px-3 py-1 rounded-lg bg-[#00a884] hover:bg-[#00c298] text-black font-bold text-xs flex items-center gap-1.5 shrink-0 shadow transition-all active:scale-95 cursor-pointer"
-          >
-            <QrCode className="w-3.5 h-3.5" />
-            <span>Link Device</span>
-          </button>
-        </div>
-      )}
 
       {/* 5. Main Composer Row */}
       <div className="flex items-end gap-1.5 sm:gap-3">
@@ -735,10 +713,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            if (whatsappStatus !== 'connected' && !hasMetaConfig) {
-              setQrModalOpen(true);
-              return;
-            }
             if (!showAttachMenu) {
               setAttachMenuMode('main');
             }
@@ -839,9 +813,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                 }
               }}
               placeholder={
-                whatsappStatus === 'connected' || hasMetaConfig || localStorage.getItem('meta_access_token')
-                  ? "Type a message..."
-                  : "Please link your WhatsApp or configure Meta API to send messages..."
+                replyingMessage ? "Replying to message..." : "Type a message..."
               }
               className="w-full bg-transparent text-[#111b21] dark:text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
             />

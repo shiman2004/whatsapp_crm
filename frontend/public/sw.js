@@ -1,7 +1,7 @@
 // Service Worker for Royal Wellness WhatsApp CRM
 // Enables native OS Desktop Action Center notifications when browsing other websites or apps.
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 

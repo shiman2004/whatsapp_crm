@@ -48,8 +48,12 @@ async function createImport(req, res, authUser) {
     const existing = await prisma.marketingContact.findUnique({ where: { normalizedPhone: row.normalizedPhone } });
     if (existing) { duplicateCount++; await prisma.marketingImportRow.create({ data: { id: id(), batchId, rowNumber: row.rowNumber, rawPhone: row.rawPhone, normalizedPhone: row.normalizedPhone, status: 'duplicate', contactId: existing.id, processedAt: new Date() } }); continue; }
     try {
-      const serialResult = await prisma.$queryRawUnsafe('SELECT public.next_marketing_contact_serial() AS serial');
-      const contact = await prisma.marketingContact.create({ data: { id: id(), serialNumber: serialResult[0].serial, normalizedPhone: row.normalizedPhone, company: companyOf(authUser), originalSource: source, sourceGroupName, firstAddedById: authUser.id } });
+      let serial = `MKT-${Date.now().toString().slice(-8)}`;
+      try {
+        const serialResult = await prisma.$queryRawUnsafe('SELECT public.next_marketing_contact_serial() AS serial');
+        if (serialResult[0]?.serial) serial = serialResult[0].serial;
+      } catch (_) {}
+      const contact = await prisma.marketingContact.create({ data: { id: id(), serialNumber: serial, normalizedPhone: row.normalizedPhone, company: companyOf(authUser), originalSource: source, sourceGroupName, firstAddedById: authUser.id } });
       validNewCount++; savedCount++;
       await prisma.marketingImportRow.create({ data: { id: id(), batchId, rowNumber: row.rowNumber, rawPhone: row.rawPhone, normalizedPhone: row.normalizedPhone, status: 'saved', contactId: contact.id, processedAt: new Date() } });
       await prisma.marketingContactContribution.create({ data: { id: id(), contactId: contact.id, batchId, contributedById: authUser.id, company: companyOf(authUser), source, sourceGroupName, outcome: 'saved' } });
@@ -382,7 +386,7 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     if (req.method === 'PATCH' && taskMatch) return await updateTask(req, res, authUser, taskMatch[1]);
   } catch (error) {
     console.error('[Marketing] request failed:', error);
-    return failure(res, 500, 'MARKETING_REQUEST_FAILED', 'The marketing request could not be completed.');
+    return failure(res, 500, 'MARKETING_REQUEST_FAILED', error?.message || 'The marketing request could not be completed.');
   }
 
   return sendJson(res, 404, {

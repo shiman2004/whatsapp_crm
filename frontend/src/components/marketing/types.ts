@@ -168,3 +168,4 @@ export interface MarketingCampaign {
   endDate?: string | null;
   createdAt: string;
 }
+

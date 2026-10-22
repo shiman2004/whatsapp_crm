@@ -61,3 +61,4 @@ export const MarketingStats: React.FC<MarketingStatsProps> = ({ contactsCount, b
     </div>
   );
 };
+

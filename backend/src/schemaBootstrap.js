@@ -165,6 +165,9 @@ const STATEMENTS = [
      value TEXT NOT NULL,
      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );`,
+  `INSERT INTO public.system_settings (key, value, updated_at)
+   VALUES ('META_VERIFY_TOKEN', 'royal_wellness_token_2026', NOW())
+   ON CONFLICT (key) DO NOTHING;`,
 
   // --- treatments columns ------------------------------------------------------
   `ALTER TABLE "treatments" ADD COLUMN IF NOT EXISTS "code" VARCHAR(50);`,

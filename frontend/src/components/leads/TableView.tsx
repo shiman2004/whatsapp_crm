@@ -810,8 +810,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 16; }
           .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 17; }
           .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 4; }
-          .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 6; }
-          .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 5; }
+          .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 5; }
+          .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 6; }
           .pipeline-table th:nth-child(10), .pipeline-table td:nth-child(10) { grid-column: 7; }
           .pipeline-table th:nth-child(11), .pipeline-table td:nth-child(11) { grid-column: 8; }
           .pipeline-table th:nth-child(12), .pipeline-table td:nth-child(12) { grid-column: 9; }
@@ -888,8 +888,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
-              <th className="py-3.5 px-4">Current Status</th>
-              <th className="py-3.5 px-3">Assigned Status</th>
+              <th className="py-3.5 px-4">Assigned Status</th>
+              <th className="py-3.5 px-3">Current Status</th>
               <th className="py-3.5 px-4">Assign Coordinator</th>
               <th className="py-3.5 px-3">Assign By</th>
               <th className="py-3.5 px-3">INQ Received Time</th>
@@ -1010,12 +1010,12 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </div>
                     </td>
 
-                    {/* 5. Assignment Status */}
+                    {/* 5. Assigned Status */}
                     <td className="py-3.5 px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <select
                         value={lead.assignedTo ? 'reassign' : 'assign'}
                         onChange={(e) => { if (e.target.value === 'assign' && lead.assignedTo) assignLead(lead.id, ''); }}
-                        className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-slate-100 outline-none focus:border-teal-500 cursor-pointer"
+                        className={`marketing-status-select rounded-lg border px-2 py-1.5 text-[10px] font-semibold outline-none cursor-pointer [color-scheme:dark] ${lead.assignedTo ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 focus:border-amber-400' : 'bg-teal-500/15 border-teal-500/50 text-teal-300 focus:border-teal-400'}`}
                         aria-label={`Assignment status for ${lead.customer?.displayName || 'lead'}`}
                       >
                         <option value="assign">Assign</option>
@@ -1029,7 +1029,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         value={lead.stage === 'assigned' ? 'accepted' : lead.stage === 'lost' ? 'rejected' : 'new'}
                         onChange={(e) => updateLeadStage(lead.id, e.target.value === 'accepted' ? 'assigned' : e.target.value === 'rejected' ? 'lost' : 'new', 'Current status changed via Pipeline table')}
                         aria-label={`Change current status for ${lead.customer?.displayName || 'lead'}`}
-                        className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1.5 text-[10px] text-slate-100 outline-none focus:border-teal-500 cursor-pointer"
+                        className={`marketing-status-select rounded-lg border px-2 py-1.5 text-[10px] font-semibold outline-none cursor-pointer [color-scheme:dark] ${lead.stage === 'assigned' ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 focus:border-emerald-400' : lead.stage === 'lost' ? 'bg-rose-500/15 border-rose-500/50 text-rose-300 focus:border-rose-400' : 'bg-sky-500/15 border-sky-500/50 text-sky-300 focus:border-sky-400'}`}
                       >
                         <option value="new">New</option>
                         <option value="accepted">Accept</option>

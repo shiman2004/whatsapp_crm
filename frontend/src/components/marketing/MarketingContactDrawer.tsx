@@ -478,7 +478,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                           Channel: <span className="text-teal-300">{latestConsent.channel || 'DIRECT'}</span>
                         </span>
                         <span className="text-[10px] text-slate-500">
-                          {new Date(latestConsent.recordedAt).toLocaleString()}
+                          {new Date(latestConsent.recordedAt || latestConsent.occurredAt || latestConsent.createdAt || Date.now()).toLocaleString()}
                         </span>
                       </div>
                       <p className="text-slate-300 text-[11px] italic">
@@ -611,9 +611,9 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                             className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80 text-xs space-y-1"
                           >
                             <div className="flex items-center justify-between">
-                              <ConsentBadge status={evt.status} />
+                              <ConsentBadge status={evt.status || evt.decision || 'unknown'} />
                               <span className="text-[10px] text-slate-500">
-                                {new Date(evt.recordedAt).toLocaleString()}
+                                {new Date(evt.recordedAt || evt.occurredAt || evt.createdAt || Date.now()).toLocaleString()}
                               </span>
                             </div>
                             <p className="text-slate-300 text-[11px]">&quot;{evt.evidence}&quot;</p>

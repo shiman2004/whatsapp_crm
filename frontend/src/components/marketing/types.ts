@@ -107,16 +107,22 @@ export interface MarketingActivity {
 
 export interface MarketingConsentEvent {
   id: string;
-  contactId: string;
-  status: ConsentStatus;
+  contactId?: string;
+  marketingContactId?: string;
+  companyId?: string | null;
+  status?: ConsentStatus;
+  decision?: ConsentStatus;
   purpose?: string | null;
   channel?: string | null;
   evidence?: string | null;
+  evidenceDescription?: string | null;
   evidenceType?: string | null;
   evidenceReference?: string | null;
   recordedById: string;
   recordedByName?: string | null;
-  recordedAt: string;
+  recordedAt?: string;
+  occurredAt?: string;
+  createdAt?: string;
 }
 
 export interface ConversionEligibility {

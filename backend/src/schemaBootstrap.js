@@ -281,7 +281,64 @@ const STATEMENTS = [
      created_by_id VARCHAR(50),
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );`,
-  `CREATE INDEX IF NOT EXISTS idx_avail_blocks_branch ON public.availability_blocks(branch_id, start_time, end_time);`
+  `CREATE INDEX IF NOT EXISTS idx_avail_blocks_branch ON public.availability_blocks(branch_id, start_time, end_time);`,
+
+  // --- marketing module foundations & serials ----------------------------------
+  `CREATE TABLE IF NOT EXISTS public.marketing_contact_serials (
+     id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1), 
+     next_value BIGINT NOT NULL DEFAULT 1
+   );`,
+  `INSERT INTO public.marketing_contact_serials (id, next_value) 
+   VALUES (1, 1) 
+   ON CONFLICT (id) DO NOTHING;`,
+  `CREATE OR REPLACE FUNCTION public.next_marketing_contact_serial() RETURNS VARCHAR LANGUAGE plpgsql AS $mkt$
+   DECLARE allocated_value BIGINT;
+   BEGIN
+     UPDATE public.marketing_contact_serials SET next_value = next_value + 1 WHERE id = 1 RETURNING next_value - 1 INTO allocated_value;
+     RETURN 'MKT-' || LPAD(allocated_value::TEXT, 8, '0');
+   END;
+   $mkt$;`,
+
+  // --- marketing contacts additive columns -------------------------------------
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(50) NOT NULL DEFAULT 'new';`,
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS converted_lead_id VARCHAR(50);`,
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS qualification_note TEXT;`,
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS is_suppressed BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS suppression_reason VARCHAR(255);`,
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS suppressed_at TIMESTAMPTZ;`,
+
+  // --- marketing consent events additive columns & indexes --------------------
+  `ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS company_id VARCHAR(50);`,
+  `ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS evidence_type VARCHAR(50);`,
+  `ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS evidence_reference VARCHAR(255);`,
+  `ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`,
+  `ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(100);`,
+  `CREATE INDEX IF NOT EXISTS marketing_consent_events_contact_occurred_idx ON public.marketing_consent_events(contact_id, recorded_at);`,
+  `CREATE INDEX IF NOT EXISTS marketing_consent_events_company_occurred_idx ON public.marketing_consent_events(company_id, recorded_at);`,
+
+  // --- marketing suppression & activities --------------------------------------
+  `CREATE TABLE IF NOT EXISTS public.marketing_suppressions (
+     id VARCHAR(36) PRIMARY KEY,
+     contact_id VARCHAR(36) UNIQUE NOT NULL,
+     reason VARCHAR(255) NOT NULL,
+     recorded_by_id VARCHAR(36) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE TABLE IF NOT EXISTS public.marketing_contact_activities (
+     id VARCHAR(36) PRIMARY KEY, 
+     contact_id VARCHAR(36) NOT NULL REFERENCES public.marketing_contacts(id) ON DELETE CASCADE,
+     actor_id VARCHAR(36) NOT NULL REFERENCES public.users(id), 
+     type VARCHAR(60) NOT NULL, 
+     note TEXT, 
+     metadata JSONB,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS marketing_contact_activities_idx ON public.marketing_contact_activities(contact_id, created_at);`,
+
+  // --- leads marketing linkage -------------------------------------------------
+  `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS marketing_contact_id VARCHAR(36);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS leads_marketing_contact_id_key ON public.leads(marketing_contact_id);`
 ];
 
 const SEED_STATEMENTS = [

@@ -262,13 +262,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {item.id === 'marketing' && marketingExpanded && !isCollapsed && (
                     <div className="ml-7 border-l border-slate-700/70 pl-2 space-y-0.5 py-1">
                       {[
-                        { id: 'dashboard', label: 'Overview' },
-                        { id: 'add', label: 'Add numbers' },
-                        { id: 'uploads', label: 'My uploads' },
-                        { id: 'contacts', label: 'Contact database' },
+                        { id: 'dashboard', label: 'Dashboard' },
+                        { id: 'add', label: 'Add Contacts' },
+                        { id: 'contacts', label: 'Contacts' },
                         { id: 'assignment', label: 'Assignment' },
-                        { id: 'tasks', label: 'My tasks' },
-                        { id: 'content', label: 'Campaign content' },
+                        { id: 'tasks', label: 'My Tasks' },
                         { id: 'reports', label: 'Reports' },
                       ].map(sub => (
                         <button

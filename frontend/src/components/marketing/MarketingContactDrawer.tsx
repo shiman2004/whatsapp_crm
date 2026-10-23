@@ -159,14 +159,14 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
-        <div className="w-full max-w-xl bg-[#0D1526] border-l border-slate-800 h-full flex flex-col shadow-2xl overflow-hidden">
+        <div className="w-full max-w-xl bg-[#09111f] border-l border-slate-800/80 h-full flex flex-col shadow-2xl overflow-hidden">
           {/* Top Drawer Header */}
-          <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between shrink-0 bg-slate-950/70">
+          <div className="px-6 py-5 border-b border-slate-800/80 flex items-start justify-between gap-4 shrink-0 bg-[#0b1625]">
             <div>
-              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-teal-400">
+              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-teal-300">
                 {contact?.serialNumber || 'Marketing Contact'}
               </span>
-              <h2 className="text-base font-bold text-white mt-0.5 flex items-center gap-2 font-mono">
+              <h2 className="text-xl font-bold text-white mt-1 flex items-center gap-2 font-mono tracking-tight">
                 {contact?.normalizedPhone || 'Loading...'}
                 {contact?.normalizedPhone && (
                   <button
@@ -184,14 +184,14 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
+              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
             >
               <X className="w-5 h-5" />
             </button>
           </div>
 
           {/* Drawer Scrollable Body */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          <div className="flex-1 overflow-y-auto p-6 space-y-5">
             {loading ? (
               <div className="p-16 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
                 <Loader2 className="w-5 h-5 animate-spin text-teal-400" />
@@ -204,7 +204,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
             ) : contact ? (
               <>
                 {/* Status Badges & Quick Action Panel */}
-                <div className="p-4 rounded-xl border border-slate-800 bg-slate-900/60 space-y-3">
+                <div className="p-4 rounded-2xl border border-slate-800/90 bg-[#0d182a] shadow-inner shadow-black/10 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs text-slate-400 font-semibold">Lifecycle Status:</span>
                     <LifecycleBadge status={contact.lifecycleStatus} size="md" />
@@ -217,12 +217,12 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
                   {/* Quick Status Dropdown */}
                   <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-3">
-                    <span className="text-xs text-slate-400">Update Status:</span>
+                    <span className="text-xs text-slate-400 font-semibold">Update pipeline status</span>
                     <select
                       disabled={isUpdatingStatus}
                       value={contact.lifecycleStatus}
                       onChange={e => handleStatusChange(e.target.value)}
-                      className="rounded bg-slate-900 border border-slate-700 text-xs text-white py-1 px-2.5 outline-none focus:border-teal-400"
+                      className="rounded-lg bg-slate-950/70 border border-slate-700 text-xs text-white py-2 px-3 outline-none focus:border-teal-400"
                     >
                       <option value="new">New</option>
                       <option value="assigned">Assigned</option>
@@ -237,9 +237,9 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                 </div>
 
                 {/* Lead Conversion CTA Banner */}
-                <div className="rounded-xl border border-teal-500/30 bg-teal-500/5 p-4 space-y-2">
+                <div className="rounded-2xl border border-teal-400/35 bg-gradient-to-br from-teal-400/[0.11] via-[#0d1f2b] to-[#0d182a] p-5 space-y-3 shadow-[0_0_30px_rgba(20,184,166,0.06)]">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-teal-300 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.14em] flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" /> CRM Lead Conversion
                     </span>
                     {contact.convertedLeadId && (
@@ -279,9 +279,9 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                 </div>
 
                 {/* Consent Management & Evidence Logger */}
-                <div className="rounded-xl border border-slate-800 bg-slate-900/40 p-4 space-y-3">
+                <div className="rounded-2xl border border-slate-800/90 bg-[#0d182a] p-5 space-y-4">
                   <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <h4 className="text-[11px] font-bold text-white uppercase tracking-[0.12em] flex items-center gap-1.5">
                       <ShieldCheck className="w-4 h-4 text-emerald-400" />
                       Consent Verification & Evidence
                     </h4>
@@ -350,7 +350,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                         consentEvents.map(evt => (
                           <div
                             key={evt.id}
-                            className="p-2.5 rounded bg-slate-900/60 border border-slate-800/80 text-xs space-y-1"
+                            className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs space-y-1.5"
                           >
                             <div className="flex items-center justify-between">
                               <ConsentBadge status={evt.status} />
@@ -368,7 +368,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
                 {/* Notes & Activity Timeline */}
                 <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-white uppercase tracking-wider">
+                  <h4 className="text-[11px] font-bold text-white uppercase tracking-[0.12em]">
                     Interaction Notes & Timeline
                   </h4>
 
@@ -378,7 +378,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                       value={noteText}
                       onChange={e => setNoteText(e.target.value)}
                       placeholder="Add follow-up notes, phone call summaries, or customer queries..."
-                      className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
+                      className="w-full rounded-xl border border-slate-700/90 bg-[#0d182a] p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400/30"
                     />
                     <div className="flex justify-end">
                       <button

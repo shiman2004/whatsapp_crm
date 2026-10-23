@@ -1,5 +1,19 @@
 import React from 'react';
-import { Plus, ArrowRight, ShieldCheck, Database, FileSpreadsheet, ArrowUpRight, CheckCircle2 } from 'lucide-react';
+import {
+  Plus,
+  ArrowRight,
+  ShieldCheck,
+  Database,
+  FileSpreadsheet,
+  ArrowUpRight,
+  CheckCircle2,
+  Users,
+  Clock,
+  Sparkles,
+  TrendingUp,
+  Loader2,
+  Calendar
+} from 'lucide-react';
 import { MarketingContact, MarketingImportBatch } from './types';
 import { LifecycleBadge } from './MarketingBadges';
 
@@ -8,6 +22,7 @@ interface MarketingDashboardProps {
   uploads: MarketingImportBatch[];
   loading: boolean;
   onNavigate: (page: string) => void;
+  onRequestApi?: (path: string, init?: RequestInit) => Promise<any>;
 }
 
 export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
@@ -15,109 +30,177 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
   uploads,
   loading,
   onNavigate,
+  onRequestApi,
 }) => {
-  const convertedCount = contacts.filter(c => c.lifecycleStatus === 'converted' || !!c.convertedLeadId).length;
-  const verifiedCount = contacts.filter(c => c.consentStatus === 'verified').length;
-  const assignedCount = contacts.filter(c => !!c.currentOwnerId).length;
+  const [dashboardData, setDashboardData] = React.useState<any | null>(null);
+  const [fetching, setFetching] = React.useState(false);
+
+  React.useEffect(() => {
+    let active = true;
+    if (onRequestApi) {
+      setFetching(true);
+      onRequestApi('/api/marketing/dashboard')
+        .then(res => {
+          if (active && res?.data) setDashboardData(res.data);
+        })
+        .catch(err => console.error('Failed to load marketing dashboard stats', err))
+        .finally(() => {
+          if (active) setFetching(false);
+        });
+    }
+    return () => {
+      active = false;
+    };
+  }, [onRequestApi]);
+
+  // Fallback to local calculations if API has not responded yet
+  const metrics = dashboardData?.metrics || {
+    totalContacts: contacts.length,
+    unassignedContacts: contacts.filter(c => !c.currentOwnerId).length,
+    assignedContacts: contacts.filter(c => !!c.currentOwnerId).length,
+    followUpsDue: contacts.filter(c => c.lifecycleStatus === 'follow_up_pending').length,
+    interestedContacts: contacts.filter(c => c.lifecycleStatus === 'interested').length,
+    convertedLeads: contacts.filter(c => c.lifecycleStatus === 'converted' || !!c.convertedLeadId).length,
+    rates: {
+      contactRate: contacts.length > 0 ? Math.round((contacts.filter(c => c.lifecycleStatus !== 'new').length / Math.max(1, contacts.filter(c => !!c.currentOwnerId).length)) * 100) : 0,
+      qualificationRate: 0,
+      leadConversionRate: contacts.length > 0 ? Math.round((contacts.filter(c => c.lifecycleStatus === 'converted').length / contacts.length) * 100) : 0,
+    }
+  };
+
   const recentBatch = uploads[0];
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
-      {/* 2-Column Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Contact Database Stats */}
-        <div className="rounded-xl border border-slate-800 bg-[#0D1526]/80 p-5 flex flex-col justify-between">
+      {/* 6 Primary KPI Cards (Section 13) */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+        {/* 1. Total Contacts */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Total Contact Pool</span>
-              <Database className="w-4 h-4 text-teal-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Contacts</span>
+              <Database className="w-3.5 h-3.5 text-teal-400" />
             </div>
-            <p className="text-3xl font-black text-white mt-2">{contacts.length.toLocaleString()}</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Public contacts captured under marketing boundaries.
-            </p>
+            <p className="text-2xl font-black text-white mt-1.5">{metrics.totalContacts.toLocaleString()}</p>
           </div>
-          <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Assigned: <strong className="text-slate-200">{assignedCount}</strong></span>
-            <button
-              type="button"
-              onClick={() => onNavigate('contacts')}
-              className="text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center gap-1"
-            >
-              Browse contacts <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
+          <span className="text-[10px] text-teal-300 font-semibold mt-2">Captured pool</span>
         </div>
 
-        {/* Lead Conversion Health */}
-        <div className="rounded-xl border border-slate-800 bg-[#0D1526]/80 p-5 flex flex-col justify-between">
+        {/* 2. Unassigned Contacts */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Qualified CRM Leads</span>
-              <ArrowUpRight className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unassigned</span>
+              <Users className="w-3.5 h-3.5 text-indigo-400" />
             </div>
-            <p className="text-3xl font-black text-emerald-400 mt-2">{convertedCount.toLocaleString()}</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Contacts converted and routed into the CRM sales pipeline.
-            </p>
+            <p className="text-2xl font-black text-indigo-300 mt-1.5">{metrics.unassignedContacts.toLocaleString()}</p>
           </div>
-          <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs">
-            <span className="text-slate-400">Verified opt-in: <strong className="text-emerald-300">{verifiedCount}</strong></span>
-            <button
-              type="button"
-              onClick={() => onNavigate('reports')}
-              className="text-emerald-400 hover:text-emerald-300 font-semibold inline-flex items-center gap-1"
-            >
-              View funnel <ArrowRight className="w-3 h-3" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('assignment')}
+            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold inline-flex items-center gap-1 mt-2"
+          >
+            Assign now <ArrowRight className="w-2.5 h-2.5" />
+          </button>
         </div>
 
-        {/* Latest Import Batch */}
-        <div className="rounded-xl border border-slate-800 bg-[#0D1526]/80 p-5 flex flex-col justify-between">
+        {/* 3. Assigned Contacts */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
           <div>
             <div className="flex items-center justify-between">
-              <span className="text-xs font-semibold text-slate-400">Latest Import Batch</span>
-              <FileSpreadsheet className="w-4 h-4 text-cyan-400" />
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned</span>
+              <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
             </div>
-            <p className="text-base font-bold text-white mt-2 truncate">
-              {recentBatch ? recentBatch.batchNumber : 'No batches yet'}
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              {recentBatch ? (
-                <>
-                  <span className="text-cyan-300 font-bold">{recentBatch.savedCount}</span> saved,{' '}
-                  <span className="text-amber-300 font-bold">{recentBatch.duplicateCount}</span> dupes skipped
-                </>
-              ) : (
-                'Start by capturing public contacts.'
-              )}
-            </p>
+            <p className="text-2xl font-black text-blue-300 mt-1.5">{metrics.assignedContacts.toLocaleString()}</p>
           </div>
-          <div className="pt-4 mt-4 border-t border-slate-800/80 flex items-center justify-between text-xs">
-            <span className="text-slate-500">
-              {recentBatch?.source ? `Source: ${recentBatch.source}` : 'Ready for ingestion'}
-            </span>
-            <button
-              type="button"
-              onClick={() => onNavigate('uploads')}
-              className="text-cyan-400 hover:text-cyan-300 font-semibold inline-flex items-center gap-1"
-            >
-              All uploads <ArrowRight className="w-3 h-3" />
-            </button>
+          <span className="text-[10px] text-blue-400 font-semibold mt-2">Active in queues</span>
+        </div>
+
+        {/* 4. Follow-ups Due */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Follow-ups Due</span>
+              <Clock className="w-3.5 h-3.5 text-amber-400" />
+            </div>
+            <p className="text-2xl font-black text-amber-300 mt-1.5">{metrics.followUpsDue.toLocaleString()}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => onNavigate('tasks')}
+            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold inline-flex items-center gap-1 mt-2"
+          >
+            Review tasks <ArrowRight className="w-2.5 h-2.5" />
+          </button>
+        </div>
+
+        {/* 5. Interested Contacts */}
+        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interested</span>
+              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
+            </div>
+            <p className="text-2xl font-black text-emerald-300 mt-1.5">{metrics.interestedContacts.toLocaleString()}</p>
+          </div>
+          <span className="text-[10px] text-emerald-400 font-semibold mt-2">Ready to convert</span>
+        </div>
+
+        {/* 6. Converted Leads */}
+        <div className="rounded-2xl border border-teal-500/30 bg-teal-500/10 p-4 flex flex-col justify-between shadow-xs">
+          <div>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300">Converted Leads</span>
+              <ArrowUpRight className="w-3.5 h-3.5 text-teal-400" />
+            </div>
+            <p className="text-2xl font-black text-teal-300 mt-1.5">{metrics.convertedLeads.toLocaleString()}</p>
+          </div>
+          <span className="text-[10px] text-teal-400 font-semibold mt-2">Promoted to CRM</span>
         </div>
       </div>
 
-      {/* Quick Action Ingestion Banner */}
-      <div className="rounded-xl border border-teal-500/30 bg-gradient-to-r from-teal-950/40 via-slate-900 to-slate-900/80 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-teal-950/20">
+      {/* Calculated Rates Row */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="p-3.5 rounded-xl border border-slate-800 bg-[#0D1526]/60 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase text-slate-400">Contact Rate</span>
+            <p className="text-base font-extrabold text-slate-200 mt-0.5">
+              {metrics.rates?.contactRate || 0}%
+            </p>
+          </div>
+          <span className="text-[11px] text-slate-500">Contacted / Assigned</span>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-slate-800 bg-[#0D1526]/60 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase text-slate-400">Qualification Rate</span>
+            <p className="text-base font-extrabold text-emerald-400 mt-0.5">
+              {metrics.rates?.qualificationRate || 0}%
+            </p>
+          </div>
+          <span className="text-[11px] text-slate-500">Interested / Contacted</span>
+        </div>
+
+        <div className="p-3.5 rounded-xl border border-teal-500/30 bg-teal-500/5 flex items-center justify-between">
+          <div>
+            <span className="text-[10px] font-bold uppercase text-teal-300">Lead Conversion Rate</span>
+            <p className="text-base font-extrabold text-teal-300 mt-0.5">
+              {metrics.rates?.leadConversionRate || 0}%
+            </p>
+          </div>
+          <span className="text-[11px] text-teal-400/80">Converted / Total</span>
+        </div>
+      </div>
+
+      {/* Quick Ingestion CTA Banner */}
+      <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-950/40 via-slate-900 to-slate-900/80 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-teal-950/20">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-teal-400" />
-            <p className="font-bold text-white text-sm">Ready to capture a new source?</p>
+            <p className="font-bold text-white text-sm">Ready to ingest a new contact source?</p>
           </div>
           <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Ingest numbers via single entry, bulk raw paste, or CSV file. All numbers are normalized to E.164 and deduplicated against marketing contacts and active CRM leads.
+            Add single contacts, paste unformatted numbers, or upload spreadsheets. Numbers are normalized to E.164 (+94...) and deduplicated against the marketing store and active CRM patient files.
           </p>
         </div>
         <button
@@ -125,23 +208,23 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
           onClick={() => onNavigate('add')}
           className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-teal-300 transition-colors shadow-sm shrink-0"
         >
-          <Plus className="w-4 h-4" /> Add numbers
+          <Plus className="w-4 h-4" /> Add Contacts
         </button>
       </div>
 
-      {/* Recent Contacts Preview Table */}
-      <div className="rounded-xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden">
-        <div className="px-4 py-3 border-b border-slate-800 flex items-center justify-between">
+      {/* Recent Ingestion Preview */}
+      <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden shadow-xs">
+        <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Database className="w-4 h-4 text-slate-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Recent Contacts</h3>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Recent Marketing Ingests</h3>
           </div>
           <button
             type="button"
             onClick={() => onNavigate('contacts')}
             className="text-xs text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center gap-1"
           >
-            View all ({contacts.length}) <ArrowRight className="w-3 h-3" />
+            Browse all contacts ({contacts.length}) <ArrowRight className="w-3 h-3" />
           </button>
         </div>
 
@@ -149,7 +232,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
           <div className="p-8 text-center text-xs text-slate-400">Loading contacts...</div>
         ) : contacts.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500">
-            No contacts recorded yet. Click &quot;Add numbers&quot; to begin.
+            No contacts recorded yet. Click &quot;Add Contacts&quot; to begin.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -164,7 +247,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
-                {contacts.slice(0, 5).map(c => (
+                {contacts.slice(0, 6).map(c => (
                   <tr key={c.id} className="hover:bg-slate-900/50 transition-colors">
                     <td className="px-4 py-2.5 font-mono text-slate-300 font-semibold">{c.serialNumber}</td>
                     <td className="px-4 py-2.5 font-mono text-teal-300">{c.normalizedPhone}</td>
@@ -178,18 +261,6 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
           </div>
         )}
       </div>
-
-      {/* Compliance Guidelines Footer Card */}
-      <div className="rounded-xl border border-slate-800/80 bg-slate-900/40 p-4 flex items-start gap-3 text-xs text-slate-400">
-        <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-        <div className="space-y-1">
-          <p className="font-semibold text-slate-200">Marketing Quarantine Boundary</p>
-          <p className="leading-relaxed">
-            Public contacts remain strictly isolated inside the marketing data store. Only contacts with logged consent and verified interest can be converted into the active CRM leads pipeline.
-          </p>
-        </div>
-      </div>
     </div>
   );
 };
-

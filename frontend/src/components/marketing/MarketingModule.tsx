@@ -32,14 +32,12 @@ import { MarketingReports } from './MarketingReports';
 import { MarketingContactDrawer } from './MarketingContactDrawer';
 
 const pages: Array<{ id: MarketingPage; label: string; icon: React.ElementType; description: string }> = [
-  { id: 'dashboard', label: 'Overview', icon: LayoutDashboard, description: 'Module health and import activity' },
-  { id: 'add', label: 'Add numbers', icon: Plus, description: 'Capture public contacts' },
-  { id: 'uploads', label: 'My uploads', icon: Upload, description: 'Review submitted batches' },
-  { id: 'contacts', label: 'Contact database', icon: Contact, description: 'Search marketing contacts' },
-  { id: 'assignment', label: 'Assignment', icon: Users, description: 'Allocate contacts to officers' },
-  { id: 'tasks', label: 'My tasks', icon: ClipboardList, description: 'Work assigned contacts' },
-  { id: 'content', label: 'Campaign content', icon: FileText, description: 'Prepare compliant content' },
-  { id: 'reports', label: 'Reports', icon: BarChart3, description: 'Measure campaign outcomes' },
+  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Module health, KPIs and conversion rates' },
+  { id: 'add', label: 'Add Contacts', icon: Plus, description: 'Single entry, bulk paste, CSV/Excel upload & batch history' },
+  { id: 'contacts', label: 'Contacts', icon: Contact, description: 'Centralized directory, consent governance & contact profiles' },
+  { id: 'assignment', label: 'Assignment', icon: Users, description: 'Round-robin or direct coordinator allocation' },
+  { id: 'tasks', label: 'My Tasks', icon: ClipboardList, description: 'Due today, overdue follow-ups, outreach & qualification' },
+  { id: 'reports', label: 'Reports', icon: BarChart3, description: 'Performance metrics, source analytics & CSV export' },
 ];
 
 function authToken() {
@@ -232,6 +230,7 @@ export const MarketingModule: React.FC = () => {
                 uploads={uploads}
                 loading={loading}
                 onNavigate={navigateToPage}
+                onRequestApi={marketingRequest}
               />
             )}
 

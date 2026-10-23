@@ -25,6 +25,8 @@ export interface MarketingContact {
   id: string;
   serialNumber: string;
   normalizedPhone: string;
+  name?: string | null;
+  tags?: string[] | null;
   company: string;
   originalSource: string;
   sourceGroupName?: string | null;
@@ -36,8 +38,15 @@ export interface MarketingContact {
   lastActivityAt?: string | null;
   qualificationNote?: string | null;
   currentOwnerId?: string | null;
+  assignedOwner?: {
+    id: string;
+    fullName: string;
+    roleTitle?: string;
+  } | null;
   assignedById?: string | null;
   assignedAt?: string | null;
+  isSuppressed?: boolean;
+  suppressionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -98,13 +107,27 @@ export interface MarketingActivity {
 
 export interface MarketingConsentEvent {
   id: string;
-  contactId: string;
-  status: ConsentStatus;
+  contactId?: string;
+  marketingContactId?: string;
+  companyId?: string | null;
+  status?: ConsentStatus;
+  decision?: ConsentStatus;
   purpose?: string | null;
   channel?: string | null;
   evidence?: string | null;
+  evidenceDescription?: string | null;
+  evidenceType?: string | null;
+  evidenceReference?: string | null;
   recordedById: string;
-  recordedAt: string;
+  recordedByName?: string | null;
+  recordedAt?: string;
+  occurredAt?: string;
+  createdAt?: string;
+}
+
+export interface ConversionEligibility {
+  eligible: boolean;
+  reasons: string[];
 }
 
 export interface MarketingAssignmentHistory {

@@ -1,6 +1,6 @@
 import React from 'react';
 import { MarketingContact, MarketingLeadConversion } from './types';
-import { Sparkles, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, Loader2, X, Link as LinkIcon } from 'lucide-react';
+import { Sparkles, ArrowRight, CheckCircle2, AlertTriangle, ShieldCheck, Loader2, X, Link as LinkIcon, MessageSquare } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
 interface MarketingConversionModalProps {
@@ -91,6 +91,14 @@ export const MarketingConversionModal: React.FC<MarketingConversionModalProps> =
     }
   };
 
+  const handleOpenChat = () => {
+    if (successLead?.id) {
+      setSelectedLeadId(successLead.id);
+      setActiveNavTab('chat');
+      onClose();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs animate-in fade-in duration-150">
       <div className="w-full max-w-lg rounded-xl border border-slate-800 bg-[#0D1526] shadow-2xl overflow-hidden flex flex-col">
@@ -135,11 +143,19 @@ export const MarketingConversionModal: React.FC<MarketingConversionModalProps> =
                 </p>
               </div>
 
-              <div className="pt-2 flex justify-center gap-2">
+              <div className="pt-2 flex flex-wrap justify-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleOpenChat}
+                  className="px-4 py-2 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs inline-flex items-center gap-1.5 shadow-sm transition-colors"
+                >
+                  <MessageSquare className="w-3.5 h-3.5" />
+                  <span>Open CRM Live Chat</span>
+                </button>
                 <button
                   type="button"
                   onClick={handleNavigateToLead}
-                  className="px-4 py-2 rounded-lg bg-teal-400 text-slate-950 font-bold text-xs hover:bg-teal-300 inline-flex items-center gap-1.5 shadow-sm"
+                  className="px-4 py-2 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-semibold text-xs hover:bg-teal-500/30 inline-flex items-center gap-1.5 transition-colors"
                 >
                   <span>Open in Pipeline</span>
                   <ArrowRight className="w-3.5 h-3.5" />

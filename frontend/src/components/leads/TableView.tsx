@@ -888,11 +888,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
-              <th className="py-3.5 px-4">Assigned Status</th>
+              <th className="py-3.5 px-4">Assign By</th>
               <th className="py-3.5 px-3">Current Status</th>
               <th className="py-3.5 px-4">Assign Coordinator</th>
-              <th className="py-3.5 px-3">Assign By</th>
-              <th className="py-3.5 px-3">INQ Received Time</th>
+              <th className="py-3.5 px-3">Assign Who</th>
+              <th className="py-3.5 px-3">Date for Entry</th>
               <th className="py-3.5 px-3">INQ Assigned</th>
               <th className="py-3.5 px-3">INQ Accept Time</th>
               <th className="py-3.5 px-3">24H Window</th>

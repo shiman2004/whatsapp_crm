@@ -303,6 +303,7 @@ model Lead {
   categoryId            String?            @db.VarChar(50)
   treatmentId           String?            @db.VarChar(50)
   serialNumber          String?            @db.VarChar(50)
+  marketingContactId    String?            @unique @map("marketing_contact_id") @db.VarChar(36)
   assignedTo            String?            @db.VarChar(36)
   assignedById          String?            @db.VarChar(36)
   assignedByName        String?            @db.VarChar(255)
@@ -323,6 +324,7 @@ model Lead {
   treatment             Treatment?         @relation(fields: [treatmentId], references: [id], onDelete: SetNull)
   assignedCoordinator   User?             @relation("AssignedCoordinator", fields: [assignedTo], references: [id], onDelete: SetNull)
   whatsappSession       WhatsAppSession?  @relation("SessionLeads", fields: [whatsappSessionId], references: [id], onDelete: SetNull)
+  marketingContact      MarketingContact?  @relation(fields: [marketingContactId], references: [id], onDelete: SetNull)
   messages              Message[]
   followups             Followup[]
   notes                 LeadNote[]
@@ -334,6 +336,7 @@ model Lead {
   @@index([treatmentId])
   @@index([assignedTo])
   @@index([whatsappSessionId])
+  @@index([marketingContactId])
   @@index([stage])
   @@map("leads")
 }
@@ -699,6 +702,8 @@ model MarketingContact {
   createdAt         DateTime               @default(now()) @map("created_at")
   updatedAt         DateTime               @updatedAt @map("updated_at")
 
+  convertedLead     Lead?                  @relation
+
   @@index([company, createdAt])
   @@index([company, consentStatus, currentOwnerId])
   @@index([currentOwnerId, assignedAt])
@@ -808,16 +813,23 @@ model MarketingContactContribution {
 }
 
 model MarketingConsentEvent {
-  id            String                 @id @default(uuid()) @db.VarChar(36)
-  contactId     String                 @map("contact_id") @db.VarChar(36)
-  status        MarketingConsentStatus
-  purpose       String?                @db.VarChar(255)
-  channel       String?                @db.VarChar(100)
-  evidence      String?                @db.Text
-  recordedById  String                 @map("recorded_by_id") @db.VarChar(36)
-  recordedAt    DateTime               @default(now()) @map("recorded_at")
+  id                 String                 @id @default(uuid()) @db.VarChar(36)
+  marketingContactId String                 @map("contact_id") @db.VarChar(36)
+  companyId          String?                @map("company_id") @db.VarChar(50)
+  decision           MarketingConsentStatus @map("status")
+  channel            String?                @map("channel") @db.VarChar(100)
+  evidenceType       String?                @map("evidence_type") @db.VarChar(50)
+  evidenceReference  String?                @map("evidence_reference") @db.VarChar(255)
+  evidenceDescription String?               @map("evidence") @db.Text
+  recordedById       String                 @map("recorded_by_id") @db.VarChar(36)
+  occurredAt         DateTime               @default(now()) @map("recorded_at")
+  createdAt          DateTime               @default(now()) @map("created_at")
+  purpose            String?                @db.VarChar(255)
+  idempotencyKey     String?                @map("idempotency_key") @db.VarChar(100)
 
-  @@index([contactId, recordedAt])
+  @@index([marketingContactId, occurredAt])
+  @@index([companyId, occurredAt])
+  @@index([decision, occurredAt])
   @@map("marketing_consent_events")
 }
 

@@ -110,7 +110,7 @@ export const ConsentBadge: React.FC<ConsentBadgeProps> = ({ status, size = 'sm' 
       return (
         <span className={`inline-flex items-center gap-1 font-semibold rounded-full bg-rose-950/60 text-rose-300 border border-rose-800/70 ${sizeClasses}`}>
           <ShieldAlert className="w-2.5 h-2.5 text-rose-400" />
-          Suppressed
+          Do Not Contact
         </span>
       );
     case 'unknown':

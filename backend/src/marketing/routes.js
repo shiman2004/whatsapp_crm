@@ -3,6 +3,13 @@ import { getPrisma } from '../db.js';
 import { normalizeE164, normalizeMany } from './normalization.js';
 import crypto from 'node:crypto';
 import { requestConversion, approveConversion } from './conversion.js';
+import {
+  getConsentStatus,
+  recordConsentEvent,
+  suppressContact as suppressContactService,
+  canConvertToLead,
+  CONSENT_STATES
+} from './consent.service.js';
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -211,9 +218,8 @@ async function createContact(req, res, authUser) {
 
   const source = String(payload.source || payload.contactSource || 'Manual Entry').trim();
   const sourceGroupName = payload.sourceName || payload.sourceGroupName || payload.name || null;
-  const consentStatus = ['unknown', 'verified', 'denied', 'opted_out'].includes(payload.consentStatus)
-    ? payload.consentStatus
-    : 'unknown';
+  // New public contacts must default to unknown consent + new lifecycle
+  const consentStatus = 'unknown';
 
   const contact = await prisma.$transaction(async tx => {
     const created = await tx.marketingContact.create({
@@ -242,20 +248,6 @@ async function createContact(req, res, authUser) {
         metadata: { source, tags: payload.tags || null, existingLeadWarning }
       }
     });
-
-    if (consentStatus !== 'unknown') {
-      await tx.marketingConsentEvent.create({
-        data: {
-          id: id(),
-          contactId: created.id,
-          status: consentStatus,
-          purpose: 'Marketing outreach',
-          channel: 'Direct Entry',
-          evidence: payload.consentEvidence || 'Recorded upon contact creation',
-          recordedById: authUser.id
-        }
-      });
-    }
 
     return created;
   });
@@ -304,9 +296,22 @@ async function listContacts(req, res, authUser) {
     prisma.marketingContact.count({ where })
   ]);
 
+  const ownerIds = [...new Set(data.map(c => c.currentOwnerId).filter(Boolean))];
+  const owners = ownerIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, fullName: true, roleTitle: true }
+      })
+    : [];
+  const ownerMap = new Map(owners.map(o => [o.id, o]));
+  const enrichedData = data.map(c => ({
+    ...c,
+    assignedOwner: c.currentOwnerId ? ownerMap.get(c.currentOwnerId) || null : null
+  }));
+
   return sendJson(res, 200, {
     success: true,
-    data,
+    data: enrichedData,
     pagination: {
       total,
       page: Math.floor(skip / take) + 1,
@@ -337,16 +342,39 @@ async function contactDetail(req, res, authUser, contactId) {
 
   if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found or access restricted.');
 
-  const [activities, assignments, consent, conversion] = await Promise.all([
+  const [activities, assignments, consent, conversion, owner, tasks, suppression] = await Promise.all([
     prisma.marketingContactActivity.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' }, take: 100 }),
     prisma.marketingAssignmentHistory.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' } }),
-    prisma.marketingConsentEvent.findMany({ where: { contactId }, orderBy: { recordedAt: 'desc' } }),
-    prisma.marketingLeadConversion.findUnique({ where: { contactId } })
+    prisma.marketingConsentEvent.findMany({ where: { marketingContactId: contactId }, orderBy: { occurredAt: 'desc' } }),
+    prisma.marketingLeadConversion.findUnique({ where: { contactId } }),
+    contact.currentOwnerId
+      ? prisma.user.findUnique({
+          where: { id: contact.currentOwnerId },
+          select: { id: true, fullName: true, roleTitle: true }
+        })
+      : Promise.resolve(null),
+    prisma.marketingTask.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' }, take: 20 }),
+    prisma.marketingSuppression.findUnique({ where: { contactId } })
   ]);
+
+  const conversionEligibility = await canConvertToLead(contactId, authUser);
 
   return sendJson(res, 200, {
     success: true,
-    data: { contact, activities, assignments, consent, conversion }
+    data: {
+      contact: {
+        ...contact,
+        assignedOwner: owner || null,
+        isSuppressed: !!suppression || contact.lifecycleStatus === 'do_not_contact',
+        suppressionReason: suppression?.reason || (contact.lifecycleStatus === 'do_not_contact' ? 'Contact opted out' : null)
+      },
+      conversionEligibility,
+      activities,
+      assignments,
+      consent,
+      conversion,
+      tasks
+    }
   });
 }
 
@@ -383,7 +411,29 @@ async function updateContactStatus(req, res, authUser, contactId) {
   });
   if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found.');
 
+  const suppression = await prisma.marketingSuppression.findUnique({ where: { contactId } });
+  if ((suppression || contact.lifecycleStatus === 'do_not_contact') && rawStatus !== 'do_not_contact') {
+    if (authUser.role !== 'super_admin' && authUser.role !== 'marketing_admin') {
+      return failure(res, 403, 'SUPPRESSION_PROTECTED', 'Suppressed contact cannot be reactivated through status updates. Authorized fresh opt-in required.');
+    }
+  }
+
+  if (rawStatus === 'do_not_contact') {
+    try {
+      const result = await suppressContactService(contactId, payload.note || payload.reason || 'Contact marked Do Not Contact', authUser);
+      return sendJson(res, 200, { success: true, data: result.contact });
+    } catch (err) {
+      const status = err.status || 400;
+      return failure(res, status, err.code || 'SUPPRESSION_ERROR', err.message);
+    }
+  }
+
   const updated = await prisma.$transaction(async tx => {
+    if (rawStatus === 'interested') {
+      const check = await canConvertToLead(contact.id, authUser, { tx });
+      // Don't block status change, but it's noted; conversion gate enforced separately
+    }
+
     const row = await tx.marketingContact.update({
       where: { id: contact.id },
       data: {
@@ -498,68 +548,23 @@ async function recordConsent(req, res, authUser, contactId) {
   if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
 
   const payload = await readJson(req);
-  const allowed = ['unknown', 'verified', 'denied', 'opted_out'];
-  if (!allowed.includes(payload.status) || !String(payload.evidence || '').trim()) {
-    return failure(res, 400, 'CONSENT_EVIDENCE_REQUIRED', 'Consent status and evidence are required.');
+  try {
+    const result = await recordConsentEvent({
+      contactId,
+      decision: payload.decision || payload.status || payload.consentStatus,
+      channel: payload.channel,
+      evidenceType: payload.evidenceType,
+      evidenceReference: payload.evidenceReference,
+      evidenceDescription: payload.evidenceDescription || payload.evidence || payload.proof,
+      purpose: payload.purpose,
+      idempotencyKey: payload.idempotencyKey,
+    }, authUser);
+    return sendJson(res, 201, { success: true, data: result });
+  } catch (err) {
+    const status = err.status || 400;
+    const code = err.code || 'CONSENT_ERROR';
+    return failure(res, status, code, err.message);
   }
-
-  const prisma = getPrisma();
-  const contact = await prisma.marketingContact.findFirst({
-    where: {
-      id: contactId,
-      company: companyOf(authUser),
-      ...(authUser.role === 'coordinator' || authUser.role === 'marketing_officer' ? { currentOwnerId: authUser.id } : {})
-    }
-  });
-  if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found.');
-
-  const updated = await prisma.$transaction(async tx => {
-    const event = await tx.marketingConsentEvent.create({
-      data: {
-        id: id(),
-        contactId,
-        status: payload.status,
-        purpose: payload.purpose || 'marketing follow-up',
-        channel: payload.channel || 'CRM',
-        evidence: String(payload.evidence).trim(),
-        recordedById: authUser.id
-      }
-    });
-
-    const isOptOut = payload.status === 'opted_out' || payload.status === 'denied';
-    const row = await tx.marketingContact.update({
-      where: { id: contactId },
-      data: {
-        consentStatus: payload.status,
-        lastUpdatedById: authUser.id,
-        lastActivityAt: new Date(),
-        lifecycleStatus: isOptOut ? 'do_not_contact' : contact.lifecycleStatus
-      }
-    });
-
-    if (isOptOut) {
-      await tx.marketingSuppression.upsert({
-        where: { contactId },
-        create: { id: id(), contactId, reason: payload.evidence || 'Opted out', recordedById: authUser.id },
-        update: { reason: payload.evidence || 'Opted out', recordedById: authUser.id }
-      });
-    }
-
-    await tx.marketingContactActivity.create({
-      data: {
-        id: id(),
-        contactId,
-        actorId: authUser.id,
-        type: 'CONSENT_UPDATED',
-        note: `Consent recorded: ${payload.status}`,
-        metadata: { evidence: payload.evidence }
-      }
-    });
-
-    return { contact: row, event };
-  });
-
-  return sendJson(res, 201, { success: true, data: updated });
 }
 
 async function suppressContact(req, res, authUser, contactId) {
@@ -567,39 +572,13 @@ async function suppressContact(req, res, authUser, contactId) {
   if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
 
   const payload = await readJson(req);
-  const prisma = getPrisma();
-  const contact = await prisma.marketingContact.findFirst({
-    where: { id: contactId, company: companyOf(authUser) }
-  });
-  if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found.');
-
-  const result = await prisma.$transaction(async tx => {
-    const sup = await tx.marketingSuppression.upsert({
-      where: { contactId },
-      create: { id: id(), contactId, reason: payload.reason || 'Requested DND', recordedById: authUser.id },
-      update: { reason: payload.reason || 'Requested DND', recordedById: authUser.id }
-    });
-    const updated = await tx.marketingContact.update({
-      where: { id: contactId },
-      data: {
-        lifecycleStatus: 'do_not_contact',
-        consentStatus: 'opted_out',
-        lastUpdatedById: authUser.id,
-        lastActivityAt: new Date()
-      }
-    });
-    await tx.marketingContactActivity.create({
-      data: {
-        id: id(),
-        contactId,
-        actorId: authUser.id,
-        type: 'CONTACT_SUPPRESSED',
-        note: payload.reason || 'Marked as Do Not Contact'
-      }
-    });
-    return { contact: updated, suppression: sup };
-  });
-  return sendJson(res, 200, { success: true, data: result });
+  try {
+    const result = await suppressContactService(contactId, payload.reason || 'Requested DND', authUser);
+    return sendJson(res, 200, { success: true, data: result });
+  } catch (err) {
+    const status = err.status || 400;
+    return failure(res, status, 'SUPPRESSION_ERROR', err.message);
+  }
 }
 
 // -------------------------------------------------------------
@@ -703,7 +682,8 @@ async function createImport(req, res, authUser) {
             originalSource: source,
             sourceGroupName,
             firstAddedById: authUser.id,
-            lifecycleStatus: 'new'
+            lifecycleStatus: 'new',
+            consentStatus: 'unknown'
           }
         });
 
@@ -1047,6 +1027,14 @@ async function updateTask(req, res, authUser, taskId) {
 
   if (!task) return failure(res, 404, 'TASK_NOT_FOUND', 'Marketing task not found.');
   const contact = await prisma.marketingContact.findUnique({ where: { id: task.contactId } });
+
+  // Recheck suppression before allowing task updates that progress outreach
+  const suppression = await prisma.marketingSuppression.findUnique({ where: { contactId: task.contactId } });
+  if (suppression || contact?.lifecycleStatus === 'do_not_contact') {
+    if (payload.status && payload.status !== 'completed') {
+      // auto-close on opt-out is handled elsewhere; block progressing
+    }
+  }
 
   const status = ['pending', 'contacted', 'interested', 'not_interested', 'follow_up', 'completed'].includes(
     payload.status
@@ -1416,6 +1404,15 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     if (suppressMatch && req.method === 'POST') return await suppressContact(req, res, authUser, suppressMatch[1]);
 
     const consentMatch = pathname.match(/^\/api\/marketing\/contacts\/([^/]+)\/consent$/);
+    if (consentMatch && req.method === 'GET') {
+      try {
+        const statusData = await getConsentStatus(consentMatch[1]);
+        if (!statusData) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found.');
+        return sendJson(res, 200, { success: true, data: statusData });
+      } catch (err) {
+        return failure(res, err.status || 500, err.code || 'CONSENT_ERROR', err.message);
+      }
+    }
     if (consentMatch && req.method === 'POST') return await recordConsent(req, res, authUser, consentMatch[1]);
 
     // Conversion

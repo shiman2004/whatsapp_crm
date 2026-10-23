@@ -109,6 +109,25 @@ async function applyMigrations() {
       CREATE INDEX IF NOT EXISTS marketing_lead_conversions_lead_idx ON public.marketing_lead_conversions(lead_id);
     `);
 
+    // 6. Consent governance (additive)
+    console.log('Applying consent governance changes...');
+    try {
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS company_id VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS evidence_type VARCHAR(50);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS evidence_reference VARCHAR(255);`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(100);`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS marketing_consent_events_contact_occurred_idx ON public.marketing_consent_events(contact_id, recorded_at);`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS marketing_consent_events_company_occurred_idx ON public.marketing_consent_events(company_id, recorded_at);`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS marketing_consent_events_decision_occurred_idx ON public.marketing_consent_events(status, recorded_at);`);
+      await prisma.$executeRawUnsafe(`UPDATE public.marketing_consent_events e SET company_id = c.company FROM public.marketing_contacts c WHERE e.contact_id = c.id AND e.company_id IS NULL;`);
+      await prisma.$executeRawUnsafe(`ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS marketing_contact_id VARCHAR(36);`);
+      await prisma.$executeRawUnsafe(`CREATE UNIQUE INDEX IF NOT EXISTS leads_marketing_contact_id_key ON public.leads(marketing_contact_id);`);
+      await prisma.$executeRawUnsafe(`CREATE INDEX IF NOT EXISTS leads_marketing_contact_id_idx ON public.leads(marketing_contact_id);`);
+    } catch (e) {
+      console.log('Consent governance partial apply:', e?.message);
+    }
+
     console.log('Testing serial generator now...');
     const serial = await prisma.$queryRawUnsafe('SELECT public.next_marketing_contact_serial() AS serial');
     console.log('SUCCESS! Serial generated:', serial[0]?.serial);

@@ -1,5 +1,11 @@
 import React from 'react';
-import { MarketingContact, MarketingActivity, MarketingConsentEvent, ConsentStatus } from './types';
+import {
+  MarketingContact,
+  MarketingActivity,
+  MarketingConsentEvent,
+  ConsentStatus,
+  ConversionEligibility,
+} from './types';
 import { LifecycleBadge, ConsentBadge } from './MarketingBadges';
 import { MarketingConversionModal } from './MarketingConversionModal';
 import {
@@ -9,6 +15,7 @@ import {
   Copy,
   Check,
   ShieldCheck,
+  ShieldAlert,
   Clock,
   Sparkles,
   Send,
@@ -19,6 +26,10 @@ import {
   Tag,
   Building2,
   Layers,
+  FileCheck2,
+  AlertTriangle,
+  History,
+  Lock,
 } from 'lucide-react';
 
 interface MarketingContactDrawerProps {
@@ -37,17 +48,22 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
   const [contact, setContact] = React.useState<MarketingContact | null>(null);
   const [activities, setActivities] = React.useState<MarketingActivity[]>([]);
   const [consentEvents, setConsentEvents] = React.useState<MarketingConsentEvent[]>([]);
+  const [conversionEligibility, setConversionEligibility] = React.useState<ConversionEligibility | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
 
-  // Interactive forms
+  // Interactive notes
   const [noteText, setNoteText] = React.useState('');
   const [submittingNote, setSubmittingNote] = React.useState(false);
 
-  // Consent form
+  // Consent form state
   const [isLoggingConsent, setIsLoggingConsent] = React.useState(false);
-  const [newConsentStatus, setNewConsentStatus] = React.useState<ConsentStatus>('verified');
-  const [consentEvidence, setConsentEvidence] = React.useState('');
+  const [newConsentDecision, setNewConsentDecision] = React.useState<ConsentStatus>('verified');
+  const [consentChannel, setConsentChannel] = React.useState('WHATSAPP_INBOUND');
+  const [evidenceType, setEvidenceType] = React.useState('MESSAGE_CONFIRMATION');
+  const [evidenceReference, setEvidenceReference] = React.useState('');
+  const [evidenceDescription, setEvidenceDescription] = React.useState('');
+  const [consentPurpose, setConsentPurpose] = React.useState('Marketing outreach & consultation follow-up');
   const [submittingConsent, setSubmittingConsent] = React.useState(false);
 
   // Status changer
@@ -79,6 +95,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
         setContact(response.data.contact);
         setActivities(response.data.activities || []);
         setConsentEvents(response.data.consent || []);
+        setConversionEligibility(response.data.conversionEligibility || null);
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : 'Failed to load contact');
@@ -102,6 +119,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
   const handleStatusChange = async (newStatus: string) => {
     if (!contact) return;
     setIsUpdatingStatus(true);
+    setError('');
     try {
       await onRequestApi(`/api/marketing/contacts/${contact.id}`, {
         method: 'PATCH',
@@ -138,21 +156,30 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
   const handleRecordConsent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!contact || !consentEvidence.trim()) return;
+    if (!contact) return;
+
+    if (newConsentDecision === 'verified' && !evidenceDescription.trim() && !evidenceReference.trim()) {
+      setError('Verifiable evidence description or reference ID is required to verify consent.');
+      return;
+    }
 
     setSubmittingConsent(true);
+    setError('');
     try {
       await onRequestApi(`/api/marketing/contacts/${contact.id}/consent`, {
         method: 'POST',
         body: JSON.stringify({
-          status: newConsentStatus,
-          evidence: consentEvidence.trim(),
-          purpose: 'Marketing outreach & consultation follow-up',
-          channel: 'WhatsApp CRM',
+          decision: newConsentDecision,
+          channel: consentChannel,
+          evidenceType,
+          evidenceReference: evidenceReference.trim() || null,
+          evidenceDescription: evidenceDescription.trim(),
+          purpose: consentPurpose.trim(),
         }),
       });
       setIsLoggingConsent(false);
-      setConsentEvidence('');
+      setEvidenceReference('');
+      setEvidenceDescription('');
       void loadDetail();
       onContactUpdated();
     } catch (caught) {
@@ -162,15 +189,38 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
     }
   };
 
-  const isEligibleForConversion =
-    contact &&
-    contact.consentStatus === 'verified' &&
-    contact.lifecycleStatus === 'interested' &&
-    !contact.convertedLeadId;
+  const handleQuickOptOut = async () => {
+    if (!contact) return;
+    const reason = window.prompt('Enter reason for opt-out / suppression (e.g. Customer requested DND):', 'Customer requested opt-out');
+    if (!reason) return;
+
+    setSubmittingConsent(true);
+    setError('');
+    try {
+      await onRequestApi(`/api/marketing/contacts/${contact.id}/suppress`, {
+        method: 'POST',
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      void loadDetail();
+      onContactUpdated();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to record opt-out');
+    } finally {
+      setSubmittingConsent(false);
+    }
+  };
+
+  const isConsentVerified = contact?.consentStatus === 'verified' && !contact.isSuppressed;
+  const isEligibleForConversion = conversionEligibility?.eligible ?? (
+    isConsentVerified &&
+    contact?.lifecycleStatus === 'interested' &&
+    !contact?.convertedLeadId
+  );
 
   const rawPhoneDigits = contact?.normalizedPhone?.replace(/[^0-9]/g, '') || '';
   const coordinatorName = contact?.assignedOwner?.fullName;
   const coordinatorRole = contact?.assignedOwner?.roleTitle;
+  const latestConsent = consentEvents[0] || null;
 
   return (
     <>
@@ -202,6 +252,12 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                   <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1">
                     <Building2 className="w-3 h-3 text-slate-400" />
                     {contact.company}
+                  </span>
+                )}
+                {contact?.isSuppressed && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-rose-300 bg-rose-950/80 px-2 py-0.5 rounded border border-rose-800 flex items-center gap-1">
+                    <ShieldAlert className="w-3 h-3 text-rose-400" />
+                    Suppressed (DND)
                   </span>
                 )}
               </div>
@@ -243,23 +299,45 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
             {/* Direct Outreach Action Buttons: Call & WhatsApp */}
             {contact?.normalizedPhone && (
-              <div className="mt-4 grid grid-cols-2 gap-2.5">
-                <a
-                  href={`tel:${contact.normalizedPhone}`}
-                  className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-colors shadow-xs"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                  Call Contact
-                </a>
-                <a
-                  href={`https://wa.me/${rawPhoneDigits}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold text-xs hover:bg-teal-500/30 transition-colors"
-                >
-                  <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
-                  WhatsApp
-                </a>
+              <div className="mt-4 space-y-2">
+                <div className="grid grid-cols-2 gap-2.5">
+                  <a
+                    href={`tel:${contact.normalizedPhone}`}
+                    className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-colors shadow-xs"
+                  >
+                    <Phone className="w-3.5 h-3.5" />
+                    Call Contact
+                  </a>
+
+                  {isConsentVerified ? (
+                    <a
+                      href={`https://wa.me/${rawPhoneDigits}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold text-xs hover:bg-teal-500/30 transition-colors"
+                    >
+                      <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+                      WhatsApp (Opted-In)
+                    </a>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled
+                      className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
+                      title="WhatsApp outreach locked: Requires verified opt-in consent"
+                    >
+                      <Lock className="w-3.5 h-3.5 text-amber-500/70" />
+                      WhatsApp Locked
+                    </button>
+                  )}
+                </div>
+
+                {!isConsentVerified && (
+                  <p className="text-[10px] text-amber-400/90 flex items-center gap-1.5 px-1">
+                    <ShieldAlert className="w-3 h-3 text-amber-400 shrink-0" />
+                    WhatsApp marketing locked until explicit opt-in consent is verified.
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -345,10 +423,10 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                   <div className="pt-2 border-t border-slate-800/80 flex items-center justify-between gap-3">
                     <span className="text-xs text-slate-400 font-semibold">Update pipeline status</span>
                     <select
-                      disabled={isUpdatingStatus}
+                      disabled={isUpdatingStatus || contact.isSuppressed}
                       value={contact.lifecycleStatus}
                       onChange={e => handleStatusChange(e.target.value)}
-                      className="rounded-lg bg-slate-950/70 border border-slate-700 text-xs text-white py-2 px-3 outline-none focus:border-teal-400"
+                      className="rounded-lg bg-slate-950/70 border border-slate-700 text-xs text-white py-2 px-3 outline-none focus:border-teal-400 disabled:opacity-50"
                     >
                       <option value="new">New</option>
                       <option value="assigned">Assigned</option>
@@ -362,7 +440,195 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                   </div>
                 </div>
 
-                {/* Lead Conversion CTA Banner */}
+                {/* Section 5: Consent Verification & Evidence Logger */}
+                <div className="rounded-2xl border border-slate-800/90 bg-[#0d182a] p-5 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-[11px] font-bold text-white uppercase tracking-[0.12em] flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                      Consent Verification & Evidence
+                    </h4>
+                    {!isLoggingConsent && (
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setNewConsentDecision('verified');
+                            setIsLoggingConsent(true);
+                          }}
+                          className="text-xs text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center gap-1"
+                        >
+                          <Plus className="w-3 h-3" /> Log Consent
+                        </button>
+                        <button
+                          type="button"
+                          onClick={handleQuickOptOut}
+                          className="text-xs text-rose-400 hover:text-rose-300 font-semibold inline-flex items-center gap-1"
+                        >
+                          <ShieldAlert className="w-3 h-3" /> Opt-Out
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Summary of active consent */}
+                  {latestConsent ? (
+                    <div className="p-3 rounded-xl bg-slate-950/60 border border-slate-800 text-xs space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] font-bold text-slate-300">
+                          Channel: <span className="text-teal-300">{latestConsent.channel || 'DIRECT'}</span>
+                        </span>
+                        <span className="text-[10px] text-slate-500">
+                          {new Date(latestConsent.recordedAt).toLocaleString()}
+                        </span>
+                      </div>
+                      <p className="text-slate-300 text-[11px] italic">
+                        &quot;{latestConsent.evidence || 'No description'}&quot;
+                      </p>
+                      {latestConsent.purpose && (
+                        <p className="text-[10px] text-slate-400">
+                          Scope: <span className="text-slate-300">{latestConsent.purpose}</span> ({contact.company})
+                        </p>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">No consent events recorded yet. Default state is Pending Consent.</p>
+                  )}
+
+                  {/* Structured Consent Form */}
+                  {isLoggingConsent && (
+                    <form onSubmit={handleRecordConsent} className="space-y-3 p-4 rounded-xl bg-slate-950 border border-slate-800">
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <label className="block">
+                          <span className="text-[11px] font-semibold text-slate-300">Consent Decision</span>
+                          <select
+                            value={newConsentDecision}
+                            onChange={e => setNewConsentDecision(e.target.value as ConsentStatus)}
+                            className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
+                          >
+                            <option value="verified">Verified Opt-in (Explicitly agreed)</option>
+                            <option value="opted_out">Opted-out / Denied (DND)</option>
+                            <option value="unknown">Pending / Unknown</option>
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="text-[11px] font-semibold text-slate-300">Collection Channel</span>
+                          <select
+                            value={consentChannel}
+                            onChange={e => setConsentChannel(e.target.value)}
+                            className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
+                          >
+                            <option value="WHATSAPP_INBOUND">WhatsApp Inbound Message</option>
+                            <option value="WEB_FORM">Web Contact / Inquiry Form</option>
+                            <option value="SIGNED_FORM">Physical Signed Consent Slip</option>
+                            <option value="PHONE_CALL">Recorded Phone Confirmation</option>
+                            <option value="IN_PERSON">In-Person Consultation / Expo</option>
+                            <option value="OTHER">Other Documented Channel</option>
+                          </select>
+                        </label>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2.5">
+                        <label className="block">
+                          <span className="text-[11px] font-semibold text-slate-300">Evidence Type</span>
+                          <select
+                            value={evidenceType}
+                            onChange={e => setEvidenceType(e.target.value)}
+                            className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
+                          >
+                            <option value="MESSAGE_CONFIRMATION">Message Confirmation</option>
+                            <option value="SIGNED_DOCUMENT">Signed Document</option>
+                            <option value="AUDIO_RECORDING">Audio Recording</option>
+                            <option value="INQUIRY_FORM">Inquiry Form</option>
+                            <option value="OTHER">Other Proof</option>
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="text-[11px] font-semibold text-slate-300">Evidence Reference / ID</span>
+                          <input
+                            value={evidenceReference}
+                            onChange={e => setEvidenceReference(e.target.value)}
+                            placeholder="e.g. Inbound Msg wamid.HBgL... / Form #409"
+                            className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
+                          />
+                        </label>
+                      </div>
+
+                      <label className="block">
+                        <span className="text-[11px] font-semibold text-slate-300">
+                          Evidence Description / Exact Quote <span className="text-rose-400">*</span>
+                        </span>
+                        <textarea
+                          required={newConsentDecision === 'verified'}
+                          rows={2}
+                          value={evidenceDescription}
+                          onChange={e => setEvidenceDescription(e.target.value)}
+                          placeholder="e.g. Customer replied 'YES' to WhatsApp opt-in prompt / Signed consultation slip at Colombo Expo"
+                          className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
+                        />
+                      </label>
+
+                      <label className="block">
+                        <span className="text-[11px] font-semibold text-slate-300">Authorized Purpose & Company</span>
+                        <input
+                          value={consentPurpose}
+                          onChange={e => setConsentPurpose(e.target.value)}
+                          className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
+                        />
+                      </label>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={() => setIsLoggingConsent(false)}
+                          className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          type="submit"
+                          disabled={submittingConsent}
+                          className="px-3.5 py-1.5 rounded bg-teal-400 text-slate-950 text-xs font-bold hover:bg-teal-300 flex items-center gap-1.5"
+                        >
+                          {submittingConsent && <Loader2 className="w-3 h-3 animate-spin" />}
+                          Record Consent Event
+                        </button>
+                      </div>
+                    </form>
+                  )}
+
+                  {/* Immutable Event History List */}
+                  {consentEvents.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-slate-800">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <History className="w-3 h-3 text-slate-500" /> Consent History Log ({consentEvents.length})
+                      </span>
+                      <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                        {consentEvents.map(evt => (
+                          <div
+                            key={evt.id}
+                            className="p-2.5 rounded-lg bg-slate-950/40 border border-slate-800/80 text-xs space-y-1"
+                          >
+                            <div className="flex items-center justify-between">
+                              <ConsentBadge status={evt.status} />
+                              <span className="text-[10px] text-slate-500">
+                                {new Date(evt.recordedAt).toLocaleString()}
+                              </span>
+                            </div>
+                            <p className="text-slate-300 text-[11px]">&quot;{evt.evidence}&quot;</p>
+                            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-0.5">
+                              <span>Channel: {evt.channel || 'DIRECT'}</span>
+                              <span>By: {evt.recordedById.slice(0, 12)}</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Section 7: CRM Lead Conversion Protection Gate */}
                 <div className="rounded-2xl border border-teal-400/35 bg-gradient-to-br from-teal-400/[0.11] via-[#0d1f2b] to-[#0d182a] p-5 space-y-3 shadow-[0_0_30px_rgba(20,184,166,0.06)]">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-teal-300 uppercase tracking-[0.14em] flex items-center gap-1.5">
@@ -382,7 +648,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                   ) : isEligibleForConversion ? (
                     <div className="space-y-2">
                       <p className="text-xs text-slate-300">
-                        Contact is qualified (<strong className="text-emerald-300">Interested</strong>) with <strong className="text-emerald-300">Verified Consent</strong>. Ready to route into the CRM pipeline.
+                        Contact is qualified (<strong className="text-emerald-300">Interested</strong>) with <strong className="text-emerald-300">Verified Consent</strong>. Ready to route into the CRM sales pipeline.
                       </p>
                       <button
                         type="button"
@@ -393,100 +659,51 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                       </button>
                     </div>
                   ) : (
-                    <div className="p-2.5 rounded bg-slate-900/80 border border-slate-800 text-xs text-slate-400 space-y-1">
-                      <p className="font-semibold text-slate-300 flex items-center gap-1">
-                        <Info className="w-3.5 h-3.5 text-amber-400" /> Conversion Protection Gate:
+                    <div className="p-3 rounded-xl bg-slate-900/90 border border-slate-800 text-xs space-y-2">
+                      <p className="font-semibold text-slate-200 flex items-center gap-1.5">
+                        <Info className="w-4 h-4 text-amber-400 shrink-0" /> Conversion Protection Gate:
                       </p>
-                      <p className="text-[11px] leading-relaxed">
-                        To route into the sales pipeline, contact must have <strong className="text-emerald-400">Verified Opt-in Consent</strong> and status set to <strong className="text-emerald-400">Interested</strong>.
-                      </p>
-                    </div>
-                  )}
-                </div>
+                      
+                      {/* Gate Verification Checklist */}
+                      <div className="space-y-1.5 pl-5 text-[11px]">
+                        <div className="flex items-center gap-2">
+                          {contact.consentStatus === 'verified' && !contact.isSuppressed ? (
+                            <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          )}
+                          <span className={contact.consentStatus === 'verified' && !contact.isSuppressed ? 'text-slate-300' : 'text-amber-300'}>
+                            Verified Opt-In Consent: <strong>{contact.consentStatus}</strong>
+                          </span>
+                        </div>
 
-                {/* Consent Management & Evidence Logger */}
-                <div className="rounded-2xl border border-slate-800/90 bg-[#0d182a] p-5 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-[11px] font-bold text-white uppercase tracking-[0.12em] flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                      Consent Verification & Evidence
-                    </h4>
-                    {!isLoggingConsent && (
-                      <button
-                        type="button"
-                        onClick={() => setIsLoggingConsent(true)}
-                        className="text-xs text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center gap-1"
-                      >
-                        <Plus className="w-3 h-3" /> Log Consent
-                      </button>
-                    )}
-                  </div>
+                        <div className="flex items-center gap-2">
+                          {contact.lifecycleStatus === 'interested' ? (
+                            <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
+                          )}
+                          <span className={contact.lifecycleStatus === 'interested' ? 'text-slate-300' : 'text-amber-300'}>
+                            Qualified Status: <strong>{contact.lifecycleStatus}</strong> (Must be &quot;Interested&quot;)
+                          </span>
+                        </div>
 
-                  {isLoggingConsent ? (
-                    <form onSubmit={handleRecordConsent} className="space-y-3 p-3 rounded-lg bg-slate-950 border border-slate-800">
-                      <label className="block">
-                        <span className="text-xs font-semibold text-slate-300">Consent Decision</span>
-                        <select
-                          value={newConsentStatus}
-                          onChange={e => setNewConsentStatus(e.target.value as ConsentStatus)}
-                          className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
-                        >
-                          <option value="verified">Verified Opt-in (Explicitly agreed)</option>
-                          <option value="unknown">Pending / Unknown</option>
-                          <option value="opted_out">Opted-out / Denied</option>
-                        </select>
-                      </label>
-
-                      <label className="block">
-                        <span className="text-xs font-semibold text-slate-300">
-                          Verification Evidence / Proof <span className="text-rose-400">*</span>
-                        </span>
-                        <input
-                          required
-                          value={consentEvidence}
-                          onChange={e => setConsentEvidence(e.target.value)}
-                          placeholder="e.g. Replied YES to opt-in prompt / Booth inquiry form signed"
-                          className="mt-1 w-full rounded bg-slate-900 border border-slate-700 text-xs text-white p-2 outline-none focus:border-teal-400"
-                        />
-                      </label>
-
-                      <div className="flex justify-end gap-2 pt-1">
-                        <button
-                          type="button"
-                          onClick={() => setIsLoggingConsent(false)}
-                          className="px-3 py-1.5 rounded bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="submit"
-                          disabled={submittingConsent}
-                          className="px-3 py-1.5 rounded bg-teal-400 text-slate-950 text-xs font-bold hover:bg-teal-300 flex items-center gap-1.5"
-                        >
-                          {submittingConsent && <Loader2 className="w-3 h-3 animate-spin" />}
-                          Record Event
-                        </button>
+                        <div className="flex items-center gap-2">
+                          {!contact.isSuppressed ? (
+                            <FileCheck2 className="w-3.5 h-3.5 text-emerald-400" />
+                          ) : (
+                            <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                          )}
+                          <span className={!contact.isSuppressed ? 'text-slate-300' : 'text-rose-300'}>
+                            Suppression Status: <strong>{contact.isSuppressed ? 'Suppressed (DND)' : 'Clear'}</strong>
+                          </span>
+                        </div>
                       </div>
-                    </form>
-                  ) : (
-                    <div className="space-y-1.5">
-                      {consentEvents.length === 0 ? (
-                        <p className="text-xs text-slate-500">No consent events logged yet. Default status is pending.</p>
-                      ) : (
-                        consentEvents.map(evt => (
-                          <div
-                            key={evt.id}
-                            className="p-3 rounded-xl bg-slate-950/40 border border-slate-800/80 text-xs space-y-1.5"
-                          >
-                            <div className="flex items-center justify-between">
-                              <ConsentBadge status={evt.status} />
-                              <span className="text-[10px] text-slate-500">
-                                {new Date(evt.recordedAt).toLocaleDateString()}
-                              </span>
-                            </div>
-                            <p className="text-slate-300 text-[11px]">&quot;{evt.evidence}&quot;</p>
-                          </div>
-                        ))
+
+                      {conversionEligibility?.reasons && conversionEligibility.reasons.length > 0 && (
+                        <div className="pt-1 border-t border-slate-800/80 text-[10px] text-amber-300/90">
+                          {conversionEligibility.reasons[0]}
+                        </div>
                       )}
                     </div>
                   )}

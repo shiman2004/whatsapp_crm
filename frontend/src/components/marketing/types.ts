@@ -45,6 +45,8 @@ export interface MarketingContact {
   } | null;
   assignedById?: string | null;
   assignedAt?: string | null;
+  isSuppressed?: boolean;
+  suppressionReason?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -110,8 +112,16 @@ export interface MarketingConsentEvent {
   purpose?: string | null;
   channel?: string | null;
   evidence?: string | null;
+  evidenceType?: string | null;
+  evidenceReference?: string | null;
   recordedById: string;
+  recordedByName?: string | null;
   recordedAt: string;
+}
+
+export interface ConversionEligibility {
+  eligible: boolean;
+  reasons: string[];
 }
 
 export interface MarketingAssignmentHistory {

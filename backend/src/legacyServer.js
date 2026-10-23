@@ -11,6 +11,7 @@ import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
+import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 
 dotenv.config();
 if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
@@ -1662,6 +1663,22 @@ const server = http.createServer(async (req, res) => {
         }
         const cleanTo = norm.clean;
         const formattedTo = norm.canonical;
+
+        // Consent Governance & Suppression Gate Check
+        const msgType = payload.templateName || payload.type === 'template' ? 'template' : (media ? 'media' : 'text');
+        const gateCheck = await canSendWhatsApp(formattedTo, msgType, {
+          templateName: payload.templateName,
+          check24hWindow: false
+        });
+        if (!gateCheck.allowed) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            code: gateCheck.code || 'MESSAGING_CONSENT_DENIED',
+            error: gateCheck.reason
+          }));
+          return;
+        }
 
         // 2. Resolve company & correct Meta Cloud API Phone Number ID
         const prisma = getPrisma();

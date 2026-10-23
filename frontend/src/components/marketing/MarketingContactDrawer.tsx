@@ -1,23 +1,24 @@
 import React from 'react';
-import { MarketingContact, MarketingActivity, MarketingConsentEvent, LifecycleStatus, ConsentStatus } from './types';
+import { MarketingContact, MarketingActivity, MarketingConsentEvent, ConsentStatus } from './types';
 import { LifecycleBadge, ConsentBadge } from './MarketingBadges';
 import { MarketingConversionModal } from './MarketingConversionModal';
 import {
   X,
   Phone,
+  MessageSquare,
   Copy,
-  ExternalLink,
+  Check,
   ShieldCheck,
-  ShieldAlert,
   Clock,
   Sparkles,
-  MessageSquare,
   Send,
   Plus,
   Loader2,
-  Calendar,
-  CheckCircle2,
   Info,
+  User,
+  Tag,
+  Building2,
+  Layers,
 } from 'lucide-react';
 
 interface MarketingContactDrawerProps {
@@ -57,6 +58,17 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
   // Copy feedback
   const [copied, setCopied] = React.useState(false);
+
+  // Listen to Escape key to close drawer
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const loadDetail = React.useCallback(async () => {
     setLoading(true);
@@ -156,38 +168,100 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
     contact.lifecycleStatus === 'interested' &&
     !contact.convertedLeadId;
 
+  const rawPhoneDigits = contact?.normalizedPhone?.replace(/[^0-9]/g, '') || '';
+  const coordinatorName = contact?.assignedOwner?.fullName;
+  const coordinatorRole = contact?.assignedOwner?.roleTitle;
+
   return (
     <>
-      <div className="fixed inset-0 z-40 bg-black/70 backdrop-blur-xs flex justify-end animate-in fade-in duration-150">
-        <div className="w-full max-w-xl bg-[#09111f] border-l border-slate-800/80 h-full flex flex-col shadow-2xl overflow-hidden">
-          {/* Top Drawer Header */}
-          <div className="px-6 py-5 border-b border-slate-800/80 flex items-start justify-between gap-4 shrink-0 bg-[#0b1625]">
-            <div>
-              <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-teal-300">
-                {contact?.serialNumber || 'Marketing Contact'}
-              </span>
-              <h2 className="text-xl font-bold text-white mt-1 flex items-center gap-2 font-mono tracking-tight">
-                {contact?.normalizedPhone || 'Loading...'}
+      <div
+        className="fixed inset-0 z-[70] overflow-hidden"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="marketing-drawer-title"
+      >
+        {/* Backdrop button - clicking outside closes drawer */}
+        <button
+          type="button"
+          aria-label="Close contact drawer"
+          onClick={onClose}
+          className="absolute inset-0 w-full h-full bg-slate-950/75 backdrop-blur-xs cursor-default transition-opacity animate-in fade-in duration-150"
+        />
+
+        {/* Slide-over drawer container */}
+        <aside className="absolute inset-y-0 right-0 flex h-full w-full max-w-xl flex-col bg-[#09111f] border-l border-slate-800 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-200">
+          {/* Top Drawer Header with Prominent Close (X) Icon */}
+          <div className="px-6 py-5 border-b border-slate-800/90 bg-[#0b1625] shrink-0">
+            {/* Top row: Badges and Close Button */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-teal-400 font-mono bg-teal-950/80 px-2.5 py-1 rounded-md border border-teal-800/60">
+                  {contact?.serialNumber || 'MKT-CONTACT'}
+                </span>
+                {contact?.company && (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-300 bg-slate-800/90 px-2 py-0.5 rounded border border-slate-700 flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-slate-400" />
+                    {contact.company}
+                  </span>
+                )}
+              </div>
+
+              {/* Dedicated Prominent Close (X) Button */}
+              <button
+                type="button"
+                onClick={onClose}
+                className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800 border border-slate-700/60 transition-all focus:outline-none focus:ring-2 focus:ring-teal-400"
+                aria-label="Close contact drawer"
+                title="Close (Esc)"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Middle row: Name and Phone */}
+            <div className="mt-3">
+              <h2 id="marketing-drawer-title" className="text-xl font-bold text-white tracking-tight">
+                {contact?.name || 'Public Marketing Contact'}
+              </h2>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="font-mono text-sm font-semibold text-teal-300">
+                  {contact?.normalizedPhone || (loading ? 'Loading phone...' : 'No number')}
+                </span>
                 {contact?.normalizedPhone && (
                   <button
                     type="button"
                     onClick={copyPhone}
-                    className="p-1 rounded text-slate-400 hover:text-white"
+                    className="p-1 rounded-md text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
                     title="Copy phone"
                   >
-                    <Copy className="w-3.5 h-3.5" />
+                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
                   </button>
                 )}
-                {copied && <span className="text-[10px] text-teal-300 font-sans font-bold">Copied!</span>}
-              </h2>
+                {copied && <span className="text-[11px] text-emerald-400 font-medium">Copied!</span>}
+              </div>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
-            >
-              <X className="w-5 h-5" />
-            </button>
+
+            {/* Direct Outreach Action Buttons: Call & WhatsApp */}
+            {contact?.normalizedPhone && (
+              <div className="mt-4 grid grid-cols-2 gap-2.5">
+                <a
+                  href={`tel:${contact.normalizedPhone}`}
+                  className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-500 text-slate-950 font-bold text-xs hover:bg-emerald-400 transition-colors shadow-xs"
+                >
+                  <Phone className="w-3.5 h-3.5" />
+                  Call Contact
+                </a>
+                <a
+                  href={`https://wa.me/${rawPhoneDigits}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold text-xs hover:bg-teal-500/30 transition-colors"
+                >
+                  <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+                  WhatsApp
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Drawer Scrollable Body */}
@@ -203,6 +277,58 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
               </div>
             ) : contact ? (
               <>
+                {/* Contact Ownership & Metadata Summary Card */}
+                <div className="p-4 rounded-2xl border border-slate-800 bg-[#0d182a] space-y-3">
+                  <div className="grid grid-cols-2 gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                        <Layers className="w-3 h-3 text-slate-500" /> Source & Group
+                      </span>
+                      <p className="font-medium text-slate-200 mt-0.5 truncate">
+                        {contact.originalSource}
+                      </p>
+                      {contact.sourceGroupName && (
+                        <p className="text-[10px] text-teal-400/90 font-mono truncate">
+                          {contact.sourceGroupName}
+                        </p>
+                      )}
+                    </div>
+                    <div>
+                      <span className="text-slate-400 text-[11px] font-semibold flex items-center gap-1">
+                        <User className="w-3 h-3 text-slate-500" /> Assigned Coordinator
+                      </span>
+                      {coordinatorName ? (
+                        <div className="mt-0.5">
+                          <p className="font-semibold text-indigo-300 truncate">
+                            {coordinatorName}
+                          </p>
+                          {coordinatorRole && (
+                            <p className="text-[10px] text-slate-400 truncate">
+                              {coordinatorRole}
+                            </p>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="text-slate-500 font-medium mt-0.5">Unassigned</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {contact.tags && contact.tags.length > 0 && (
+                    <div className="pt-2 border-t border-slate-800/80 flex flex-wrap items-center gap-1.5">
+                      <Tag className="w-3 h-3 text-slate-500 shrink-0" />
+                      {contact.tags.map((tag, idx) => (
+                        <span
+                          key={idx}
+                          className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
                 {/* Status Badges & Quick Action Panel */}
                 <div className="p-4 rounded-2xl border border-slate-800/90 bg-[#0d182a] shadow-inner shadow-black/10 space-y-3">
                   <div className="flex items-center justify-between">
@@ -417,7 +543,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
               </>
             ) : null}
           </div>
-        </div>
+        </aside>
       </div>
 
       {/* Conversion Confirmation Modal */}
@@ -436,4 +562,3 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
     </>
   );
 };
-

@@ -304,9 +304,22 @@ async function listContacts(req, res, authUser) {
     prisma.marketingContact.count({ where })
   ]);
 
+  const ownerIds = [...new Set(data.map(c => c.currentOwnerId).filter(Boolean))];
+  const owners = ownerIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: ownerIds } },
+        select: { id: true, fullName: true, roleTitle: true }
+      })
+    : [];
+  const ownerMap = new Map(owners.map(o => [o.id, o]));
+  const enrichedData = data.map(c => ({
+    ...c,
+    assignedOwner: c.currentOwnerId ? ownerMap.get(c.currentOwnerId) || null : null
+  }));
+
   return sendJson(res, 200, {
     success: true,
-    data,
+    data: enrichedData,
     pagination: {
       total,
       page: Math.floor(skip / take) + 1,
@@ -337,16 +350,33 @@ async function contactDetail(req, res, authUser, contactId) {
 
   if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found or access restricted.');
 
-  const [activities, assignments, consent, conversion] = await Promise.all([
+  const [activities, assignments, consent, conversion, owner, tasks] = await Promise.all([
     prisma.marketingContactActivity.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' }, take: 100 }),
     prisma.marketingAssignmentHistory.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' } }),
     prisma.marketingConsentEvent.findMany({ where: { contactId }, orderBy: { recordedAt: 'desc' } }),
-    prisma.marketingLeadConversion.findUnique({ where: { contactId } })
+    prisma.marketingLeadConversion.findUnique({ where: { contactId } }),
+    contact.currentOwnerId
+      ? prisma.user.findUnique({
+          where: { id: contact.currentOwnerId },
+          select: { id: true, fullName: true, roleTitle: true }
+        })
+      : Promise.resolve(null),
+    prisma.marketingTask.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' }, take: 20 })
   ]);
 
   return sendJson(res, 200, {
     success: true,
-    data: { contact, activities, assignments, consent, conversion }
+    data: {
+      contact: {
+        ...contact,
+        assignedOwner: owner || null
+      },
+      activities,
+      assignments,
+      consent,
+      conversion,
+      tasks
+    }
   });
 }
 

@@ -1,7 +1,20 @@
 import React from 'react';
 import { MarketingContact } from './types';
 import { LifecycleBadge, ConsentBadge } from './MarketingBadges';
-import { Search, Filter, Download, UserCheck, ShieldAlert, ArrowUpDown, ChevronLeft, ChevronRight, User } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  Download,
+  UserCheck,
+  ShieldAlert,
+  ArrowUpDown,
+  ChevronLeft,
+  ChevronRight,
+  User,
+  Eye,
+  Phone,
+  MessageSquare,
+} from 'lucide-react';
 
 interface MarketingContactsProps {
   contacts: MarketingContact[];
@@ -200,30 +213,32 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                 />
               </th>
               <th className="px-3 py-3">Serial</th>
-              <th className="px-3 py-3">Phone (E.164)</th>
+              <th className="px-3 py-3">Contact</th>
               <th className="px-3 py-3">Source & Group</th>
               <th className="px-3 py-3">Consent</th>
               <th className="px-3 py-3">Status</th>
-              <th className="px-3 py-3">Assigned Owner</th>
+              <th className="px-3 py-3">Assigned Coordinator</th>
               <th className="px-3 py-3">Date</th>
+              <th className="px-3 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {loading ? (
               <tr>
-                <td colSpan={8} className="p-8 text-center text-slate-400">
+                <td colSpan={9} className="p-8 text-center text-slate-400">
                   Loading marketing contacts...
                 </td>
               </tr>
             ) : contacts.length === 0 ? (
               <tr>
-                <td colSpan={8} className="p-12 text-center text-slate-500">
+                <td colSpan={9} className="p-12 text-center text-slate-500">
                   No marketing contacts found matching the filters.
                 </td>
               </tr>
             ) : (
               contacts.map(contact => {
                 const isSelected = selectedIds.has(contact.id);
+                const rawPhoneDigits = contact.normalizedPhone.replace(/[^0-9]/g, '');
                 return (
                   <tr
                     key={contact.id}
@@ -243,8 +258,15 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                     <td className="px-3 py-3 font-mono font-bold text-slate-200">
                       {contact.serialNumber}
                     </td>
-                    <td className="px-3 py-3 font-mono font-bold text-teal-300">
-                      {contact.normalizedPhone}
+                    <td className="px-3 py-3">
+                      {contact.name && (
+                        <div className="font-semibold text-slate-100 truncate max-w-[150px]">
+                          {contact.name}
+                        </div>
+                      )}
+                      <div className="font-mono font-bold text-teal-300">
+                        {contact.normalizedPhone}
+                      </div>
                     </td>
                     <td className="px-3 py-3 text-slate-300 max-w-[200px] truncate">
                       <div>{contact.originalSource}</div>
@@ -261,7 +283,19 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       <LifecycleBadge status={contact.lifecycleStatus} />
                     </td>
                     <td className="px-3 py-3 text-slate-300">
-                      {contact.currentOwnerId ? (
+                      {contact.assignedOwner ? (
+                        <div>
+                          <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300 font-semibold truncate">
+                            <User className="w-3 h-3 text-indigo-400 shrink-0" />
+                            {contact.assignedOwner.fullName}
+                          </span>
+                          {contact.assignedOwner.roleTitle && (
+                            <span className="text-[10px] text-slate-400 block truncate">
+                              {contact.assignedOwner.roleTitle}
+                            </span>
+                          )}
+                        </div>
+                      ) : contact.currentOwnerId ? (
                         <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300 font-medium">
                           <User className="w-3 h-3 text-indigo-400" />
                           Assigned
@@ -272,6 +306,34 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                     </td>
                     <td className="px-3 py-3 text-slate-400 whitespace-nowrap">
                       {new Date(contact.createdAt).toLocaleDateString()}
+                    </td>
+                    <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
+                      <div className="inline-flex items-center gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onSelectContact(contact)}
+                          className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-teal-300 hover:text-white hover:bg-slate-700 transition-colors"
+                          title="View contact drawer"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <a
+                          href={`tel:${contact.normalizedPhone}`}
+                          className="p-1.5 rounded-lg border border-emerald-800/80 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60 transition-colors"
+                          title="Call contact"
+                        >
+                          <Phone className="w-3.5 h-3.5" />
+                        </a>
+                        <a
+                          href={`https://wa.me/${rawPhoneDigits}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="p-1.5 rounded-lg border border-teal-800/80 bg-teal-950/60 text-teal-300 hover:bg-teal-900/60 transition-colors"
+                          title="Open WhatsApp"
+                        >
+                          <MessageSquare className="w-3.5 h-3.5" />
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 );

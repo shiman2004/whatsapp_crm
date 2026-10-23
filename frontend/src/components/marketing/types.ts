@@ -42,8 +42,16 @@ export interface MarketingContact {
     id: string;
     fullName: string;
     roleTitle?: string;
+    role?: string;
   } | null;
   assignedById?: string | null;
+  assignedBy?: {
+    id: string;
+    fullName: string;
+    roleTitle?: string;
+    role?: string;
+  } | null;
+  assignedByName?: string | null;
   assignedAt?: string | null;
   isSuppressed?: boolean;
   suppressionReason?: string | null;

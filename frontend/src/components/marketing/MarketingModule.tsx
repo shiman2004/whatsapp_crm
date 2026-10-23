@@ -257,6 +257,8 @@ export const MarketingModule: React.FC = () => {
               <MarketingContacts
                 contacts={contacts}
                 loading={loading}
+                onRequestApi={marketingRequest}
+                onRefresh={loadContacts}
                 onSelectContact={c => setSelectedContactId(c.id)}
                 onBulkAssign={contactIds => {
                   navigateToPage('assignment');

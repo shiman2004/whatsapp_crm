@@ -73,13 +73,27 @@ async function runE2EWorkflowMatrix() {
   assert(prisma, 'Prisma client must be available');
 
   // Query actual admin and coordinator users from test database
-  const adminUser = await prisma.user.findFirst({
+  let adminUser = await prisma.user.findFirst({
     where: { role: 'super_admin', active: true }
-  }) || { id: 'user-admin-1', email: 'admin@royalwellness.lk', fullName: 'Super Admin' };
+  });
+  if (!adminUser) {
+    adminUser = await prisma.user.upsert({
+      where: { id: 'user-admin-1' },
+      create: { id: 'user-admin-1', email: 'admin@royalwellness.lk', fullName: 'Super Admin', role: 'super_admin', active: true },
+      update: { active: true, role: 'super_admin' }
+    });
+  }
 
-  const coordinatorUser = await prisma.user.findFirst({
+  let coordinatorUser = await prisma.user.findFirst({
     where: { role: 'coordinator', active: true }
-  }) || { id: 'user-coord-1', email: 'coord@royalwellness.lk', fullName: 'Test Coordinator' };
+  });
+  if (!coordinatorUser) {
+    coordinatorUser = await prisma.user.upsert({
+      where: { id: 'user-coord-1' },
+      create: { id: 'user-coord-1', email: 'coord@royalwellness.lk', fullName: 'Test Coordinator', role: 'coordinator', active: true, company: 'RWC' },
+      update: { active: true, role: 'coordinator' }
+    });
+  }
 
   // Use unique phone numbers per run to avoid state contamination
   const runSalt = Date.now().toString().slice(-6);

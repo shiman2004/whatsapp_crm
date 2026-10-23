@@ -397,7 +397,6 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               <th className="px-3 py-3">Assign Who</th>
               {/* 6. Assign Coordinator */}
               <th className="px-3 py-3">Assign Coordinator</th>
-              {/* 7. Consent */}
               <th className="px-3 py-3">Consent</th>
               {/* 8. Status */}
               <th className="px-3 py-3">Status</th>
@@ -530,7 +529,12 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       )}
                     </td>
 
-                    {/* 6. Assign Coordinator (Interactive Searchable Dropdown) */}
+                    {/* 6. Assigned At */}
+                    <td className="hidden">
+                      {contact.assignedAt ? new Date(contact.assignedAt).toLocaleString() : '—'}
+                    </td>
+
+                    {/* 7. Assign Coordinator (Interactive Searchable Dropdown) */}
                     <td className="px-3 py-3 coordinator-dropdown-container relative" onClick={e => e.stopPropagation()}>
                       {!canAssignContacts ? (
                         <button

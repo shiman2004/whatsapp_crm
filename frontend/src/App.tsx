@@ -1,29 +1,38 @@
-import React, { useState } from 'react';
+import React, { useState, Suspense, lazy } from 'react';
 import { CrmProvider, useCrm } from './context/CrmContext';
 import { Header } from './components/layout/Header';
 import { Sidebar, NavTab } from './components/layout/Sidebar';
 import { ToastContainer } from './components/layout/ToastContainer';
-import { WhatsAppSimulator } from './components/simulator/WhatsAppSimulator';
 import { DashboardOverview } from './components/dashboard/DashboardOverview';
-import { AnalyticsView } from './components/analytics/AnalyticsView';
 import { LeadsView } from './components/leads/LeadsView';
 import { LeadDetailWorkspace } from './components/chat/LeadDetailWorkspace';
-import { TreatmentsManager } from './components/admin/TreatmentsManager';
-import { CoordinatorsManager } from './components/admin/CoordinatorsManager';
-import { TemplatesManager } from './components/admin/TemplatesManager';
-import { AuditLogsViewer } from './components/admin/AuditLogsViewer';
-import { ArchitectureBlueprint } from './components/admin/ArchitectureBlueprint';
-import { WebhookSimulatorPlayground } from './components/admin/WebhookSimulatorPlayground';
-import { SuperAdminSettingsView } from './components/admin/SuperAdminSettings/SuperAdminSettingsView';
-import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
-import { AppointmentSchedulerView } from './components/appointments/AppointmentSchedulerView';
 import { LoginScreen } from './components/auth/LoginScreen';
-import { MarketingModule } from './components/marketing/MarketingModule';
 
-import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
+import { MessageSquare, KanbanSquare, LayoutDashboard, Menu, Loader2 } from 'lucide-react';
 import { NotificationContainer } from './components/notifications/NotificationContainer';
 import { NotificationSettingsModal } from './components/notifications/NotificationSettingsModal';
 import { DesktopNotificationBanner } from './components/notifications/DesktopNotificationBanner';
+
+// Lazy-loaded secondary & admin modules for code-splitting and small initial chunk sizes
+const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
+const TreatmentsManager = lazy(() => import('./components/admin/TreatmentsManager').then(m => ({ default: m.TreatmentsManager })));
+const CoordinatorsManager = lazy(() => import('./components/admin/CoordinatorsManager').then(m => ({ default: m.CoordinatorsManager })));
+const TemplatesManager = lazy(() => import('./components/admin/TemplatesManager').then(m => ({ default: m.TemplatesManager })));
+const AuditLogsViewer = lazy(() => import('./components/admin/AuditLogsViewer').then(m => ({ default: m.AuditLogsViewer })));
+const ArchitectureBlueprint = lazy(() => import('./components/admin/ArchitectureBlueprint').then(m => ({ default: m.ArchitectureBlueprint })));
+const WebhookSimulatorPlayground = lazy(() => import('./components/admin/WebhookSimulatorPlayground').then(m => ({ default: m.WebhookSimulatorPlayground })));
+const SuperAdminSettingsView = lazy(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then(m => ({ default: m.SuperAdminSettingsView })));
+const TeamBroadcastView = lazy(() => import('./components/broadcast/TeamBroadcastView').then(m => ({ default: m.TeamBroadcastView })));
+const AppointmentSchedulerView = lazy(() => import('./components/appointments/AppointmentSchedulerView').then(m => ({ default: m.AppointmentSchedulerView })));
+const MarketingModule = lazy(() => import('./components/marketing/MarketingModule').then(m => ({ default: m.MarketingModule })));
+const WhatsAppSimulator = lazy(() => import('./components/simulator/WhatsAppSimulator').then(m => ({ default: m.WhatsAppSimulator })));
+
+const ViewLoader: React.FC = () => (
+  <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400 min-h-[300px]">
+    <Loader2 className="w-8 h-8 animate-spin text-teal-400" />
+    <span className="mt-3 text-xs font-semibold text-slate-400 tracking-wide">Loading workspace module...</span>
+  </div>
+);
 
 const MainLayout: React.FC = () => {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -93,20 +102,22 @@ const MainLayout: React.FC = () => {
           activeTab === 'appointment-rooms' ? 'p-0 overflow-hidden bg-slate-950' : 
           'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/30'
         }`}>
-          {activeTab === 'dashboard' && <DashboardOverview />}
-          {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
-          {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
-          {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
-          {activeTab === 'marketing' && <MarketingModule />}
-          {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
-          {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
-          {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
-          {activeTab === 'templates' && <TemplatesManager />}
-          {activeTab === 'broadcast' && <TeamBroadcastView />}
-          {activeTab === 'reports' && currentUser?.role === 'super_admin' && <AnalyticsView />}
-          {activeTab === 'audit' && currentUser?.role === 'super_admin' && <AuditLogsViewer />}
-          {activeTab === 'webhook-sandbox' && currentUser?.role === 'super_admin' && <WebhookSimulatorPlayground />}
-          {activeTab === 'architecture' && currentUser?.role === 'super_admin' && <ArchitectureBlueprint />}
+          <Suspense fallback={<ViewLoader />}>
+            {activeTab === 'dashboard' && <DashboardOverview />}
+            {activeTab === 'leads-kanban' && <LeadsView onSelectLead={handleSelectLead} />}
+            {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
+            {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
+            {activeTab === 'marketing' && <MarketingModule />}
+            {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
+            {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
+            {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
+            {activeTab === 'templates' && <TemplatesManager />}
+            {activeTab === 'broadcast' && <TeamBroadcastView />}
+            {activeTab === 'reports' && currentUser?.role === 'super_admin' && <AnalyticsView />}
+            {activeTab === 'audit' && currentUser?.role === 'super_admin' && <AuditLogsViewer />}
+            {activeTab === 'webhook-sandbox' && currentUser?.role === 'super_admin' && <WebhookSimulatorPlayground />}
+            {activeTab === 'architecture' && currentUser?.role === 'super_admin' && <ArchitectureBlueprint />}
+          </Suspense>
         </main>
       </div>
 
@@ -165,7 +176,9 @@ const MainLayout: React.FC = () => {
       )}
 
       {/* WhatsApp Interactive Mobile Phone Simulator */}
-      <WhatsAppSimulator />
+      <Suspense fallback={null}>
+        <WhatsAppSimulator />
+      </Suspense>
 
       {/* Real-time Toasts */}
       <ToastContainer />

@@ -14,6 +14,7 @@ import {
   Eye,
   Phone,
   MessageSquare,
+  Lock,
 } from 'lucide-react';
 
 interface MarketingContactsProps {
@@ -324,15 +325,26 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                         >
                           <Phone className="w-3.5 h-3.5" />
                         </a>
-                        <a
-                          href={`https://wa.me/${rawPhoneDigits}`}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1.5 rounded-lg border border-teal-800/80 bg-teal-950/60 text-teal-300 hover:bg-teal-900/60 transition-colors"
-                          title="Open WhatsApp"
-                        >
-                          <MessageSquare className="w-3.5 h-3.5" />
-                        </a>
+                        {contact.consentStatus === 'verified' && !contact.isSuppressed ? (
+                          <a
+                            href={`https://wa.me/${rawPhoneDigits}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="p-1.5 rounded-lg border border-teal-800/80 bg-teal-950/60 text-teal-300 hover:bg-teal-900/60 transition-colors"
+                            title="Open WhatsApp (Verified Consent)"
+                          >
+                            <MessageSquare className="w-3.5 h-3.5" />
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled
+                            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/80 text-slate-600 cursor-not-allowed"
+                            title="WhatsApp outreach locked: Requires verified opt-in consent"
+                          >
+                            <Lock className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

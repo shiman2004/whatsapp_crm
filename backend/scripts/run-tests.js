@@ -43,6 +43,7 @@ const ALL_SUITES = [
   'test-appointments.js',
   'test-phonetic-composer.js',
   'test-marketing-e2e.js',
+  'test-consent-governance.js',
   'test-e2e-workflow-matrix.js',
 ];
 

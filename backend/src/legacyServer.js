@@ -12,6 +12,7 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
+import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
 
 dotenv.config();
 if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
@@ -6206,6 +6207,14 @@ const server = http.createServer(async (req, res) => {
 
                     // Persist to Supabase / PostgreSQL database
                     const prisma = getPrisma();
+                    const marketingInbound = prisma && getDbStatus() && phone
+                      ? await processMarketingInboundMessage({ prisma, company: companyInfo.code, phone, text, messageId, receivedAt: new Date() }).catch(error => {
+                          console.error('[Marketing inbound automation]', error.message);
+                          return null;
+                        })
+                      : null;
+                    if (marketingInbound) continue;
+
                     if (prisma && getDbStatus() && phone) {
                       try {
                         const rawClean = String(phone).replace(/[^0-9]/g, '');

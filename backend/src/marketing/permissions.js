@@ -10,7 +10,8 @@ const CAPABILITIES = Object.freeze({
   reassign: 'reassign',
   export: 'export',
   approveCampaigns: 'approve_campaigns',
-  audit: 'audit'
+  audit: 'audit',
+  deleteContacts: 'delete_contacts',
 });
 
 const ROLE_CAPABILITIES = Object.freeze({

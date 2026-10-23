@@ -31,6 +31,7 @@ import {
   AlertTriangle,
   History,
   Lock,
+  Trash2,
 } from 'lucide-react';
 
 interface MarketingContactDrawerProps {
@@ -69,6 +70,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
   // Status changer
   const [isUpdatingStatus, setIsUpdatingStatus] = React.useState(false);
+  const [isDeleting, setIsDeleting] = React.useState(false);
 
   // Conversion modal
   const [showConversionModal, setShowConversionModal] = React.useState(false);
@@ -77,7 +79,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
   const [copied, setCopied] = React.useState(false);
 
   // CRM context for Live Chat navigation
-  const { setSelectedLeadId, setActiveNavTab, leads } = useCrm();
+  const { currentUser, setSelectedLeadId, setActiveNavTab, leads } = useCrm();
 
   const matchingLead = React.useMemo(() => {
     if (!contact) return null;
@@ -160,6 +162,23 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
       setError(caught instanceof Error ? caught.message : 'Status update failed');
     } finally {
       setIsUpdatingStatus(false);
+    }
+  };
+
+
+  const handleDeleteContact = async () => {
+    if (!contact || !window.confirm(`Permanently delete ${contact.serialNumber}? This cannot be undone.`)) return;
+
+    setIsDeleting(true);
+    setError('');
+    try {
+      await onRequestApi(`/api/marketing/contacts/${contact.id}`, { method: 'DELETE' });
+      onContactUpdated();
+      onClose();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : 'Failed to delete contact');
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -248,7 +267,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
   const rawPhoneDigits = contact?.normalizedPhone?.replace(/[^0-9]/g, '') || '';
   const coordinatorName = contact?.assignedOwner?.fullName;
-  const coordinatorRole = contact?.assignedOwner?.roleTitle;
+  const coordinatorRole = contact?.assignedOwner?.roleTitle || contact?.assignedOwner?.role;
   const latestConsent = consentEvents[0] || null;
 
   return (
@@ -518,6 +537,18 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                         >
                           <ShieldAlert className="w-3 h-3" /> Opt-Out
                         </button>
+                        {currentUser?.role === 'super_admin' && !contact?.convertedLeadId && (
+                          <button
+                            type="button"
+                            onClick={handleDeleteContact}
+                            disabled={isDeleting}
+                            className="text-xs text-rose-400 hover:text-rose-300 font-semibold inline-flex items-center gap-1 disabled:opacity-50"
+                            title="Permanently delete this marketing contact"
+                          >
+                            {isDeleting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Trash2 className="w-3 h-3" />}
+                            Delete
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>

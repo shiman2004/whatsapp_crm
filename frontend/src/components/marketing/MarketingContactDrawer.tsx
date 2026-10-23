@@ -8,6 +8,7 @@ import {
 } from './types';
 import { LifecycleBadge, ConsentBadge } from './MarketingBadges';
 import { MarketingConversionModal } from './MarketingConversionModal';
+import { useCrm } from '../../context/CrmContext';
 import {
   X,
   Phone,
@@ -74,6 +75,34 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
 
   // Copy feedback
   const [copied, setCopied] = React.useState(false);
+
+  // CRM context for Live Chat navigation
+  const { setSelectedLeadId, setActiveNavTab, leads } = useCrm();
+
+  const matchingLead = React.useMemo(() => {
+    if (!contact) return null;
+    if (contact.convertedLeadId) {
+      return leads.find(l => l.id === contact.convertedLeadId) || null;
+    }
+    const cleanDigits = (contact.normalizedPhone || '').replace(/[^0-9]/g, '');
+    if (!cleanDigits || cleanDigits.length < 7) return null;
+    return (
+      leads.find(l => {
+        const p1 = (l.customer?.phoneNumber || '').replace(/[^0-9]/g, '');
+        const p2 = (l.customer?.whatsappNumber || '').replace(/[^0-9]/g, '');
+        return (p1 && p1.endsWith(cleanDigits.slice(-9))) || (p2 && p2.endsWith(cleanDigits.slice(-9)));
+      }) || null
+    );
+  }, [contact, leads]);
+
+  const handleOpenLiveChat = (targetLeadId?: string) => {
+    const leadId = targetLeadId || matchingLead?.id || contact?.convertedLeadId;
+    if (leadId) {
+      setSelectedLeadId(leadId);
+      setActiveNavTab('chat');
+      onClose();
+    }
+  };
 
   // Listen to Escape key to close drawer
   React.useEffect(() => {
@@ -309,22 +338,45 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                     Call Contact
                   </a>
 
-                  {isConsentVerified ? (
-                    <a
-                      href={`https://wa.me/${rawPhoneDigits}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold text-xs hover:bg-teal-500/30 transition-colors"
+                  {matchingLead || contact.convertedLeadId ? (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenLiveChat()}
+                      className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition-colors shadow-xs"
+                      title="Open chat directly in CRM Live WhatsApp workspace"
                     >
-                      <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
-                      WhatsApp (Opted-In)
-                    </a>
+                      <MessageSquare className="w-3.5 h-3.5 text-white" />
+                      Open CRM Live Chat
+                    </button>
+                  ) : isConsentVerified && !contact.isSuppressed ? (
+                    isEligibleForConversion ? (
+                      <button
+                        type="button"
+                        onClick={() => setShowConversionModal(true)}
+                        className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold text-xs hover:bg-teal-500/30 transition-colors"
+                        title="Convert qualified contact to CRM Lead and open in CRM Live Chat"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+                        Convert & Open Chat
+                      </button>
+                    ) : (
+                      <a
+                        href={`https://wa.me/${rawPhoneDigits}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/40 font-bold text-xs hover:bg-teal-500/30 transition-colors"
+                        title="Open external WhatsApp chat"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5 text-teal-400" />
+                        WhatsApp (Opted-In)
+                      </a>
+                    )
                   ) : (
                     <button
                       type="button"
                       disabled
                       className="inline-flex items-center justify-center gap-2 py-2 px-3 rounded-lg bg-slate-900 border border-slate-800 text-slate-500 font-bold text-xs cursor-not-allowed"
-                      title="WhatsApp outreach locked: Requires verified opt-in consent"
+                      title="WhatsApp outreach locked: Requires verified opt-in consent before opening CRM Live Chat"
                     >
                       <Lock className="w-3.5 h-3.5 text-amber-500/70" />
                       WhatsApp Locked
@@ -641,10 +693,19 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                     )}
                   </div>
 
-                  {contact.convertedLeadId ? (
-                    <p className="text-xs text-slate-300">
-                      This contact has been successfully converted into an active CRM sales lead.
-                    </p>
+                  {contact.convertedLeadId || matchingLead ? (
+                    <div className="space-y-2.5">
+                      <p className="text-xs text-slate-300">
+                        This contact is linked to CRM sales lead <strong className="text-teal-300 font-mono">{(contact.convertedLeadId || matchingLead?.id)?.slice(0, 8)}</strong>.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLiveChat()}
+                        className="w-full py-2.5 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs transition-all flex items-center justify-center gap-2 shadow-sm"
+                      >
+                        <MessageSquare className="w-4 h-4" /> Open in CRM Live Chat
+                      </button>
+                    </div>
                   ) : isEligibleForConversion ? (
                     <div className="space-y-2">
                       <p className="text-xs text-slate-300">

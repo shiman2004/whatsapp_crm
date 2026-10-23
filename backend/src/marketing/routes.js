@@ -302,7 +302,7 @@ async function listContacts(req, res, authUser) {
   const users = allUserIds.length
     ? await prisma.user.findMany({
         where: { id: { in: allUserIds } },
-        select: { id: true, fullName: true, roleTitle: true, company: true }
+        select: { id: true, fullName: true, role: true, company: true }
       })
     : [];
   const userMap = new Map(users.map(u => [u.id, u]));
@@ -321,7 +321,7 @@ async function listContacts(req, res, authUser) {
     if (missingHistoryUsers.length) {
       const moreUsers = await prisma.user.findMany({
         where: { id: { in: missingHistoryUsers } },
-        select: { id: true, fullName: true, roleTitle: true, company: true }
+        select: { id: true, fullName: true, role: true, company: true }
       });
       moreUsers.forEach(u => userMap.set(u.id, u));
     }
@@ -385,7 +385,7 @@ async function contactDetail(req, res, authUser, contactId) {
     contact.currentOwnerId
       ? prisma.user.findUnique({
           where: { id: contact.currentOwnerId },
-          select: { id: true, fullName: true, roleTitle: true }
+          select: { id: true, fullName: true, role: true }
         })
       : Promise.resolve(null),
     prisma.marketingTask.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' }, take: 20 }),
@@ -616,6 +616,51 @@ async function suppressContact(req, res, authUser, contactId) {
   }
 }
 
+
+async function deleteContact(req, res, authUser, contactId) {
+  const authorization = assertMarketingCapability(authUser, CAPABILITIES.deleteContacts);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+
+  const prisma = getPrisma();
+  if (!prisma) return failure(res, 503, 'DATABASE_UNAVAILABLE', 'Marketing database is unavailable.');
+
+  try {
+    const deleted = await prisma.$transaction(async tx => {
+      const contact = await tx.marketingContact.findFirst({
+        where: { id: contactId, company: companyOf(authUser) }
+      });
+      if (!contact) throw Object.assign(new Error('Marketing contact not found.'), { status: 404, code: 'MARKETING_CONTACT_NOT_FOUND' });
+      if (contact.convertedLeadId) {
+        throw Object.assign(new Error('Converted contacts cannot be deleted.'), { status: 409, code: 'MARKETING_CONTACT_CONVERTED' });
+      }
+
+      await tx.marketingImportRow.updateMany({ where: { contactId }, data: { contactId: null } });
+      await tx.marketingContactContribution.updateMany({ where: { contactId }, data: { contactId: null } });
+      await tx.marketingTask.deleteMany({ where: { contactId } });
+      await tx.marketingAssignmentHistory.deleteMany({ where: { contactId } });
+      await tx.marketingConsentEvent.deleteMany({ where: { marketingContactId: contactId } });
+      await tx.marketingSuppression.deleteMany({ where: { contactId } });
+      await tx.marketingContactActivity.deleteMany({ where: { contactId } });
+      await tx.marketingLeadConversion.deleteMany({ where: { contactId } });
+      await tx.marketingContact.delete({ where: { id: contactId } });
+      await tx.marketingAuditLog.create({
+        data: {
+          id: id(),
+          company: contact.company,
+          actorId: authUser.id,
+          action: 'marketing_contact_deleted',
+          entityType: 'MarketingContact',
+          entityId: contact.id,
+          metadata: { serialNumber: contact.serialNumber }
+        }
+      });
+      return { id: contact.id, serialNumber: contact.serialNumber };
+    });
+    return sendJson(res, 200, { success: true, data: deleted });
+  } catch (err) {
+    return failure(res, err.status || 500, err.code || 'MARKETING_CONTACT_DELETE_FAILED', err.message);
+  }
+}
 // -------------------------------------------------------------
 // 3. CONTACT INGESTION & BATCH IMPORT
 // -------------------------------------------------------------
@@ -1505,6 +1550,7 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     const contactMatch = pathname.match(/^\/api\/marketing\/contacts\/([^/]+)$/);
     if (contactMatch && req.method === 'GET') return await contactDetail(req, res, authUser, contactMatch[1]);
     if (contactMatch && req.method === 'PATCH') return await updateContactStatus(req, res, authUser, contactMatch[1]);
+    if (contactMatch && req.method === 'DELETE') return await deleteContact(req, res, authUser, contactMatch[1]);
 
     const activityMatch = pathname.match(/^\/api\/marketing\/contacts\/([^/]+)\/activities$/);
     if (activityMatch && req.method === 'POST') return await addContactActivity(req, res, authUser, activityMatch[1]);

@@ -1,6 +1,7 @@
 import React from 'react';
 import { MarketingContact } from './types';
 import { LifecycleBadge, ConsentBadge } from './MarketingBadges';
+import { useCrm } from '../../context/CrmContext';
 import {
   Search,
   Filter,
@@ -56,7 +57,13 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   assignmentFilter,
   onAssignmentFilterChange,
 }) => {
+  const { setSelectedLeadId, setActiveNavTab, leads } = useCrm();
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  const handleOpenLeadChat = (leadId: string) => {
+    setSelectedLeadId(leadId);
+    setActiveNavTab('chat');
+  };
 
   // Toggle selection
   const toggleSelectAll = () => {
@@ -325,26 +332,53 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                         >
                           <Phone className="w-3.5 h-3.5" />
                         </a>
-                        {contact.consentStatus === 'verified' && !contact.isSuppressed ? (
-                          <a
-                            href={`https://wa.me/${rawPhoneDigits}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="p-1.5 rounded-lg border border-teal-800/80 bg-teal-950/60 text-teal-300 hover:bg-teal-900/60 transition-colors"
-                            title="Open WhatsApp (Verified Consent)"
-                          >
-                            <MessageSquare className="w-3.5 h-3.5" />
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            disabled
-                            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/80 text-slate-600 cursor-not-allowed"
-                            title="WhatsApp outreach locked: Requires verified opt-in consent"
-                          >
-                            <Lock className="w-3.5 h-3.5" />
-                          </button>
-                        )}
+                        {(() => {
+                          const matchedLead = contact.convertedLeadId
+                            ? leads.find(l => l.id === contact.convertedLeadId)
+                            : leads.find(l => {
+                                const p1 = (l.customer?.phoneNumber || '').replace(/[^0-9]/g, '');
+                                const p2 = (l.customer?.whatsappNumber || '').replace(/[^0-9]/g, '');
+                                return (p1 && p1.endsWith(rawPhoneDigits.slice(-9))) || (p2 && p2.endsWith(rawPhoneDigits.slice(-9)));
+                              });
+
+                          if (matchedLead || contact.convertedLeadId) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenLeadChat(matchedLead?.id || contact.convertedLeadId!)}
+                                className="p-1.5 rounded-lg border border-emerald-700/80 bg-emerald-950/70 text-emerald-300 hover:bg-emerald-900/80 transition-colors"
+                                title="Open in CRM Live Chat"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </button>
+                            );
+                          }
+
+                          if (contact.consentStatus === 'verified' && !contact.isSuppressed) {
+                            return (
+                              <a
+                                href={`https://wa.me/${rawPhoneDigits}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="p-1.5 rounded-lg border border-teal-800/80 bg-teal-950/60 text-teal-300 hover:bg-teal-900/60 transition-colors"
+                                title="Open WhatsApp (Verified Consent)"
+                              >
+                                <MessageSquare className="w-3.5 h-3.5" />
+                              </a>
+                            );
+                          }
+
+                          return (
+                            <button
+                              type="button"
+                              disabled
+                              className="p-1.5 rounded-lg border border-slate-800 bg-slate-900/80 text-slate-600 cursor-not-allowed"
+                              title="WhatsApp outreach locked: Requires verified opt-in consent"
+                            >
+                              <Lock className="w-3.5 h-3.5" />
+                            </button>
+                          );
+                        })()}
                       </div>
                     </td>
                   </tr>

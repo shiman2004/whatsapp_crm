@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { normalizeE164, isValidE164, normalizeMany } from './src/marketing/normalization.js';
 import { handleMarketingRoutes } from './src/marketing/routes.js';
 import { getPrisma } from './src/db.js';
+import { ensureSchema } from './src/schemaBootstrap.js';
 import { Readable } from 'node:stream';
 
 function mockReq(method, path, body = null) {
@@ -68,6 +69,7 @@ const coordinator1 = { id: 'test-coord-1', role: 'coordinator', active: true, co
 const coordinator2 = { id: 'test-coord-2', role: 'coordinator', active: true, company: 'RWC' };
 
 const prisma = getPrisma();
+await ensureSchema(prisma);
 
 // Ensure test coordinators exist in database
 await prisma.user.upsert({
@@ -93,7 +95,7 @@ if (contactIds.length) {
   await prisma.marketingLeadConversion.deleteMany({ where: { contactId: { in: contactIds } } }).catch(() => {});
   await prisma.marketingTask.deleteMany({ where: { contactId: { in: contactIds } } }).catch(() => {});
   await prisma.marketingContactActivity.deleteMany({ where: { contactId: { in: contactIds } } }).catch(() => {});
-  await prisma.marketingConsentEvent.deleteMany({ where: { contactId: { in: contactIds } } }).catch(() => {});
+  await prisma.marketingConsentEvent.deleteMany({ where: { marketingContactId: { in: contactIds } } }).catch(() => {});
   await prisma.marketingContact.deleteMany({ where: { id: { in: contactIds } } }).catch(() => {});
 }
 
@@ -339,7 +341,7 @@ if (finalContactIds.length) {
   await prisma.marketingLeadConversion.deleteMany({ where: { contactId: { in: finalContactIds } } }).catch(() => {});
   await prisma.marketingTask.deleteMany({ where: { contactId: { in: finalContactIds } } }).catch(() => {});
   await prisma.marketingContactActivity.deleteMany({ where: { contactId: { in: finalContactIds } } }).catch(() => {});
-  await prisma.marketingConsentEvent.deleteMany({ where: { contactId: { in: finalContactIds } } }).catch(() => {});
+  await prisma.marketingConsentEvent.deleteMany({ where: { marketingContactId: { in: finalContactIds } } }).catch(() => {});
   await prisma.marketingContact.deleteMany({ where: { id: { in: finalContactIds } } }).catch(() => {});
 }
 if (createdLeadId) {

@@ -9,6 +9,7 @@ import {
   CONSENT_STATES,
 } from './src/modules/marketing/services/consent.service.js';
 import { getPrisma } from './src/db.js';
+import { ensureSchema } from './src/schemaBootstrap.js';
 import { Readable } from 'node:stream';
 
 function mockReq(method, path, body = null) {
@@ -55,6 +56,7 @@ async function callMarketing(method, pathname, body, actor) {
 console.log('🧪 Starting Consent Governance & Protection Gate Verification Suite...\n');
 
 const prisma = getPrisma();
+await ensureSchema(prisma);
 const superAdmin = { id: 'test-sa-1', role: 'super_admin', active: true, company: 'RWC' };
 const coordinatorRwc = { id: 'test-coord-rwc', role: 'coordinator', active: true, company: 'RWC' };
 const coordinatorCras = { id: 'test-coord-cras', role: 'coordinator', active: true, company: 'CRAS' };
@@ -67,7 +69,7 @@ const existing = await prisma.marketingContact.findMany({
 });
 const existingIds = existing.map(e => e.id);
 if (existingIds.length) {
-  await prisma.marketingConsentEvent.deleteMany({ where: { contactId: { in: existingIds } } }).catch(() => {});
+  await prisma.marketingConsentEvent.deleteMany({ where: { marketingContactId: { in: existingIds } } }).catch(() => {});
   await prisma.marketingSuppression.deleteMany({ where: { contactId: { in: existingIds } } }).catch(() => {});
   await prisma.marketingTask.deleteMany({ where: { contactId: { in: existingIds } } }).catch(() => {});
   await prisma.marketingLeadConversion.deleteMany({ where: { contactId: { in: existingIds } } }).catch(() => {});
@@ -290,7 +292,7 @@ console.log('✅ Pass 14: Duplicate conversion attempt rejected with 409 Conflic
 console.log('--- Check 15: Consent event history remains auditable ---');
 const consentStatusData = await getConsentStatus(contact1.id);
 assert(consentStatusData.history.length >= 1, 'Consent events must be preserved');
-assert.equal(consentStatusData.history[0].status, 'verified');
+assert.equal(consentStatusData.history[0].decision || consentStatusData.history[0].status, 'verified');
 assert.equal(consentStatusData.history[0].recordedById, superAdmin.id);
 console.log(`✅ Pass 15: Audit trail verified with ${consentStatusData.history.length} logged consent event(s).\n`);
 
@@ -314,7 +316,7 @@ console.log(`✅ Pass 17: Verified ${existingLeads.length} existing CRM leads re
 
 // Clean up test fixtures
 await prisma.marketingConsentEvent.deleteMany({
-  where: { contactId: { in: [contact1.id, contact2.id, crasContact.id] } },
+  where: { marketingContactId: { in: [contact1.id, contact2.id, crasContact.id] } },
 }).catch(() => {});
 await prisma.marketingSuppression.deleteMany({
   where: { contactId: { in: [contact1.id, contact2.id, crasContact.id] } },

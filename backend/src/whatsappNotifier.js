@@ -26,6 +26,16 @@ export async function sendAppointmentNotification({
   const cleanPhone = String(patientPhone).replace(/[^0-9]/g, '');
   if (cleanPhone.length < 9) return { sent: false, reason: 'Invalid phone format' };
 
+  try {
+    const { canSendWhatsApp } = await import('./modules/marketing/services/consent.service.js');
+    const gate = await canSendWhatsApp(patientPhone, 'template', { check24hWindow: false });
+    if (!gate.allowed) {
+      return { sent: false, reason: gate.reason, code: gate.code };
+    }
+  } catch (e) {
+    // ignore gate errors to not break existing appointment notifications
+  }
+
   // Prepare standard clinical messages
   let messageText = '';
   const dateStr = appointmentDate || new Date().toISOString().split('T')[0];

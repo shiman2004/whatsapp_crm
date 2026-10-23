@@ -345,7 +345,7 @@ async function contactDetail(req, res, authUser, contactId) {
   const [activities, assignments, consent, conversion, owner, tasks, suppression] = await Promise.all([
     prisma.marketingContactActivity.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' }, take: 100 }),
     prisma.marketingAssignmentHistory.findMany({ where: { contactId }, orderBy: { createdAt: 'desc' } }),
-    prisma.marketingConsentEvent.findMany({ where: { contactId }, orderBy: { recordedAt: 'desc' } }),
+    prisma.marketingConsentEvent.findMany({ where: { marketingContactId: contactId }, orderBy: { occurredAt: 'desc' } }),
     prisma.marketingLeadConversion.findUnique({ where: { contactId } }),
     contact.currentOwnerId
       ? prisma.user.findUnique({

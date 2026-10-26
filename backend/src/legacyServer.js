@@ -20,7 +20,7 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 
 const PORT = process.env.PORT || 3000;
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || (process.argv[1] && process.argv[1].includes('test'));
-const JWT_SECRET = process.env.JWT_SECRET || (IS_TEST_ENV ? 'test-only-jwt-secret-do-not-use' : '');
+const JWT_SECRET = process.env.JWT_SECRET || (IS_TEST_ENV ? 'test-only-jwt-secret-do-not-use' : (process.env.NODE_ENV !== 'production' ? 'royal_wellness_crm_jwt_secret_key_2026_super_secure' : ''));
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be configured before starting the backend.');
 }

@@ -108,6 +108,57 @@ export interface ExamReportsData {
   recentProvisions: ExamProvision[];
 }
 
+export interface ExamMcqQuestion {
+  id: string;
+  title: string;
+  questionText: string;
+  categoryId?: string;
+  categoryName?: string;
+  subject?: string;
+  imageUrl?: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  optionE: string;
+  correctAnswer: 'A' | 'B' | 'C' | 'D' | 'E';
+  rememberNote1: string;
+  rememberNote2: string;
+  rememberNote3: string;
+  explanation?: string;
+  difficulty?: 'Easy' | 'Medium' | 'Hard';
+  displayOrder?: number;
+  isActive?: boolean;
+  createdAt?: string;
+}
+
+export interface ExamMcqPracticeAttempt {
+  id: string;
+  sessionId?: string;
+  studentId?: string;
+  studentName: string;
+  studentIdentifier?: string;
+  examTitle?: string;
+  categoryId?: string;
+  questionId: string;
+  questionTitle?: string;
+  firstSelectedAnswer: string;
+  numberOfAttempts: number;
+  attemptsHistory?: string[];
+  finalCorrectAnswer: string;
+  isCorrectFirstTry?: boolean;
+  timeSpentSeconds: number;
+  createdAt: string;
+}
+
+export interface ExamMcqStats {
+  totalQuestions: number;
+  totalAttempts: number;
+  firstTryCorrect: number;
+  firstTryAccuracy: number;
+  uniqueStudents: number;
+}
+
 function getAuthHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' 
     ? (localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('royal_crm_token') || '')
@@ -355,6 +406,89 @@ export const examService = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to load exam reports');
+    const json = await res.json();
+    return json.data;
+  },
+
+  // 9. Interactive MCQ Practice Module
+  async getMcqQuestions(params?: { categoryId?: string; search?: string }): Promise<ExamMcqQuestion[]> {
+    const query = new URLSearchParams();
+    if (params?.categoryId && params.categoryId !== 'all') query.set('categoryId', params.categoryId);
+    if (params?.search) query.set('search', params.search);
+    const qs = query.toString();
+    const url = `${API_BASE_URL}/api/exam/mcq/questions${qs ? `?${qs}` : ''}`;
+
+    const res = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load MCQ practice questions');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async createMcqQuestion(data: Partial<ExamMcqQuestion>): Promise<ExamMcqQuestion> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mcq/questions`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create question' }));
+      throw new Error(err.error || 'Failed to create MCQ question');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  async updateMcqQuestion(id: string, data: Partial<ExamMcqQuestion>): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mcq/questions/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update question' }));
+      throw new Error(err.error || 'Failed to update MCQ question');
+    }
+  },
+
+  async deleteMcqQuestion(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mcq/questions/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete MCQ question');
+  },
+
+  async recordPracticeAttempt(attempt: Partial<ExamMcqPracticeAttempt>): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mcq/record-attempt`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(attempt),
+    });
+    if (!res.ok) throw new Error('Failed to record practice attempt');
+  },
+
+  async getPracticeAttempts(params?: { studentId?: string; limit?: number }): Promise<ExamMcqPracticeAttempt[]> {
+    const query = new URLSearchParams();
+    if (params?.studentId) query.set('studentId', params.studentId);
+    if (params?.limit) query.set('limit', String(params.limit));
+    const qs = query.toString();
+    const url = `${API_BASE_URL}/api/exam/mcq/attempts${qs ? `?${qs}` : ''}`;
+
+    const res = await fetch(url, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load practice attempts');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async getMcqStats(): Promise<ExamMcqStats> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mcq/stats`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load MCQ statistics');
     const json = await res.json();
     return json.data;
   }

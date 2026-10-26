@@ -387,6 +387,58 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_exam_provisions_cat ON public.exam_provisions(category_id);`,
   `CREATE INDEX IF NOT EXISTS idx_exam_provisions_status ON public.exam_provisions(access_status);`,
 
+  // --- Interactive MCQ Practice Module Tables -------------------------------
+  `CREATE TABLE IF NOT EXISTS public.exam_mcq_questions (
+     id VARCHAR(100) PRIMARY KEY,
+     title VARCHAR(255) NOT NULL,
+     question_text TEXT NOT NULL,
+     category_id VARCHAR(100),
+     category_name VARCHAR(100),
+     subject VARCHAR(150) DEFAULT 'General Medicine',
+     image_url TEXT,
+     option_a TEXT NOT NULL,
+     option_b TEXT NOT NULL,
+     option_c TEXT NOT NULL,
+     option_d TEXT NOT NULL,
+     option_e TEXT NOT NULL,
+     correct_answer VARCHAR(5) NOT NULL,
+     remember_note_1 TEXT NOT NULL,
+     remember_note_2 TEXT NOT NULL,
+     remember_note_3 TEXT NOT NULL,
+     explanation TEXT,
+     difficulty VARCHAR(20) DEFAULT 'Medium',
+     display_order INTEGER DEFAULT 0,
+     is_active BOOLEAN DEFAULT TRUE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_cat ON public.exam_mcq_questions(category_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_active ON public.exam_mcq_questions(is_active);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_order ON public.exam_mcq_questions(display_order);`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_mcq_practice_attempts (
+     id VARCHAR(100) PRIMARY KEY,
+     session_id VARCHAR(100),
+     student_id VARCHAR(100),
+     student_name VARCHAR(150) NOT NULL,
+     student_identifier VARCHAR(100),
+     exam_title VARCHAR(255),
+     category_id VARCHAR(100),
+     question_id VARCHAR(100) NOT NULL,
+     question_title VARCHAR(255),
+     first_selected_answer VARCHAR(5) NOT NULL,
+     number_of_attempts INTEGER NOT NULL DEFAULT 1,
+     attempts_history JSONB DEFAULT '[]'::jsonb,
+     final_correct_answer VARCHAR(5) NOT NULL,
+     is_correct_first_try BOOLEAN DEFAULT FALSE,
+     time_spent_seconds INTEGER DEFAULT 0,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_student ON public.exam_mcq_practice_attempts(student_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_session ON public.exam_mcq_practice_attempts(session_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_question ON public.exam_mcq_practice_attempts(question_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_created ON public.exam_mcq_practice_attempts(created_at);`,
+
   // --- marketing module foundations & serials ----------------------------------
   `CREATE TABLE IF NOT EXISTS public.marketing_contact_serials (
      id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1), 

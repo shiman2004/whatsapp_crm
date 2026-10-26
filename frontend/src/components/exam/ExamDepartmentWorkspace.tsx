@@ -14,6 +14,7 @@ import { ExamDashboardView } from './ExamDashboardView';
 import { MaterialRequestsView } from './MaterialRequestsView';
 import { ExamMaterialsView } from './ExamMaterialsView';
 import { MockTestsView } from './MockTestsView';
+import { InteractiveMcqPracticeView } from './InteractiveMcqPracticeView';
 import { ExamProvisionView } from './ExamProvisionView';
 import { ExamReportsView } from './ExamReportsView';
 import { NewMaterialRequestModal } from './NewMaterialRequestModal';
@@ -209,6 +210,13 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
           mockTests={mockTests}
           categories={categories}
           onRefresh={refreshData}
+          onNavigateToPractice={() => handleTabChange('mcq-practice')}
+        />
+      )}
+
+      {(activeTab === 'mcq-practice' || activeTab === 'mcq') && (
+        <InteractiveMcqPracticeView
+          categories={categories}
         />
       )}
 

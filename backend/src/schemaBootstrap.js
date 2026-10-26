@@ -420,7 +420,7 @@ const SEED_STATEMENTS = [
 ];
 
 const EXAM_SEED_STATEMENTS = [
-  // 1. Initial Exam Categories matching screenshot
+  // 1. Initial Exam Categories
   `INSERT INTO public.exam_categories (id, name, code, description, icon, color, is_active, display_order, created_at, updated_at)
    VALUES
      ('cat-dha', 'DHA', 'DHA', 'Dubai Health Authority licensing exams for doctors, nurses, allied health', 'Stethoscope', '#06b6d4', TRUE, 1, NOW(), NOW()),
@@ -429,29 +429,6 @@ const EXAM_SEED_STATEMENTS = [
      ('cat-prometric', 'Prometric', 'PROMETRIC', 'Saudi Commission (SCFHS), Qatar (QCHP), Oman & Bahrain Prometric exams', 'ClipboardCheck', '#f59e0b', TRUE, 4, NOW(), NOW()),
      ('cat-nclex', 'NCLEX', 'NCLEX', 'National Council Licensure Examination for Registered Nurses (RN/PN)', 'ShieldAlert', '#ef4444', TRUE, 5, NOW(), NOW()),
      ('cat-other', 'Other Exams', 'OTHER', 'Specialized international board exams and nursing entrance credentials', 'Globe', '#64748b', TRUE, 6, NOW(), NOW())
-   ON CONFLICT (id) DO NOTHING;`,
-
-  // 2. Initial Exam Material Requests matching screenshot
-  `INSERT INTO public.exam_material_requests (id, request_number, title, category_id, category_name, type, requested_by, candidate_name, candidate_phone, request_date, status, urgency, notes, created_at, updated_at)
-   VALUES
-     ('req-001', 'REQ-2026-001', 'DHA Registered Nurse - Module 1', 'cat-dha', 'DHA', 'Mock Test', 'Limtha', 'Limtha Perera', '+971 50 123 4567', '2026-10-26 09:15:00+05:30', 'Pending', 'Normal', 'Urgent need for cardiovascular and critical care module question sets.', NOW(), NOW()),
-     ('req-002', 'REQ-2026-002', 'HAAD Pharmacist - Study Notes', 'cat-haad', 'HAAD', 'Study Material', 'Nirekshan', 'Nirekshan Raj', '+971 50 234 5678', '2026-10-25 16:30:00+05:30', 'In Progress', 'High', 'Pharmacology calculations and clinical pharmacy practice guidelines.', NOW(), NOW()),
-     ('req-003', 'REQ-2026-003', 'MOH Technician - Mock Test', 'cat-moh', 'MOH', 'Mock Test', 'Reesma', 'Reesma Begum', '+971 50 345 6789', '2026-10-25 11:20:00+05:30', 'Pending', 'Normal', 'Medical laboratory technician practice questions and hematology banks.', NOW(), NOW()),
-     ('req-004', 'REQ-2026-004', 'DHA Medical Lab Technologist - Notes', 'cat-dha', 'DHA', 'Study Material', 'Aheela', 'Aheela Fatima', '+971 50 456 7890', '2026-10-24 15:45:00+05:30', 'Approved', 'Normal', 'Approved for release to candidate batch October 2026.', NOW(), NOW()),
-     ('req-005', 'REQ-2026-005', 'Saudi Prometric - Question Bank', 'cat-prometric', 'Prometric', 'Question Bank', 'Sathusika', 'Sathusika Mohan', '+971 50 567 8901', '2026-10-24 10:10:00+05:30', 'Pending', 'Normal', 'Full Prometric general nursing bank with rationales.', NOW(), NOW()),
-     ('req-006', 'REQ-2026-006', 'NCLEX Next-Gen Case Studies', 'cat-nclex', 'NCLEX', 'Mock Test', 'Limtha', 'Kavitha Senanayake', '+94 77 123 9988', '2026-10-23 14:00:00+05:30', 'Pending', 'High', 'Next-Gen clinical judgment measurement model clinical scenarios.', NOW(), NOW()),
-     ('req-007', 'REQ-2026-007', 'MOH General Practitioner Clinical Review', 'cat-moh', 'MOH', 'Study Material', 'Reesma', 'Dr. Farhan Tariq', '+971 55 889 1234', '2026-10-23 10:30:00+05:30', 'Pending', 'Urgent', 'Internal medicine and pediatric review summaries for GP exam.', NOW(), NOW())
-   ON CONFLICT (id) DO NOTHING;`,
-
-  // 3. Initial Representative Exam Materials matching category counts
-  `INSERT INTO public.exam_materials (id, title, category_id, category_name, type, description, file_name, file_url, file_type, file_size, file_size_formatted, target_profession, uploaded_by, uploader_name, download_count, is_active, created_at, updated_at)
-   VALUES
-     ('mat-001', 'DHA Registered Nurse Comprehensive Review 2026', 'cat-dha', 'DHA', 'Study Material', 'Complete official review syllabus and clinical scenarios for DHA RN exam.', 'dha_rn_review_2026.pdf', '/api/media/dha_rn_review_2026.pdf', 'application/pdf', 15728640, '15.0 MB', 'Registered Nurse', 'admin', 'Admin', 48, TRUE, NOW(), NOW()),
-     ('mat-002', 'HAAD Pharmacist Drug Classification & Dosages', 'cat-haad', 'HAAD', 'Study Material', 'Essential pharmacology handbook and dosage calculation formula sheet.', 'haad_pharmacology_guide.pdf', '/api/media/haad_pharmacology_guide.pdf', 'application/pdf', 8388608, '8.0 MB', 'Pharmacist', 'admin', 'Admin', 32, TRUE, NOW(), NOW()),
-     ('mat-003', 'MOH Laboratory Technician Practice Bank', 'cat-moh', 'MOH', 'Mock Test', '1000 Question test bank covering hematology, biochemistry, and microbiology.', 'moh_lab_test_bank.zip', '/api/media/moh_lab_test_bank.zip', 'application/zip', 52428800, '50.0 MB', 'Lab Technician', 'admin', 'Admin', 29, TRUE, NOW(), NOW()),
-     ('mat-004', 'Saudi Prometric General Nursing Question Paper 2026', 'cat-prometric', 'Prometric', 'Question Bank', 'Prometric real-pattern mock paper with answer rationales and scoring rubric.', 'prometric_nursing_qbank.pdf', '/api/media/prometric_nursing_qbank.pdf', 'application/pdf', 12582912, '12.0 MB', 'Registered Nurse', 'admin', 'Admin', 56, TRUE, NOW(), NOW()),
-     ('mat-005', 'NCLEX-RN Next Generation Clinical Judgment Pack', 'cat-nclex', 'NCLEX', 'Study Material', 'Case-based simulation notes, pharmacology mnemonics, and adaptive test tips.', 'nclex_ngn_mastery.pdf', '/api/media/nclex_ngn_mastery.pdf', 'application/pdf', 24117248, '23.0 MB', 'Registered Nurse', 'admin', 'Admin', 64, TRUE, NOW(), NOW()),
-     ('mat-006', 'OET Medicine & Nursing High-Scoring Roleplays', 'cat-other', 'Other Exams', 'Study Material', 'Audio transcripts and roleplay scenarios for occupational English test.', 'oet_healthcare_mastery.pdf', '/api/media/oet_healthcare_mastery.pdf', 'application/pdf', 6291456, '6.0 MB', 'General Practitioner', 'admin', 'Admin', 19, TRUE, NOW(), NOW())
    ON CONFLICT (id) DO NOTHING;`
 ];
 

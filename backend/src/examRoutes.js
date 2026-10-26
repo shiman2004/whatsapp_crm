@@ -14,322 +14,18 @@ import { saveMediaToSupabase } from './supabaseMedia.js';
 
 // In-memory fallback stores when DB is operating offline
 let MEMORY_CATEGORIES = [
-  { id: 'cat-dha', name: 'DHA', code: 'DHA', description: 'Dubai Health Authority licensing exams for doctors, nurses, allied health', icon: 'Stethoscope', color: '#06b6d4', isActive: true, displayOrder: 1, materialCount: 32 },
-  { id: 'cat-haad', name: 'HAAD', code: 'HAAD', description: 'Health Authority Abu Dhabi / DoH healthcare professional exams', icon: 'PlusCircle', color: '#10b981', isActive: true, displayOrder: 2, materialCount: 18 },
-  { id: 'cat-moh', name: 'MOH', code: 'MOH', description: 'Ministry of Health UAE licensing exams and assessment modules', icon: 'Activity', color: '#8b5cf6', isActive: true, displayOrder: 3, materialCount: 18 },
-  { id: 'cat-prometric', name: 'Prometric', code: 'PROMETRIC', description: 'Saudi Commission (SCFHS), Qatar (QCHP), Oman & Bahrain Prometric exams', icon: 'ClipboardCheck', color: '#f59e0b', isActive: true, displayOrder: 4, materialCount: 15 },
-  { id: 'cat-nclex', name: 'NCLEX', code: 'NCLEX', description: 'National Council Licensure Examination for Registered Nurses (RN/PN)', icon: 'ShieldAlert', color: '#ef4444', isActive: true, displayOrder: 5, materialCount: 26 },
-  { id: 'cat-other', name: 'Other Exams', code: 'OTHER', description: 'Specialized international board exams and nursing entrance credentials', icon: 'Globe', color: '#64748b', isActive: true, displayOrder: 6, materialCount: 9 }
+  { id: 'cat-dha', name: 'DHA', code: 'DHA', description: 'Dubai Health Authority licensing exams for doctors, nurses, allied health', icon: 'Stethoscope', color: '#06b6d4', isActive: true, displayOrder: 1, materialCount: 0 },
+  { id: 'cat-haad', name: 'HAAD', code: 'HAAD', description: 'Health Authority Abu Dhabi / DoH healthcare professional exams', icon: 'PlusCircle', color: '#10b981', isActive: true, displayOrder: 2, materialCount: 0 },
+  { id: 'cat-moh', name: 'MOH', code: 'MOH', description: 'Ministry of Health UAE licensing exams and assessment modules', icon: 'Activity', color: '#8b5cf6', isActive: true, displayOrder: 3, materialCount: 0 },
+  { id: 'cat-prometric', name: 'Prometric', code: 'PROMETRIC', description: 'Saudi Commission (SCFHS), Qatar (QCHP), Oman & Bahrain Prometric exams', icon: 'ClipboardCheck', color: '#f59e0b', isActive: true, displayOrder: 4, materialCount: 0 },
+  { id: 'cat-nclex', name: 'NCLEX', code: 'NCLEX', description: 'National Council Licensure Examination for Registered Nurses (RN/PN)', icon: 'ShieldAlert', color: '#ef4444', isActive: true, displayOrder: 5, materialCount: 0 },
+  { id: 'cat-other', name: 'Other Exams', code: 'OTHER', description: 'Specialized international board exams and nursing entrance credentials', icon: 'Globe', color: '#64748b', isActive: true, displayOrder: 6, materialCount: 0 }
 ];
 
-let MEMORY_REQUESTS = [
-  {
-    id: 'req-001',
-    requestNumber: 'REQ-2026-001',
-    title: 'DHA Registered Nurse - Module 1',
-    categoryId: 'cat-dha',
-    categoryName: 'DHA',
-    type: 'Mock Test',
-    requestedBy: 'Limtha',
-    candidateName: 'Limtha Perera',
-    candidatePhone: '+971 50 123 4567',
-    requestDate: '2026-10-26T09:15:00+05:30',
-    status: 'Pending',
-    urgency: 'Normal',
-    notes: 'Cardiovascular and critical care module question sets.'
-  },
-  {
-    id: 'req-002',
-    requestNumber: 'REQ-2026-002',
-    title: 'HAAD Pharmacist - Study Notes',
-    categoryId: 'cat-haad',
-    categoryName: 'HAAD',
-    type: 'Study Material',
-    requestedBy: 'Nirekshan',
-    candidateName: 'Nirekshan Raj',
-    candidatePhone: '+971 50 234 5678',
-    requestDate: '2026-10-25T16:30:00+05:30',
-    status: 'In Progress',
-    urgency: 'High',
-    notes: 'Pharmacology calculations and clinical pharmacy practice guidelines.'
-  },
-  {
-    id: 'req-003',
-    requestNumber: 'REQ-2026-003',
-    title: 'MOH Technician - Mock Test',
-    categoryId: 'cat-moh',
-    categoryName: 'MOH',
-    type: 'Mock Test',
-    requestedBy: 'Reesma',
-    candidateName: 'Reesma Begum',
-    candidatePhone: '+971 50 345 6789',
-    requestDate: '2026-10-25T11:20:00+05:30',
-    status: 'Pending',
-    urgency: 'Normal',
-    notes: 'Medical laboratory technician practice questions and hematology banks.'
-  },
-  {
-    id: 'req-004',
-    requestNumber: 'REQ-2026-004',
-    title: 'DHA Medical Lab Technologist - Notes',
-    categoryId: 'cat-dha',
-    categoryName: 'DHA',
-    type: 'Study Material',
-    requestedBy: 'Aheela',
-    candidateName: 'Aheela Fatima',
-    candidatePhone: '+971 50 456 7890',
-    requestDate: '2026-10-24T15:45:00+05:30',
-    status: 'Approved',
-    urgency: 'Normal',
-    notes: 'Approved for release to candidate batch October 2026.'
-  },
-  {
-    id: 'req-005',
-    requestNumber: 'REQ-2026-005',
-    title: 'Saudi Prometric - Question Bank',
-    categoryId: 'cat-prometric',
-    categoryName: 'Prometric',
-    type: 'Question Bank',
-    requestedBy: 'Sathusika',
-    candidateName: 'Sathusika Mohan',
-    candidatePhone: '+971 50 567 8901',
-    requestDate: '2026-10-24T10:10:00+05:30',
-    status: 'Pending',
-    urgency: 'Normal',
-    notes: 'Full Prometric general nursing bank with rationales.'
-  },
-  {
-    id: 'req-006',
-    requestNumber: 'REQ-2026-006',
-    title: 'NCLEX Next-Gen Case Studies',
-    categoryId: 'cat-nclex',
-    categoryName: 'NCLEX',
-    type: 'Mock Test',
-    requestedBy: 'Limtha',
-    candidateName: 'Kavitha Senanayake',
-    candidatePhone: '+94 77 123 9988',
-    requestDate: '2026-10-23T14:00:00+05:30',
-    status: 'Pending',
-    urgency: 'High',
-    notes: 'Next-Gen clinical judgment measurement model clinical scenarios.'
-  },
-  {
-    id: 'req-007',
-    requestNumber: 'REQ-2026-007',
-    title: 'MOH General Practitioner Clinical Review',
-    categoryId: 'cat-moh',
-    categoryName: 'MOH',
-    type: 'Study Material',
-    requestedBy: 'Reesma',
-    candidateName: 'Dr. Farhan Tariq',
-    candidatePhone: '+971 55 889 1234',
-    requestDate: '2026-10-23T10:30:00+05:30',
-    status: 'Pending',
-    urgency: 'Urgent',
-    notes: 'Internal medicine and pediatric review summaries for GP exam.'
-  }
-];
-
-let MEMORY_MATERIALS = [
-  {
-    id: 'mat-001',
-    title: 'DHA Registered Nurse Comprehensive Review 2026',
-    categoryId: 'cat-dha',
-    categoryName: 'DHA',
-    type: 'Study Material',
-    description: 'Complete official review syllabus and clinical scenarios for DHA RN exam.',
-    fileName: 'dha_rn_review_2026.pdf',
-    fileUrl: '/uploads/dha_rn_review_2026.pdf',
-    fileType: 'application/pdf',
-    fileSize: 15728640,
-    fileSizeFormatted: '15.0 MB',
-    targetProfession: 'Registered Nurse',
-    uploadedBy: 'admin',
-    uploaderName: 'Admin',
-    downloadCount: 48,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mat-002',
-    title: 'HAAD Pharmacist Drug Classification & Dosages',
-    categoryId: 'cat-haad',
-    categoryName: 'HAAD',
-    type: 'Study Material',
-    description: 'Essential pharmacology handbook and dosage calculation formula sheet.',
-    fileName: 'haad_pharmacology_guide.pdf',
-    fileUrl: '/uploads/haad_pharmacology_guide.pdf',
-    fileType: 'application/pdf',
-    fileSize: 8388608,
-    fileSizeFormatted: '8.0 MB',
-    targetProfession: 'Pharmacist',
-    uploadedBy: 'admin',
-    uploaderName: 'Admin',
-    downloadCount: 32,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mat-003',
-    title: 'MOH Laboratory Technician Practice Bank',
-    categoryId: 'cat-moh',
-    categoryName: 'MOH',
-    type: 'Mock Test',
-    description: '1000 Question test bank covering hematology, biochemistry, and microbiology.',
-    fileName: 'moh_lab_test_bank.zip',
-    fileUrl: '/uploads/moh_lab_test_bank.zip',
-    fileType: 'application/zip',
-    fileSize: 52428800,
-    fileSizeFormatted: '50.0 MB',
-    targetProfession: 'Lab Technician',
-    uploadedBy: 'admin',
-    uploaderName: 'Admin',
-    downloadCount: 29,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mat-004',
-    title: 'Saudi Prometric General Nursing Question Paper 2026',
-    categoryId: 'cat-prometric',
-    categoryName: 'Prometric',
-    type: 'Question Bank',
-    description: 'Prometric real-pattern mock paper with answer rationales and scoring rubric.',
-    fileName: 'prometric_nursing_qbank.pdf',
-    fileUrl: '/uploads/prometric_nursing_qbank.pdf',
-    fileType: 'application/pdf',
-    fileSize: 12582912,
-    fileSizeFormatted: '12.0 MB',
-    targetProfession: 'Registered Nurse',
-    uploadedBy: 'admin',
-    uploaderName: 'Admin',
-    downloadCount: 56,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mat-005',
-    title: 'NCLEX-RN Next Generation Clinical Judgment Pack',
-    categoryId: 'cat-nclex',
-    categoryName: 'NCLEX',
-    type: 'Study Material',
-    description: 'Case-based simulation notes, pharmacology mnemonics, and adaptive test tips.',
-    fileName: 'nclex_ngn_mastery.pdf',
-    fileUrl: '/uploads/nclex_ngn_mastery.pdf',
-    fileType: 'application/pdf',
-    fileSize: 24117248,
-    fileSizeFormatted: '23.0 MB',
-    targetProfession: 'Registered Nurse',
-    uploadedBy: 'admin',
-    uploaderName: 'Admin',
-    downloadCount: 64,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mat-006',
-    title: 'OET Medicine & Nursing High-Scoring Roleplays',
-    categoryId: 'cat-other',
-    categoryName: 'Other Exams',
-    type: 'Study Material',
-    description: 'Audio transcripts and roleplay scenarios for occupational English test.',
-    fileName: 'oet_healthcare_mastery.pdf',
-    fileUrl: '/uploads/oet_healthcare_mastery.pdf',
-    fileType: 'application/pdf',
-    fileSize: 6291456,
-    fileSizeFormatted: '6.0 MB',
-    targetProfession: 'General Practitioner',
-    uploadedBy: 'admin',
-    uploaderName: 'Admin',
-    downloadCount: 19,
-    isActive: true,
-    createdAt: new Date().toISOString()
-  }
-];
-
-let MEMORY_MOCK_TESTS = [
-  {
-    id: 'mock-001',
-    title: 'DHA Nursing Licensure Full Mock Examination',
-    categoryId: 'cat-dha',
-    categoryName: 'DHA',
-    targetProfession: 'Registered Nurse',
-    totalQuestions: 150,
-    durationMinutes: 180,
-    passingScore: 65,
-    difficulty: 'Hard',
-    questionPaperUrl: '/uploads/dha_mock_paper.pdf',
-    answerKeyUrl: '/uploads/dha_mock_answers.pdf',
-    explanationUrl: '',
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mock-002',
-    title: 'HAAD Clinical Pharmacist Mock Exam 2026',
-    categoryId: 'cat-haad',
-    categoryName: 'HAAD',
-    targetProfession: 'Pharmacist',
-    totalQuestions: 100,
-    durationMinutes: 120,
-    passingScore: 70,
-    difficulty: 'Medium',
-    questionPaperUrl: '/uploads/haad_pharmacist_mock.pdf',
-    answerKeyUrl: '/uploads/haad_pharmacist_answers.pdf',
-    explanationUrl: '',
-    isActive: true,
-    createdAt: new Date().toISOString()
-  },
-  {
-    id: 'mock-003',
-    title: 'Saudi Prometric General Nursing Speed Drill',
-    categoryId: 'cat-prometric',
-    categoryName: 'Prometric',
-    targetProfession: 'Registered Nurse',
-    totalQuestions: 75,
-    durationMinutes: 90,
-    passingScore: 60,
-    difficulty: 'Medium',
-    questionPaperUrl: '/uploads/prometric_drill_paper.pdf',
-    answerKeyUrl: '',
-    explanationUrl: '',
-    isActive: true,
-    createdAt: new Date().toISOString()
-  }
-];
-
-let MEMORY_PROVISIONS = [
-  {
-    id: 'prov-001',
-    candidateName: 'Limtha Perera',
-    candidatePhone: '+971 50 123 4567',
-    candidateEmail: 'limtha.p@example.com',
-    categoryId: 'cat-dha',
-    categoryName: 'DHA',
-    packageName: 'DHA RN Comprehensive Bundle + 5 Mocks',
-    provisionDate: '2026-10-20T10:00:00+05:30',
-    validUntil: '2027-04-20T10:00:00+05:30',
-    accessStatus: 'Active',
-    materialsIncluded: ['mat-001', 'mock-001'],
-    providedBy: 'Admin',
-    notes: 'Provisioned with full candidate support access.'
-  },
-  {
-    id: 'prov-002',
-    candidateName: 'Nirekshan Raj',
-    candidatePhone: '+971 50 234 5678',
-    candidateEmail: 'nirekshan@example.com',
-    categoryId: 'cat-haad',
-    categoryName: 'HAAD',
-    packageName: 'HAAD Clinical Pharmacist Study Package',
-    provisionDate: '2026-10-18T14:30:00+05:30',
-    validUntil: '2027-01-18T14:30:00+05:30',
-    accessStatus: 'Active',
-    materialsIncluded: ['mat-002', 'mock-002'],
-    providedBy: 'Admin',
-    notes: 'Included pharmacology formula sheets.'
-  }
-];
+let MEMORY_REQUESTS = [];
+let MEMORY_MATERIALS = [];
+let MEMORY_MOCK_TESTS = [];
+let MEMORY_PROVISIONS = [];
 
 /**
  * Send JSON response helper
@@ -409,17 +105,17 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     // 1. DASHBOARD STATS: GET /api/exam/dashboard-stats
     // -------------------------------------------------------------------------
     if (req.method === 'GET' && pathname === '/api/exam/dashboard-stats') {
-      let pendingRequestsCount = 5;
-      let totalExamsProvidedCount = 128;
-      let totalStudyMaterialsCount = 346;
-      let totalMockTestsCount = 278;
+      let pendingRequestsCount = 0;
+      let totalExamsProvidedCount = 0;
+      let totalStudyMaterialsCount = 0;
+      let totalMockTestsCount = 0;
       let categoryCounts = {
-        'cat-dha': 32,
-        'cat-haad': 18,
-        'cat-moh': 18,
-        'cat-prometric': 15,
-        'cat-nclex': 26,
-        'cat-other': 9
+        'cat-dha': 0,
+        'cat-haad': 0,
+        'cat-moh': 0,
+        'cat-prometric': 0,
+        'cat-nclex': 0,
+        'cat-other': 0
       };
       let recentRequests = [];
 
@@ -435,21 +131,21 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           const provCountRes = await prisma.$queryRawUnsafe(`
             SELECT COUNT(*)::int as count FROM public.exam_provisions;
           `);
-          if (provCountRes && provCountRes[0] && provCountRes[0].count > 0) {
+          if (provCountRes && provCountRes[0]) {
             totalExamsProvidedCount = provCountRes[0].count;
           }
 
           const matCountRes = await prisma.$queryRawUnsafe(`
             SELECT COUNT(*)::int as count FROM public.exam_materials WHERE type != 'Mock Test';
           `);
-          if (matCountRes && matCountRes[0] && matCountRes[0].count > 0) {
+          if (matCountRes && matCountRes[0]) {
             totalStudyMaterialsCount = matCountRes[0].count;
           }
 
           const mockCountRes = await prisma.$queryRawUnsafe(`
             SELECT COUNT(*)::int as count FROM public.exam_mock_tests;
           `);
-          if (mockCountRes && mockCountRes[0] && mockCountRes[0].count > 0) {
+          if (mockCountRes && mockCountRes[0]) {
             totalMockTestsCount = mockCountRes[0].count;
           }
 
@@ -493,12 +189,17 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         } catch (dbErr) {
           console.warn('⚠️ [ExamRoutes] Dashboard stats DB query fallback:', dbErr.message);
         }
-      }
-
-      // Memory fallback if DB query returned 0 rows
-      if (recentRequests.length === 0) {
+      } else {
         recentRequests = MEMORY_REQUESTS.slice(0, 5);
         pendingRequestsCount = MEMORY_REQUESTS.filter(r => r.status === 'Pending').length;
+        totalExamsProvidedCount = MEMORY_PROVISIONS.length;
+        totalStudyMaterialsCount = MEMORY_MATERIALS.filter(m => m.type !== 'Mock Test').length;
+        totalMockTestsCount = MEMORY_MOCK_TESTS.length;
+        MEMORY_MATERIALS.forEach(m => {
+          if (m.categoryId) {
+            categoryCounts[m.categoryId] = (categoryCounts[m.categoryId] || 0) + 1;
+          }
+        });
       }
 
       sendJson(res, 200, {
@@ -539,13 +240,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 color: r.color,
                 isActive: r.is_active,
                 displayOrder: r.display_order,
-                materialCount: r.material_count > 0 ? r.material_count : (
-                  r.code === 'DHA' ? 32 :
-                  r.code === 'HAAD' ? 18 :
-                  r.code === 'MOH' ? 18 :
-                  r.code === 'PROMETRIC' ? 15 :
-                  r.code === 'NCLEX' ? 26 : 9
-                )
+                materialCount: Number(r.material_count || 0)
               }));
             }
           } catch (err) {
@@ -1268,25 +963,115 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     // 8. REPORTS: /api/exam/reports
     // -------------------------------------------------------------------------
     if (pathname === '/api/exam/reports' && req.method === 'GET') {
-      const stats = {
-        totalRequests: MEMORY_REQUESTS.length,
-        approvedRequests: MEMORY_REQUESTS.filter(r => r.status === 'Approved').length,
-        pendingRequests: MEMORY_REQUESTS.filter(r => r.status === 'Pending').length,
-        inProgressRequests: MEMORY_REQUESTS.filter(r => r.status === 'In Progress').length,
-        totalMaterials: 346,
-        totalMockTests: 278,
-        totalProvisions: 128,
-        categoryBreakdown: [
-          { category: 'DHA', count: 32, percentage: 26 },
-          { category: 'HAAD', count: 18, percentage: 15 },
-          { category: 'MOH', count: 18, percentage: 15 },
-          { category: 'Prometric', count: 15, percentage: 12 },
-          { category: 'NCLEX', count: 26, percentage: 21 },
-          { category: 'Other Exams', count: 9, percentage: 11 }
-        ],
-        recentProvisions: MEMORY_PROVISIONS.slice(0, 5)
-      };
-      sendJson(res, 200, { success: true, data: stats });
+      let totalRequests = 0;
+      let approvedRequests = 0;
+      let pendingRequests = 0;
+      let inProgressRequests = 0;
+      let totalMaterials = 0;
+      let totalMockTests = 0;
+      let totalProvisions = 0;
+      let categoryBreakdown = [];
+      let recentProvisions = [];
+
+      if (prisma) {
+        try {
+          const [reqsStats, matCount, mockCount, provCount, catStats, provs] = await Promise.all([
+            prisma.$queryRawUnsafe(`
+              SELECT 
+                COUNT(*)::int as total,
+                COUNT(CASE WHEN status = 'Approved' THEN 1 END)::int as approved,
+                COUNT(CASE WHEN status = 'Pending' THEN 1 END)::int as pending,
+                COUNT(CASE WHEN status = 'In Progress' THEN 1 END)::int as in_progress
+              FROM public.exam_material_requests;
+            `),
+            prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_materials;`),
+            prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_mock_tests;`),
+            prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_provisions;`),
+            prisma.$queryRawUnsafe(`
+              SELECT c.name as category, COUNT(m.id)::int as count
+              FROM public.exam_categories c
+              LEFT JOIN public.exam_materials m ON m.category_id = c.id
+              GROUP BY c.name, c.display_order
+              ORDER BY c.display_order ASC;
+            `),
+            prisma.$queryRawUnsafe(`
+              SELECT * FROM public.exam_provisions 
+              ORDER BY provision_date DESC 
+              LIMIT 5;
+            `)
+          ]);
+
+          if (reqsStats && reqsStats[0]) {
+            totalRequests = reqsStats[0].total || 0;
+            approvedRequests = reqsStats[0].approved || 0;
+            pendingRequests = reqsStats[0].pending || 0;
+            inProgressRequests = reqsStats[0].in_progress || 0;
+          }
+          if (matCount && matCount[0]) totalMaterials = matCount[0].count || 0;
+          if (mockCount && mockCount[0]) totalMockTests = mockCount[0].count || 0;
+          if (provCount && provCount[0]) totalProvisions = provCount[0].count || 0;
+
+          if (catStats && catStats.length > 0) {
+            categoryBreakdown = catStats.map(r => ({
+              category: r.category,
+              count: Number(r.count || 0),
+              percentage: totalMaterials > 0 ? Math.round((Number(r.count || 0) / totalMaterials) * 100) : 0
+            }));
+          }
+
+          if (provs && provs.length > 0) {
+            recentProvisions = provs.map(p => ({
+              id: p.id,
+              candidateName: p.candidate_name,
+              candidatePhone: p.candidate_phone,
+              candidateEmail: p.candidate_email,
+              categoryId: p.category_id,
+              categoryName: p.category_name,
+              packageName: p.package_name,
+              provisionDate: p.provision_date,
+              validUntil: p.valid_until,
+              accessStatus: p.access_status,
+              materialsIncluded: p.materials_included || [],
+              providedBy: p.provided_by,
+              notes: p.notes
+            }));
+          }
+        } catch (dbErr) {
+          console.warn('⚠️ [ExamRoutes] Reports DB query error:', dbErr.message);
+        }
+      } else {
+        totalRequests = MEMORY_REQUESTS.length;
+        approvedRequests = MEMORY_REQUESTS.filter(r => r.status === 'Approved').length;
+        pendingRequests = MEMORY_REQUESTS.filter(r => r.status === 'Pending').length;
+        inProgressRequests = MEMORY_REQUESTS.filter(r => r.status === 'In Progress').length;
+        totalMaterials = MEMORY_MATERIALS.length;
+        totalMockTests = MEMORY_MOCK_TESTS.length;
+        totalProvisions = MEMORY_PROVISIONS.length;
+        categoryBreakdown = MEMORY_CATEGORIES.map(c => {
+          const count = MEMORY_MATERIALS.filter(m => m.categoryId === c.id).length;
+          return {
+            category: c.name,
+            count,
+            percentage: totalMaterials > 0 ? Math.round((count / totalMaterials) * 100) : 0
+          };
+        });
+        recentProvisions = MEMORY_PROVISIONS.slice(0, 5);
+      }
+
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          totalRequests,
+          approvedRequests,
+          pendingRequests,
+          inProgressRequests,
+          totalMaterials,
+          totalMockTests,
+          totalProvisions,
+          categoryBreakdown,
+          recentProvisions
+        }
+      });
       return true;
     }
 

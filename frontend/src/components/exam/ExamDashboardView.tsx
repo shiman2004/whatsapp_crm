@@ -103,7 +103,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
   };
 
   const formatRequestDate = (dateString?: string) => {
-    if (!dateString) return '26 Oct 2026, 09:15 AM';
+    if (!dateString) return '-';
     try {
       const d = new Date(dateString);
       if (isNaN(d.getTime())) return dateString;
@@ -137,7 +137,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
             <div>
               <p className="text-xs font-medium text-slate-300">New Exam Material Request</p>
               <h3 className="text-2xl font-black text-white mt-0.5 tracking-tight">
-                {stats.pendingRequestsCount || 5}
+                {stats.pendingRequestsCount ?? 0}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">Pending approval</p>
             </div>
@@ -159,7 +159,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
             <div>
               <p className="text-xs font-medium text-slate-300">Total Exams Provided</p>
               <h3 className="text-2xl font-black text-white mt-0.5 tracking-tight">
-                {stats.totalExamsProvidedCount || 128}
+                {stats.totalExamsProvidedCount ?? 0}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">Across all categories</p>
             </div>
@@ -181,7 +181,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
             <div>
               <p className="text-xs font-medium text-slate-300">Total Study Materials</p>
               <h3 className="text-2xl font-black text-white mt-0.5 tracking-tight">
-                {stats.totalStudyMaterialsCount || 346}
+                {stats.totalStudyMaterialsCount ?? 0}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">PDFs, Videos, Notes</p>
             </div>
@@ -203,7 +203,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
             <div>
               <p className="text-xs font-medium text-slate-300">Total Mock Tests</p>
               <h3 className="text-2xl font-black text-white mt-0.5 tracking-tight">
-                {stats.totalMockTestsCount || 278}
+                {stats.totalMockTestsCount ?? 0}
               </h3>
               <p className="text-[11px] text-slate-400 mt-0.5">Question Papers</p>
             </div>
@@ -457,7 +457,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
             {/* 2x3 Categories Grid matching screenshot */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {categories.slice(0, 6).map((cat) => {
-                const count = stats.categoryCounts[cat.id] || cat.materialCount || 0;
+                const count = stats.categoryCounts[cat.id] ?? cat.materialCount ?? 0;
                 return (
                   <div
                     key={cat.id}

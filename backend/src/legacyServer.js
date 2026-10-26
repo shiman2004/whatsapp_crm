@@ -12,6 +12,8 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleExamRoutes } from './examRoutes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
+import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
+import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
 
 dotenv.config();
 if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
@@ -980,7 +982,7 @@ const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Hub-Signature-256, x-coordinator-id, x-user-id');
   res.setHeader('Access-Control-Max-Age', '86400');
 
-  const requestLimit = getBodyLimit(url.parse(req.url || '/', true).pathname || '/');
+  const requestLimit = getBodyLimit(new URL(req.url || '/', 'http://localhost').pathname || '/');
   const declaredLength = Number(req.headers['content-length'] || 0);
   if (declaredLength > requestLimit) {
     res.writeHead(413, { 'Content-Type': 'application/json' });
@@ -994,7 +996,12 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  const parsedUrl = url.parse(req.url, true);
+  const rawParsedUrl = new URL(req.url || '/', 'http://localhost');
+  const parsedUrl = {
+    pathname: rawParsedUrl.pathname,
+    query: Object.fromEntries(rawParsedUrl.searchParams.entries()),
+    searchParams: rawParsedUrl.searchParams
+  };
   // Older/cached frontend bundles may still send `/api/api/...` when their
   // configured API URL already includes `/api`. Collapse duplicate prefixes
   // before public-route and authentication checks so login remains reachable.
@@ -1667,6 +1674,27 @@ const server = http.createServer(async (req, res) => {
         const cleanTo = norm.clean;
         const formattedTo = norm.canonical;
 
+        // Consent Governance & Suppression Gate Check
+        const msgType = payload.templateName || payload.type === 'template' ? 'template' : (media ? 'media' : 'text');
+        try {
+          const gateCheck = await canSendWhatsApp(formattedTo, msgType, {
+            templateName: payload.templateName,
+            check24hWindow: false
+          });
+          if (!gateCheck.allowed) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              code: gateCheck.code || 'MESSAGING_CONSENT_DENIED',
+              error: gateCheck.reason
+            }));
+            return;
+          }
+        } catch (e) {
+          // If gate check fails unexpectedly, be conservative for marketing contacts is handled inside; otherwise allow CRM flow
+          console.warn('[ConsentGate] /api/send check failed:', e?.message);
+        }
+
         // 2. Resolve company & correct Meta Cloud API Phone Number ID
         const prisma = getPrisma();
         let resolvedCompany = payload.company;
@@ -1994,7 +2022,7 @@ const server = http.createServer(async (req, res) => {
                       serialNumber: await allocateCompanyLeadSerial(prisma, resolvedCompany),
                       customerId: cust.id,
                       categoryId: firstCat?.id || (resolvedCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
-                      treatmentId: firstTrt?.id || (resolvedCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
+                      treatmentId: firstTrt?.id || (resolvedCompany === 'CRAS' ? 'crs-adi' : 'trt-prp'),
                       stage: 'contacted',
                       source: resolvedCompany || 'RWC',
                       language: 'en'
@@ -2219,6 +2247,25 @@ const server = http.createServer(async (req, res) => {
 
         const cleanTo = norm.clean;
         const formattedTo = norm.canonical;
+
+        // Consent gate for templates too
+        try {
+          const gateCheck = await canSendWhatsApp(formattedTo, 'template', {
+            templateName,
+            check24hWindow: false
+          });
+          if (!gateCheck.allowed) {
+            res.writeHead(403, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              code: gateCheck.code || 'MESSAGING_CONSENT_DENIED',
+              error: gateCheck.reason
+            }));
+            return;
+          }
+        } catch (e) {
+          console.warn('[ConsentGate] /api/send-template check failed:', e?.message);
+        }
 
         let effectiveLanguage = language;
         if (
@@ -4121,6 +4168,7 @@ const server = http.createServer(async (req, res) => {
                 assignedById: assignerId,
                 assignedByName: assignerName,
                 assignedAt: assignmentDate,
+                acceptedAt: null,
                 stage: 'new',
                 updatedAt: new Date()
               },
@@ -4261,6 +4309,7 @@ const server = http.createServer(async (req, res) => {
                   assignedById: assignerId,
                   assignedByName: assignerName,
                   assignedAt: assignmentDate,
+                  acceptedAt: targetLead.stage === 'new' ? assignmentDate : targetLead.acceptedAt,
                   stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
                   updatedAt: new Date()
                 }
@@ -4298,6 +4347,7 @@ const server = http.createServer(async (req, res) => {
                   assignedById: assignerId,
                   assignedByName: assignerName,
                   assignedAt: assignmentDate,
+                  acceptedAt: targetLead.stage === 'new' ? assignmentDate : targetLead.acceptedAt,
                   stage: targetLead.stage === 'new' ? 'assigned' : targetLead.stage,
                   updatedAt: new Date()
                 },
@@ -4432,13 +4482,14 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 10b2. REST: Update Lead Treatment & Serial Number & Stage
-  if ((req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || pathname.startsWith('/api/leads/'))) {
+  const isLeadsUpdateRoute = (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || (pathname.startsWith('/api/leads/') && pathname !== '/api/leads/create' && pathname !== '/api/leads/assign' && pathname !== '/api/leads/delete' && !pathname.startsWith('/api/leads/delete/')));
+  if (isLeadsUpdateRoute) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' ? pathname.split('/')[3] : null;
+        const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' && pathname !== '/api/leads/create' ? pathname.split('/')[3] : null;
         const leadId = payload.leadId || payload.id || urlLeadId;
         const { treatmentId, categoryId, serialNumber, stage, language, customerId, phone, whatsappId, reason, acceptedAt } = payload;
 
@@ -4602,7 +4653,8 @@ const server = http.createServer(async (req, res) => {
                 leadId: actualLeadId,
                 fromStage: prevStage,
                 toStage: stage,
-                changedBy: authUser?.id || 'user-admin-1',
+                changedById: authUser?.id || 'user-admin-1',
+                changedByName: authUser?.fullName || 'Super Admin',
                 reason: reason || `Stage changed from ${prevStage} to ${stage}`
               }
             }).catch(() => {});
@@ -4920,7 +4972,7 @@ const server = http.createServer(async (req, res) => {
                 source: targetCompany,
                 serialNumber: companySerial,
                 categoryId: firstCat?.id || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
-                treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
+                treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-prp'),
                 stage: leadStage,
                 assignedTo: targetCoordinatorId,
                 assignedById: targetCoordinatorId ? (authUser?.id || null) : null,
@@ -5236,7 +5288,7 @@ const server = http.createServer(async (req, res) => {
             customerId: savedCustomer.id,
             customer: savedCustomer,
             categoryId: categoryId || (targetCompany === 'CRAS' ? 'cat-cras-courses' : 'cat-hair-care'),
-            treatmentId: treatmentId || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-hair-prp'),
+            treatmentId: treatmentId || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-prp'),
             stage: initialMessage ? 'contacted' : 'new',
             source: targetCompany,
             company: targetCompany,
@@ -6164,6 +6216,14 @@ const server = http.createServer(async (req, res) => {
 
                     // Persist to Supabase / PostgreSQL database
                     const prisma = getPrisma();
+                    const marketingInbound = prisma && getDbStatus() && phone
+                      ? await processMarketingInboundMessage({ prisma, company: companyInfo.code, phone, text, messageId, receivedAt: new Date() }).catch(error => {
+                          console.error('[Marketing inbound automation]', error.message);
+                          return null;
+                        })
+                      : null;
+                    if (marketingInbound) continue;
+
                     if (prisma && getDbStatus() && phone) {
                       try {
                         const rawClean = String(phone).replace(/[^0-9]/g, '');

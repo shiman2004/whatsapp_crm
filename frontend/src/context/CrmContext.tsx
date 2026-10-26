@@ -831,6 +831,25 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (leadsRes && leadsRes.ok) {
         const leadsPayload = await leadsRes.json().catch(() => []);
         fetchedDbLeads = Array.isArray(leadsPayload) ? leadsPayload : (leadsPayload?.leads || []);
+
+        // The API caps each page at 200 leads. Continue loading while the
+        // response says more pages exist so older leads are not hidden.
+        if (!Array.isArray(leadsPayload) && leadsPayload?.hasMore) {
+          let nextPage = Number(leadsPayload.page || 1) + 1;
+          while (nextPage <= Number(leadsPayload.totalPages || nextPage)) {
+            const nextLeadsRes = await fetch(
+              `${API_BASE_URL}/api/leads?paginate=1&pageSize=200&page=${nextPage}`,
+              { headers: authHeaders }
+            ).catch(() => null);
+            if (!nextLeadsRes?.ok) break;
+            const nextPayload = await nextLeadsRes.json().catch(() => null);
+            const nextLeads = Array.isArray(nextPayload) ? nextPayload : (nextPayload?.leads || []);
+            if (!Array.isArray(nextLeads) || nextLeads.length === 0) break;
+            fetchedDbLeads = fetchedDbLeads.concat(nextLeads);
+            if (Array.isArray(nextPayload) || !nextPayload.hasMore) break;
+            nextPage += 1;
+          }
+        }
         if (Array.isArray(fetchedDbLeads)) {
           const dbCustomers: Customer[] = [];
           const hydratedLeads: Lead[] = [];
@@ -1990,6 +2009,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               assignedById: currentUser.id,
               assignedByName: currentUser.fullName,
               assignedAt: nowIso,
+              acceptedAt: undefined,
               stage: 'new' as LeadStage,
               updatedAt: nowIso
             };
@@ -2014,6 +2034,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             assignedById: currentUser.id,
             assignedByName: currentUser.fullName,
             assignedAt: nowIso,
+            acceptedAt: prevStage === 'new' ? nowIso : l.acceptedAt,
             assignmentHistories: [newHist, ...(l.assignmentHistories || [])],
             stage: newStage,
             updatedAt: nowIso

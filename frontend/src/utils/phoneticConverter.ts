@@ -424,6 +424,7 @@ export function transliterateText(text: string, lang: TypingLanguage): string {
       return token;
     }
     // If token contains non-ASCII characters (e.g. already Tamil/Sinhala/emojis), preserve it
+    // eslint-disable-next-line no-control-regex
     if (/[^\x00-\x7F]/.test(token)) {
       return token;
     }

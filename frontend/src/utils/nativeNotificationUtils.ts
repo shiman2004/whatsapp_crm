@@ -101,6 +101,6 @@ export async function showDesktopNativeNotification(
           notif.close();
         };
       }
-    } catch (e2) {}
+    } catch {}
   }
 }

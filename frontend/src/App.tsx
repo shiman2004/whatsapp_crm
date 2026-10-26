@@ -17,6 +17,7 @@ import { WebhookSimulatorPlayground } from './components/admin/WebhookSimulatorP
 import { SuperAdminSettingsView } from './components/admin/SuperAdminSettings/SuperAdminSettingsView';
 import { TeamBroadcastView } from './components/broadcast/TeamBroadcastView';
 import { AppointmentSchedulerView } from './components/appointments/AppointmentSchedulerView';
+import { ExamDepartmentWorkspace } from './components/exam/ExamDepartmentWorkspace';
 import { LoginScreen } from './components/auth/LoginScreen';
 
 import { MessageSquare, KanbanSquare, LayoutDashboard, Menu } from 'lucide-react';
@@ -90,6 +91,7 @@ const MainLayout: React.FC = () => {
         <main className={`flex-1 min-h-0 flex flex-col overflow-hidden ${
           activeTab === 'chat' ? 'p-0 bg-[#efeae2] dark:bg-[#0b141a]' : 
           activeTab === 'appointment-rooms' ? 'p-0 overflow-hidden bg-slate-950' : 
+          (activeTab === 'exam-department' || activeTab.startsWith('exam-')) ? 'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-[#0b141a]' :
           'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/30'
         }`}>
           {activeTab === 'dashboard' && <DashboardOverview />}
@@ -98,6 +100,16 @@ const MainLayout: React.FC = () => {
           {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
           {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
           {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
+          {(activeTab === 'exam-department' || activeTab.startsWith('exam-')) && (
+            <ExamDepartmentWorkspace
+              initialSubTab={
+                activeTab === 'exam-department' || activeTab === 'exam-dashboard'
+                  ? 'dashboard'
+                  : activeTab.replace('exam-', '')
+              }
+              onSubTabChange={(sub) => setActiveTab(`exam-${sub}` as any)}
+            />
+          )}
           {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
           {activeTab === 'templates' && <TemplatesManager />}
           {activeTab === 'broadcast' && <TeamBroadcastView />}

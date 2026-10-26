@@ -10,6 +10,7 @@ import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, del
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
+import { handleExamRoutes } from './examRoutes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 
 dotenv.config();
@@ -1427,6 +1428,12 @@ const server = http.createServer(async (req, res) => {
   // owns capability checks and must never fall through into lead/contact handlers.
   const handledMarketingRoute = await handleMarketingRoutes(req, res, pathname, authUser);
   if (handledMarketingRoute !== false) {
+    return;
+  }
+
+  // Exam Department Module (Health Professional Exams, Requests, Mock Tests, Materials)
+  const handledExamRoute = await handleExamRoutes(req, res, pathname, authUser);
+  if (handledExamRoute !== false) {
     return;
   }
 

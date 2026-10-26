@@ -439,6 +439,117 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_question ON public.exam_mcq_practice_attempts(question_id);`,
   `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_created ON public.exam_mcq_practice_attempts(created_at);`,
 
+  // --- Healthcare Licensing Exam Preparation Platform Tables ---------------
+  `CREATE TABLE IF NOT EXISTS public.exam_courses (
+     id VARCHAR(100) PRIMARY KEY,
+     course_code VARCHAR(50) UNIQUE NOT NULL,
+     course_name VARCHAR(255) NOT NULL,
+     exam_authority VARCHAR(100) NOT NULL,
+     profession VARCHAR(100) NOT NULL,
+     country VARCHAR(100) DEFAULT 'UAE',
+     description TEXT,
+     thumbnail TEXT,
+     status VARCHAR(50) DEFAULT 'Active',
+     access_type VARCHAR(50) DEFAULT 'Free',
+     created_by VARCHAR(100),
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_courses_authority ON public.exam_courses(exam_authority);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_courses_profession ON public.exam_courses(profession);`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_subjects (
+     id VARCHAR(100) PRIMARY KEY,
+     course_id VARCHAR(100) NOT NULL,
+     subject_name VARCHAR(150) NOT NULL,
+     description TEXT,
+     status VARCHAR(50) DEFAULT 'Active',
+     sort_order INTEGER DEFAULT 0,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_subjects_course ON public.exam_subjects(course_id);`,
+
+  // Additive columns for Question Bank in exam_mcq_questions
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS question_code VARCHAR(50);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS course_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS subject_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS topic VARCHAR(150);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS detailed_explanation TEXT;`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(50) DEFAULT 'Both';`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Active';`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_course ON public.exam_mcq_questions(course_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_qcode ON public.exam_mcq_questions(question_code);`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_practice_sessions (
+     id VARCHAR(100) PRIMARY KEY,
+     student_id VARCHAR(100),
+     student_name VARCHAR(150) NOT NULL,
+     course_id VARCHAR(100),
+     current_question_index INTEGER DEFAULT 0,
+     completed_question_ids JSONB DEFAULT '[]'::jsonb,
+     question_attempts_state JSONB DEFAULT '{}'::jsonb,
+     total_time_spent INTEGER DEFAULT 0,
+     last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_practice_sess_student ON public.exam_practice_sessions(student_id, course_id);`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_mock_test_attempts (
+     id VARCHAR(100) PRIMARY KEY,
+     student_id VARCHAR(100),
+     student_name VARCHAR(150) NOT NULL,
+     mock_test_id VARCHAR(100) NOT NULL,
+     mock_test_name VARCHAR(255),
+     course_id VARCHAR(100),
+     started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     submitted_at TIMESTAMP WITH TIME ZONE,
+     total_questions INTEGER DEFAULT 0,
+     correct_answers INTEGER DEFAULT 0,
+     wrong_answers INTEGER DEFAULT 0,
+     unanswered INTEGER DEFAULT 0,
+     score NUMERIC(5,2) DEFAULT 0,
+     percentage NUMERIC(5,2) DEFAULT 0,
+     result VARCHAR(20) DEFAULT 'FAIL',
+     time_taken_seconds INTEGER DEFAULT 0,
+     answers_snapshot JSONB DEFAULT '{}'::jsonb
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mock_att_student ON public.exam_mock_test_attempts(student_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_mock_att_test ON public.exam_mock_test_attempts(mock_test_id);`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_study_materials (
+     id VARCHAR(100) PRIMARY KEY,
+     course_id VARCHAR(100),
+     subject_id VARCHAR(100),
+     topic VARCHAR(150),
+     title VARCHAR(255) NOT NULL,
+     description TEXT,
+     material_type VARCHAR(50) DEFAULT 'PDF',
+     file_url TEXT,
+     external_url TEXT,
+     thumbnail TEXT,
+     allow_download BOOLEAN DEFAULT TRUE,
+     status VARCHAR(50) DEFAULT 'Active',
+     uploaded_by VARCHAR(100),
+     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_materials_course ON public.exam_study_materials(course_id);`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_guidelines (
+     id VARCHAR(100) PRIMARY KEY,
+     course_id VARCHAR(100) NOT NULL,
+     guideline_title VARCHAR(255) NOT NULL,
+     section VARCHAR(100) NOT NULL,
+     content TEXT NOT NULL,
+     official_reference_url TEXT,
+     updated_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     status VARCHAR(50) DEFAULT 'Active',
+     created_by VARCHAR(100),
+     updated_by VARCHAR(100)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_guidelines_course ON public.exam_guidelines(course_id);`,
+
   // --- marketing module foundations & serials ----------------------------------
   `CREATE TABLE IF NOT EXISTS public.marketing_contact_serials (
      id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1), 

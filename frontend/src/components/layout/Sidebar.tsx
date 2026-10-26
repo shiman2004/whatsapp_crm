@@ -31,13 +31,19 @@ export type NavTab =
   | 'treatments' 
   | 'exam-department'
   | 'exam-dashboard'
+  | 'exam-courses'
   | 'exam-requests'
   | 'exam-materials'
   | 'exam-mock-tests'
   | 'exam-mcq-practice'
   | 'exam-study-materials'
+  | 'exam-guidelines'
+  | 'exam-question-bank'
+  | 'exam-progress'
+  | 'exam-results'
   | 'exam-provision'
   | 'exam-reports'
+  | 'exam-settings'
   | 'coordinators' 
   | 'templates' 
   | 'reports' 
@@ -276,14 +282,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       {!isCollapsed && isExamExpanded && (
                         <div className="pl-3 pr-1 py-0.5 space-y-0.5 border-l border-slate-700/50 dark:border-slate-800 ml-4 my-1">
                           {[
-                            { id: 'exam-dashboard' as NavTab, label: 'Exam Dashboard' },
-                            { id: 'exam-requests' as NavTab, label: 'Material Requests' },
-                            { id: 'exam-materials' as NavTab, label: 'Exam Materials' },
-                            { id: 'exam-mock-tests' as NavTab, label: 'Mock Tests' },
+                            { id: 'exam-dashboard' as NavTab, label: 'Dashboard' },
+                            { id: 'exam-courses' as NavTab, label: 'Courses / Prep' },
                             { id: 'exam-mcq-practice' as NavTab, label: 'MCQ Practice 🎯' },
+                            { id: 'exam-mock-tests' as NavTab, label: 'Mock Tests' },
                             { id: 'exam-study-materials' as NavTab, label: 'Study Materials' },
-                            { id: 'exam-provision' as NavTab, label: 'Exam Provision' },
+                            { id: 'exam-guidelines' as NavTab, label: 'Exam Guidelines' },
+                            { id: 'exam-question-bank' as NavTab, label: 'Question Bank' },
+                            { id: 'exam-progress' as NavTab, label: 'Student Progress' },
+                            { id: 'exam-results' as NavTab, label: 'Exam Results' },
+                            { id: 'exam-requests' as NavTab, label: 'Material Requests' },
                             { id: 'exam-reports' as NavTab, label: 'Reports' },
+                            { id: 'exam-settings' as NavTab, label: 'Settings' },
                           ].map((subItem) => {
                             const isSubActive = activeTab === subItem.id || (subItem.id === 'exam-dashboard' && activeTab === 'exam-department');
                             return (

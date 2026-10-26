@@ -869,6 +869,8 @@ async function authenticateRequest(req, parsedUrl) {
     } else {
       return { user: null, error: 'Malformed Authorization header. Format must be Bearer <token>', status: 401 };
     }
+  } else if (parsedUrl && parsedUrl.query && parsedUrl.query.token) {
+    rawToken = String(parsedUrl.query.token).trim();
   }
 
   // Reject missing credentials immediately. Identity headers are never authentication.

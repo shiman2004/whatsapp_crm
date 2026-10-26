@@ -112,7 +112,7 @@ export const UploadMaterialModal: React.FC<UploadMaterialModalProps> = ({
             fileType: selectedFile.type || 'application/pdf',
           });
 
-          fileUrl = uploadRes.url;
+          fileUrl = uploadRes.url || (uploadRes as any).fileUrl;
         } else {
           // For larger files up to 1GB
           setProgress(70);

@@ -12,6 +12,15 @@ import {
   HardDrive
 } from 'lucide-react';
 import { ExamMaterial, ExamCategory } from '../../services/examService';
+import { API_BASE_URL } from '../../config/api';
+
+const resolveMediaUrl = (url?: string) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 interface ExamMaterialsViewProps {
   materials: ExamMaterial[];
@@ -74,8 +83,24 @@ export const ExamMaterialsView: React.FC<ExamMaterialsViewProps> = ({
 
   const handleDownload = (mat: ExamMaterial) => {
     onIncrementDownload(mat.id);
-    const targetUrl = mat.externalUrl || mat.fileUrl || '#';
-    window.open(targetUrl, '_blank');
+    const token = typeof window !== 'undefined'
+      ? (localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('royal_crm_token') || '')
+      : '';
+
+    let targetUrl = mat.externalUrl;
+    if (!targetUrl) {
+      if (mat.fileUrl) {
+        targetUrl = resolveMediaUrl(mat.fileUrl);
+        if (!targetUrl.includes('?sig=') && token) {
+          targetUrl += `${targetUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+        }
+      } else if (mat.id) {
+        targetUrl = `${API_BASE_URL}/api/exam/materials/${mat.id}/download${token ? `?token=${encodeURIComponent(token)}` : ''}`;
+      }
+    }
+    if (targetUrl) {
+      window.open(targetUrl, '_blank');
+    }
   };
 
   return (

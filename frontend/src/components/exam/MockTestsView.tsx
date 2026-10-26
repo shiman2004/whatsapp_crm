@@ -13,6 +13,15 @@ import {
   FileText
 } from 'lucide-react';
 import { ExamMockTest, ExamCategory, examService } from '../../services/examService';
+import { API_BASE_URL } from '../../config/api';
+
+const resolveMediaUrl = (url?: string) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
+    return url;
+  }
+  return `${API_BASE_URL}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 interface MockTestsViewProps {
   mockTests: ExamMockTest[];
@@ -172,7 +181,10 @@ export const MockTestsView: React.FC<MockTestsViewProps> = ({
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => window.open(test.questionPaperUrl || '#', '_blank')}
+                  onClick={() => {
+                    const url = resolveMediaUrl(test.questionPaperUrl);
+                    if (url) window.open(url, '_blank');
+                  }}
                   className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500 text-amber-300 hover:text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 border border-amber-500/30"
                 >
                   <FileText className="w-3.5 h-3.5" />
@@ -181,7 +193,10 @@ export const MockTestsView: React.FC<MockTestsViewProps> = ({
                 {test.answerKeyUrl && (
                   <button
                     type="button"
-                    onClick={() => window.open(test.answerKeyUrl, '_blank')}
+                    onClick={() => {
+                      const url = resolveMediaUrl(test.answerKeyUrl);
+                      if (url) window.open(url, '_blank');
+                    }}
                     className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors"
                     title="View Answer Key"
                   >

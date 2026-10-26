@@ -10,7 +10,29 @@ import crypto from 'crypto';
 import path from 'path';
 import fs from 'fs';
 import { getPrisma } from './db.js';
-import { saveMediaToSupabase } from './supabaseMedia.js';
+import { saveMediaToSupabase, getMediaFromSupabase } from './supabaseMedia.js';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'royal_wellness_crm_jwt_secret_key_2026_super_secure';
+
+function signMediaFile(fileName) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+}
+
+function createPrivateMediaUrl(fileName) {
+  const signature = signMediaFile(fileName);
+  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
+}
+
+function ensureSignedMediaUrl(fileUrl) {
+  if (!fileUrl || typeof fileUrl !== 'string') return fileUrl || '';
+  if (fileUrl.startsWith('/uploads/') && !fileUrl.includes('?sig=')) {
+    const fName = path.basename(decodeURIComponent(fileUrl.split('?')[0]));
+    if (fName) {
+      return createPrivateMediaUrl(fName);
+    }
+  }
+  return fileUrl;
+}
 
 // In-memory fallback stores when DB is operating offline
 let MEMORY_CATEGORIES = [
@@ -564,7 +586,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 type: r.type,
                 description: r.description,
                 fileName: r.file_name,
-                fileUrl: r.file_url,
+                fileUrl: ensureSignedMediaUrl(r.file_url),
                 fileType: r.file_type,
                 fileSize: Number(r.file_size || 0),
                 fileSizeFormatted: r.file_size_formatted || formatBytes(r.file_size),
@@ -617,7 +639,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           type: body.type || 'Study Material',
           description: body.description || '',
           fileName: body.fileName || 'document.pdf',
-          fileUrl: body.fileUrl || '',
+          fileUrl: ensureSignedMediaUrl(body.fileUrl || ''),
           fileType: body.fileType || 'application/pdf',
           fileSize: body.fileSize || 1048576,
           fileSizeFormatted: body.fileSizeFormatted || formatBytes(body.fileSize || 1048576),
@@ -657,11 +679,83 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
     }
 
-    // Material detail / delete / download count
+    // Material detail / delete / download count / direct file stream
     if (pathname.startsWith('/api/exam/materials/')) {
       const parts = pathname.split('/');
       const matId = parts[4];
       const action = parts[5];
+
+      if (req.method === 'GET' && action === 'download') {
+        let material = null;
+        if (prisma) {
+          try {
+            const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_materials WHERE id = $1 LIMIT 1;`, matId);
+            if (rows && rows.length > 0) material = rows[0];
+          } catch (e) {}
+        }
+        if (!material) {
+          material = MEMORY_MATERIALS.find(m => m.id === matId);
+        }
+        if (!material) {
+          sendJson(res, 404, { success: false, error: 'Material not found' });
+          return true;
+        }
+
+        // Increment download count asynchronously
+        if (prisma) {
+          prisma.$executeRawUnsafe(`UPDATE public.exam_materials SET download_count = download_count + 1 WHERE id = $1;`, matId).catch(() => null);
+        }
+        const memItem = MEMORY_MATERIALS.find(m => m.id === matId);
+        if (memItem) memItem.downloadCount = (memItem.downloadCount || 0) + 1;
+
+        // If external link, redirect
+        const extUrl = material.external_url || material.externalUrl;
+        if (extUrl) {
+          res.writeHead(302, { Location: extUrl });
+          res.end();
+          return true;
+        }
+
+        const rawFileUrl = material.file_url || material.fileUrl || '';
+        const rawFileName = material.file_name || material.fileName || 'exam_material.pdf';
+        const fileType = material.file_type || material.fileType || 'application/pdf';
+
+        const cleanName = path.basename(decodeURIComponent(rawFileUrl.split('?')[0])) || rawFileName;
+        const uploadDir = path.join(process.cwd(), 'public', 'uploads');
+        const localPath = path.join(uploadDir, cleanName);
+
+        if (fs.existsSync(localPath)) {
+          const stat = fs.statSync(localPath);
+          res.writeHead(200, {
+            'Content-Type': fileType,
+            'Content-Length': stat.size,
+            'Content-Disposition': `inline; filename="${encodeURIComponent(rawFileName)}"`,
+            'Access-Control-Allow-Origin': '*',
+            'Cache-Control': 'public, max-age=86400'
+          });
+          fs.createReadStream(localPath).pipe(res);
+          return true;
+        }
+
+        // Fallback to Supabase cloud storage
+        try {
+          const media = await getMediaFromSupabase(cleanName);
+          if (media && media.buffer) {
+            res.writeHead(200, {
+              'Content-Type': media.mimeType || fileType,
+              'Content-Length': media.buffer.length,
+              'Content-Disposition': `inline; filename="${encodeURIComponent(rawFileName)}"`,
+              'Access-Control-Allow-Origin': '*',
+              'Cache-Control': 'public, max-age=86400'
+            });
+            res.end(media.buffer);
+            return true;
+          }
+        } catch (sErr) {}
+
+        sendJson(res, 404, { success: false, error: 'File content not found on server' });
+        return true;
+      }
 
       if (req.method === 'POST' && action === 'download-count') {
         if (prisma) {
@@ -743,7 +837,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         const filePath = path.join(uploadDir, cleanName);
         fs.writeFileSync(filePath, buffer);
 
-        const publicUrl = `/uploads/${cleanName}`;
+        const publicUrl = createPrivateMediaUrl(cleanName);
         sendJson(res, 200, {
           success: true,
           url: publicUrl,

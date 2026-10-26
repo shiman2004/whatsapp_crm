@@ -10,7 +10,9 @@ import {
   Trash2,
   CheckCircle2,
   HelpCircle,
-  FileText
+  FileText,
+  Sparkles,
+  ArrowRight
 } from 'lucide-react';
 import { ExamMockTest, ExamCategory, examService } from '../../services/examService';
 import { API_BASE_URL } from '../../config/api';
@@ -27,12 +29,14 @@ interface MockTestsViewProps {
   mockTests: ExamMockTest[];
   categories: ExamCategory[];
   onRefresh: () => void;
+  onNavigateToPractice?: () => void;
 }
 
 export const MockTestsView: React.FC<MockTestsViewProps> = ({
   mockTests,
   categories,
   onRefresh,
+  onNavigateToPractice,
 }) => {
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -97,6 +101,37 @@ export const MockTestsView: React.FC<MockTestsViewProps> = ({
 
   return (
     <div className="space-y-4">
+      {/* Interactive MCQ Practice Callout Banner */}
+      {onNavigateToPractice && (
+        <div className="relative overflow-hidden rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-950/40 via-[#111b21] to-slate-900 p-4 shadow-xl flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/30 shadow-md shadow-teal-500/10">
+              <Sparkles className="w-5 h-5" />
+            </span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-xs sm:text-sm font-black text-white">Interactive MCQ Practice Mode</h3>
+                <span className="rounded-full bg-teal-500/20 px-2 py-0.5 text-[10px] font-bold text-teal-300 border border-teal-500/30">
+                  NEW
+                </span>
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Master clinical questions with immediate feedback, 5 options, retry until correct, and 3 high-yield Remember Notes.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onNavigateToPractice}
+            className="flex items-center gap-2 rounded-xl bg-teal-500 px-4 py-2 text-xs font-bold text-slate-950 shadow-lg shadow-teal-500/20 hover:bg-teal-400 active:scale-95 transition-all shrink-0 cursor-pointer"
+          >
+            <span>Launch MCQ Practice</span>
+            <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+          </button>
+        </div>
+      )}
+
       {/* Top Controls */}
       <div className="bg-[#111b21] border border-slate-800 rounded-2xl p-4 shadow-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3 flex-1">

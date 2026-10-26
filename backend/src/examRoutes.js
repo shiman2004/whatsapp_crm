@@ -49,6 +49,80 @@ let MEMORY_MATERIALS = [];
 let MEMORY_MOCK_TESTS = [];
 let MEMORY_PROVISIONS = [];
 
+let MEMORY_MCQ_QUESTIONS = [
+  {
+    id: 'mcq-sample-blood-transfusion',
+    title: 'Question 1 — Blood Transfusion Reaction',
+    questionText: 'Fifteen minutes after starting a blood transfusion, a patient develops chills, shortness of breath, and lower back pain. What should the nurse do FIRST?',
+    categoryId: 'cat-dha',
+    categoryName: 'DHA',
+    subject: 'Nursing / Clinical Procedures',
+    imageUrl: '',
+    optionA: 'Slow the transfusion and reassess after 10 minutes',
+    optionB: 'Administer an antipyretic and continue the transfusion',
+    optionC: 'Stop the transfusion immediately and maintain IV access with normal saline using new tubing',
+    optionD: 'Notify the blood bank before stopping the transfusion',
+    optionE: 'Increase the IV flow rate to maintain blood pressure',
+    correctAnswer: 'C',
+    rememberNote1: 'Suspected acute transfusion reaction → STOP the blood transfusion immediately.',
+    rememberNote2: 'Maintain IV access with 0.9% normal saline using new tubing.',
+    rememberNote3: 'Assess the patient, monitor vital signs, and notify the physician/provider and blood bank according to protocol.',
+    explanation: 'An acute hemolytic or febrile transfusion reaction is a medical emergency. The priority action is to immediately stop the infusion to prevent further exposure to incompatible blood while preserving venous access using fresh IV tubing and 0.9% normal saline.',
+    difficulty: 'Medium',
+    displayOrder: 1,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'mcq-sample-digoxin-toxicity',
+    title: 'Question 2 — Digoxin Toxicity and Hypokalemia',
+    questionText: 'A patient with heart failure is receiving Digoxin 0.25 mg daily and Furosemide 40 mg daily. Which clinical finding should alert the nurse to potential digoxin toxicity?',
+    categoryId: 'cat-nclex',
+    categoryName: 'NCLEX',
+    subject: 'Pharmacology & Cardiovascular',
+    imageUrl: '',
+    optionA: 'Heart rate of 88 beats/min and mild ankle edema',
+    optionB: 'Visual disturbances with yellow-green halos and nausea',
+    optionC: 'Serum potassium level of 4.8 mEq/L',
+    optionD: 'Increased appetite and weight gain of 1 lb in 3 days',
+    optionE: 'Blood pressure of 134/82 mmHg',
+    correctAnswer: 'B',
+    rememberNote1: 'Classic signs of digoxin toxicity: GI distress (nausea/vomiting/anorexia), bradycardia/dysrhythmias, and visual changes (yellow-green halos/blurred vision).',
+    rememberNote2: 'Hypokalemia (low potassium, commonly from loop diuretics like furosemide) significantly increases digoxin binding and potentiates toxicity.',
+    rememberNote3: 'Always assess the apical pulse for 1 full minute prior to administration; withhold and notify provider if apical pulse is < 60 bpm in adults.',
+    explanation: 'Digoxin has a narrow therapeutic range (0.8–2.0 ng/mL). Hypokalemia caused by loop diuretics heightens myocardial sensitivity to digoxin, leading to visual disturbances, gastrointestinal upset, and fatal dysrhythmias.',
+    difficulty: 'Medium',
+    displayOrder: 2,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  },
+  {
+    id: 'mcq-sample-anaphylaxis-shock',
+    title: 'Question 3 — Emergency Management of Anaphylaxis',
+    questionText: 'A client with an acute severe allergic reaction develops stridor, facial angioedema, and a systolic blood pressure drop to 80 mmHg. What is the immediate first-line pharmacological treatment?',
+    categoryId: 'cat-prometric',
+    categoryName: 'Prometric',
+    subject: 'Emergency Care / Immunology',
+    imageUrl: '',
+    optionA: 'Oral diphenhydramine 50 mg',
+    optionB: 'Intravenous hydrocortisone 200 mg',
+    optionC: 'Intramuscular Epinephrine (1:1,000) administered into the anterolateral thigh',
+    optionD: 'Inhaled albuterol nebulizer monotherapy',
+    optionE: 'Subcutaneous Epinephrine (1:10,000) in the deltoid muscle',
+    correctAnswer: 'C',
+    rememberNote1: 'Intramuscular (IM) Epinephrine 1:1,000 in the mid-anterolateral thigh is the first-line, life-saving drug of choice in anaphylaxis.',
+    rememberNote2: 'Do not delay epinephrine administration to give antihistamines or corticosteroids, which are secondary second-line treatments.',
+    rememberNote3: 'Place patient in recumbent position with lower extremities elevated, administer high-flow oxygen, and establish large-bore IV access for isotonic fluid resuscitation.',
+    explanation: 'Epinephrine stimulates alpha-1, beta-1, and beta-2 adrenergic receptors, reversing peripheral vasodilation, reducing mucosal edema, and opening bronchial airways. IM injection in the vastus lateralis achieves prompt peak plasma concentrations.',
+    difficulty: 'Hard',
+    displayOrder: 3,
+    isActive: true,
+    createdAt: new Date().toISOString()
+  }
+];
+
+let MEMORY_MCQ_ATTEMPTS = [];
+
 /**
  * Send JSON response helper
  */
@@ -1054,7 +1128,407 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     }
 
     // -------------------------------------------------------------------------
-    // 8. REPORTS: /api/exam/reports
+    // 8. INTERACTIVE MCQ PRACTICE MODULE: /api/exam/mcq/*
+    // -------------------------------------------------------------------------
+
+    // Helper: auto-seed sample questions into database if table is empty
+    async function ensureSeedMcqQuestions(prisma) {
+      if (!prisma) return;
+      try {
+        const countRes = await prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_mcq_questions;`);
+        const count = countRes?.[0]?.count || 0;
+        if (count === 0) {
+          for (const q of MEMORY_MCQ_QUESTIONS) {
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.exam_mcq_questions (
+                id, title, question_text, category_id, category_name, subject, image_url,
+                option_a, option_b, option_c, option_d, option_e, correct_answer,
+                remember_note_1, remember_note_2, remember_note_3, explanation,
+                difficulty, display_order, is_active, created_at, updated_at
+              ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7,
+                $8, $9, $10, $11, $12, $13,
+                $14, $15, $16, $17,
+                $18, $19, TRUE, NOW(), NOW()
+              ) ON CONFLICT (id) DO NOTHING;
+            `,
+              q.id, q.title, q.questionText, q.categoryId, q.categoryName, q.subject, q.imageUrl || '',
+              q.optionA, q.optionB, q.optionC, q.optionD, q.optionE, q.correctAnswer,
+              q.rememberNote1, q.rememberNote2, q.rememberNote3, q.explanation || '',
+              q.difficulty || 'Medium', q.displayOrder || 1
+            );
+          }
+        }
+      } catch (seedErr) {
+        console.warn('⚠️ [ExamRoutes] Seed MCQ questions error:', seedErr.message);
+      }
+    }
+
+    // 8.1 GET /api/exam/mcq/questions & POST /api/exam/mcq/questions
+    if (pathname === '/api/exam/mcq/questions') {
+      if (req.method === 'GET') {
+        let questions = MEMORY_MCQ_QUESTIONS;
+        if (prisma) {
+          try {
+            await ensureSeedMcqQuestions(prisma);
+            const catFilter = query.categoryId && query.categoryId !== 'all' ? query.categoryId : null;
+            const searchFilter = query.search ? `%${query.search.toLowerCase()}%` : null;
+
+            let queryStr = `SELECT * FROM public.exam_mcq_questions WHERE is_active = TRUE`;
+            const params = [];
+            if (catFilter) {
+              params.push(catFilter);
+              queryStr += ` AND category_id = $${params.length}`;
+            }
+            if (searchFilter) {
+              params.push(searchFilter);
+              queryStr += ` AND (LOWER(title) LIKE $${params.length} OR LOWER(question_text) LIKE $${params.length} OR LOWER(subject) LIKE $${params.length})`;
+            }
+            queryStr += ` ORDER BY display_order ASC, created_at DESC;`;
+
+            const rows = await prisma.$queryRawUnsafe(queryStr, ...params);
+            if (rows && rows.length > 0) {
+              questions = rows.map(r => ({
+                id: r.id,
+                title: r.title,
+                questionText: r.question_text,
+                categoryId: r.category_id,
+                categoryName: r.category_name,
+                subject: r.subject,
+                imageUrl: ensureSignedMediaUrl(r.image_url),
+                optionA: r.option_a,
+                optionB: r.option_b,
+                optionC: r.option_c,
+                optionD: r.option_d,
+                optionE: r.option_e,
+                correctAnswer: r.correct_answer,
+                rememberNote1: r.remember_note_1,
+                rememberNote2: r.remember_note_2,
+                rememberNote3: r.remember_note_3,
+                explanation: r.explanation,
+                difficulty: r.difficulty,
+                displayOrder: r.display_order,
+                isActive: r.is_active,
+                createdAt: r.created_at
+              }));
+            }
+          } catch (err) {
+            console.warn('⚠️ [ExamRoutes] MCQ questions DB fallback:', err.message);
+          }
+        }
+
+        // Apply client query filters on in-memory if needed
+        if (query.categoryId && query.categoryId !== 'all') {
+          questions = questions.filter(q => q.categoryId === query.categoryId);
+        }
+        if (query.search) {
+          const s = query.search.toLowerCase();
+          questions = questions.filter(q =>
+            (q.title && q.title.toLowerCase().includes(s)) ||
+            (q.questionText && q.questionText.toLowerCase().includes(s)) ||
+            (q.subject && q.subject.toLowerCase().includes(s))
+          );
+        }
+
+        sendJson(res, 200, { success: true, data: questions });
+        return true;
+      }
+
+      if (req.method === 'POST') {
+        const body = await parseJsonBody(req);
+        if (!body.title || !body.questionText) {
+          sendJson(res, 400, { success: false, error: 'Question title and question text are required' });
+          return true;
+        }
+        if (!body.optionA || !body.optionB || !body.optionC || !body.optionD || !body.optionE) {
+          sendJson(res, 400, { success: false, error: 'All 5 options (A, B, C, D, E) are required' });
+          return true;
+        }
+        const correct = String(body.correctAnswer || 'A').toUpperCase().trim();
+        if (!['A', 'B', 'C', 'D', 'E'].includes(correct)) {
+          sendJson(res, 400, { success: false, error: 'Correct answer must be one of: A, B, C, D, E' });
+          return true;
+        }
+        if (!body.rememberNote1 || !body.rememberNote2 || !body.rememberNote3) {
+          sendJson(res, 400, { success: false, error: 'All 3 Remember Notes are required for correct answer guidance' });
+          return true;
+        }
+
+        const newId = `mcq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+        const qRecord = {
+          id: newId,
+          title: body.title.trim(),
+          questionText: body.questionText.trim(),
+          categoryId: body.categoryId || 'cat-dha',
+          categoryName: body.categoryName || 'DHA',
+          subject: body.subject?.trim() || 'General Health Sciences',
+          imageUrl: body.imageUrl?.trim() || '',
+          optionA: body.optionA.trim(),
+          optionB: body.optionB.trim(),
+          optionC: body.optionC.trim(),
+          optionD: body.optionD.trim(),
+          optionE: body.optionE.trim(),
+          correctAnswer: correct,
+          rememberNote1: body.rememberNote1.trim(),
+          rememberNote2: body.rememberNote2.trim(),
+          rememberNote3: body.rememberNote3.trim(),
+          explanation: body.explanation?.trim() || '',
+          difficulty: body.difficulty || 'Medium',
+          displayOrder: Number(body.displayOrder) || MEMORY_MCQ_QUESTIONS.length + 1,
+          isActive: true,
+          createdAt: new Date().toISOString()
+        };
+
+        if (prisma) {
+          try {
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.exam_mcq_questions (
+                id, title, question_text, category_id, category_name, subject, image_url,
+                option_a, option_b, option_c, option_d, option_e, correct_answer,
+                remember_note_1, remember_note_2, remember_note_3, explanation,
+                difficulty, display_order, is_active, created_at, updated_at
+              ) VALUES (
+                $1, $2, $3, $4, $5, $6, $7,
+                $8, $9, $10, $11, $12, $13,
+                $14, $15, $16, $17,
+                $18, $19, TRUE, NOW(), NOW()
+              );
+            `,
+              qRecord.id, qRecord.title, qRecord.questionText, qRecord.categoryId, qRecord.categoryName,
+              qRecord.subject, qRecord.imageUrl, qRecord.optionA, qRecord.optionB, qRecord.optionC,
+              qRecord.optionD, qRecord.optionE, qRecord.correctAnswer, qRecord.rememberNote1,
+              qRecord.rememberNote2, qRecord.rememberNote3, qRecord.explanation,
+              qRecord.difficulty, qRecord.displayOrder
+            );
+          } catch (err) {
+            console.warn('⚠️ [ExamRoutes] MCQ insert DB error:', err.message);
+          }
+        }
+
+        MEMORY_MCQ_QUESTIONS.unshift(qRecord);
+        sendJson(res, 201, { success: true, data: qRecord, message: 'MCQ question created successfully' });
+        return true;
+      }
+    }
+
+    // 8.2 PUT & DELETE /api/exam/mcq/questions/:id
+    if (pathname.startsWith('/api/exam/mcq/questions/')) {
+      const qId = pathname.replace('/api/exam/mcq/questions/', '');
+      
+      if (req.method === 'PUT') {
+        const body = await parseJsonBody(req);
+        const correct = body.correctAnswer ? String(body.correctAnswer).toUpperCase().trim() : undefined;
+
+        if (prisma) {
+          try {
+            await prisma.$executeRawUnsafe(`
+              UPDATE public.exam_mcq_questions SET
+                title = COALESCE($2, title),
+                question_text = COALESCE($3, question_text),
+                category_id = COALESCE($4, category_id),
+                category_name = COALESCE($5, category_name),
+                subject = COALESCE($6, subject),
+                image_url = COALESCE($7, image_url),
+                option_a = COALESCE($8, option_a),
+                option_b = COALESCE($9, option_b),
+                option_c = COALESCE($10, option_c),
+                option_d = COALESCE($11, option_d),
+                option_e = COALESCE($12, option_e),
+                correct_answer = COALESCE($13, correct_answer),
+                remember_note_1 = COALESCE($14, remember_note_1),
+                remember_note_2 = COALESCE($15, remember_note_2),
+                remember_note_3 = COALESCE($16, remember_note_3),
+                explanation = COALESCE($17, explanation),
+                difficulty = COALESCE($18, difficulty),
+                display_order = COALESCE($19, display_order),
+                updated_at = NOW()
+              WHERE id = $1;
+            `,
+              qId, body.title, body.questionText, body.categoryId, body.categoryName,
+              body.subject, body.imageUrl, body.optionA, body.optionB, body.optionC,
+              body.optionD, body.optionE, correct, body.rememberNote1,
+              body.rememberNote2, body.rememberNote3, body.explanation,
+              body.difficulty, body.displayOrder
+            );
+          } catch (err) {
+            console.warn('⚠️ [ExamRoutes] MCQ update DB error:', err.message);
+          }
+        }
+
+        const memIndex = MEMORY_MCQ_QUESTIONS.findIndex(q => q.id === qId);
+        if (memIndex !== -1) {
+          MEMORY_MCQ_QUESTIONS[memIndex] = {
+            ...MEMORY_MCQ_QUESTIONS[memIndex],
+            ...body,
+            id: qId,
+            correctAnswer: correct || MEMORY_MCQ_QUESTIONS[memIndex].correctAnswer
+          };
+        }
+
+        sendJson(res, 200, { success: true, message: 'Question updated successfully' });
+        return true;
+      }
+
+      if (req.method === 'DELETE') {
+        if (prisma) {
+          try {
+            await prisma.$executeRawUnsafe(`DELETE FROM public.exam_mcq_questions WHERE id = $1;`, qId);
+          } catch (err) {
+            console.warn('⚠️ [ExamRoutes] MCQ delete DB error:', err.message);
+          }
+        }
+        MEMORY_MCQ_QUESTIONS = MEMORY_MCQ_QUESTIONS.filter(q => q.id !== qId);
+        sendJson(res, 200, { success: true, message: 'Question deleted successfully' });
+        return true;
+      }
+    }
+
+    // 8.3 POST /api/exam/mcq/record-attempt (Student Practice Session Attempt Logging)
+    if (pathname === '/api/exam/mcq/record-attempt' && req.method === 'POST') {
+      const body = await parseJsonBody(req);
+      if (!body.questionId || !body.firstSelectedAnswer || !body.finalCorrectAnswer) {
+        sendJson(res, 400, { success: false, error: 'Question ID, first answer, and final answer are required' });
+        return true;
+      }
+
+      const attemptId = `att-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+      const attemptRecord = {
+        id: attemptId,
+        sessionId: body.sessionId || `session-${Date.now()}`,
+        studentId: body.studentId || authUser?.id || 'candidate-student',
+        studentName: body.studentName || authUser?.fullName || 'Candidate Student',
+        studentIdentifier: body.studentIdentifier || authUser?.email || '',
+        examTitle: body.examTitle || 'Interactive MCQ Practice',
+        categoryId: body.categoryId || 'cat-dha',
+        questionId: body.questionId,
+        questionTitle: body.questionTitle || 'Exam Practice Question',
+        firstSelectedAnswer: String(body.firstSelectedAnswer).toUpperCase().trim(),
+        numberOfAttempts: Number(body.numberOfAttempts) || 1,
+        attemptsHistory: Array.isArray(body.attemptsHistory) ? body.attemptsHistory : [body.firstSelectedAnswer],
+        finalCorrectAnswer: String(body.finalCorrectAnswer).toUpperCase().trim(),
+        isCorrectFirstTry: Boolean(body.isCorrectFirstTry || body.numberOfAttempts === 1),
+        timeSpentSeconds: Number(body.timeSpentSeconds) || 0,
+        createdAt: new Date().toISOString()
+      };
+
+      if (prisma) {
+        try {
+          await prisma.$executeRawUnsafe(`
+            INSERT INTO public.exam_mcq_practice_attempts (
+              id, session_id, student_id, student_name, student_identifier, exam_title,
+              category_id, question_id, question_title, first_selected_answer,
+              number_of_attempts, attempts_history, final_correct_answer,
+              is_correct_first_try, time_spent_seconds, created_at
+            ) VALUES (
+              $1, $2, $3, $4, $5, $6,
+              $7, $8, $9, $10,
+              $11, $12::jsonb, $13,
+              $14, $15, NOW()
+            );
+          `,
+            attemptRecord.id, attemptRecord.sessionId, attemptRecord.studentId, attemptRecord.studentName,
+            attemptRecord.studentIdentifier, attemptRecord.examTitle, attemptRecord.categoryId,
+            attemptRecord.questionId, attemptRecord.questionTitle, attemptRecord.firstSelectedAnswer,
+            attemptRecord.numberOfAttempts, JSON.stringify(attemptRecord.attemptsHistory),
+            attemptRecord.finalCorrectAnswer, attemptRecord.isCorrectFirstTry, attemptRecord.timeSpentSeconds
+          );
+        } catch (err) {
+          console.warn('⚠️ [ExamRoutes] Attempt insert DB error:', err.message);
+        }
+      }
+
+      MEMORY_MCQ_ATTEMPTS.unshift(attemptRecord);
+      sendJson(res, 201, { success: true, data: attemptRecord, message: 'Practice attempt recorded successfully' });
+      return true;
+    }
+
+    // 8.4 GET /api/exam/mcq/attempts (Audit & Practice History)
+    if (pathname === '/api/exam/mcq/attempts' && req.method === 'GET') {
+      let attempts = MEMORY_MCQ_ATTEMPTS;
+      if (prisma) {
+        try {
+          const limit = Math.min(Number(query.limit) || 100, 500);
+          const studentFilter = query.studentId || null;
+          let queryStr = `SELECT * FROM public.exam_mcq_practice_attempts`;
+          const params = [];
+          if (studentFilter) {
+            params.push(studentFilter);
+            queryStr += ` WHERE student_id = $1`;
+          }
+          queryStr += ` ORDER BY created_at DESC LIMIT ${limit};`;
+
+          const rows = await prisma.$queryRawUnsafe(queryStr, ...params);
+          if (rows && rows.length > 0) {
+            attempts = rows.map(r => ({
+              id: r.id,
+              sessionId: r.session_id,
+              studentId: r.student_id,
+              studentName: r.student_name,
+              studentIdentifier: r.student_identifier,
+              examTitle: r.exam_title,
+              categoryId: r.category_id,
+              questionId: r.question_id,
+              questionTitle: r.question_title,
+              firstSelectedAnswer: r.first_selected_answer,
+              numberOfAttempts: r.number_of_attempts,
+              attemptsHistory: r.attempts_history || [],
+              finalCorrectAnswer: r.final_correct_answer,
+              isCorrectFirstTry: r.is_correct_first_try,
+              timeSpentSeconds: r.time_spent_seconds,
+              createdAt: r.created_at
+            }));
+          }
+        } catch (err) {
+          console.warn('⚠️ [ExamRoutes] Attempts DB fallback:', err.message);
+        }
+      }
+
+      sendJson(res, 200, { success: true, data: attempts });
+      return true;
+    }
+
+    // 8.5 GET /api/exam/mcq/stats (Analytics overview)
+    if (pathname === '/api/exam/mcq/stats' && req.method === 'GET') {
+      let totalQuestions = MEMORY_MCQ_QUESTIONS.length;
+      let totalAttempts = MEMORY_MCQ_ATTEMPTS.length;
+      let firstTryCorrect = MEMORY_MCQ_ATTEMPTS.filter(a => a.isCorrectFirstTry).length;
+      let uniqueStudents = new Set(MEMORY_MCQ_ATTEMPTS.map(a => a.studentName)).size;
+
+      if (prisma) {
+        try {
+          const [qCount, aCount, fCount, sCount] = await Promise.all([
+            prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_mcq_questions WHERE is_active = TRUE;`),
+            prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_mcq_practice_attempts;`),
+            prisma.$queryRawUnsafe(`SELECT COUNT(*)::int as count FROM public.exam_mcq_practice_attempts WHERE is_correct_first_try = TRUE;`),
+            prisma.$queryRawUnsafe(`SELECT COUNT(DISTINCT student_name)::int as count FROM public.exam_mcq_practice_attempts;`)
+          ]);
+
+          if (qCount?.[0]) totalQuestions = qCount[0].count;
+          if (aCount?.[0]) totalAttempts = aCount[0].count;
+          if (fCount?.[0]) firstTryCorrect = fCount[0].count;
+          if (sCount?.[0]) uniqueStudents = sCount[0].count;
+        } catch (err) {
+          console.warn('⚠️ [ExamRoutes] MCQ stats DB error:', err.message);
+        }
+      }
+
+      const firstTryAccuracy = totalAttempts > 0 ? Math.round((firstTryCorrect / totalAttempts) * 100) : 0;
+
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          totalQuestions,
+          totalAttempts,
+          firstTryCorrect,
+          firstTryAccuracy,
+          uniqueStudents
+        }
+      });
+      return true;
+    }
+
+    // -------------------------------------------------------------------------
+    // 9. REPORTS: /api/exam/reports
     // -------------------------------------------------------------------------
     if (pathname === '/api/exam/reports' && req.method === 'GET') {
       let totalRequests = 0;

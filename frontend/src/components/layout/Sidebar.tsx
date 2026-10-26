@@ -34,6 +34,7 @@ export type NavTab =
   | 'exam-requests'
   | 'exam-materials'
   | 'exam-mock-tests'
+  | 'exam-mcq-practice'
   | 'exam-study-materials'
   | 'exam-provision'
   | 'exam-reports'
@@ -279,6 +280,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             { id: 'exam-requests' as NavTab, label: 'Material Requests' },
                             { id: 'exam-materials' as NavTab, label: 'Exam Materials' },
                             { id: 'exam-mock-tests' as NavTab, label: 'Mock Tests' },
+                            { id: 'exam-mcq-practice' as NavTab, label: 'MCQ Practice 🎯' },
                             { id: 'exam-study-materials' as NavTab, label: 'Study Materials' },
                             { id: 'exam-provision' as NavTab, label: 'Exam Provision' },
                             { id: 'exam-reports' as NavTab, label: 'Reports' },

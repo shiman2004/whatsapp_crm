@@ -1,13 +1,13 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, Copy, ExternalLink, MessageCircle, Phone, ShieldCheck, User, X } from 'lucide-react';
+import { Clock3, Copy, MessageCircle, Phone, ShieldCheck, User, X } from 'lucide-react';
 import { Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 
-interface PatientContactDrawerProps { lead: Lead; onClose: () => void; }
+interface PatientContactDrawerProps { lead: Lead; onClose: () => void; onOpenWhatsApp: () => void; }
 
-export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead, onClose }) => {
+export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead, onClose, onOpenWhatsApp }) => {
   const { categories, treatments, users, messages, notes } = useCrm();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
@@ -89,7 +89,7 @@ export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead
           <div className="mb-2 flex items-center justify-between"><h3 id="contact-section-title" className="text-xs font-semibold uppercase tracking-wider text-slate-400">Contact</h3>{copyState !== 'idle' && <span role="status" className={`text-xs ${copyState === 'copied' ? 'text-emerald-400' : 'text-amber-300'}`}>{copyState === 'copied' ? 'Phone copied' : 'Could not copy phone'}</span>}</div>
           <div className="grid grid-cols-2 gap-2">
             {rawPhone ? <a href={`tel:${rawPhone}`} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg bg-emerald-500 px-3 py-2 text-sm font-semibold text-slate-950 hover:bg-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-300"><Phone className="h-4 w-4" />Call</a> : <span className="inline-flex min-h-11 items-center justify-center rounded-lg bg-slate-900 px-3 text-sm text-slate-500">No number to call</span>}
-            {rawPhone ? <a href={`https://wa.me/${rawPhone.replace(/[^0-9]/g, '')}`} target="_blank" rel="noreferrer" className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400"><ExternalLink className="h-4 w-4" />WhatsApp</a> : <span className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-800 px-3 text-sm text-slate-500">No WhatsApp number</span>}
+            {rawPhone ? <button type="button" onClick={onOpenWhatsApp} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-teal-400"><MessageCircle className="h-4 w-4" />WhatsApp</button> : <span className="inline-flex min-h-11 items-center justify-center rounded-lg border border-slate-800 px-3 text-sm text-slate-500">No WhatsApp number</span>}
           </div>
           {rawPhone && <button type="button" onClick={copyPhone} className="mt-2 inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-lg border border-slate-800 px-3 text-sm font-medium text-slate-300 hover:bg-slate-900 focus:outline-none focus:ring-2 focus:ring-teal-400"><Copy className="h-4 w-4" />Copy phone number</button>}
         </section>

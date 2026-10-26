@@ -59,8 +59,8 @@ function parseJsonBody(req) {
  * Returns true if the route was handled, false if it should fall through to subsequent handlers
  */
 export async function handleAppointmentRoutes(req, res, pathname, authUser) {
-  const parsedUrl = url.parse(req.url, true);
-  const query = parsedUrl.query;
+  const parsedReqUrl = new URL(req.url || '/', 'http://localhost');
+  const query = Object.fromEntries(parsedReqUrl.searchParams.entries());
   const prisma = getPrisma();
   const dbOk = getDbStatus() && !!prisma;
 
@@ -334,7 +334,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             u_creator."fullName" AS "createdByName",
             a.cancellation_reason AS "cancellationReason", a.created_at AS "createdAt",
             c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone", c."avatarUrl" AS "patientAvatar",
-            u."full_name" AS "doctorName", u."title" AS "doctorTitle",
+            u."fullName" AS "doctorName", u."title" AS "doctorTitle",
             t.name AS "treatmentName", t."durationMinutes" AS "treatmentDuration", t."startingPrice" AS "treatmentPrice",
             r.name AS "roomName", r.room_number AS "roomNumber", r.color AS "roomColor"
           FROM public.appointments a
@@ -543,7 +543,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
               a.patient_id AS "patientId", a.doctor_id AS "doctorId", a.treatment_id AS "treatmentId",
               a.start_time AS "startTime", a.end_time AS "endTime", a.status, a.notes,
               c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone",
-              u."full_name" AS "doctorName",
+              u."fullName" AS "doctorName",
               t.name AS "treatmentName",
               r.name AS "roomName", r.room_number AS "roomNumber", r.color AS "roomColor",
               b.name AS "branchName"
@@ -646,7 +646,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             a.start_time AS "startTime", a.end_time AS "endTime", a.status, a.notes,
             a.cancellation_reason AS "cancellationReason", a.created_at AS "createdAt",
             c."displayName" AS "patientName", c."whatsappNumber" AS "patientPhone", c."avatarUrl" AS "patientAvatar",
-            u."full_name" AS "doctorName",
+            u."fullName" AS "doctorName",
             t.name AS "treatmentName", t."durationMinutes" AS "treatmentDuration", t."startingPrice" AS "treatmentPrice",
             r.name AS "roomName", r.room_number AS "roomNumber", r.color AS "roomColor",
             b.name AS "branchName"
@@ -1027,7 +1027,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             ab.id, ab.branch_id AS "branchId", ab.room_id AS "roomId", 
             ab.doctor_id AS "doctorId", ab.start_time AS "startTime", 
             ab.end_time AS "endTime", ab.reason, ab.created_at AS "createdAt",
-            r.name AS "roomName", u."full_name" AS "doctorName"
+            r.name AS "roomName", u."fullName" AS "doctorName"
           FROM public.availability_blocks ab
           LEFT JOIN public.rooms r ON ab.room_id = r.id
           LEFT JOIN public.doctors u ON ab.doctor_id = u.id

@@ -159,6 +159,169 @@ export interface ExamMcqStats {
   uniqueStudents: number;
 }
 
+export interface ExamCourse {
+  id: string;
+  courseCode: string;
+  courseName: string;
+  examAuthority: string;
+  profession: string;
+  country: string;
+  description?: string;
+  thumbnail?: string;
+  status: 'Active' | 'Inactive' | 'Draft';
+  accessType?: 'Free' | 'Paid' | 'Assigned Students Only';
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  subjectsCount?: number;
+  questionsCount?: number;
+  mockTestsCount?: number;
+  materialsCount?: number;
+}
+
+export interface ExamSubject {
+  id: string;
+  courseId: string;
+  subjectName: string;
+  description?: string;
+  status: 'Active' | 'Inactive';
+  sortOrder: number;
+  questionsCount?: number;
+}
+
+export interface ExamPlatformQuestion {
+  id: string;
+  questionCode: string;
+  courseId: string;
+  subjectId: string;
+  subject?: string;
+  topic?: string;
+  title?: string;
+  questionText: string;
+  questionImage?: string;
+  optionA: string;
+  optionB: string;
+  optionC: string;
+  optionD: string;
+  optionE: string;
+  correctAnswer: 'A' | 'B' | 'C' | 'D' | 'E';
+  rememberNote1: string;
+  rememberNote2: string;
+  rememberNote3: string;
+  detailedExplanation?: string;
+  difficulty: 'Easy' | 'Medium' | 'Hard';
+  questionType: 'Practice' | 'Mock Test' | 'Both';
+  status: 'Active' | 'Inactive' | 'Draft';
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ExamPracticeSessionData {
+  currentQuestionIndex: number;
+  completedQuestionIds: string[];
+  questionAttemptsState: Record<string, { attempts: string[]; isCorrect: boolean; timeSpent: number }>;
+  totalTimeSpent: number;
+}
+
+export interface ExamMockTestPlatform {
+  id: string;
+  courseId: string;
+  mockTestName: string;
+  subjectScope?: string;
+  description?: string;
+  durationMinutes: number;
+  totalQuestions: number;
+  passPercentage: number;
+  randomQuestionOrder: boolean;
+  randomAnswerOrder: boolean;
+  allowBackNavigation: boolean;
+  showResults: 'Immediately' | 'After Admin Release';
+  status: 'Draft' | 'Published' | 'Inactive';
+  questions?: Array<Omit<ExamPlatformQuestion, 'correctAnswer' | 'rememberNote1' | 'rememberNote2' | 'rememberNote3' | 'detailedExplanation'>>;
+}
+
+export interface ExamMockTestAttemptRecord {
+  id: string;
+  studentId: string;
+  studentName: string;
+  mockTestId: string;
+  mockTestName: string;
+  courseId: string;
+  totalQuestions: number;
+  correctAnswers: number;
+  wrongAnswers: number;
+  unanswered: number;
+  score: number;
+  percentage: number;
+  result: 'PASS' | 'FAIL';
+  timeTakenSeconds: number;
+  answersSnapshot: Array<{
+    questionId: string;
+    questionCode: string;
+    questionText: string;
+    optionA: string;
+    optionB: string;
+    optionC: string;
+    optionD: string;
+    optionE: string;
+    studentAnswer: string | null;
+    correctAnswer: string;
+    isCorrect: boolean;
+    rememberNotes: string[];
+    detailedExplanation?: string;
+  }>;
+  submittedAt: string;
+}
+
+export interface ExamStudyMaterialPlatform {
+  id: string;
+  courseId: string;
+  subjectId: string;
+  topic?: string;
+  title: string;
+  description?: string;
+  materialType: 'PDF' | 'DOC' | 'PPT' | 'Video' | 'Notes' | 'Web Link';
+  fileUrl?: string;
+  externalUrl?: string;
+  thumbnail?: string;
+  allowDownload: boolean;
+  status: 'Active' | 'Inactive';
+  uploadedBy?: string;
+  uploadedAt: string;
+}
+
+export interface ExamGuidelinePlatform {
+  id: string;
+  courseId: string;
+  guidelineTitle: string;
+  section: string;
+  content: string;
+  officialReferenceUrl?: string;
+  updatedDate: string;
+  status: 'Active' | 'Inactive';
+}
+
+export interface StudentProgressAnalyticsData {
+  studentName: string;
+  totalQuestionsAttempted: number;
+  accuracyRate: number;
+  averageAttemptsPerQuestion: number;
+  timeStudiedMinutes: number;
+  subjectsAnalysis: Array<{
+    subject: string;
+    totalQuestions: number;
+    correctFirstTry: number;
+    accuracy: number;
+    status: 'Weak' | 'Needs Improvement' | 'Strong';
+  }>;
+  recommendedPractice: Array<{
+    subject: string;
+    recommendation: string;
+    accuracy: number;
+  }>;
+}
+
 function getAuthHeaders(): HeadersInit {
   const token = typeof window !== 'undefined' 
     ? (localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('royal_crm_token') || '')
@@ -489,6 +652,327 @@ export const examService = {
       headers: getAuthHeaders(),
     });
     if (!res.ok) throw new Error('Failed to load MCQ statistics');
+    const json = await res.json();
+    return json.data;
+  },
+
+  // =========================================================================
+  // 10. HEALTHCARE EXAM PLATFORM: COURSES
+  // =========================================================================
+  async getCourses(): Promise<ExamCourse[]> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/courses`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load exam courses');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async getCourseById(id: string): Promise<ExamCourse> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/courses/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load course details');
+    const json = await res.json();
+    return json.data;
+  },
+
+  async createCourse(data: Partial<ExamCourse>): Promise<ExamCourse> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/courses`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create course' }));
+      throw new Error(err.error || 'Failed to create course');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  // =========================================================================
+  // 11. SUBJECTS / CATEGORIES
+  // =========================================================================
+  async getCourseSubjects(courseId?: string): Promise<ExamSubject[]> {
+    const url = courseId
+      ? `${API_BASE_URL}/api/exam/courses/${courseId}/subjects`
+      : `${API_BASE_URL}/api/exam/subjects`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to load subjects');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async createSubject(courseId: string, data: { subjectName: string; sortOrder?: number }): Promise<ExamSubject> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/courses/${courseId}/subjects`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to create subject');
+    const json = await res.json();
+    return json.data;
+  },
+
+  // =========================================================================
+  // 12. CENTRALIZED QUESTION BANK
+  // =========================================================================
+  async getQuestionBank(params?: {
+    courseId?: string;
+    subjectId?: string;
+    difficulty?: string;
+    questionType?: string;
+    search?: string;
+  }): Promise<ExamPlatformQuestion[]> {
+    const q = new URLSearchParams();
+    if (params?.courseId && params.courseId !== 'all') q.set('courseId', params.courseId);
+    if (params?.subjectId && params.subjectId !== 'all') q.set('subjectId', params.subjectId);
+    if (params?.difficulty && params.difficulty !== 'all') q.set('difficulty', params.difficulty);
+    if (params?.questionType && params.questionType !== 'all') q.set('questionType', params.questionType);
+    if (params?.search) q.set('search', params.search);
+    const qs = q.toString();
+    const url = `${API_BASE_URL}/api/exam/questions${qs ? `?${qs}` : ''}`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to load question bank');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async createQuestionBankItem(data: Partial<ExamPlatformQuestion>): Promise<ExamPlatformQuestion> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/questions`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create question' }));
+      throw new Error(err.error || 'Failed to create question');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  async updateQuestionBankItem(id: string, data: Partial<ExamPlatformQuestion>): Promise<ExamPlatformQuestion> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/questions/${id}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error('Failed to update question');
+    const json = await res.json();
+    return json.data;
+  },
+
+  async deleteQuestionBankItem(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/questions/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete question');
+  },
+
+  async bulkImportQuestions(questions: any[]): Promise<{ importedCount: number; duplicatesCount: number; errorsCount: number }> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/questions/bulk-import`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ questions }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Bulk import failed' }));
+      throw new Error(err.error || 'Bulk import failed');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  // =========================================================================
+  // 13. MCQ PRACTICE RUNNER: SERVER-SIDE VALIDATION & PERSISTENCE
+  // =========================================================================
+  async checkPracticeAnswerServer(params: {
+    questionId: string;
+    selectedAnswer: string;
+    attemptNumber?: number;
+    timeSpentSeconds?: number;
+    studentName?: string;
+  }): Promise<{
+    isCorrect: boolean;
+    status: 'correct' | 'incorrect';
+    message: string;
+    correctAnswer?: string;
+    rememberNotes?: string[];
+    detailedExplanation?: string;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/practice/check-answer`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(params),
+    });
+    if (!res.ok) throw new Error('Failed to validate practice answer');
+    return await res.json();
+  },
+
+  async getPracticeSession(courseId = 'course-dha-rn', studentId?: string): Promise<ExamPracticeSessionData> {
+    const q = new URLSearchParams({ courseId });
+    if (studentId) q.set('studentId', studentId);
+    const res = await fetch(`${API_BASE_URL}/api/exam/practice/session?${q.toString()}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load practice session');
+    const json = await res.json();
+    return json.data;
+  },
+
+  async savePracticeSession(data: {
+    courseId: string;
+    studentId?: string;
+    studentName?: string;
+    currentQuestionIndex: number;
+    completedQuestionIds: string[];
+    questionAttemptsState: Record<string, any>;
+    totalTimeSpent: number;
+  }): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/practice/session`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) console.warn('Failed to save practice session');
+  },
+
+  async restartPracticeSession(courseId = 'course-dha-rn', studentId?: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/practice/session/restart`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ courseId, studentId }),
+    });
+    if (!res.ok) throw new Error('Failed to restart practice session');
+  },
+
+  // =========================================================================
+  // 14. MOCK TEST SIMULATION ENGINE
+  // =========================================================================
+  async getMockTestForTaker(id: string): Promise<ExamMockTestPlatform> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mock-tests/${id}`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load mock exam');
+    const json = await res.json();
+    return json.data;
+  },
+
+  async submitMockTest(mockTestId: string, submission: {
+    answers: Record<string, string>;
+    studentName?: string;
+    studentId?: string;
+    timeTakenSeconds: number;
+  }): Promise<ExamMockTestAttemptRecord> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mock-tests/${mockTestId}/submit`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(submission),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Mock test submission failed' }));
+      throw new Error(err.error || 'Mock test submission failed');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  async getMockTestResults(): Promise<ExamMockTestAttemptRecord[]> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/mock-test-results`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to load mock test results');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  // =========================================================================
+  // 15. STUDY MATERIALS
+  // =========================================================================
+  async getPlatformStudyMaterials(params?: { courseId?: string; subjectId?: string }): Promise<ExamStudyMaterialPlatform[]> {
+    const q = new URLSearchParams();
+    if (params?.courseId && params.courseId !== 'all') q.set('courseId', params.courseId);
+    if (params?.subjectId && params.subjectId !== 'all') q.set('subjectId', params.subjectId);
+    const qs = q.toString();
+    const url = `${API_BASE_URL}/api/exam/study-materials${qs ? `?${qs}` : ''}`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to load study materials');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async createPlatformStudyMaterial(data: Partial<ExamStudyMaterialPlatform>): Promise<ExamStudyMaterialPlatform> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/study-materials`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to upload material' }));
+      throw new Error(err.error || 'Failed to upload material');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  async deletePlatformStudyMaterial(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/study-materials/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete study material');
+  },
+
+  // =========================================================================
+  // 16. EXAM GUIDELINES
+  // =========================================================================
+  async getExamGuidelines(courseId?: string): Promise<ExamGuidelinePlatform[]> {
+    const q = new URLSearchParams();
+    if (courseId && courseId !== 'all') q.set('courseId', courseId);
+    const qs = q.toString();
+    const url = `${API_BASE_URL}/api/exam/guidelines${qs ? `?${qs}` : ''}`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to load exam guidelines');
+    const json = await res.json();
+    return json.data || [];
+  },
+
+  async createExamGuideline(data: Partial<ExamGuidelinePlatform>): Promise<ExamGuidelinePlatform> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/guidelines`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to create guideline' }));
+      throw new Error(err.error || 'Failed to create guideline');
+    }
+    const json = await res.json();
+    return json.data;
+  },
+
+  async deleteExamGuideline(id: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/guidelines/${id}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) throw new Error('Failed to delete guideline');
+  },
+
+  // =========================================================================
+  // 17. STUDENT PROGRESS & WEAK AREA ANALYTICS
+  // =========================================================================
+  async getStudentProgressAnalytics(studentId?: string, studentName?: string): Promise<StudentProgressAnalyticsData> {
+    const q = new URLSearchParams();
+    if (studentId) q.set('studentId', studentId);
+    if (studentName) q.set('studentName', studentName);
+    const qs = q.toString();
+    const url = `${API_BASE_URL}/api/exam/analytics/student-progress${qs ? `?${qs}` : ''}`;
+    const res = await fetch(url, { headers: getAuthHeaders() });
+    if (!res.ok) throw new Error('Failed to load progress analytics');
     const json = await res.json();
     return json.data;
   }

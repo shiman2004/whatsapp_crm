@@ -40,28 +40,28 @@ export const ExamReportsView: React.FC = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-[#111b21] border border-slate-800 rounded-2xl p-4 shadow-xl">
           <span className="text-[11px] text-slate-400 font-medium">Total Requests Logged</span>
-          <h3 className="text-2xl font-black text-white mt-1">{reports?.totalRequests || 7}</h3>
+          <h3 className="text-2xl font-black text-white mt-1">{reports?.totalRequests ?? 0}</h3>
           <p className="text-[11px] text-emerald-400 mt-1 flex items-center gap-1">
             <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>{reports?.approvedRequests || 1} approved</span>
+            <span>{reports?.approvedRequests ?? 0} approved</span>
           </p>
         </div>
 
         <div className="bg-[#111b21] border border-slate-800 rounded-2xl p-4 shadow-xl">
           <span className="text-[11px] text-slate-400 font-medium">Active In Progress</span>
-          <h3 className="text-2xl font-black text-blue-400 mt-1">{reports?.inProgressRequests || 1}</h3>
+          <h3 className="text-2xl font-black text-blue-400 mt-1">{reports?.inProgressRequests ?? 0}</h3>
           <p className="text-[11px] text-slate-400 mt-1">Under syllabus review</p>
         </div>
 
         <div className="bg-[#111b21] border border-slate-800 rounded-2xl p-4 shadow-xl">
           <span className="text-[11px] text-slate-400 font-medium">Material Repository</span>
-          <h3 className="text-2xl font-black text-emerald-400 mt-1">{reports?.totalMaterials || 346}</h3>
+          <h3 className="text-2xl font-black text-emerald-400 mt-1">{reports?.totalMaterials ?? 0}</h3>
           <p className="text-[11px] text-slate-400 mt-1">Across all licensing boards</p>
         </div>
 
         <div className="bg-[#111b21] border border-slate-800 rounded-2xl p-4 shadow-xl">
           <span className="text-[11px] text-slate-400 font-medium">Candidates Enrolled</span>
-          <h3 className="text-2xl font-black text-amber-400 mt-1">{reports?.totalProvisions || 128}</h3>
+          <h3 className="text-2xl font-black text-amber-400 mt-1">{reports?.totalProvisions ?? 0}</h3>
           <p className="text-[11px] text-slate-400 mt-1">Active test preparation</p>
         </div>
       </div>
@@ -73,7 +73,7 @@ export const ExamReportsView: React.FC = () => {
             <PieChart className="w-4 h-4 text-cyan-400" />
             <span>Material Distribution by Exam Board</span>
           </h3>
-          <span className="text-xs text-slate-400">Total 346 Learning Assets</span>
+          <span className="text-xs text-slate-400">Total {reports?.totalMaterials ?? 0} Learning Assets</span>
         </div>
 
         <div className="space-y-3.5">
@@ -89,7 +89,7 @@ export const ExamReportsView: React.FC = () => {
                 <div
                   className="h-full rounded-full transition-all duration-500"
                   style={{
-                    width: `${item.percentage * 3.5}%`,
+                    width: `${Math.min(100, item.percentage)}%`,
                     backgroundColor:
                       item.category === 'DHA' ? '#06b6d4' :
                       item.category === 'HAAD' ? '#10b981' :

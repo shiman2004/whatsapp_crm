@@ -46,18 +46,11 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
 
   // Live Data Stores
   const [stats, setStats] = useState<ExamDashboardStats>({
-    pendingRequestsCount: 5,
-    totalExamsProvidedCount: 128,
-    totalStudyMaterialsCount: 346,
-    totalMockTestsCount: 278,
-    categoryCounts: {
-      'cat-dha': 32,
-      'cat-haad': 18,
-      'cat-moh': 18,
-      'cat-prometric': 15,
-      'cat-nclex': 26,
-      'cat-other': 9,
-    },
+    pendingRequestsCount: 0,
+    totalExamsProvidedCount: 0,
+    totalStudyMaterialsCount: 0,
+    totalMockTestsCount: 0,
+    categoryCounts: {},
     recentRequests: [],
   });
 

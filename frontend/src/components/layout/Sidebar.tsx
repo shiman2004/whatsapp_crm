@@ -15,6 +15,9 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   CalendarDays,
+  Upload,
+  Contact,
+  ClipboardList
   GraduationCap,
   ChevronDown,
   ChevronRight
@@ -359,12 +362,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {item.id === 'marketing' && marketingExpanded && !isCollapsed && (
                     <div className="ml-7 border-l border-slate-700/70 pl-2 space-y-0.5 py-1">
                       {[
-                        { id: 'dashboard', label: 'Dashboard' },
-                        { id: 'add', label: 'Add Contacts' },
-                        { id: 'contacts', label: 'Contacts' },
-                        { id: 'assignment', label: 'Assignment' },
-                        { id: 'tasks', label: 'My Tasks' },
-                        { id: 'reports', label: 'Reports' },
+                        { id: 'dashboard', label: 'Marketing Dashboard', icon: LayoutDashboard },
+                        { id: 'add', label: 'Add Contact', icon: Upload },
+                        { id: 'uploads', label: 'My Uploads', icon: FileText },
+                        { id: 'contacts', label: 'Contact Database', icon: Contact },
+                        { id: 'assignment', label: 'Staff Assignment', icon: Users },
+                        { id: 'tasks', label: 'My Marketing Tasks', icon: ClipboardList },
+                        { id: 'campaigns', label: 'Campaigns & Templates', icon: FileText },
+                        { id: 'reports', label: 'Marketing Reports', icon: BarChart3 },
                       ].map(sub => (
                         <button
                           key={sub.id}
@@ -381,7 +386,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                               : 'text-slate-400 hover:bg-slate-800/70 hover:text-teal-300'
                           }`}
                         >
-                          <span>{sub.label}</span>
+                          <span className="flex items-center gap-1.5">{React.createElement(sub.icon, { className: 'w-3 h-3' })}{sub.label}</span>
                           {activeTab === 'marketing' && currentMarketingPage === sub.id && (
                             <span className="w-1.5 h-1.5 rounded-full bg-teal-400" />
                           )}

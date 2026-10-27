@@ -1,11 +1,14 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import dotenv from 'dotenv';
 import { assertDatabaseOperationAllowed } from '../src/databasePolicy.js';
 
 dotenv.config();
 assertDatabaseOperationAllowed('utility');
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  adapter: new PrismaPg({ connectionString: process.env.DIRECT_URL || process.env.DATABASE_URL }),
+});
 
 async function main() {
   console.log('🌱 Starting Royal Wellness Center MySQL Database Seeding...');

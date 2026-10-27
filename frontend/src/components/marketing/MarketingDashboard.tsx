@@ -4,15 +4,16 @@ import {
   ArrowRight,
   ShieldCheck,
   Database,
-  FileSpreadsheet,
   ArrowUpRight,
   CheckCircle2,
   Users,
   Clock,
   Sparkles,
-  TrendingUp,
   Loader2,
-  Calendar
+  Activity,
+  UserPlus,
+  Target,
+  ChevronRight,
 } from 'lucide-react';
 import { MarketingContact, MarketingImportBatch } from './types';
 import { LifecycleBadge } from './MarketingBadges';
@@ -68,163 +69,82 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
     }
   };
 
-  const recentBatch = uploads[0];
-
   return (
-    <div className="p-4 sm:p-6 space-y-6">
-      {/* 6 Primary KPI Cards (Section 13) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
-        {/* 1. Total Contacts */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
+    <div className="p-4 sm:p-6 space-y-5">
+      <section className="rounded-2xl border border-slate-800 bg-[#0B1323] shadow-[0_18px_48px_rgba(0,0,0,0.18)] overflow-hidden">
+        <div className="flex flex-col gap-4 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Contacts</span>
-              <Database className="w-3.5 h-3.5 text-teal-400" />
+            <div className="flex items-center gap-2">
+              <Activity className="h-4 w-4 text-teal-400" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-teal-300">Marketing operations</p>
+              {fetching && <Loader2 className="h-3 w-3 animate-spin text-slate-500" aria-label="Refreshing dashboard" />}
             </div>
-            <p className="text-2xl font-black text-white mt-1.5">{metrics.totalContacts.toLocaleString()}</p>
+            <h2 className="mt-1 text-lg font-black tracking-tight text-white">Today&apos;s contact queue</h2>
           </div>
-          <span className="text-[10px] text-teal-300 font-semibold mt-2">Captured pool</span>
-        </div>
-
-        {/* 2. Unassigned Contacts */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Unassigned</span>
-              <Users className="w-3.5 h-3.5 text-indigo-400" />
-            </div>
-            <p className="text-2xl font-black text-indigo-300 mt-1.5">{metrics.unassignedContacts.toLocaleString()}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('assignment')}
-            className="text-[10px] text-indigo-400 hover:text-indigo-300 font-bold inline-flex items-center gap-1 mt-2"
-          >
-            Assign now <ArrowRight className="w-2.5 h-2.5" />
+          <button type="button" onClick={() => onNavigate('add')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 px-4 py-2.5 text-xs font-bold text-slate-950 transition-colors hover:bg-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300 focus:ring-offset-2 focus:ring-offset-[#0B1323]">
+            <Plus className="h-4 w-4" /> Add contact
           </button>
         </div>
-
-        {/* 3. Assigned Contacts */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Assigned</span>
-              <CheckCircle2 className="w-3.5 h-3.5 text-blue-400" />
-            </div>
-            <p className="text-2xl font-black text-blue-300 mt-1.5">{metrics.assignedContacts.toLocaleString()}</p>
+        <div className="grid divide-y divide-slate-800 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+          <div className="p-5">
+            <div className="flex items-center justify-between text-slate-400"><span className="text-[10px] font-bold uppercase tracking-wider">Contact pool</span><Database className="h-4 w-4 text-teal-400" /></div>
+            <p className="mt-2 text-3xl font-black tracking-tight text-white">{metrics.totalContacts.toLocaleString()}</p>
+            <p className="mt-1 text-xs text-slate-500">Contacts available to work</p>
           </div>
-          <span className="text-[10px] text-blue-400 font-semibold mt-2">Active in queues</span>
-        </div>
-
-        {/* 4. Follow-ups Due */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Follow-ups Due</span>
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-            </div>
-            <p className="text-2xl font-black text-amber-300 mt-1.5">{metrics.followUpsDue.toLocaleString()}</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => onNavigate('tasks')}
-            className="text-[10px] text-amber-400 hover:text-amber-300 font-bold inline-flex items-center gap-1 mt-2"
-          >
-            Review tasks <ArrowRight className="w-2.5 h-2.5" />
+          <button type="button" onClick={() => onNavigate('assignment')} className="group p-5 text-left transition-colors hover:bg-indigo-400/5 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-400">
+            <div className="flex items-center justify-between text-slate-400"><span className="text-[10px] font-bold uppercase tracking-wider">Needs assignment</span><Users className="h-4 w-4 text-indigo-400" /></div>
+            <p className="mt-2 text-3xl font-black tracking-tight text-indigo-300">{metrics.unassignedContacts.toLocaleString()}</p>
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-indigo-300">Open assignment queue <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+          </button>
+          <button type="button" onClick={() => onNavigate('tasks')} className="group p-5 text-left transition-colors hover:bg-amber-400/5 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-amber-400">
+            <div className="flex items-center justify-between text-slate-400"><span className="text-[10px] font-bold uppercase tracking-wider">Next action</span><Clock className="h-4 w-4 text-amber-400" /></div>
+            <p className="mt-2 text-3xl font-black tracking-tight text-amber-300">{metrics.followUpsDue.toLocaleString()}</p>
+            <span className="mt-1 inline-flex items-center gap-1 text-xs font-semibold text-amber-300">Review follow-ups <ChevronRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></span>
           </button>
         </div>
+      </section>
 
-        {/* 5. Interested Contacts */}
-        <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 flex flex-col justify-between shadow-xs">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Interested</span>
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
-            </div>
-            <p className="text-2xl font-black text-emerald-300 mt-1.5">{metrics.interestedContacts.toLocaleString()}</p>
-          </div>
-          <span className="text-[10px] text-emerald-400 font-semibold mt-2">Ready to convert</span>
+      <section className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-4 sm:p-5">
+        <div className="mb-4 flex items-end justify-between gap-4"><div><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Lifecycle</p><h3 className="mt-1 text-sm font-bold text-white">Pipeline at a glance</h3></div><span className="hidden text-xs text-slate-500 sm:block">From active queue to CRM lead</span></div>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {[
+            ['Assigned', metrics.assignedContacts, 'Active in queues', CheckCircle2, 'text-blue-300', 'border-blue-500/20'],
+            ['Follow-ups due', metrics.followUpsDue, 'Needs review', Clock, 'text-amber-300', 'border-amber-500/20'],
+            ['Interested', metrics.interestedContacts, 'Ready to convert', Sparkles, 'text-emerald-300', 'border-emerald-500/20'],
+            ['Converted', metrics.convertedLeads, 'Promoted to CRM', ArrowUpRight, 'text-teal-300', 'border-teal-500/30'],
+          ].map(([label, value, note, Icon, color, border], index) => {
+            const StepIcon = Icon as React.ElementType;
+            return <div key={label as string} className={`relative border-l-2 ${border} bg-slate-950/25 px-4 py-3.5`}>
+              {index > 0 && <ChevronRight className="absolute -left-2.5 top-1/2 hidden h-4 w-4 -translate-y-1/2 bg-[#0D1526] text-slate-600 lg:block" />}
+              <div className="flex items-center justify-between"><span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label as string}</span><StepIcon className={`h-4 w-4 ${color}`} /></div>
+              <p className={`mt-2 text-2xl font-black ${color}`}>{(value as number).toLocaleString()}</p><p className="mt-1 text-[11px] text-slate-500">{note as string}</p>
+            </div>;
+          })}
         </div>
+      </section>
 
-        {/* 6. Converted Leads */}
-        <div className="rounded-2xl border border-teal-500/30 bg-teal-500/10 p-4 flex flex-col justify-between shadow-xs">
-          <div>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-300">Converted Leads</span>
-              <ArrowUpRight className="w-3.5 h-3.5 text-teal-400" />
-            </div>
-            <p className="text-2xl font-black text-teal-300 mt-1.5">{metrics.convertedLeads.toLocaleString()}</p>
-          </div>
-          <span className="text-[10px] text-teal-400 font-semibold mt-2">Promoted to CRM</span>
-        </div>
-      </div>
+      <section className="grid border border-slate-800 bg-[#0B1323] sm:grid-cols-3 sm:divide-x sm:divide-slate-800">
+        {[
+          ['Contact rate', metrics.rates?.contactRate || 0, 'Contacted / assigned', 'text-white'],
+          ['Qualification rate', metrics.rates?.qualificationRate || 0, 'Interested / contacted', 'text-emerald-300'],
+          ['Lead conversion', metrics.rates?.leadConversionRate || 0, 'Converted / total', 'text-teal-300'],
+        ].map(([label, value, detail, color]) => <div key={label as string} className="flex items-center justify-between px-5 py-3.5"><div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label as string}</p><p className={`mt-1 text-xl font-black ${color}`}>{value as number}%</p></div><span className="max-w-[125px] text-right text-[11px] text-slate-500">{detail as string}</span></div>)}
+      </section>
 
-      {/* Calculated Rates Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <div className="p-3.5 rounded-xl border border-slate-800 bg-[#0D1526]/60 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase text-slate-400">Contact Rate</span>
-            <p className="text-base font-extrabold text-slate-200 mt-0.5">
-              {metrics.rates?.contactRate || 0}%
-            </p>
-          </div>
-          <span className="text-[11px] text-slate-500">Contacted / Assigned</span>
-        </div>
+      <section className="flex flex-col justify-between gap-4 rounded-2xl border border-teal-500/25 bg-teal-500/[0.05] px-5 py-4 sm:flex-row sm:items-center">
+        <div className="flex gap-3"><span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-teal-500/30 bg-teal-500/10"><ShieldCheck className="h-4 w-4 text-teal-300" /></span><div><h3 className="text-sm font-bold text-white">Add a new contact safely</h3><p className="mt-1 text-xs leading-relaxed text-slate-400">Each number is normalized to E.164 and checked against marketing contacts and active CRM patient files.</p></div></div>
+        <button type="button" onClick={() => onNavigate('add')} className="inline-flex shrink-0 items-center justify-center gap-2 text-xs font-bold text-teal-300 hover:text-teal-200 focus:outline-none focus:ring-2 focus:ring-teal-300 focus:ring-offset-2 focus:ring-offset-[#0D1526]"><UserPlus className="h-4 w-4" /> Add contact <ArrowRight className="h-3.5 w-3.5" /></button>
+      </section>
 
-        <div className="p-3.5 rounded-xl border border-slate-800 bg-[#0D1526]/60 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase text-slate-400">Qualification Rate</span>
-            <p className="text-base font-extrabold text-emerald-400 mt-0.5">
-              {metrics.rates?.qualificationRate || 0}%
-            </p>
-          </div>
-          <span className="text-[11px] text-slate-500">Interested / Contacted</span>
-        </div>
-
-        <div className="p-3.5 rounded-xl border border-teal-500/30 bg-teal-500/5 flex items-center justify-between">
-          <div>
-            <span className="text-[10px] font-bold uppercase text-teal-300">Lead Conversion Rate</span>
-            <p className="text-base font-extrabold text-teal-300 mt-0.5">
-              {metrics.rates?.leadConversionRate || 0}%
-            </p>
-          </div>
-          <span className="text-[11px] text-teal-400/80">Converted / Total</span>
-        </div>
-      </div>
-
-      {/* Quick Ingestion CTA Banner */}
-      <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-950/40 via-slate-900 to-slate-900/80 p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-lg shadow-teal-950/20">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-4 h-4 text-teal-400" />
-            <p className="font-bold text-white text-sm">Ready to ingest a new contact source?</p>
-          </div>
-          <p className="text-xs text-slate-300 max-w-2xl leading-relaxed">
-            Add single contacts, paste unformatted numbers, or upload spreadsheets. Numbers are normalized to E.164 (+94...) and deduplicated against the marketing store and active CRM patient files.
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => onNavigate('add')}
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 px-4 py-2.5 text-xs font-bold text-slate-950 hover:bg-teal-300 transition-colors shadow-sm shrink-0"
-        >
-          <Plus className="w-4 h-4" /> Add Contacts
-        </button>
-      </div>
-
-      {/* Recent Ingestion Preview */}
-      <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden shadow-xs">
-        <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Database className="w-4 h-4 text-slate-400" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-200">Recent Marketing Ingests</h3>
-          </div>
+      <section className="overflow-hidden rounded-2xl border border-slate-800 bg-[#0D1526]/60 shadow-xs">
+        <div className="flex flex-col gap-3 border-b border-slate-800 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div><div className="flex items-center gap-2"><Target className="h-4 w-4 text-teal-400" /><p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Latest activity</p></div><h3 className="mt-1 text-sm font-bold text-white">Recent contacts</h3></div>
           <button
             type="button"
             onClick={() => onNavigate('contacts')}
-            className="text-xs text-teal-400 hover:text-teal-300 font-semibold inline-flex items-center gap-1"
+            className="inline-flex items-center gap-1 text-xs font-semibold text-teal-400 hover:text-teal-300 focus:outline-none focus:ring-2 focus:ring-teal-300 rounded"
           >
-            Browse all contacts ({contacts.length}) <ArrowRight className="w-3 h-3" />
+            View all contacts ({contacts.length}) <ArrowRight className="h-3 w-3" />
           </button>
         </div>
 
@@ -232,7 +152,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
           <div className="p-8 text-center text-xs text-slate-400">Loading contacts...</div>
         ) : contacts.length === 0 ? (
           <div className="p-8 text-center text-xs text-slate-500">
-            No contacts recorded yet. Click &quot;Add Contacts&quot; to begin.
+            No contacts recorded yet. Click &quot;Add contact&quot; to begin.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -260,7 +180,7 @@ export const MarketingDashboard: React.FC<MarketingDashboardProps> = ({
             </table>
           </div>
         )}
-      </div>
+      </section>
     </div>
   );
 };

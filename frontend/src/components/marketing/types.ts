@@ -5,7 +5,7 @@ export type MarketingPage =
   | 'contacts'
   | 'assignment'
   | 'tasks'
-  | 'content'
+  | 'campaigns'
   | 'reports';
 
 export type LifecycleStatus =

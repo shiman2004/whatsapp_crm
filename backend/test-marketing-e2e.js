@@ -65,6 +65,7 @@ console.log('✅ Pass 1 & 2: All phone normalizations and rejections verified.\n
 
 // Prepare test actors
 const superAdmin = { id: 'test-sa-1', role: 'super_admin', active: true, company: 'RWC' };
+const marketingAdmin = { id: 'test-ma-1', role: 'marketing_admin', active: true, company: 'RWC' };
 const coordinator1 = { id: 'test-coord-1', role: 'coordinator', active: true, company: 'RWC' };
 const coordinator2 = { id: 'test-coord-2', role: 'coordinator', active: true, company: 'RWC' };
 
@@ -329,6 +330,33 @@ await handleMarketingRoutes(
 assert.equal(csvRes.status, 200);
 assert.equal(csvRes.headers['Content-Type'], 'text/csv');
 assert.ok(csvRes.body.includes('Total Contacts Imported'));
+
+const reportViewRes = mockRes();
+await handleMarketingRoutes(
+  mockReq('GET', '/api/marketing/reports?range=today'),
+  reportViewRes,
+  '/api/marketing/reports',
+  marketingAdmin
+);
+assert.equal(reportViewRes.status, 200, 'Marketing Admin should be able to view reports');
+
+const reportExportDeniedRes = mockRes();
+await handleMarketingRoutes(
+  mockReq('GET', '/api/marketing/reports?range=today&export=csv'),
+  reportExportDeniedRes,
+  '/api/marketing/reports',
+  marketingAdmin
+);
+assert.equal(reportExportDeniedRes.status, 403, 'Marketing Admin should not export report data');
+
+const coordinatorReportDeniedRes = mockRes();
+await handleMarketingRoutes(
+  mockReq('GET', '/api/marketing/reports?range=today'),
+  coordinatorReportDeniedRes,
+  '/api/marketing/reports',
+  coordinator1
+);
+assert.equal(coordinatorReportDeniedRes.status, 403, 'Coordinators should not view company reports');
 console.log('✅ Pass 15 & 16: Dashboard KPIs and CSV reports generated with mathematically sound rates.\n');
 
 // Cleanup synthetic records

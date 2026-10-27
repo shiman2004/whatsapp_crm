@@ -775,32 +775,24 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               <th className="px-3 py-3">Contact Number</th>
               {/* 3. Source & Group */}
               <th className="px-3 py-3">Source & Group</th>
-              {/* 4. Assigned Staff */}
+              {/* 4. Assigned Staff (Consolidated with Role & Inline Reassign) */}
               <th className="px-3 py-3">Assigned Staff</th>
-              {/* 5. Assign / Reassign */}
-              <th className="px-3 py-3">Assign / Reassign</th>
-              {/* 6. Assigned By */}
+              {/* 5. Assigned By */}
               <th className="px-3 py-3">Assigned By</th>
-              {/* 7. Coordinator */}
-              <th className="px-3 py-3">Coordinator</th>
-              {/* 8. Assigned At */}
-              <th className="px-3 py-3">Assigned At</th>
-              {/* 9. Reassigned At */}
-              <th className="px-3 py-3">Reassigned At</th>
-              {/* 10. Assignment Status */}
-              <th className="px-3 py-3">Assignment Status</th>
-              {/* 11. Consent Status */}
+              {/* 6. Assignment Date (Merged with Reassigned Date) */}
+              <th className="px-3 py-3">Assignment Date</th>
+              {/* 7. Consent Status */}
               <th className="px-3 py-3">Consent Status</th>
-              {/* 12. Lead Status */}
+              {/* 8. Lead Status */}
               <th className="px-3 py-3">Lead Status</th>
-              {/* 13. Actions */}
+              {/* 9. Actions */}
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {loading ? (
               <tr>
-                <td colSpan={14} className="p-8 text-center text-slate-400">
+                <td colSpan={10} className="p-8 text-center text-slate-400">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
                     <span>Loading marketing contacts...</span>
@@ -809,7 +801,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               </tr>
             ) : displayContacts.length === 0 ? (
               <tr>
-                <td colSpan={14} className="p-12 text-center text-slate-500">
+                <td colSpan={10} className="p-12 text-center text-slate-500">
                   No marketing contacts found matching the filters.
                 </td>
               </tr>
@@ -878,164 +870,170 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       )}
                     </td>
 
-                    {/* 4. Assigned Staff */}
-                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
-                      {contact.assignedOwner ? (
-                        <div className="max-w-[140px]">
-                          <span className="inline-flex items-center gap-1.5 text-[11px] text-indigo-300 font-semibold truncate">
-                            <User className="w-3 h-3 text-indigo-400 shrink-0" />
-                            <span className="truncate">{contact.assignedOwner.fullName}</span>
-                          </span>
-                          {contact.assignedOwner.roleTitle && (
-                            <span className="text-[10px] text-slate-400 block truncate">
-                              {contact.assignedOwner.roleTitle}
-                            </span>
-                          )}
-                        </div>
-                      ) : contact.currentOwnerId ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300 font-medium">
-                          <User className="w-3 h-3 text-indigo-400" />
-                          Assigned
-                        </span>
-                      ) : (
-                        <span className="text-slate-600 font-mono text-[11px]">—</span>
-                      )}
-                    </td>
-
-                    {/* 5. Assign / Reassign (Interactive Searchable Dropdown) */}
+                    {/* 4. Assigned Staff (Consolidated with Role & Inline Assign/Reassign Action) */}
                     <td className="px-3 py-3 coordinator-dropdown-container relative" onClick={e => e.stopPropagation()}>
-                      {!canAssignContacts ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 text-[11px] cursor-not-allowed"
-                          title="Only authorized administrators can assign marketing contacts"
-                        >
-                          <Lock className="w-3 h-3 text-slate-600" />
-                          <span>{isAssigned ? 'Reassign' : 'Assign'}</span>
-                        </button>
-                      ) : (
-                        <div className="relative inline-block">
+                      <div className="flex items-center gap-2">
+                        {contact.assignedOwner ? (
+                          <div className="min-w-[110px] max-w-[140px]">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] text-indigo-300 font-semibold truncate">
+                              <User className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <span className="truncate">{contact.assignedOwner.fullName}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 block truncate">
+                              {contact.assignedOwner.roleTitle || 'Marketing Staff'}
+                            </span>
+                          </div>
+                        ) : contact.currentOwnerId ? (
+                          <div className="min-w-[100px]">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300 font-medium">
+                              <User className="w-3 h-3 text-indigo-400" />
+                              Assigned
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-500 border border-slate-800">
+                            Unassigned
+                          </span>
+                        )}
+
+                        {/* Inline Assign / Reassign Button with Popover */}
+                        {!canAssignContacts ? (
                           <button
                             type="button"
-                            disabled={isRowAssigning}
-                            onClick={() => {
-                              if (isDropdownOpen) {
-                                setOpenDropdownContactId(null);
-                                setCoordinatorSearch('');
-                              } else {
-                                setOpenDropdownContactId(contact.id);
-                                setCoordinatorSearch('');
-                              }
-                            }}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all border shadow-sm ${
-                              isAssigned
-                                ? 'border-indigo-800/70 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/50 hover:border-indigo-600'
-                                : 'border-teal-700/70 bg-teal-950/40 text-teal-300 hover:bg-teal-900/50 hover:border-teal-500'
-                            }`}
-                            title={isAssigned ? 'Reassign coordinator' : 'Assign to coordinator'}
+                            disabled
+                            className="p-1 rounded border border-slate-800 bg-slate-900/60 text-slate-600 text-[10px] cursor-not-allowed"
+                            title="Only administrators can assign contacts"
                           >
-                            {isRowAssigning ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-teal-400" />
-                            ) : isAssigned ? (
-                              <RefreshCw className="w-3 h-3 text-indigo-400" />
-                            ) : (
-                              <UserPlus className="w-3 h-3 text-teal-400" />
-                            )}
-                            <span>{isAssigned ? 'Reassign' : 'Assign'}</span>
-                            <ChevronDown className="w-3 h-3 opacity-70" />
+                            <Lock className="w-3 h-3" />
                           </button>
+                        ) : (
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              disabled={isRowAssigning}
+                              onClick={() => {
+                                if (isDropdownOpen) {
+                                  setOpenDropdownContactId(null);
+                                  setCoordinatorSearch('');
+                                } else {
+                                  setOpenDropdownContactId(contact.id);
+                                  setCoordinatorSearch('');
+                                }
+                              }}
+                              className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all border shadow-sm inline-flex items-center gap-1 ${
+                                isAssigned
+                                  ? 'border-indigo-800/70 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/60 hover:text-white'
+                                  : 'border-teal-700/70 bg-teal-950/40 text-teal-300 hover:bg-teal-900/60 hover:text-white'
+                              }`}
+                              title={isAssigned ? 'Reassign to another staff member' : 'Assign to staff member'}
+                            >
+                              {isRowAssigning ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-teal-400" />
+                              ) : isAssigned ? (
+                                <>
+                                  <RotateCcw className="w-2.5 h-2.5 text-indigo-400" />
+                                  <span>Reassign</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus className="w-2.5 h-2.5 text-teal-400" />
+                                  <span>Assign</span>
+                                </>
+                              )}
+                              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                            </button>
 
-                          {/* Searchable Dropdown Popover */}
-                          {isDropdownOpen && (
-                            <div className="absolute left-0 mt-1.5 w-64 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in duration-150">
-                              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 text-[11px]">
-                                <span className="font-semibold text-slate-300">
-                                  {isAssigned ? 'Reassign Coordinator' : 'Assign Coordinator'}
-                                </span>
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-teal-400">
-                                  {contact.company}
-                                </span>
-                              </div>
+                            {/* Dropdown Popover */}
+                            {isDropdownOpen && (
+                              <div className="absolute left-0 mt-1.5 w-64 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in duration-150">
+                                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 text-[11px]">
+                                  <span className="font-semibold text-slate-300">
+                                    {isAssigned ? 'Reassign Staff' : 'Assign Staff'}
+                                  </span>
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-teal-400">
+                                    {contact.company}
+                                  </span>
+                                </div>
 
-                              {/* Search input inside dropdown */}
-                              <div className="relative mb-2">
-                                <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-slate-500" />
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={coordinatorSearch}
-                                  onChange={e => setCoordinatorSearch(e.target.value)}
-                                  placeholder="Search name, role..."
-                                  className="w-full rounded border border-slate-800 bg-slate-900 py-1 pl-7 pr-2 text-[11px] text-white placeholder-slate-500 outline-none focus:border-teal-400"
-                                />
-                              </div>
+                                {/* Search input inside dropdown */}
+                                <div className="relative mb-2">
+                                  <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-slate-500" />
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={coordinatorSearch}
+                                    onChange={e => setCoordinatorSearch(e.target.value)}
+                                    placeholder="Search staff, role..."
+                                    className="w-full rounded border border-slate-800 bg-slate-900 py-1 pl-7 pr-2 text-[11px] text-white placeholder-slate-500 outline-none focus:border-teal-400"
+                                  />
+                                </div>
 
-                              {/* Coordinator Options List */}
-                              <div className="max-h-48 overflow-y-auto space-y-1">
-                                {filteredCoordinators.length === 0 ? (
-                                  <div className="p-3 text-center text-[11px] text-slate-500">
-                                    No eligible coordinators found for {contact.company}.
-                                  </div>
-                                ) : (
-                                  filteredCoordinators.map(c => {
-                                    const isCurrent = contact.assignedOwner?.id === c.id;
-                                    return (
-                                      <button
-                                        key={c.id}
-                                        type="button"
-                                        disabled={isCurrent}
-                                        onClick={() => {
-                                          if (isAssigned) {
-                                            setOpenDropdownContactId(null);
-                                            setReassignModal({
-                                              contact,
-                                              newCoordinator: {
+                                {/* Options List */}
+                                <div className="max-h-48 overflow-y-auto space-y-1">
+                                  {filteredCoordinators.length === 0 ? (
+                                    <div className="p-3 text-center text-[11px] text-slate-500">
+                                      No eligible staff found for {contact.company}.
+                                    </div>
+                                  ) : (
+                                    filteredCoordinators.map(c => {
+                                      const isCurrent = contact.assignedOwner?.id === c.id;
+                                      return (
+                                        <button
+                                          key={c.id}
+                                          type="button"
+                                          disabled={isCurrent}
+                                          onClick={() => {
+                                            if (isAssigned) {
+                                              setOpenDropdownContactId(null);
+                                              setReassignModal({
+                                                contact,
+                                                newCoordinator: {
+                                                  id: c.id,
+                                                  fullName: c.fullName,
+                                                  roleTitle: c.roleTitle || c.role,
+                                                  company: c.company,
+                                                },
+                                              });
+                                              setReassignReason('');
+                                            } else {
+                                              void handleDirectAssign(contact, {
                                                 id: c.id,
                                                 fullName: c.fullName,
-                                                roleTitle: c.roleTitle || c.role,
-                                                company: c.company,
-                                              },
-                                            });
-                                            setReassignReason('');
-                                          } else {
-                                            void handleDirectAssign(contact, {
-                                              id: c.id,
-                                              fullName: c.fullName,
-                                            });
-                                          }
-                                        }}
-                                        className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between text-[11px] transition-colors ${
-                                          isCurrent
-                                            ? 'bg-slate-900/40 text-slate-500 cursor-not-allowed opacity-60'
-                                            : 'hover:bg-slate-800/80 text-slate-200'
-                                        }`}
-                                      >
-                                        <div className="truncate pr-2">
-                                          <div className="font-medium text-slate-200 truncate">
-                                            {c.fullName}
+                                              });
+                                            }
+                                          }}
+                                          className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between text-[11px] transition-colors ${
+                                            isCurrent
+                                              ? 'bg-slate-900/40 text-slate-500 cursor-not-allowed opacity-60'
+                                              : 'hover:bg-slate-800/80 text-slate-200'
+                                          }`}
+                                        >
+                                          <div className="truncate pr-2">
+                                            <div className="font-medium text-slate-200 truncate">
+                                              {c.fullName}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 truncate">
+                                              {c.roleTitle || c.role} {c.company ? `(${c.company})` : ''}
+                                            </div>
                                           </div>
-                                          <div className="text-[10px] text-slate-400 truncate">
-                                            {c.roleTitle || c.role} {c.company ? `(${c.company})` : ''}
-                                          </div>
-                                        </div>
-                                        {isCurrent && (
-                                          <span className="text-[10px] text-indigo-400 font-semibold shrink-0">
-                                            Current
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })
-                                )}
+                                          {isCurrent && (
+                                            <span className="text-[10px] text-indigo-400 font-semibold shrink-0">
+                                              Current
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })
+                                  )}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
 
-                    {/* 6. Assigned By */}
+                    {/* 5. Assigned By */}
                     <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
                       {contact.assignedBy?.fullName || contact.assignedByName ? (
                         <div>
@@ -1053,48 +1051,25 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       )}
                     </td>
 
-                    {/* 7. Coordinator */}
-                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
-                      {(() => {
-                        const isCoordinator = (role?: string) => (role || '').toLowerCase().includes('coordinator');
-                        let coordName = null;
-                        if (contact.assignedOwner && isCoordinator(contact.assignedOwner.roleTitle || (contact.assignedOwner as any).role)) {
-                          coordName = contact.assignedOwner.fullName;
-                        } else if (contact.assignedBy && isCoordinator(contact.assignedBy.roleTitle || (contact.assignedBy as any).role)) {
-                          coordName = contact.assignedBy.fullName;
-                        }
-                        return coordName ? (
-                          <span className="text-slate-200 font-medium text-[11px]">{coordName}</span>
-                        ) : (
-                          <span className="text-slate-600 font-mono text-[11px]">—</span>
-                        );
-                      })()}
-                    </td>
-
-                    {/* 8. Assigned At */}
-                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                      {contact.assignedAt ? new Date(contact.assignedAt).toLocaleString() : '—'}
-                    </td>
-
-                    {/* 9. Reassigned At */}
-                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                      {contact.lastReassignedAt ? new Date(contact.lastReassignedAt).toLocaleString() : '—'}
-                    </td>
-
-                    {/* 10. Assignment Status */}
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      {contact.lastReassignedAt ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/80 inline-flex items-center gap-1">
-                          <RotateCcw className="w-2.5 h-2.5" /> Reassigned
-                        </span>
-                      ) : (contact.assignedOwner || contact.currentOwnerId) ? (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/80 inline-flex items-center gap-1">
-                          <Check className="w-2.5 h-2.5" /> Assigned
-                        </span>
+                    {/* 6. Assignment Date (Merged Assigned & Reassigned Timestamps) */}
+                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap font-mono text-[11px]">
+                      {contact.assignedAt ? (
+                        <div>
+                          <div className="text-slate-300">
+                            {new Date(contact.assignedAt).toLocaleDateString()}
+                            <span className="text-slate-500 text-[10px] ml-1.5">
+                              {new Date(contact.assignedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          {contact.lastReassignedAt && (
+                            <div className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 mt-0.5" title="Reassigned date">
+                              <RotateCcw className="w-2.5 h-2.5 text-amber-400" />
+                              <span>Reassigned {new Date(contact.lastReassignedAt).toLocaleDateString()}</span>
+                            </div>
+                          )}
+                        </div>
                       ) : (
-                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-700">
-                          Unassigned
-                        </span>
+                        <span className="text-slate-600 font-mono text-[11px]">—</span>
                       )}
                     </td>
 

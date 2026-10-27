@@ -7,10 +7,7 @@ generator client {
 }
 
 datasource db {
-  // HARDCODED local test database. Not env-driven on purpose: `prisma` CLI reads
-  // backend/.env and would otherwise target production.
   provider = "postgresql"
-  url      = "postgresql://postgres:postgres@localhost:5432/crm_test"
 }
 
 enum UserRole {
@@ -698,6 +695,7 @@ model MarketingContact {
   currentOwnerId    String?                @map("current_owner_id") @db.VarChar(36)
   assignedById      String?                @map("assigned_by_id") @db.VarChar(36)
   assignedAt        DateTime?              @map("assigned_at")
+  lastReassignedAt  DateTime?              @map("last_reassigned_at")
   lastUpdatedById   String?                @map("last_updated_by_id") @db.VarChar(36)
   createdAt         DateTime               @default(now()) @map("created_at")
   updatedAt         DateTime               @updatedAt @map("updated_at")
@@ -849,6 +847,7 @@ model MarketingAssignmentHistory {
   previousOwnerId String? @map("previous_owner_id") @db.VarChar(36)
   newOwnerId     String?  @map("new_owner_id") @db.VarChar(36)
   assignedById   String   @map("assigned_by_id") @db.VarChar(36)
+  eventType      String   @default("assigned") @map("event_type") @db.VarChar(30)
   reason         String?  @db.Text
   createdAt      DateTime @default(now()) @map("created_at")
 

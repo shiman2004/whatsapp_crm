@@ -27,6 +27,13 @@ import {
   Trash2,
   Calendar,
   RotateCcw,
+  Eye,
+  Clock,
+  Sparkles,
+  ShieldCheck,
+  Activity,
+  Layers,
+  Users,
 } from 'lucide-react';
 
 interface MarketingContactsProps {
@@ -49,10 +56,18 @@ interface MarketingContactsProps {
   onLifecycleFilterChange: (val: string) => void;
   assignmentFilter: string;
   onAssignmentFilterChange: (val: string) => void;
+  staffFilter?: string;
+  onStaffFilterChange?: (val: string) => void;
+  batchFilter?: string;
+  onBatchFilterChange?: (val: string) => void;
+  leadStatusFilter?: string;
+  onLeadStatusFilterChange?: (val: string) => void;
   dateFilter?: string;
   onDateFilterChange?: (val: string) => void;
   sortFilter?: string;
   onSortFilterChange?: (val: string) => void;
+  uploads?: any[];
+  onResetFilters?: () => void;
 }
 
 export const MarketingContacts: React.FC<MarketingContactsProps> = ({
@@ -75,13 +90,48 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   onLifecycleFilterChange,
   assignmentFilter,
   onAssignmentFilterChange,
+  staffFilter = 'all',
+  onStaffFilterChange,
+  batchFilter = 'all',
+  onBatchFilterChange,
+  leadStatusFilter = 'all',
+  onLeadStatusFilterChange,
   dateFilter = 'all',
   onDateFilterChange,
   sortFilter = 'date_desc',
   onSortFilterChange,
+  uploads = [],
+  onResetFilters,
 }) => {
   const { setSelectedLeadId, setActiveNavTab, leads, users, currentUser } = useCrm();
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  // Count active filters
+  const activeFilterCount = React.useMemo(() => {
+    let count = 0;
+    if (search.trim()) count++;
+    if (consentFilter !== 'all') count++;
+    if (lifecycleFilter !== 'all') count++;
+    if (assignmentFilter !== 'all') count++;
+    if (staffFilter !== 'all') count++;
+    if (batchFilter !== 'all') count++;
+    if (leadStatusFilter !== 'all') count++;
+    if (dateFilter !== 'all') count++;
+    return count;
+  }, [search, consentFilter, lifecycleFilter, assignmentFilter, staffFilter, batchFilter, leadStatusFilter, dateFilter]);
+
+  const handleResetFilters = () => {
+    onSearchChange('');
+    onConsentFilterChange('all');
+    onLifecycleFilterChange('all');
+    onAssignmentFilterChange('all');
+    if (onStaffFilterChange) onStaffFilterChange('all');
+    if (onBatchFilterChange) onBatchFilterChange('all');
+    if (onLeadStatusFilterChange) onLeadStatusFilterChange('all');
+    if (onDateFilterChange) onDateFilterChange('all');
+    if (onSortFilterChange) onSortFilterChange('date_desc');
+    if (onResetFilters) onResetFilters();
+  };
 
   // Notification state
   const [notice, setNotice] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -90,6 +140,32 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   const [openDropdownContactId, setOpenDropdownContactId] = React.useState<string | null>(null);
   const [coordinatorSearch, setCoordinatorSearch] = React.useState<string>('');
   const [assigningContactId, setAssigningContactId] = React.useState<string | null>(null);
+
+  // Assignment history modal state
+  const [historyTarget, setHistoryTarget] = React.useState<MarketingContact | null>(null);
+  const [historyList, setHistoryList] = React.useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyError, setHistoryError] = React.useState('');
+
+  const handleOpenHistory = async (contact: MarketingContact, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setHistoryTarget(contact);
+    setHistoryLoading(true);
+    setHistoryError('');
+    setHistoryList([]);
+    try {
+      if (onRequestApi) {
+        const res = await onRequestApi(`/api/marketing/contacts/${contact.id}/history`);
+        if (res?.data?.history) {
+          setHistoryList(res.data.history);
+        }
+      }
+    } catch (err: any) {
+      setHistoryError(err.message || 'Failed to load assignment history.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   // Reassignment modal state
   const [reassignModal, setReassignModal] = React.useState<{
@@ -189,12 +265,35 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   // Permission check for assignment: super_admin or users with assign capability
   const canAssignContacts = currentUser?.role === 'super_admin';
 
+  // Deterministic displayContacts with sort order
+  const displayContacts = React.useMemo(() => {
+    let result = [...contacts];
+    if (sortFilter === "phone_asc") {
+      result.sort((a, b) => a.normalizedPhone.localeCompare(b.normalizedPhone));
+    } else if (sortFilter === "phone_desc") {
+      result.sort((a, b) => b.normalizedPhone.localeCompare(a.normalizedPhone));
+    } else if (sortFilter === "serial_asc") {
+      result.sort((a, b) => (a.serialNumber || "").localeCompare(b.serialNumber || ""));
+    } else if (sortFilter === "serial_desc") {
+      result.sort((a, b) => (b.serialNumber || "").localeCompare(a.serialNumber || ""));
+    } else if (sortFilter === "source_asc") {
+      result.sort((a, b) => (a.originalSource || "").localeCompare(b.originalSource || ""));
+    } else if (sortFilter === "source_desc") {
+      result.sort((a, b) => (b.originalSource || "").localeCompare(a.originalSource || ""));
+    } else if (sortFilter === "date_asc") {
+      result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    } else if (sortFilter === "date_desc") {
+      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return result;
+  }, [contacts, sortFilter]);
+
   // Toggle selection
   const toggleSelectAll = () => {
-    if (selectedIds.size === contacts.length) {
+    if (selectedIds.size === displayContacts.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(contacts.map(c => c.id)));
+      setSelectedIds(new Set(displayContacts.map(c => c.id)));
     }
   };
 
@@ -208,7 +307,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
 
   // Export CSV
   const exportCleanedCsv = () => {
-    if (contacts.length === 0) return;
+    if (displayContacts.length === 0) return;
     const headers = [
       'Serial Number',
       'Phone',
@@ -220,7 +319,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
       'Lifecycle Status',
       'Created At',
     ];
-    const rows = contacts.map(c => [
+    const rows = displayContacts.map(c => [
       c.serialNumber,
       c.normalizedPhone,
       `"${c.originalSource.replace(/"/g, '""')}"`,
@@ -397,104 +496,224 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
         </div>
       )}
 
-      {/* Search & Filter Toolbar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-          <input
-            value={search}
-            onChange={e => onSearchChange(e.target.value)}
-            placeholder="Search phone, serial, source or group..."
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400"
-          />
+      {/* Redesigned Search & Filter Control Hub */}
+      <div className="space-y-3 bg-[#0a1120] p-3.5 rounded-xl border border-slate-800 shadow-sm">
+        {/* Row 1: Prominent Search Bar & Primary Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[260px] max-w-xl">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+            <input
+              value={search}
+              onChange={e => onSearchChange(e.target.value)}
+              placeholder="Search phone (+94...), serial (MKT-...), source, or group..."
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-8 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400 transition-colors"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-800/80 bg-rose-950/40 text-xs font-semibold text-rose-300 hover:bg-rose-900/60 hover:text-white transition-colors"
+                title="Reset all active filters"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>Reset Filters</span>
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-900/80 text-[10px] text-rose-200 font-mono font-bold">
+                  {activeFilterCount}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={exportCleanedCsv}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200 hover:text-white hover:bg-slate-800 hover:border-slate-600 transition-colors"
+              title="Download CSV export of current contacts"
+            >
+              <Download className="w-3.5 h-3.5 text-teal-400" />
+              <span>Export Cleaned</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Consent Filter */}
-          <select
-            value={consentFilter}
-            onChange={e => onConsentFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-          >
-            <option value="all">All Consent</option>
-            <option value="verified">Verified Opt-in</option>
-            <option value="unknown">Pending Consent</option>
-            <option value="denied">Denied / Opted-out</option>
-          </select>
+        {/* Row 2: Filter Group Pills & Sorting (De-duplicated & Categorized) */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+            <Filter className="w-3.5 h-3.5 text-teal-400" />
+            <span>Filters:</span>
+          </div>
 
-          {/* Lifecycle Filter */}
-          <select
-            value={lifecycleFilter}
-            onChange={e => onLifecycleFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-          >
-            <option value="all">All Statuses</option>
-            <option value="new">New</option>
-            <option value="assigned">Assigned</option>
-            <option value="contacted">Contacted</option>
-            <option value="follow_up_pending">Follow-up Pending</option>
-            <option value="interested">Interested</option>
-            <option value="not_interested">Not Interested</option>
-            <option value="converted">Converted to Lead</option>
-            <option value="do_not_contact">Do Not Contact</option>
-          </select>
+          {/* 1. Allocation Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Allocation:</span>
+            <select
+              value={assignmentFilter}
+              onChange={e => onAssignmentFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by assignment status"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All</option>
+              <option className="bg-slate-900 text-slate-200" value="false">Unassigned Only</option>
+              <option className="bg-slate-900 text-slate-200" value="true">Assigned Only</option>
+              <option className="bg-slate-900 text-slate-200" value="reassigned">Reassigned Only</option>
+            </select>
+          </div>
 
-          {/* Assignment Filter */}
-          <select
-            value={assignmentFilter}
-            onChange={e => onAssignmentFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-          >
-            <option value="all">All Allocation</option>
-            <option value="false">Unassigned Only</option>
-            <option value="true">Assigned Only</option>
-          </select>
+          {/* 2. Assigned Staff Filter */}
+          {users && users.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+              <Users className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span className="text-slate-400 text-[11px] font-medium">Staff:</span>
+              <select
+                value={staffFilter}
+                onChange={e => onStaffFilterChange && onStaffFilterChange(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium max-w-[140px] truncate"
+                style={{ colorScheme: 'dark' }}
+                title="Filter by assigned staff member"
+              >
+                <option className="bg-slate-900 text-slate-200" value="all">All Staff</option>
+                {users.filter(u => u.active).map(u => (
+                  <option key={u.id} className="bg-slate-900 text-slate-200" value={u.id}>
+                    {u.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+          {/* 3. CRM Lead Conversion Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <Sparkles className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">CRM Lead:</span>
+            <select
+              value={leadStatusFilter}
+              onChange={e => onLeadStatusFilterChange && onLeadStatusFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by CRM lead conversion status"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Leads</option>
+              <option className="bg-slate-900 text-slate-200" value="converted">Converted to Lead</option>
+              <option className="bg-slate-900 text-slate-200" value="not_converted">Not Converted</option>
+            </select>
+          </div>
+
+          {/* 4. Outreach / Lifecycle Status (De-duplicated: removed 'assigned' and 'converted' which belong to Allocation and Lead) */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <Activity className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Outreach:</span>
+            <select
+              value={lifecycleFilter}
+              onChange={e => onLifecycleFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by marketing outreach progress"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Outreach</option>
+              <option className="bg-slate-900 text-slate-200" value="new">New / Uncontacted</option>
+              <option className="bg-slate-900 text-slate-200" value="contacted">Contacted</option>
+              <option className="bg-slate-900 text-slate-200" value="follow_up_pending">Follow-up Pending</option>
+              <option className="bg-slate-900 text-slate-200" value="interested">Interested</option>
+              <option className="bg-slate-900 text-slate-200" value="not_interested">Not Interested</option>
+              <option className="bg-slate-900 text-slate-200" value="do_not_contact">Do Not Contact (DND)</option>
+            </select>
+          </div>
+
+          {/* 5. Consent Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <ShieldCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Consent:</span>
+            <select
+              value={consentFilter}
+              onChange={e => onConsentFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by consent status"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Consent</option>
+              <option className="bg-slate-900 text-slate-200" value="verified">Verified Opt-in</option>
+              <option className="bg-slate-900 text-slate-200" value="unknown">Pending Consent</option>
+              <option className="bg-slate-900 text-slate-200" value="denied">Denied / Opted-out</option>
+            </select>
+          </div>
+
+          {/* 6. Batch Filter */}
+          {uploads && uploads.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+              <Layers className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span className="text-slate-400 text-[11px] font-medium">Batch:</span>
+              <select
+                value={batchFilter}
+                onChange={e => onBatchFilterChange && onBatchFilterChange(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium max-w-[130px] truncate"
+                style={{ colorScheme: 'dark' }}
+                title="Filter by import batch"
+              >
+                <option className="bg-slate-900 text-slate-200" value="all">All Batches</option>
+                {uploads.map(b => (
+                  <option key={b.id} className="bg-slate-900 text-slate-200" value={b.id}>
+                    Batch #{b.batchNumber}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* 7. Added Date Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
             <Calendar className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Date:</span>
             <select
               value={dateFilter}
               onChange={e => onDateFilterChange && onDateFilterChange(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer"
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
               style={{ colorScheme: 'dark' }}
-              title="Filter by Added Date"
+              title="Filter by added date"
             >
-              <option value="all">All Dates</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="last7days">Last 7 Days</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
+              <option className="bg-slate-900 text-slate-200" value="all">All Dates</option>
+              <option className="bg-slate-900 text-slate-200" value="today">Today</option>
+              <option className="bg-slate-900 text-slate-200" value="yesterday">Yesterday</option>
+              <option className="bg-slate-900 text-slate-200" value="last7days">Last 7 Days</option>
+              <option className="bg-slate-900 text-slate-200" value="this_month">This Month</option>
+              <option className="bg-slate-900 text-slate-200" value="last_month">Last Month</option>
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+          {/* 8. Sorting Dropdown */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors sm:ml-auto">
             <ArrowUpDown className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Sort:</span>
             <select
               value={sortFilter}
               onChange={e => onSortFilterChange && onSortFilterChange(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
-              title="Sort by Date, Number, Serial, or Source"
+              className="bg-transparent text-xs text-teal-300 outline-none cursor-pointer font-semibold"
+              style={{ colorScheme: 'dark' }}
+              title="Sort contacts list"
             >
-              <option value="date_desc">Date: Newest First</option>
-              <option value="date_asc">Date: Oldest First</option>
-              <option value="phone_asc">Numbers: A to Z (0-9)</option>
-              <option value="phone_desc">Numbers: Z to A (9-0)</option>
-              <option value="serial_asc">Serial: A to Z</option>
-              <option value="serial_desc">Serial: Z to A</option>
-              <option value="source_asc">Source: A to Z</option>
-              <option value="source_desc">Source: Z to A</option>
+              <option className="bg-slate-900 text-slate-200" value="date_desc">Newest First</option>
+              <option className="bg-slate-900 text-slate-200" value="date_asc">Oldest First</option>
+              <option className="bg-slate-900 text-slate-200" value="phone_asc">Number (0-9)</option>
+              <option className="bg-slate-900 text-slate-200" value="phone_desc">Number (9-0)</option>
+              <option className="bg-slate-900 text-slate-200" value="serial_asc">Serial (A-Z)</option>
+              <option className="bg-slate-900 text-slate-200" value="serial_desc">Serial (Z-A)</option>
+              <option className="bg-slate-900 text-slate-200" value="source_asc">Source (A-Z)</option>
+              <option className="bg-slate-900 text-slate-200" value="source_desc">Source (Z-A)</option>
             </select>
           </div>
-
-          <button
-            type="button"
-            onClick={exportCleanedCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Download CSV export"
-          >
-            <Download className="w-3.5 h-3.5 text-teal-400" /> Export Cleaned
-          </button>
         </div>
       </div>
 
@@ -537,58 +756,57 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
         </div>
       )}
 
-      {/* Main Contacts Table - Required 10 Column Order (+ Checkbox) */}
+      {/* Main Contacts Table - Required 13 Column Order (+ Checkbox) */}
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#0D1526]/70 min-h-[420px]">
-        <table className="w-full text-left text-xs">
+        <table className="w-full text-left text-xs whitespace-nowrap">
           <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
             <tr>
               <th className="px-3 py-3 w-8">
                 <input
                   type="checkbox"
-                  checked={contacts.length > 0 && selectedIds.size === contacts.length}
+                  checked={displayContacts.length > 0 && selectedIds.size === displayContacts.length}
                   onChange={toggleSelectAll}
                   className="rounded border-slate-700 bg-slate-900 text-teal-400 focus:ring-0 cursor-pointer"
                 />
               </th>
               {/* 1. Serial */}
               <th className="px-3 py-3">Serial</th>
-              {/* 2. Contact */}
-              <th className="px-3 py-3">Contact</th>
+              {/* 2. Contact Number */}
+              <th className="px-3 py-3">Contact Number</th>
               {/* 3. Source & Group */}
               <th className="px-3 py-3">Source & Group</th>
-              {/* 4. Assign By */}
-              <th className="px-3 py-3">Assign By</th>
-              {/* 5. Assign Who */}
-              <th className="px-3 py-3">Assign Who</th>
-              {/* 6. Assign Coordinator */}
-              <th className="px-3 py-3">Assign Coordinator</th>
-              <th className="px-3 py-3">Consent</th>
-              {/* 8. Status */}
-              <th className="px-3 py-3">Status</th>
-              {/* 9. Date */}
-              <th className="px-3 py-3">Date</th>
-              {/* 10. Actions */}
+              {/* 4. Assigned Staff (Consolidated with Role & Inline Reassign) */}
+              <th className="px-3 py-3">Assigned Staff</th>
+              {/* 5. Assigned By */}
+              <th className="px-3 py-3">Assigned By</th>
+              {/* 6. Assignment Date (Merged with Reassigned Date) */}
+              <th className="px-3 py-3">Assignment Date</th>
+              {/* 7. Consent Status */}
+              <th className="px-3 py-3">Consent Status</th>
+              {/* 8. Lead Status */}
+              <th className="px-3 py-3">Lead Status</th>
+              {/* 9. Actions */}
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {loading ? (
               <tr>
-                <td colSpan={11} className="p-8 text-center text-slate-400">
+                <td colSpan={10} className="p-8 text-center text-slate-400">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
                     <span>Loading marketing contacts...</span>
                   </div>
                 </td>
               </tr>
-            ) : contacts.length === 0 ? (
+            ) : displayContacts.length === 0 ? (
               <tr>
-                <td colSpan={11} className="p-12 text-center text-slate-500">
+                <td colSpan={10} className="p-12 text-center text-slate-500">
                   No marketing contacts found matching the filters.
                 </td>
               </tr>
             ) : (
-              contacts.map(contact => {
+              displayContacts.map(contact => {
                 const isSelected = selectedIds.has(contact.id);
                 const rawPhoneDigits = contact.normalizedPhone.replace(/[^0-9]/g, '');
                 const isAssigned = Boolean(contact.assignedOwner?.id || contact.currentOwnerId);
@@ -630,7 +848,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       {contact.serialNumber}
                     </td>
 
-                    {/* 2. Contact */}
+                    {/* 2. Contact Number */}
                     <td className="px-3 py-3">
                       {contact.name && (
                         <div className="font-semibold text-slate-100 truncate max-w-[150px]">
@@ -652,7 +870,170 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       )}
                     </td>
 
-                    {/* 4. Assign By */}
+                    {/* 4. Assigned Staff (Consolidated with Role & Inline Assign/Reassign Action) */}
+                    <td className="px-3 py-3 coordinator-dropdown-container relative" onClick={e => e.stopPropagation()}>
+                      <div className="flex items-center gap-2">
+                        {contact.assignedOwner ? (
+                          <div className="min-w-[110px] max-w-[140px]">
+                            <span className="inline-flex items-center gap-1.5 text-[11px] text-indigo-300 font-semibold truncate">
+                              <User className="w-3 h-3 text-indigo-400 shrink-0" />
+                              <span className="truncate">{contact.assignedOwner.fullName}</span>
+                            </span>
+                            <span className="text-[10px] text-slate-400 block truncate">
+                              {contact.assignedOwner.roleTitle || 'Marketing Staff'}
+                            </span>
+                          </div>
+                        ) : contact.currentOwnerId ? (
+                          <div className="min-w-[100px]">
+                            <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300 font-medium">
+                              <User className="w-3 h-3 text-indigo-400" />
+                              Assigned
+                            </span>
+                          </div>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-500 border border-slate-800">
+                            Unassigned
+                          </span>
+                        )}
+
+                        {/* Inline Assign / Reassign Button with Popover */}
+                        {!canAssignContacts ? (
+                          <button
+                            type="button"
+                            disabled
+                            className="p-1 rounded border border-slate-800 bg-slate-900/60 text-slate-600 text-[10px] cursor-not-allowed"
+                            title="Only administrators can assign contacts"
+                          >
+                            <Lock className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <div className="relative inline-block">
+                            <button
+                              type="button"
+                              disabled={isRowAssigning}
+                              onClick={() => {
+                                if (isDropdownOpen) {
+                                  setOpenDropdownContactId(null);
+                                  setCoordinatorSearch('');
+                                } else {
+                                  setOpenDropdownContactId(contact.id);
+                                  setCoordinatorSearch('');
+                                }
+                              }}
+                              className={`px-2 py-1 rounded-md text-[10px] font-semibold transition-all border shadow-sm inline-flex items-center gap-1 ${
+                                isAssigned
+                                  ? 'border-indigo-800/70 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/60 hover:text-white'
+                                  : 'border-teal-700/70 bg-teal-950/40 text-teal-300 hover:bg-teal-900/60 hover:text-white'
+                              }`}
+                              title={isAssigned ? 'Reassign to another staff member' : 'Assign to staff member'}
+                            >
+                              {isRowAssigning ? (
+                                <Loader2 className="w-3 h-3 animate-spin text-teal-400" />
+                              ) : isAssigned ? (
+                                <>
+                                  <RotateCcw className="w-2.5 h-2.5 text-indigo-400" />
+                                  <span>Reassign</span>
+                                </>
+                              ) : (
+                                <>
+                                  <UserPlus className="w-2.5 h-2.5 text-teal-400" />
+                                  <span>Assign</span>
+                                </>
+                              )}
+                              <ChevronDown className="w-2.5 h-2.5 opacity-60" />
+                            </button>
+
+                            {/* Dropdown Popover */}
+                            {isDropdownOpen && (
+                              <div className="absolute left-0 mt-1.5 w-64 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in duration-150">
+                                <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 text-[11px]">
+                                  <span className="font-semibold text-slate-300">
+                                    {isAssigned ? 'Reassign Staff' : 'Assign Staff'}
+                                  </span>
+                                  <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-teal-400">
+                                    {contact.company}
+                                  </span>
+                                </div>
+
+                                {/* Search input inside dropdown */}
+                                <div className="relative mb-2">
+                                  <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-slate-500" />
+                                  <input
+                                    type="text"
+                                    autoFocus
+                                    value={coordinatorSearch}
+                                    onChange={e => setCoordinatorSearch(e.target.value)}
+                                    placeholder="Search staff, role..."
+                                    className="w-full rounded border border-slate-800 bg-slate-900 py-1 pl-7 pr-2 text-[11px] text-white placeholder-slate-500 outline-none focus:border-teal-400"
+                                  />
+                                </div>
+
+                                {/* Options List */}
+                                <div className="max-h-48 overflow-y-auto space-y-1">
+                                  {filteredCoordinators.length === 0 ? (
+                                    <div className="p-3 text-center text-[11px] text-slate-500">
+                                      No eligible staff found for {contact.company}.
+                                    </div>
+                                  ) : (
+                                    filteredCoordinators.map(c => {
+                                      const isCurrent = contact.assignedOwner?.id === c.id;
+                                      return (
+                                        <button
+                                          key={c.id}
+                                          type="button"
+                                          disabled={isCurrent}
+                                          onClick={() => {
+                                            if (isAssigned) {
+                                              setOpenDropdownContactId(null);
+                                              setReassignModal({
+                                                contact,
+                                                newCoordinator: {
+                                                  id: c.id,
+                                                  fullName: c.fullName,
+                                                  roleTitle: c.roleTitle || c.role,
+                                                  company: c.company,
+                                                },
+                                              });
+                                              setReassignReason('');
+                                            } else {
+                                              void handleDirectAssign(contact, {
+                                                id: c.id,
+                                                fullName: c.fullName,
+                                              });
+                                            }
+                                          }}
+                                          className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between text-[11px] transition-colors ${
+                                            isCurrent
+                                              ? 'bg-slate-900/40 text-slate-500 cursor-not-allowed opacity-60'
+                                              : 'hover:bg-slate-800/80 text-slate-200'
+                                          }`}
+                                        >
+                                          <div className="truncate pr-2">
+                                            <div className="font-medium text-slate-200 truncate">
+                                              {c.fullName}
+                                            </div>
+                                            <div className="text-[10px] text-slate-400 truncate">
+                                              {c.roleTitle || c.role} {c.company ? `(${c.company})` : ''}
+                                            </div>
+                                          </div>
+                                          {isCurrent && (
+                                            <span className="text-[10px] text-indigo-400 font-semibold shrink-0">
+                                              Current
+                                            </span>
+                                          )}
+                                        </button>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+
+                    {/* 5. Assigned By */}
                     <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
                       {contact.assignedBy?.fullName || contact.assignedByName ? (
                         <div>
@@ -666,190 +1047,69 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                           )}
                         </div>
                       ) : (
-                        <span className="text-slate-600 font-mono">—</span>
+                        <span className="text-slate-600 font-mono text-[11px]">—</span>
                       )}
                     </td>
 
-                    {/* 5. Assign Who */}
-                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
-                      {contact.assignedOwner ? (
-                        <div className="max-w-[140px]">
-                          <span className="inline-flex items-center gap-1.5 text-[11px] text-indigo-300 font-semibold truncate">
-                            <User className="w-3 h-3 text-indigo-400 shrink-0" />
-                            <span className="truncate">{contact.assignedOwner.fullName}</span>
-                          </span>
-                          {contact.assignedOwner.roleTitle && (
-                            <span className="text-[10px] text-slate-400 block truncate">
-                              {contact.assignedOwner.roleTitle}
+                    {/* 6. Assignment Date (Merged Assigned & Reassigned Timestamps) */}
+                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap font-mono text-[11px]">
+                      {contact.assignedAt ? (
+                        <div>
+                          <div className="text-slate-300">
+                            {new Date(contact.assignedAt).toLocaleDateString()}
+                            <span className="text-slate-500 text-[10px] ml-1.5">
+                              {new Date(contact.assignedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
-                          )}
-                        </div>
-                      ) : contact.currentOwnerId ? (
-                        <span className="inline-flex items-center gap-1 text-[11px] text-indigo-300 font-medium">
-                          <User className="w-3 h-3 text-indigo-400" />
-                          Assigned
-                        </span>
-                      ) : (
-                        <span className="text-slate-500 text-[11px] font-medium">Unassigned</span>
-                      )}
-                    </td>
-
-                    {/* 6. Assigned At */}
-                    <td className="hidden">
-                      {contact.assignedAt ? new Date(contact.assignedAt).toLocaleString() : '—'}
-                    </td>
-
-                    {/* 7. Assign Coordinator (Interactive Searchable Dropdown) */}
-                    <td className="px-3 py-3 coordinator-dropdown-container relative" onClick={e => e.stopPropagation()}>
-                      {!canAssignContacts ? (
-                        <button
-                          type="button"
-                          disabled
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-md border border-slate-800 bg-slate-900/60 text-slate-500 text-[11px] cursor-not-allowed"
-                          title="Only authorized administrators can assign marketing contacts"
-                        >
-                          <Lock className="w-3 h-3 text-slate-600" />
-                          <span>{isAssigned ? 'Reassign' : 'Assign'}</span>
-                        </button>
-                      ) : (
-                        <div className="relative inline-block">
-                          <button
-                            type="button"
-                            disabled={isRowAssigning}
-                            onClick={() => {
-                              if (isDropdownOpen) {
-                                setOpenDropdownContactId(null);
-                                setCoordinatorSearch('');
-                              } else {
-                                setOpenDropdownContactId(contact.id);
-                                setCoordinatorSearch('');
-                              }
-                            }}
-                            className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[11px] font-semibold transition-all border shadow-sm ${
-                              isAssigned
-                                ? 'border-indigo-800/70 bg-indigo-950/40 text-indigo-300 hover:bg-indigo-900/50 hover:border-indigo-600'
-                                : 'border-teal-700/70 bg-teal-950/40 text-teal-300 hover:bg-teal-900/50 hover:border-teal-500'
-                            }`}
-                            title={isAssigned ? 'Reassign coordinator' : 'Assign to coordinator'}
-                          >
-                            {isRowAssigning ? (
-                              <Loader2 className="w-3 h-3 animate-spin text-teal-400" />
-                            ) : isAssigned ? (
-                              <RefreshCw className="w-3 h-3 text-indigo-400" />
-                            ) : (
-                              <UserPlus className="w-3 h-3 text-teal-400" />
-                            )}
-                            <span>{isAssigned ? 'Reassign' : 'Assign'}</span>
-                            <ChevronDown className="w-3 h-3 opacity-70" />
-                          </button>
-
-                          {/* Searchable Dropdown Popover */}
-                          {isDropdownOpen && (
-                            <div className="absolute left-0 mt-1.5 w-64 rounded-lg border border-slate-700 bg-slate-950 p-2 shadow-2xl z-50 animate-in fade-in duration-150">
-                              <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-800 text-[11px]">
-                                <span className="font-semibold text-slate-300">
-                                  {isAssigned ? 'Reassign Coordinator' : 'Assign Coordinator'}
-                                </span>
-                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-teal-400">
-                                  {contact.company}
-                                </span>
-                              </div>
-
-                              {/* Search input inside dropdown */}
-                              <div className="relative mb-2">
-                                <Search className="absolute left-2 top-2 w-3.5 h-3.5 text-slate-500" />
-                                <input
-                                  type="text"
-                                  autoFocus
-                                  value={coordinatorSearch}
-                                  onChange={e => setCoordinatorSearch(e.target.value)}
-                                  placeholder="Search name, role..."
-                                  className="w-full rounded border border-slate-800 bg-slate-900 py-1 pl-7 pr-2 text-[11px] text-white placeholder-slate-500 outline-none focus:border-teal-400"
-                                />
-                              </div>
-
-                              {/* Coordinator Options List */}
-                              <div className="max-h-48 overflow-y-auto space-y-1">
-                                {filteredCoordinators.length === 0 ? (
-                                  <div className="p-3 text-center text-[11px] text-slate-500">
-                                    No eligible coordinators found for {contact.company}.
-                                  </div>
-                                ) : (
-                                  filteredCoordinators.map(c => {
-                                    const isCurrent = contact.assignedOwner?.id === c.id;
-                                    return (
-                                      <button
-                                        key={c.id}
-                                        type="button"
-                                        disabled={isCurrent}
-                                        onClick={() => {
-                                          if (isAssigned) {
-                                            setOpenDropdownContactId(null);
-                                            setReassignModal({
-                                              contact,
-                                              newCoordinator: {
-                                                id: c.id,
-                                                fullName: c.fullName,
-                                                roleTitle: c.roleTitle || c.role,
-                                                company: c.company,
-                                              },
-                                            });
-                                            setReassignReason('');
-                                          } else {
-                                            void handleDirectAssign(contact, {
-                                              id: c.id,
-                                              fullName: c.fullName,
-                                            });
-                                          }
-                                        }}
-                                        className={`w-full text-left px-2 py-1.5 rounded flex items-center justify-between text-[11px] transition-colors ${
-                                          isCurrent
-                                            ? 'bg-slate-900/40 text-slate-500 cursor-not-allowed opacity-60'
-                                            : 'hover:bg-slate-800/80 text-slate-200'
-                                        }`}
-                                      >
-                                        <div className="truncate pr-2">
-                                          <div className="font-medium text-slate-200 truncate">
-                                            {c.fullName}
-                                          </div>
-                                          <div className="text-[10px] text-slate-400 truncate">
-                                            {c.roleTitle || c.role} {c.company ? `(${c.company})` : ''}
-                                          </div>
-                                        </div>
-                                        {isCurrent && (
-                                          <span className="text-[10px] text-indigo-400 font-semibold shrink-0">
-                                            Current
-                                          </span>
-                                        )}
-                                      </button>
-                                    );
-                                  })
-                                )}
-                              </div>
+                          </div>
+                          {contact.lastReassignedAt && (
+                            <div className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 mt-0.5" title="Reassigned date">
+                              <RotateCcw className="w-2.5 h-2.5 text-amber-400" />
+                              <span>Reassigned {new Date(contact.lastReassignedAt).toLocaleDateString()}</span>
                             </div>
                           )}
                         </div>
+                      ) : (
+                        <span className="text-slate-600 font-mono text-[11px]">—</span>
                       )}
                     </td>
 
-                    {/* 7. Consent */}
+                    {/* 11. Consent Status */}
                     <td className="px-3 py-3 whitespace-nowrap">
                       <ConsentBadge status={contact.consentStatus} />
                     </td>
 
-                    {/* 8. Status */}
+                    {/* 12. Lead Status */}
                     <td className="px-3 py-3 whitespace-nowrap">
-                      <LifecycleBadge status={contact.lifecycleStatus} />
+                      {contact.convertedLeadId || contact.lifecycleStatus === 'converted' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950 text-teal-300 border border-teal-800 inline-flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Converted
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-500 border border-slate-800">
+                          Not Converted
+                        </span>
+                      )}
                     </td>
 
-                    {/* 9. Date */}
-                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                      {new Date(contact.createdAt).toLocaleDateString()}
-                    </td>
-
-                    {/* 10. Actions */}
-                    <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    {/* 13. Actions */}
+                    <td className="px-3 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onSelectContact(contact)}
+                          className="p-1.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                          title="View contact details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={e => handleOpenHistory(contact, e)}
+                          className="p-1.5 rounded-lg border border-indigo-800/80 bg-indigo-950/60 text-indigo-300 hover:text-white hover:bg-indigo-900/80 transition-colors"
+                          title="View assignment history"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                        </button>
                         <a
                           href={`tel:${contact.normalizedPhone}`}
                           className="p-1.5 rounded-lg border border-emerald-800/80 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60 transition-colors"
@@ -933,7 +1193,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
       {/* Pagination Controls */}
       <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
         <span>
-          Showing {contacts.length} of {totalContacts} contacts
+          Showing {displayContacts.length} of {totalContacts} contacts
         </span>
         <div className="flex items-center gap-2">
           <button
@@ -1127,6 +1387,108 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               >
                 {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assignment History Timeline Modal */}
+      {historyTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Contact Assignment History</h3>
+                  <p className="text-xs text-slate-400">
+                    Serial: <span className="font-mono text-teal-300 font-semibold">{historyTarget.serialNumber}</span> &bull; Number: <span className="font-mono text-slate-200 font-semibold">{historyTarget.normalizedPhone}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryTarget(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {historyLoading ? (
+                <div className="p-10 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                  <span>Loading assignment timeline...</span>
+                </div>
+              ) : historyError ? (
+                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs">
+                  {historyError}
+                </div>
+              ) : historyList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  No previous assignment records found for this contact.
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-800 bg-[#0D1526]/70 overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                      <tr>
+                        <th className="px-3 py-2.5">Event</th>
+                        <th className="px-3 py-2.5">From Staff</th>
+                        <th className="px-3 py-2.5">To Staff</th>
+                        <th className="px-3 py-2.5">Date & Time</th>
+                        <th className="px-3 py-2.5">Performed By</th>
+                        <th className="px-3 py-2.5">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans text-[11px]">
+                      {historyList.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-900/40">
+                          <td className="px-3 py-2.5 font-bold">
+                            {item.eventType === 'reassigned' || item.previousOwnerId ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800/60">
+                                Reassignment
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                                Initial Assignment
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-400">
+                            {item.previousOwner?.fullName || (item.previousOwnerId ? 'Previous Staff' : '—')}
+                          </td>
+                          <td className="px-3 py-2.5 font-semibold text-slate-200">
+                            {item.newOwner?.fullName || '—'}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-400">
+                            {new Date(item.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-300">
+                            {item.assignedBy?.fullName || 'System'}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-400 italic max-w-[160px] truncate" title={item.reason || ''}>
+                            {item.reason || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setHistoryTarget(null)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

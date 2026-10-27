@@ -29,6 +29,11 @@ import {
   RotateCcw,
   Eye,
   Clock,
+  Sparkles,
+  ShieldCheck,
+  Activity,
+  Layers,
+  Users,
 } from 'lucide-react';
 
 interface MarketingContactsProps {
@@ -62,6 +67,7 @@ interface MarketingContactsProps {
   sortFilter?: string;
   onSortFilterChange?: (val: string) => void;
   uploads?: any[];
+  onResetFilters?: () => void;
 }
 
 export const MarketingContacts: React.FC<MarketingContactsProps> = ({
@@ -95,9 +101,37 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   sortFilter = 'date_desc',
   onSortFilterChange,
   uploads = [],
+  onResetFilters,
 }) => {
   const { setSelectedLeadId, setActiveNavTab, leads, users, currentUser } = useCrm();
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
+
+  // Count active filters
+  const activeFilterCount = React.useMemo(() => {
+    let count = 0;
+    if (search.trim()) count++;
+    if (consentFilter !== 'all') count++;
+    if (lifecycleFilter !== 'all') count++;
+    if (assignmentFilter !== 'all') count++;
+    if (staffFilter !== 'all') count++;
+    if (batchFilter !== 'all') count++;
+    if (leadStatusFilter !== 'all') count++;
+    if (dateFilter !== 'all') count++;
+    return count;
+  }, [search, consentFilter, lifecycleFilter, assignmentFilter, staffFilter, batchFilter, leadStatusFilter, dateFilter]);
+
+  const handleResetFilters = () => {
+    onSearchChange('');
+    onConsentFilterChange('all');
+    onLifecycleFilterChange('all');
+    onAssignmentFilterChange('all');
+    if (onStaffFilterChange) onStaffFilterChange('all');
+    if (onBatchFilterChange) onBatchFilterChange('all');
+    if (onLeadStatusFilterChange) onLeadStatusFilterChange('all');
+    if (onDateFilterChange) onDateFilterChange('all');
+    if (onSortFilterChange) onSortFilterChange('date_desc');
+    if (onResetFilters) onResetFilters();
+  };
 
   // Notification state
   const [notice, setNotice] = React.useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -462,114 +496,193 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
         </div>
       )}
 
-      {/* Search & Filter Toolbar */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-500" />
-          <input
-            value={search}
-            onChange={e => onSearchChange(e.target.value)}
-            placeholder="Search phone, serial, source or group..."
-            className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400"
-          />
+      {/* Redesigned Search & Filter Control Hub */}
+      <div className="space-y-3 bg-[#0a1120] p-3.5 rounded-xl border border-slate-800 shadow-sm">
+        {/* Row 1: Prominent Search Bar & Primary Actions */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[260px] max-w-xl">
+            <Search className="absolute left-3 top-2.5 w-4 h-4 text-slate-400" />
+            <input
+              value={search}
+              onChange={e => onSearchChange(e.target.value)}
+              placeholder="Search phone (+94...), serial (MKT-...), source, or group..."
+              className="w-full rounded-lg border border-slate-700 bg-slate-900 py-2 pl-9 pr-8 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400 focus:ring-1 focus:ring-teal-400 transition-colors"
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => onSearchChange('')}
+                className="absolute right-2.5 top-2.5 text-slate-400 hover:text-white"
+                title="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 shrink-0">
+            {activeFilterCount > 0 && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-rose-800/80 bg-rose-950/40 text-xs font-semibold text-rose-300 hover:bg-rose-900/60 hover:text-white transition-colors"
+                title="Reset all active filters"
+              >
+                <RotateCcw className="w-3.5 h-3.5 text-rose-400" />
+                <span>Reset Filters</span>
+                <span className="ml-0.5 px-1.5 py-0.5 rounded-full bg-rose-900/80 text-[10px] text-rose-200 font-mono font-bold">
+                  {activeFilterCount}
+                </span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={exportCleanedCsv}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-lg border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-200 hover:text-white hover:bg-slate-800 hover:border-slate-600 transition-colors"
+              title="Download CSV export of current contacts"
+            >
+              <Download className="w-3.5 h-3.5 text-teal-400" />
+              <span>Export Cleaned</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          {/* Consent Filter */}
-          <select
-            value={consentFilter}
-            onChange={e => onConsentFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-          >
-            <option className="bg-slate-900 text-slate-200" value="all">All Consent</option>
-            <option className="bg-slate-900 text-slate-200" value="verified">Verified Opt-in</option>
-            <option className="bg-slate-900 text-slate-200" value="unknown">Pending Consent</option>
-            <option className="bg-slate-900 text-slate-200" value="denied">Denied / Opted-out</option>
-          </select>
+        {/* Row 2: Filter Group Pills & Sorting (De-duplicated & Categorized) */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/80 text-xs">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1 shrink-0">
+            <Filter className="w-3.5 h-3.5 text-teal-400" />
+            <span>Filters:</span>
+          </div>
 
-          {/* Lifecycle Filter */}
-          <select
-            value={lifecycleFilter}
-            onChange={e => onLifecycleFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-          >
-            <option className="bg-slate-900 text-slate-200" value="all">All Statuses</option>
-            <option className="bg-slate-900 text-slate-200" value="new">New</option>
-            <option className="bg-slate-900 text-slate-200" value="assigned">Assigned</option>
-            <option className="bg-slate-900 text-slate-200" value="contacted">Contacted</option>
-            <option className="bg-slate-900 text-slate-200" value="follow_up_pending">Follow-up Pending</option>
-            <option className="bg-slate-900 text-slate-200" value="interested">Interested</option>
-            <option className="bg-slate-900 text-slate-200" value="not_interested">Not Interested</option>
-            <option className="bg-slate-900 text-slate-200" value="converted">Converted to Lead</option>
-            <option className="bg-slate-900 text-slate-200" value="do_not_contact">Do Not Contact</option>
-          </select>
+          {/* 1. Allocation Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Allocation:</span>
+            <select
+              value={assignmentFilter}
+              onChange={e => onAssignmentFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by assignment status"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All</option>
+              <option className="bg-slate-900 text-slate-200" value="false">Unassigned Only</option>
+              <option className="bg-slate-900 text-slate-200" value="true">Assigned Only</option>
+              <option className="bg-slate-900 text-slate-200" value="reassigned">Reassigned Only</option>
+            </select>
+          </div>
 
-          {/* Assignment Filter */}
-          <select
-            value={assignmentFilter}
-            onChange={e => onAssignmentFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-          >
-            <option className="bg-slate-900 text-slate-200" value="all">All Allocation</option>
-            <option className="bg-slate-900 text-slate-200" value="false">Unassigned Only</option>
-            <option className="bg-slate-900 text-slate-200" value="true">Assigned Only</option>
-            <option className="bg-slate-900 text-slate-200" value="reassigned">Reassigned Only</option>
-          </select>
-
-          {/* Assigned Staff Filter */}
+          {/* 2. Assigned Staff Filter */}
           {users && users.length > 0 && (
-            <select
-              value={staffFilter}
-              onChange={e => onStaffFilterChange && onStaffFilterChange(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-              title="Filter by Assigned Staff"
-            >
-              <option className="bg-slate-900 text-slate-200" value="all">All Staff</option>
-              {users.filter(u => u.active).map(u => (
-                <option key={u.id} className="bg-slate-900 text-slate-200" value={u.id}>
-                  {u.fullName}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+              <Users className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span className="text-slate-400 text-[11px] font-medium">Staff:</span>
+              <select
+                value={staffFilter}
+                onChange={e => onStaffFilterChange && onStaffFilterChange(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium max-w-[140px] truncate"
+                style={{ colorScheme: 'dark' }}
+                title="Filter by assigned staff member"
+              >
+                <option className="bg-slate-900 text-slate-200" value="all">All Staff</option>
+                {users.filter(u => u.active).map(u => (
+                  <option key={u.id} className="bg-slate-900 text-slate-200" value={u.id}>
+                    {u.fullName}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
 
-          {/* Import Batch Filter */}
+          {/* 3. CRM Lead Conversion Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <Sparkles className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">CRM Lead:</span>
+            <select
+              value={leadStatusFilter}
+              onChange={e => onLeadStatusFilterChange && onLeadStatusFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by CRM lead conversion status"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Leads</option>
+              <option className="bg-slate-900 text-slate-200" value="converted">Converted to Lead</option>
+              <option className="bg-slate-900 text-slate-200" value="not_converted">Not Converted</option>
+            </select>
+          </div>
+
+          {/* 4. Outreach / Lifecycle Status (De-duplicated: removed 'assigned' and 'converted' which belong to Allocation and Lead) */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <Activity className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Outreach:</span>
+            <select
+              value={lifecycleFilter}
+              onChange={e => onLifecycleFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by marketing outreach progress"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Outreach</option>
+              <option className="bg-slate-900 text-slate-200" value="new">New / Uncontacted</option>
+              <option className="bg-slate-900 text-slate-200" value="contacted">Contacted</option>
+              <option className="bg-slate-900 text-slate-200" value="follow_up_pending">Follow-up Pending</option>
+              <option className="bg-slate-900 text-slate-200" value="interested">Interested</option>
+              <option className="bg-slate-900 text-slate-200" value="not_interested">Not Interested</option>
+              <option className="bg-slate-900 text-slate-200" value="do_not_contact">Do Not Contact (DND)</option>
+            </select>
+          </div>
+
+          {/* 5. Consent Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+            <ShieldCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Consent:</span>
+            <select
+              value={consentFilter}
+              onChange={e => onConsentFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by consent status"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Consent</option>
+              <option className="bg-slate-900 text-slate-200" value="verified">Verified Opt-in</option>
+              <option className="bg-slate-900 text-slate-200" value="unknown">Pending Consent</option>
+              <option className="bg-slate-900 text-slate-200" value="denied">Denied / Opted-out</option>
+            </select>
+          </div>
+
+          {/* 6. Batch Filter */}
           {uploads && uploads.length > 0 && (
-            <select
-              value={batchFilter}
-              onChange={e => onBatchFilterChange && onBatchFilterChange(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-              title="Filter by Ingest Batch"
-            >
-              <option className="bg-slate-900 text-slate-200" value="all">All Batches</option>
-              {uploads.map(b => (
-                <option key={b.id} className="bg-slate-900 text-slate-200" value={b.id}>
-                  Batch #{b.batchNumber}
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
+              <Layers className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+              <span className="text-slate-400 text-[11px] font-medium">Batch:</span>
+              <select
+                value={batchFilter}
+                onChange={e => onBatchFilterChange && onBatchFilterChange(e.target.value)}
+                className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium max-w-[130px] truncate"
+                style={{ colorScheme: 'dark' }}
+                title="Filter by import batch"
+              >
+                <option className="bg-slate-900 text-slate-200" value="all">All Batches</option>
+                {uploads.map(b => (
+                  <option key={b.id} className="bg-slate-900 text-slate-200" value={b.id}>
+                    Batch #{b.batchNumber}
+                  </option>
+                ))}
+              </select>
+            </div>
           )}
 
-          {/* Lead Conversion Filter */}
-          <select
-            value={leadStatusFilter}
-            onChange={e => onLeadStatusFilterChange && onLeadStatusFilterChange(e.target.value)}
-            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
-            title="Filter by Lead Conversion"
-          >
-            <option className="bg-slate-900 text-slate-200" value="all">All Lead Statuses</option>
-            <option className="bg-slate-900 text-slate-200" value="converted">Converted to Lead</option>
-            <option className="bg-slate-900 text-slate-200" value="not_converted">Not Converted</option>
-          </select>
-
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+          {/* 7. Added Date Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors">
             <Calendar className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Date:</span>
             <select
               value={dateFilter}
               onChange={e => onDateFilterChange && onDateFilterChange(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer"
+              className="bg-transparent text-xs text-white outline-none cursor-pointer font-medium"
               style={{ colorScheme: 'dark' }}
-              title="Filter by Added Date"
+              title="Filter by added date"
             >
               <option className="bg-slate-900 text-slate-200" value="all">All Dates</option>
               <option className="bg-slate-900 text-slate-200" value="today">Today</option>
@@ -580,33 +693,27 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             </select>
           </div>
 
-          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+          {/* 8. Sorting Dropdown */}
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5 text-xs text-slate-300 hover:border-slate-600 transition-colors sm:ml-auto">
             <ArrowUpDown className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <span className="text-slate-400 text-[11px] font-medium">Sort:</span>
             <select
               value={sortFilter}
               onChange={e => onSortFilterChange && onSortFilterChange(e.target.value)}
-              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
-              title="Sort by Date, Number, Serial, or Source"
+              className="bg-transparent text-xs text-teal-300 outline-none cursor-pointer font-semibold"
+              style={{ colorScheme: 'dark' }}
+              title="Sort contacts list"
             >
-              <option className="bg-slate-900 text-slate-200" value="date_desc">Date: Newest First</option>
-              <option className="bg-slate-900 text-slate-200" value="date_asc">Date: Oldest First</option>
-              <option className="bg-slate-900 text-slate-200" value="phone_asc">Numbers: A to Z (0-9)</option>
-              <option className="bg-slate-900 text-slate-200" value="phone_desc">Numbers: Z to A (9-0)</option>
-              <option className="bg-slate-900 text-slate-200" value="serial_asc">Serial: A to Z</option>
-              <option className="bg-slate-900 text-slate-200" value="serial_desc">Serial: Z to A</option>
-              <option className="bg-slate-900 text-slate-200" value="source_asc">Source: A to Z</option>
-              <option className="bg-slate-900 text-slate-200" value="source_desc">Source: Z to A</option>
+              <option className="bg-slate-900 text-slate-200" value="date_desc">Newest First</option>
+              <option className="bg-slate-900 text-slate-200" value="date_asc">Oldest First</option>
+              <option className="bg-slate-900 text-slate-200" value="phone_asc">Number (0-9)</option>
+              <option className="bg-slate-900 text-slate-200" value="phone_desc">Number (9-0)</option>
+              <option className="bg-slate-900 text-slate-200" value="serial_asc">Serial (A-Z)</option>
+              <option className="bg-slate-900 text-slate-200" value="serial_desc">Serial (Z-A)</option>
+              <option className="bg-slate-900 text-slate-200" value="source_asc">Source (A-Z)</option>
+              <option className="bg-slate-900 text-slate-200" value="source_desc">Source (Z-A)</option>
             </select>
           </div>
-
-          <button
-            type="button"
-            onClick={exportCleanedCsv}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700 bg-slate-900 text-xs font-semibold text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
-            title="Download CSV export"
-          >
-            <Download className="w-3.5 h-3.5 text-teal-400" /> Export Cleaned
-          </button>
         </div>
       </div>
 

@@ -95,6 +95,19 @@ export const MarketingModule: React.FC = () => {
   const [dateFilter, setDateFilter] = React.useState('all');
   const [sortFilter, setSortFilter] = React.useState('date_desc');
 
+  const handleResetFilters = React.useCallback(() => {
+    setSearch('');
+    setConsentFilter('all');
+    setLifecycleFilter('all');
+    setAssignmentFilter('all');
+    setStaffFilter('all');
+    setBatchFilter('all');
+    setLeadStatusFilter('all');
+    setDateFilter('all');
+    setSortFilter('date_desc');
+    setContactPage(1);
+  }, []);
+
   // Selected Contact Drawer
   const [selectedContactId, setSelectedContactId] = React.useState<string | null>(null);
   const [transferredContactIds, setTransferredContactIds] = React.useState<string[]>([]);
@@ -382,6 +395,7 @@ export const MarketingModule: React.FC = () => {
                   setContactPage(1);
                 }}
                 uploads={uploads}
+                onResetFilters={handleResetFilters}
               />
             )}
 

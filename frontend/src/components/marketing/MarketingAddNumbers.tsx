@@ -1,373 +1,485 @@
 import React from 'react';
 import {
+  AlertCircle,
+  CheckCircle2,
   Loader2,
   Plus,
-  UploadCloud,
   FileSpreadsheet,
-  CheckCircle2,
-  AlertCircle,
-  XCircle,
-  Info,
-  RefreshCw,
-  History,
-  FileText,
+  ClipboardPaste,
   UserPlus,
-  Layers,
-  Calendar,
-  Eye,
-  X
+  Upload,
+  Check,
+  X,
+  FileText,
+  AlertTriangle,
+  ArrowRight,
+  ShieldCheck,
+  Sparkles,
 } from 'lucide-react';
-import { MarketingImportBatch, MarketingImportRow } from './types';
 import { useCrm } from '../../context/CrmContext';
 
 interface MarketingAddNumbersProps {
-  loading: boolean;
-  onImportComplete: (batch: MarketingImportBatch) => void;
+  onContactCreated: () => void;
   onRequestApi: (path: string, init?: RequestInit) => Promise<any>;
+  onNavigateToAssignment?: () => void;
 }
 
-type AddTab = 'single' | 'bulk' | 'file' | 'history';
+// RFC-4180 Client-side CSV Parser for instant preview and validation
+function parseCsvClient(text: string) {
+  if (!text) return [];
+  const clean = text.replace(/^\uFEFF/, '');
+  const lines = clean.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length === 0) return [];
+
+  // Determine delimiter
+  const first = lines[0];
+  let delim = ',';
+  if ((first.match(/\t/g) || []).length > (first.match(/,/g) || []).length) delim = '\t';
+  else if ((first.match(/;/g) || []).length > (first.match(/,/g) || []).length) delim = ';';
+
+  const rows: string[][] = [];
+  let currentRow: string[] = [];
+  let field = '';
+  let inQuotes = false;
+
+  for (let i = 0; i < clean.length; i++) {
+    const c = clean[i];
+    const next = clean[i + 1];
+
+    if (c === '"') {
+      if (inQuotes && next === '"') {
+        field += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (c === delim && !inQuotes) {
+      currentRow.push(field.trim());
+      field = '';
+    } else if ((c === '\r' || c === '\n') && !inQuotes) {
+      if (c === '\r' && next === '\n') i++;
+      currentRow.push(field.trim());
+      field = '';
+      if (currentRow.some(col => col.length > 0)) rows.push(currentRow);
+      currentRow = [];
+    } else {
+      field += c;
+    }
+  }
+  if (field.length > 0 || currentRow.length > 0) {
+    currentRow.push(field.trim());
+    if (currentRow.some(col => col.length > 0)) rows.push(currentRow);
+  }
+
+  if (rows.length === 0) return [];
+  const headers = rows[0].map(h => h.toLowerCase().replace(/[\s\-_]/g, ''));
+  const hasPhoneHeader = headers.some(h =>
+    ['phone', 'phonenumber', 'mobile', 'contact', 'telephone', 'whatsapp', 'number'].includes(h)
+  );
+
+  const dataRows = hasPhoneHeader ? rows.slice(1) : rows;
+
+  return dataRows.map((row, idx) => {
+    let phone = '';
+    let name = '';
+    let group = '';
+    let notes = '';
+
+    if (hasPhoneHeader) {
+      headers.forEach((h, colIdx) => {
+        const val = row[colIdx] || '';
+        if (['phone', 'phonenumber', 'mobile', 'contact', 'telephone', 'whatsapp', 'number'].includes(h)) {
+          phone = val;
+        } else if (['name', 'fullname', 'contactname'].includes(h)) {
+          name = val;
+        } else if (['group', 'groupname', 'sourcegroup'].includes(h)) {
+          group = val;
+        } else if (['notes', 'note', 'remarks'].includes(h)) {
+          notes = val;
+        }
+      });
+    } else {
+      phone = row.find(col => /[\d]{7,}/.test(col)) || row[0] || '';
+      name = row.find(col => col !== phone && !/^[\d\s+\-()]+$/.test(col)) || '';
+    }
+
+    return {
+      index: idx + 1,
+      phone: phone.trim(),
+      name: name.trim() || undefined,
+      group: group.trim() || undefined,
+      notes: notes.trim() || undefined,
+      isValid: /^\+?[\d\s\-().]{8,18}$/.test(phone.trim()),
+    };
+  }).filter(r => Boolean(r.phone));
+}
 
 export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
-  loading,
-  onImportComplete,
+  onContactCreated,
   onRequestApi,
+  onNavigateToAssignment,
 }) => {
   const { currentUser } = useCrm();
-  const [tab, setTab] = React.useState<AddTab>('single');
+
+  // Mode Tabs: 'single' | 'paste' | 'csv'
+  const [activeMode, setActiveMode] = React.useState<'single' | 'paste' | 'csv'>('single');
+
+  // Shared Config
+  const [company, setCompany] = React.useState(currentUser?.company || 'RWC');
+  const [source, setSource] = React.useState('Public Event / Campaign');
+  const [sourceName, setSourceName] = React.useState('');
+  const [region, setRegion] = React.useState('LK');
 
   // Single Contact Form State
   const [singleName, setSingleName] = React.useState('');
   const [singlePhone, setSinglePhone] = React.useState('');
-  const [singleCompany, setSingleCompany] = React.useState(currentUser?.company || 'RWC');
-  const [singleSource, setSingleSource] = React.useState('Event / Walk-in');
-  const [singleSourceName, setSingleSourceName] = React.useState('');
   const [singleTags, setSingleTags] = React.useState('');
-  const [singleConsent, setSingleConsent] = React.useState<'unknown' | 'verified' | 'denied' | 'opted_out'>('unknown');
   const [singleNotes, setSingleNotes] = React.useState('');
 
-  // Bulk Paste Form State
-  const [bulkSource, setBulkSource] = React.useState('WhatsApp public group');
-  const [bulkSourceName, setBulkSourceName] = React.useState('');
-  const [bulkText, setBulkText] = React.useState('');
+  // Bulk Paste State
+  const [pasteText, setPasteText] = React.useState('');
 
-  // File Upload Form State
-  const [fileSource, setFileSource] = React.useState('Exhibition / Trade Fair');
-  const [fileSourceName, setFileSourceName] = React.useState('');
-  const [file, setFile] = React.useState<File | null>(null);
-  const [parsedFileNumbers, setParsedFileNumbers] = React.useState<string[]>([]);
-  const [filePreviewRows, setFilePreviewRows] = React.useState<string[]>([]);
-  const [fileError, setFileError] = React.useState('');
+  // CSV Upload State
+  const [csvFile, setCsvFile] = React.useState<File | null>(null);
+  const [csvTextContent, setCsvTextContent] = React.useState<string>('');
+  const [csvPreviewRows, setCsvPreviewRows] = React.useState<Array<{ index: number; phone: string; name?: string; group?: string; isValid: boolean }>>([]);
+  const [isDragging, setIsDragging] = React.useState(false);
 
-  // Execution & Feedback States
+  // Status & Receipts
   const [submitting, setSubmitting] = React.useState(false);
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
-  const [summary, setSummary] = React.useState<MarketingImportBatch | null>(null);
+  const [batchReceipt, setBatchReceipt] = React.useState<{
+    batchNumber: string;
+    totalSubmitted: number;
+    savedCount: number;
+    duplicateCount: number;
+    invalidCount: number;
+  } | null>(null);
 
-  // Import History States
-  const [historyBatches, setHistoryBatches] = React.useState<MarketingImportBatch[]>([]);
-  const [loadingHistory, setLoadingHistory] = React.useState(false);
-  const [selectedBatch, setSelectedBatch] = React.useState<MarketingImportBatch | null>(null);
-  const [batchRows, setBatchRows] = React.useState<MarketingImportRow[]>([]);
-  const [loadingBatchRows, setLoadingBatchRows] = React.useState(false);
-
-  // Load history when tab becomes active
-  const loadHistory = React.useCallback(async () => {
-    setLoadingHistory(true);
-    try {
-      const res = await onRequestApi('/api/marketing/imports');
-      if (res?.data) {
-        setHistoryBatches(res.data);
-      }
-    } catch (err) {
-      console.error('Failed to load batch history', err);
-    } finally {
-      setLoadingHistory(false);
-    }
-  }, [onRequestApi]);
-
-  React.useEffect(() => {
-    if (tab === 'history') {
-      void loadHistory();
-    }
-  }, [tab, loadHistory]);
-
-  // Load row audit details for a specific batch
-  const handleViewBatchDetails = async (batch: MarketingImportBatch) => {
-    setSelectedBatch(batch);
-    setLoadingBatchRows(true);
-    try {
-      const res = await onRequestApi(`/api/marketing/imports/${batch.id}`);
-      if (res?.data?.rows) {
-        setBatchRows(res.data.rows);
-      }
-    } catch (err) {
-      console.error('Failed to load batch rows', err);
-    } finally {
-      setLoadingBatchRows(false);
-    }
-  };
-
-  // File parsing logic
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const selected = event.target.files?.[0];
-    if (!selected) return;
-    setFile(selected);
-    setFileError('');
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = String(e.target?.result || '');
-        const lines = text.split(/[\r\n]+/).map(line => line.trim()).filter(Boolean);
-        if (lines.length === 0) {
-          setFileError('The selected file appears to be empty.');
-          return;
-        }
-
-        const detected: string[] = [];
-        const preview: string[] = [];
-
-        lines.forEach((line) => {
-          const parts = line.split(/[,;\t]+/).map(p => p.trim().replace(/^["']|["']$/g, ''));
-          const phoneCandidate = parts.find(p => /\+?\d[\d\s\-().]{6,16}/.test(p)) || parts[0];
-          if (phoneCandidate) {
-            detected.push(phoneCandidate);
-            if (preview.length < 5) {
-              preview.push(`${phoneCandidate} (${parts.slice(1).join(', ') || 'No extra cols'})`);
-            }
-          }
-        });
-
-        if (detected.length === 0) {
-          setFileError('Could not find any phone number patterns in this file.');
-          return;
-        }
-
-        setParsedFileNumbers(detected);
-        setFilePreviewRows(preview);
-      } catch (err) {
-        setFileError('Failed to parse file: ' + (err instanceof Error ? err.message : String(err)));
-      }
+  // Bulk Paste Real-Time Statistics
+  const parsedPasteStats = React.useMemo(() => {
+    if (!pasteText.trim()) return { total: 0, valid: 0, sample: [] };
+    const rawTokens = pasteText.split(/[\n,;\t]+/).map(t => t.trim()).filter(Boolean);
+    const uniqueTokens = Array.from(new Set(rawTokens));
+    const validCount = uniqueTokens.filter(t => /^\+?[\d\s\-().]{8,18}$/.test(t)).length;
+    return {
+      total: uniqueTokens.length,
+      valid: validCount,
+      sample: uniqueTokens.slice(0, 5),
     };
-    reader.readAsText(selected);
-  };
+  }, [pasteText]);
 
-  // Submit Single Contact
+  // Handle Single Contact Submit
   const handleSingleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setNotice('');
-    setSummary(null);
+    setBatchReceipt(null);
 
     if (!singlePhone.trim()) {
-      setError('Please enter a phone number.');
+      setError('Please provide a valid phone number.');
       return;
     }
 
     setSubmitting(true);
     try {
-      const res = await onRequestApi('/api/marketing/contacts', {
+      const response = await onRequestApi('/api/marketing/contacts', {
         method: 'POST',
         body: JSON.stringify({
           phone: singlePhone.trim(),
           name: singleName.trim() || undefined,
-          company: singleCompany,
-          source: singleSource,
-          sourceName: singleSourceName.trim() || undefined,
+          company,
+          source,
+          sourceName: sourceName.trim() || undefined,
           tags: singleTags.trim() || undefined,
-          consentStatus: singleConsent,
           notes: singleNotes.trim() || undefined,
+          region,
         }),
       });
 
-      if (res?.data) {
-        setNotice(`Contact successfully added with Serial #${res.data.serialNumber || res.data.id}`);
+      if (response?.data) {
+        setNotice(`Contact successfully ingested with Serial #${response.data.serialNumber || response.data.id}`);
         setSingleName('');
         setSinglePhone('');
-        setSingleSourceName('');
         setSingleTags('');
         setSingleNotes('');
-        onImportComplete({
-          id: res.data.id,
-          batchNumber: res.data.serialNumber,
-          company: res.data.company,
-          uploadedById: currentUser?.id || '',
-          source: res.data.originalSource,
-          totalSubmitted: 1,
-          validNewCount: 1,
-          duplicateCount: 0,
-          invalidCount: 0,
-          savedCount: 1,
-          status: 'completed',
-          createdAt: new Date().toISOString()
-        });
+        onContactCreated();
       }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Failed to add contact');
+    } catch (caught: any) {
+      setError(caught.message || 'Failed to add contact');
     } finally {
       setSubmitting(false);
     }
   };
 
-  // Submit Bulk Paste or File Import
-  const handleBatchSubmit = async (e: React.FormEvent) => {
+  // Handle Bulk Paste Submit
+  const handlePasteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setNotice('');
-    setSummary(null);
+    setBatchReceipt(null);
 
-    let numbersToSubmit: string[] = [];
-    let currentSource = '';
-    let currentGroupName = '';
-    let fileName: string | undefined = undefined;
-
-    if (tab === 'bulk') {
-      numbersToSubmit = bulkText
-        .split(/[\r\n,;\t]+/)
-        .map(n => n.trim())
-        .filter(Boolean);
-      if (numbersToSubmit.length === 0) {
-        setError('Please enter at least one phone number in the text area.');
-        return;
-      }
-      currentSource = bulkSource.trim();
-      currentGroupName = bulkSourceName.trim();
-    } else if (tab === 'file') {
-      if (parsedFileNumbers.length === 0) {
-        setError('Please select and parse a valid CSV or text file containing phone numbers.');
-        return;
-      }
-      numbersToSubmit = parsedFileNumbers;
-      currentSource = fileSource.trim();
-      currentGroupName = fileSourceName.trim();
-      fileName = file?.name;
-    }
-
-    if (!currentSource) {
-      setError('Source description is required.');
+    const rawTokens = pasteText.split(/[\n,;\t]+/).map(t => t.trim()).filter(Boolean);
+    if (rawTokens.length === 0) {
+      setError('Please paste at least one phone number.');
       return;
     }
 
     setSubmitting(true);
     try {
-      const response = await onRequestApi('/api/marketing/import', {
+      const response = await onRequestApi('/api/marketing/imports', {
         method: 'POST',
         body: JSON.stringify({
-          source: currentSource,
-          sourceGroupName: currentGroupName || null,
-          numbers: numbersToSubmit,
-          fileName,
-          idempotencyKey: crypto.randomUUID(),
+          numbers: rawTokens,
+          source,
+          sourceGroupName: sourceName.trim() || undefined,
+          company,
+          region,
         }),
       });
 
       if (response?.data) {
-        setSummary(response.data);
-        onImportComplete(response.data);
-        if (tab === 'bulk') setBulkText('');
-        if (tab === 'file') {
-          setFile(null);
-          setParsedFileNumbers([]);
-          setFilePreviewRows([]);
-        }
+        setBatchReceipt(response.data);
+        setNotice(`Bulk ingestion finished: ${response.data.savedCount} new contacts saved to pool.`);
+        setPasteText('');
+        onContactCreated();
       }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : 'Import failed');
+    } catch (caught: any) {
+      setError(caught.message || 'Bulk ingestion failed');
     } finally {
       setSubmitting(false);
     }
   };
 
-  const rawCount = tab === 'bulk'
-    ? bulkText.split(/[\r\n,;\t]+/).map(n => n.trim()).filter(Boolean).length
-    : tab === 'file'
-    ? parsedFileNumbers.length
-    : 1;
+  // Handle CSV File Selection
+  const handleFileChange = (file: File) => {
+    setCsvFile(file);
+    setError('');
+    setNotice('');
+    setBatchReceipt(null);
+
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const content = String(ev.target?.result || '');
+      setCsvTextContent(content);
+      const parsed = parseCsvClient(content);
+      setCsvPreviewRows(parsed);
+    };
+    reader.onerror = () => {
+      setError('Unable to read the selected file.');
+    };
+    reader.readAsText(file);
+  };
+
+  // Handle CSV Upload Submit
+  const handleCsvSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setNotice('');
+    setBatchReceipt(null);
+
+    if (!csvTextContent.trim()) {
+      setError('Please select or drop a valid CSV spreadsheet.');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      const response = await onRequestApi('/api/marketing/imports', {
+        method: 'POST',
+        body: JSON.stringify({
+          csvText: csvTextContent,
+          fileName: csvFile?.name || 'contacts.csv',
+          source,
+          sourceGroupName: sourceName.trim() || undefined,
+          company,
+          region,
+        }),
+      });
+
+      if (response?.data) {
+        setBatchReceipt(response.data);
+        setNotice(`CSV Batch Import completed: ${response.data.savedCount} contacts created.`);
+        setCsvFile(null);
+        setCsvTextContent('');
+        setCsvPreviewRows([]);
+        onContactCreated();
+      }
+    } catch (caught: any) {
+      setError(caught.message || 'Failed to process CSV file.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
-    <div className="p-4 sm:p-6 space-y-5">
-      {/* 4-Tab Navigation */}
-      <div className="flex flex-wrap items-center gap-2 border-b border-slate-800 pb-3">
-        <button
-          type="button"
-          onClick={() => { setTab('single'); setError(''); setNotice(''); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-            tab === 'single'
-              ? 'bg-teal-400/10 text-teal-300 border border-teal-500/30'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-          }`}
-        >
-          <UserPlus className="w-4 h-4" /> Single Contact
-        </button>
+    <div className="p-4 sm:p-6 space-y-6">
+      {/* 1. Header Banner */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-4">
+        <div>
+          <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <Plus className="w-4 h-4 text-teal-400" />
+            Add Public Contact Numbers
+          </h3>
+          <p className="mt-1 text-xs text-slate-400">
+            Ingest single numbers, paste bulk lists, or upload RFC-4180 compliant CSV spreadsheets with E.164 normalization.
+          </p>
+        </div>
 
-        <button
-          type="button"
-          onClick={() => { setTab('bulk'); setError(''); setNotice(''); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-            tab === 'bulk'
-              ? 'bg-teal-400/10 text-teal-300 border border-teal-500/30'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-          }`}
-        >
-          <Layers className="w-4 h-4" /> Bulk Paste
-        </button>
+        {/* Mode Selector Tabs */}
+        <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700/80 p-1 rounded-xl shrink-0">
+          <button
+            type="button"
+            onClick={() => { setActiveMode('single'); setError(''); setNotice(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeMode === 'single'
+                ? 'bg-teal-400 text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <UserPlus className="w-3.5 h-3.5" />
+            <span>Single Contact</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => { setTab('file'); setError(''); setNotice(''); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-            tab === 'file'
-              ? 'bg-teal-400/10 text-teal-300 border border-teal-500/30'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-          }`}
-        >
-          <FileSpreadsheet className="w-4 h-4" /> CSV / Excel Upload
-        </button>
+          <button
+            type="button"
+            onClick={() => { setActiveMode('paste'); setError(''); setNotice(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeMode === 'paste'
+                ? 'bg-teal-400 text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <ClipboardPaste className="w-3.5 h-3.5" />
+            <span>Bulk Paste</span>
+          </button>
 
-        <button
-          type="button"
-          onClick={() => { setTab('history'); setError(''); setNotice(''); }}
-          className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-bold transition-all ${
-            tab === 'history'
-              ? 'bg-teal-400/10 text-teal-300 border border-teal-500/30'
-              : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-          }`}
-        >
-          <History className="w-4 h-4" /> Import History
-        </button>
+          <button
+            type="button"
+            onClick={() => { setActiveMode('csv'); setError(''); setNotice(''); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+              activeMode === 'csv'
+                ? 'bg-teal-400 text-slate-950 shadow-sm'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            <FileSpreadsheet className="w-3.5 h-3.5" />
+            <span>CSV / Excel Upload</span>
+          </button>
+        </div>
       </div>
 
-      {/* Alerts */}
+      {/* 2. Notifications & Batch Receipts */}
       {error && (
-        <div className="p-3.5 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-200 text-xs flex items-center gap-2.5">
-          <AlertCircle className="w-4 h-4 text-rose-400 shrink-0" />
+        <div className="flex items-center gap-2.5 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3.5 text-xs text-rose-200 animate-in fade-in duration-150">
+          <AlertCircle className="h-4 w-4 shrink-0 text-rose-400" />
           <span>{error}</span>
         </div>
       )}
 
-      {notice && (
-        <div className="p-3.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 text-emerald-200 text-xs flex items-center gap-2.5">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+      {notice && !batchReceipt && (
+        <div className="flex items-center gap-2.5 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3.5 text-xs text-emerald-200 animate-in fade-in duration-150">
+          <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
           <span>{notice}</span>
         </div>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 1: SINGLE CONTACT FORM                                     */}
-      {/* ============================================================== */}
-      {tab === 'single' && (
-        <form onSubmit={handleSingleSubmit} className="space-y-4 max-w-2xl">
+      {/* Batch Ingestion Receipt Card */}
+      {batchReceipt && (
+        <div className="rounded-2xl border border-teal-500/40 bg-teal-950/30 p-5 shadow-lg space-y-3 animate-in fade-in duration-200">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-teal-800/60 pb-3">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="w-5 h-5 text-teal-400 shrink-0" />
+              <div>
+                <h4 className="text-sm font-bold text-white">Batch Import Ingested Successfully</h4>
+                <p className="text-[11px] font-mono text-teal-300">
+                  Batch #{batchReceipt.batchNumber}
+                </p>
+              </div>
+            </div>
+
+            {onNavigateToAssignment && (
+              <button
+                type="button"
+                onClick={onNavigateToAssignment}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-teal-400 text-slate-950 text-xs font-bold hover:bg-teal-300 transition-colors shadow-sm"
+              >
+                <span>Assign Ingested Contacts</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[10px] text-slate-400 font-mono uppercase">Submitted</span>
+              <p className="text-lg font-black text-white">{batchReceipt.totalSubmitted}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-800/80">
+              <span className="text-[10px] text-emerald-400 font-mono uppercase">New Contacts Saved</span>
+              <p className="text-lg font-black text-emerald-300">{batchReceipt.savedCount}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[10px] text-amber-400 font-mono uppercase">Duplicate Excluded</span>
+              <p className="text-lg font-black text-amber-300">{batchReceipt.duplicateCount}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[10px] text-rose-400 font-mono uppercase">Invalid Format</span>
+              <p className="text-lg font-black text-rose-300">{batchReceipt.invalidCount}</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 3. Common Context Bar (Company & Source Config) */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl border border-slate-800 bg-[#0c1424] text-xs">
+        <div>
+          <label className="block font-semibold text-slate-300 mb-1">Company Scope</label>
+          <select
+            value={company}
+            onChange={e => setCompany(e.target.value as any)}
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-teal-400 cursor-pointer"
+          >
+            <option value="RWC">Royal Wellness Clinic (RWC)</option>
+            <option value="CRAS">Alpha CRAS Education (CRAS)</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="block font-semibold text-slate-300 mb-1">Contact Source / Channel *</label>
+          <input
+            required
+            value={source}
+            onChange={e => setSource(e.target.value)}
+            placeholder="e.g. WhatsApp Group, Walk-in, Expo 2026"
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white placeholder-slate-500 outline-none focus:border-teal-400"
+          />
+        </div>
+
+        <div>
+          <label className="block font-semibold text-slate-300 mb-1">Source Group / Batch Tag</label>
+          <input
+            value={sourceName}
+            onChange={e => setSourceName(e.target.value)}
+            placeholder="e.g. VIP Wellness Group #3"
+            className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white placeholder-slate-500 outline-none focus:border-teal-400"
+          />
+        </div>
+      </div>
+
+      {/* 4. Active Mode Panes */}
+
+      {/* MODE 1: SINGLE CONTACT */}
+      {activeMode === 'single' && (
+        <form onSubmit={handleSingleSubmit} className="max-w-2xl space-y-4 animate-in fade-in duration-150">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="block">
-              <span className="text-xs font-bold text-slate-300">
-                Contact Name (Optional)
-              </span>
+              <span className="text-xs font-bold text-slate-300">Contact Name (Optional)</span>
               <input
                 value={singleName}
                 onChange={e => setSingleName(e.target.value)}
-                placeholder="e.g. John Perera"
+                placeholder="e.g. Dr. John Perera"
                 className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
               />
             </label>
@@ -381,57 +493,24 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
                 value={singlePhone}
                 onChange={e => setSinglePhone(e.target.value)}
                 placeholder="+94771234567 or 0771234567"
-                className="mt-1.5 w-full font-mono rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-              />
-            </label>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">Company Scope</span>
-              <select
-                value={singleCompany}
-                onChange={e => setSingleCompany(e.target.value as 'RWC' | 'CRAS')}
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-teal-400"
-              >
-                <option value="RWC">Royal Wellness Center (RWC)</option>
-                <option value="CRAS">Aviation Academy (CRAS)</option>
-              </select>
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">Contact Source</span>
-              <input
-                required
-                value={singleSource}
-                onChange={e => setSingleSource(e.target.value)}
-                placeholder="e.g. Walk-in, Expo, Web form"
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">Source Name / Tag</span>
-              <input
-                value={singleSourceName}
-                onChange={e => setSingleSourceName(e.target.value)}
-                placeholder="e.g. Medical Clinic Day #2"
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
+                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 font-mono text-xs text-teal-300 placeholder-slate-500 outline-none focus:border-teal-400"
               />
             </label>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <label className="block">
-              <span className="text-xs font-bold text-slate-300">Consent Status</span>
+              <span className="text-xs font-bold text-slate-300">Default Country / Region</span>
               <select
-                value={singleConsent}
-                onChange={e => setSingleConsent(e.target.value as any)}
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-teal-400"
+                value={region}
+                onChange={e => setRegion(e.target.value)}
+                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-teal-400 cursor-pointer"
               >
-                <option value="unknown">Unknown / Pending (Standard Ingestion)</option>
-                <option value="verified">Verified Opt-in (Consent Confirmed)</option>
-                <option value="opted_out">Opted Out / Do Not Contact</option>
+                <option value="LK">Sri Lanka (+94)</option>
+                <option value="AE">United Arab Emirates (+971)</option>
+                <option value="IN">India (+91)</option>
+                <option value="GB">United Kingdom (+44)</option>
+                <option value="US">United States (+1)</option>
               </select>
             </label>
 
@@ -447,393 +526,220 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
           </div>
 
           <label className="block">
-            <span className="text-xs font-bold text-slate-300">Initial Notes</span>
+            <span className="text-xs font-bold text-slate-300">Initial Qualification Notes</span>
             <textarea
               rows={3}
               value={singleNotes}
               onChange={e => setSingleNotes(e.target.value)}
-              placeholder="Add customer background, specific treatment interest, or notes..."
+              placeholder="Add patient background, health interest, or special instructions..."
               className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
             />
           </label>
 
-          <div className="pt-2 flex items-center justify-between border-t border-slate-800">
+          <div className="flex items-center justify-between border-t border-slate-800 pt-3">
             <span className="text-[11px] text-slate-400">
-              Numbers are normalized to E.164 (+94...) and deduplicated automatically.
+              Numbers are normalized to E.164 and deduplicated against CRM patient records.
             </span>
             <button
               type="submit"
               disabled={submitting || !singlePhone.trim()}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-5 py-2.5 text-xs font-bold text-slate-950 hover:bg-teal-300 disabled:opacity-50 transition-all shadow-sm"
+              className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-5 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition-all hover:bg-teal-300 disabled:opacity-50"
             >
-              {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-              Save Single Contact
+              {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+              <span>Save Contact</span>
             </button>
           </div>
         </form>
       )}
 
-      {/* ============================================================== */}
-      {/* TAB 2: BULK PASTE FORM                                         */}
-      {/* ============================================================== */}
-      {tab === 'bulk' && (
-        <form onSubmit={handleBatchSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">
-                Source Description <span className="text-rose-400">*</span>
-              </span>
-              <input
-                required
-                value={bulkSource}
-                onChange={e => setBulkSource(e.target.value)}
-                placeholder="e.g. WhatsApp Public Community, Exhibition 2026"
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">Source Group / Campaign Tag</span>
-              <input
-                value={bulkSourceName}
-                onChange={e => setBulkSourceName(e.target.value)}
-                placeholder="e.g. Colombo Medical Expo, Group #4"
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-              />
-            </label>
-          </div>
-
-          <label className="block">
+      {/* MODE 2: BULK PASTE NUMBERS */}
+      {activeMode === 'paste' && (
+        <form onSubmit={handlePasteSubmit} className="space-y-4 animate-in fade-in duration-150">
+          <div className="rounded-2xl border border-slate-800 bg-[#0D1526]/80 p-5 space-y-4">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold text-slate-300">
-                Raw Phone Numbers <span className="text-rose-400">*</span>
-              </span>
-              <span className="text-[11px] font-mono text-teal-400">
-                {rawCount} number{rawCount === 1 ? '' : 's'} detected
-              </span>
-            </div>
-            <textarea
-              required
-              rows={8}
-              value={bulkText}
-              onChange={e => setBulkText(e.target.value)}
-              placeholder={`+94771234567\n0769876543\n+94715554433\n(Paste one number per line or separated by commas/tabs)`}
-              className="mt-1.5 w-full font-mono rounded-lg border border-slate-700 bg-slate-900 p-3 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-            />
-          </label>
-
-          <div className="pt-2 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-800">
-            <div className="flex items-center gap-2 text-xs text-slate-400">
-              <Info className="w-4 h-4 text-teal-400 shrink-0" />
-              <span>E.164 engine cleans and deduplicates against existing contacts and CRM leads.</span>
-            </div>
-            <button
-              type="submit"
-              disabled={submitting || rawCount === 0}
-              className="inline-flex items-center justify-center gap-2 rounded-lg bg-teal-400 px-5 py-2.5 text-xs font-bold text-slate-950 hover:bg-teal-300 disabled:opacity-50 transition-all shadow-sm shrink-0"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Ingesting & normalizing...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" /> Ingest {rawCount > 0 ? `${rawCount} Contacts` : 'Contacts'}
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* ============================================================== */}
-      {/* TAB 3: CSV / EXCEL UPLOAD                                      */}
-      {/* ============================================================== */}
-      {tab === 'file' && (
-        <form onSubmit={handleBatchSubmit} className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">
-                Source Description <span className="text-rose-400">*</span>
-              </span>
-              <input
-                required
-                value={fileSource}
-                onChange={e => setFileSource(e.target.value)}
-                placeholder="e.g. Aviation Expo 2026, Clinical Conference"
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-              />
-            </label>
-
-            <label className="block">
-              <span className="text-xs font-bold text-slate-300">Source Group / File Label</span>
-              <input
-                value={fileSourceName}
-                onChange={e => setFileSourceName(e.target.value)}
-                placeholder="e.g. Sheet #1 - Registrations"
-                className="mt-1.5 w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-white placeholder-slate-500 outline-none focus:border-teal-400"
-              />
-            </label>
-          </div>
-
-          <div className="space-y-3">
-            <span className="text-xs font-bold text-slate-300">
-              Upload CSV, TSV or Text File <span className="text-rose-400">*</span>
-            </span>
-            <div className="border-2 border-dashed border-slate-700 hover:border-teal-500/50 rounded-xl p-6 text-center bg-slate-900/50 transition-colors">
-              <input
-                type="file"
-                id="csv-file-input"
-                accept=".csv, .txt, .tsv, .xlsx"
-                onChange={handleFileChange}
-                className="hidden"
-              />
-              <label htmlFor="csv-file-input" className="cursor-pointer block space-y-2">
-                <UploadCloud className="w-8 h-8 text-teal-400 mx-auto" />
-                <p className="text-xs font-bold text-slate-200">
-                  {file ? file.name : 'Click to select CSV, TSV or spreadsheet file'}
-                </p>
-                <p className="text-[11px] text-slate-400">
-                  Client-side detector extracts phone numbers from the first detected column.
-                </p>
-              </label>
-            </div>
-
-            {fileError && (
-              <p className="text-xs text-rose-400 flex items-center gap-1.5">
-                <XCircle className="w-3.5 h-3.5" /> {fileError}
-              </p>
-            )}
-
-            {parsedFileNumbers.length > 0 && (
-              <div className="p-3.5 rounded-lg border border-slate-800 bg-[#0D1526] space-y-2">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-bold text-teal-300">
-                    Parsed {parsedFileNumbers.length} contact candidate{parsedFileNumbers.length === 1 ? '' : 's'}
-                  </span>
-                  <span className="text-slate-400 text-[11px]">Previewing first 5 rows:</span>
-                </div>
-                <div className="space-y-1">
-                  {filePreviewRows.map((sample, i) => (
-                    <div key={i} className="text-[11px] font-mono text-slate-300 bg-slate-900/80 px-2.5 py-1 rounded">
-                      Row {i + 1}: {sample}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="pt-2 flex items-center justify-between border-t border-slate-800">
-            <span className="text-[11px] text-slate-400">
-              Batches of up to 10,000 numbers are supported safely.
-            </span>
-            <button
-              type="submit"
-              disabled={submitting || parsedFileNumbers.length === 0}
-              className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-5 py-2.5 text-xs font-bold text-slate-950 hover:bg-teal-300 disabled:opacity-50 transition-all shadow-sm"
-            >
-              {submitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" /> Ingesting file...
-                </>
-              ) : (
-                <>
-                  <Plus className="w-4 h-4" /> Import {parsedFileNumbers.length} Contacts
-                </>
-              )}
-            </button>
-          </div>
-        </form>
-      )}
-
-      {/* ============================================================== */}
-      {/* TAB 4: IMPORT HISTORY                                          */}
-      {/* ============================================================== */}
-      {tab === 'history' && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <p className="text-xs text-slate-400">
-              Audit log of previous ingestion batches, duplicates detected, and row status.
-            </p>
-            <button
-              type="button"
-              onClick={() => void loadHistory()}
-              className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              title="Refresh history"
-            >
-              <RefreshCw className={`w-4 h-4 ${loadingHistory ? 'animate-spin text-teal-400' : ''}`} />
-            </button>
-          </div>
-
-          {loadingHistory ? (
-            <div className="p-12 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-              <Loader2 className="w-5 h-5 animate-spin text-teal-400" />
-              Loading batch audit history...
-            </div>
-          ) : historyBatches.length === 0 ? (
-            <div className="p-12 text-center text-xs text-slate-500 rounded-xl border border-slate-800 bg-slate-900/40">
-              No previous import batches recorded for this company.
-            </div>
-          ) : (
-            <div className="overflow-x-auto rounded-xl border border-slate-800">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-slate-950/80 text-[10px] uppercase font-bold text-slate-400 border-b border-slate-800">
-                  <tr>
-                    <th className="px-4 py-3">Batch Number</th>
-                    <th className="px-4 py-3">Source & File</th>
-                    <th className="px-4 py-3 text-right">Submitted</th>
-                    <th className="px-4 py-3 text-right">Saved Clean</th>
-                    <th className="px-4 py-3 text-right">Duplicates</th>
-                    <th className="px-4 py-3 text-right">Invalid</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3 text-center">Audit</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60 bg-[#0D1526]/40">
-                  {historyBatches.map(b => (
-                    <tr key={b.id} className="hover:bg-slate-800/40 transition-colors">
-                      <td className="px-4 py-3 font-mono font-bold text-teal-300">{b.batchNumber}</td>
-                      <td className="px-4 py-3">
-                        <p className="font-semibold text-white">{b.source}</p>
-                        {b.fileName && <p className="text-[10px] text-slate-400">{b.fileName}</p>}
-                      </td>
-                      <td className="px-4 py-3 text-right font-mono text-slate-300">{b.totalSubmitted}</td>
-                      <td className="px-4 py-3 text-right font-mono text-emerald-400 font-bold">{b.savedCount}</td>
-                      <td className="px-4 py-3 text-right font-mono text-amber-400">{b.duplicateCount}</td>
-                      <td className="px-4 py-3 text-right font-mono text-rose-400">{b.invalidCount}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                          b.status === 'completed'
-                            ? 'bg-emerald-950 text-emerald-300 border border-emerald-800/50'
-                            : b.status === 'partially_completed'
-                            ? 'bg-amber-950 text-amber-300 border border-amber-800/50'
-                            : 'bg-rose-950 text-rose-300 border border-rose-800/50'
-                        }`}>
-                          {b.status}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-slate-400">
-                        {new Date(b.createdAt).toLocaleDateString()}
-                      </td>
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => handleViewBatchDetails(b)}
-                          className="p-1 rounded text-slate-400 hover:text-teal-300 hover:bg-slate-800"
-                          title="View row-level logs"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Row-Level Batch Details Modal */}
-      {selectedBatch && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-xs">
-          <div className="w-full max-w-2xl max-h-[80vh] rounded-xl border border-slate-800 bg-[#0D1526] shadow-2xl overflow-hidden flex flex-col">
-            <div className="px-5 py-4 border-b border-slate-800 flex items-center justify-between">
               <div>
-                <span className="text-[10px] uppercase font-bold text-teal-400 font-mono">
-                  {selectedBatch.batchNumber}
-                </span>
-                <h3 className="text-sm font-bold text-white mt-0.5">Row-Level Ingestion Audit</h3>
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
+                  Bulk Number Paste Area
+                </h4>
+                <p className="text-[11px] text-slate-400">
+                  Paste up to 5,000 numbers separated by newlines, commas, tabs, or spaces.
+                </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedBatch(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800"
-              >
-                <X className="w-5 h-5" />
-              </button>
+
+              {parsedPasteStats.total > 0 && (
+                <div className="flex items-center gap-2 text-xs font-mono">
+                  <span className="px-2 py-0.5 rounded bg-slate-900 text-slate-300 border border-slate-700">
+                    {parsedPasteStats.total} detected
+                  </span>
+                  <span className="px-2 py-0.5 rounded bg-teal-950 text-teal-300 border border-teal-800 font-bold">
+                    {parsedPasteStats.valid} valid numbers
+                  </span>
+                </div>
+              )}
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4">
-              {loadingBatchRows ? (
-                <div className="p-8 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin text-teal-400" /> Loading rows...
-                </div>
-              ) : batchRows.length === 0 ? (
-                <p className="text-xs text-slate-500 text-center py-6">No row entries available.</p>
+            <textarea
+              rows={8}
+              value={pasteText}
+              onChange={e => setPasteText(e.target.value)}
+              placeholder={`Paste unformatted numbers here...\nExample:\n0771234567\n+94770000001\n071-234-5678, +971501234567\n0112345678\t+94751239845`}
+              className="w-full rounded-xl border border-slate-700 bg-slate-950 p-4 font-mono text-xs text-teal-300 placeholder-slate-600 outline-none focus:border-teal-400 leading-relaxed"
+            />
+
+            {parsedPasteStats.sample.length > 0 && (
+              <div className="p-3 rounded-lg bg-slate-900/60 border border-slate-800 text-[11px] text-slate-400">
+                <span className="font-semibold text-slate-300">Live preview sample: </span>
+                {parsedPasteStats.sample.join(', ')}
+                {parsedPasteStats.total > 5 ? ` and ${parsedPasteStats.total - 5} more...` : ''}
+              </div>
+            )}
+          </div>
+
+          <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+            <span className="text-[11px] text-slate-400">
+              Duplicates within the paste and across the database are safely excluded automatically.
+            </span>
+            <button
+              type="submit"
+              disabled={submitting || parsedPasteStats.valid === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-5 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition-all hover:bg-teal-300 disabled:opacity-50"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Ingesting Numbers...
+                </>
               ) : (
+                <>
+                  <ClipboardPaste className="h-4 w-4" />
+                  <span>Ingest {parsedPasteStats.valid > 0 ? `${parsedPasteStats.valid} Numbers` : 'Numbers'}</span>
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* MODE 3: STANDARDS-COMPLIANT CSV & EXCEL UPLOAD */}
+      {activeMode === 'csv' && (
+        <form onSubmit={handleCsvSubmit} className="space-y-4 animate-in fade-in duration-150">
+          {/* Dropzone Container */}
+          <div
+            onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
+            onDragLeave={() => setIsDragging(false)}
+            onDrop={e => {
+              e.preventDefault();
+              setIsDragging(false);
+              const file = e.dataTransfer.files?.[0];
+              if (file) handleFileChange(file);
+            }}
+            className={`rounded-2xl border-2 border-dashed p-8 text-center transition-all ${
+              isDragging
+                ? 'border-teal-400 bg-teal-950/20'
+                : 'border-slate-700/80 bg-[#0D1526]/60 hover:border-slate-600'
+            }`}
+          >
+            <input
+              type="file"
+              id="csvFileInput"
+              accept=".csv,.txt,.tsv"
+              onChange={e => {
+                const file = e.target.files?.[0];
+                if (file) handleFileChange(file);
+              }}
+              className="hidden"
+            />
+            <label htmlFor="csvFileInput" className="cursor-pointer space-y-3 block">
+              <div className="w-12 h-12 rounded-2xl bg-teal-500/20 text-teal-400 flex items-center justify-center mx-auto border border-teal-500/30">
+                <FileSpreadsheet className="w-6 h-6" />
+              </div>
+
+              <div>
+                <p className="text-sm font-bold text-white">
+                  {csvFile ? csvFile.name : 'Drop your CSV / TSV spreadsheet here'}
+                </p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Supports RFC-4180 standard formatting, quoted text with commas, UTF-8 BOM, and custom headers.
+                </p>
+              </div>
+
+              <span className="inline-block px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-200 text-xs font-semibold hover:bg-slate-700 transition-colors">
+                {csvFile ? 'Choose another file' : 'Browse local file'}
+              </span>
+            </label>
+          </div>
+
+          {/* Real-time Parsed Preview Table */}
+          {csvPreviewRows.length > 0 && (
+            <div className="rounded-2xl border border-slate-800 bg-[#0c1424] overflow-hidden shadow-xs">
+              <div className="p-3.5 border-b border-slate-800 flex items-center justify-between text-xs">
+                <div className="flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-teal-400" />
+                  <span className="font-bold text-white">
+                    Parsed Preview ({csvPreviewRows.length} valid rows found)
+                  </span>
+                </div>
+                <span className="text-[11px] text-slate-400">Showing first 6 rows</span>
+              </div>
+
+              <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-950 text-[10px] uppercase text-slate-400">
+                  <thead className="bg-slate-950/80 text-slate-400 border-b border-slate-800">
                     <tr>
-                      <th className="px-3 py-2">Row</th>
-                      <th className="px-3 py-2">Raw Phone</th>
-                      <th className="px-3 py-2">Normalized</th>
-                      <th className="px-3 py-2">Result</th>
+                      <th className="px-3 py-2">#</th>
+                      <th className="px-3 py-2">Phone Column</th>
+                      <th className="px-3 py-2">Name Column</th>
+                      <th className="px-3 py-2">Group / Source</th>
+                      <th className="px-3 py-2">Format Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-800 font-mono">
-                    {batchRows.map(row => (
-                      <tr key={row.id}>
-                        <td className="px-3 py-2 text-slate-400">{row.rowNumber}</td>
-                        <td className="px-3 py-2 text-slate-300">{row.rawPhone}</td>
-                        <td className="px-3 py-2 text-teal-300">{row.normalizedPhone || '—'}</td>
-                        <td className="px-3 py-2">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                            row.status === 'saved'
-                              ? 'text-emerald-400 bg-emerald-950/60'
-                              : row.status === 'duplicate'
-                              ? 'text-amber-400 bg-amber-950/60'
-                              : 'text-rose-400 bg-rose-950/60'
-                          }`}>
-                            {row.status}
-                          </span>
+                  <tbody className="divide-y divide-slate-800/60 font-mono text-[11px]">
+                    {csvPreviewRows.slice(0, 6).map(row => (
+                      <tr key={row.index} className="hover:bg-slate-900/50">
+                        <td className="px-3 py-2 text-slate-500">{row.index}</td>
+                        <td className="px-3 py-2 font-bold text-teal-300">{row.phone}</td>
+                        <td className="px-3 py-2 font-sans text-slate-300">{row.name || '—'}</td>
+                        <td className="px-3 py-2 font-sans text-slate-400">{row.group || sourceName || '—'}</td>
+                        <td className="px-3 py-2 font-sans">
+                          {row.isValid ? (
+                            <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-800/60 text-[10px] font-bold inline-flex items-center gap-1">
+                              <Check className="w-3 h-3" /> Valid
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded bg-rose-950 text-rose-300 border border-rose-800/60 text-[10px] font-bold">
+                              Invalid
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between border-t border-slate-800 pt-3">
+            <span className="text-[11px] text-slate-400">
+              Columns mapped automatically (Phone, Name, Source, Group, Notes).
+            </span>
+            <button
+              type="submit"
+              disabled={submitting || csvPreviewRows.length === 0}
+              className="inline-flex items-center gap-2 rounded-lg bg-teal-400 px-5 py-2.5 text-xs font-bold text-slate-950 shadow-sm transition-all hover:bg-teal-300 disabled:opacity-50"
+            >
+              {submitting ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> Ingesting CSV Batch...
+                </>
+              ) : (
+                <>
+                  <Upload className="h-4 w-4" />
+                  <span>Upload & Ingest {csvPreviewRows.length} Contacts</span>
+                </>
               )}
-            </div>
+            </button>
           </div>
-        </div>
-      )}
-
-      {/* Reconciliation Summary Card */}
-      {summary && (
-        <div className="rounded-xl border border-teal-500/30 bg-teal-500/5 p-5 space-y-3 animate-in fade-in duration-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="w-5 h-5 text-teal-400" />
-              <h3 className="text-sm font-bold text-white">Import Reconciliation Complete</h3>
-            </div>
-            <span className="font-mono text-xs text-teal-300 font-bold">{summary.batchNumber}</span>
-          </div>
-
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Total Submitted</span>
-              <p className="text-xl font-black text-white mt-0.5">{summary.totalSubmitted}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-emerald-950/40 border border-emerald-800/40">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">Saved (Clean)</span>
-              <p className="text-xl font-black text-emerald-300 mt-0.5">{summary.savedCount}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-amber-950/40 border border-amber-800/40">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400">Duplicates Skipped</span>
-              <p className="text-xl font-black text-amber-300 mt-0.5">{summary.duplicateCount}</p>
-            </div>
-            <div className="p-3 rounded-lg bg-rose-950/40 border border-rose-800/40">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-400">Invalid Rejected</span>
-              <p className="text-xl font-black text-rose-300 mt-0.5">{summary.invalidCount}</p>
-            </div>
-          </div>
-
-          <p className="text-xs text-slate-400 pt-1">
-            Status: <span className="font-bold uppercase text-slate-200">{summary.status}</span>. Contacts loaded into the unassigned pool and ready for coordinator allocation.
-          </p>
-        </div>
+        </form>
       )}
     </div>
   );

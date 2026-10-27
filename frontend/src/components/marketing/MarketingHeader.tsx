@@ -1,8 +1,13 @@
 import React from 'react';
-import { ShieldCheck, Sparkles } from 'lucide-react';
+import { ChevronRight, Home, ShieldCheck, Sparkles } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
-export const MarketingHeader: React.FC = () => {
+interface MarketingHeaderProps {
+  pageLabel: string;
+  onNavigate: (page: 'dashboard') => void;
+}
+
+export const MarketingHeader: React.FC<MarketingHeaderProps> = ({ pageLabel, onNavigate }) => {
   const { currentUser } = useCrm();
 
   const companyName = currentUser?.company === 'CRAS' 
@@ -34,6 +39,12 @@ export const MarketingHeader: React.FC = () => {
         <h1 className="text-2xl font-black tracking-tight text-white mt-1">
           Public Contact Marketing
         </h1>
+        <nav aria-label="Breadcrumb" className="mt-2 flex flex-wrap items-center gap-1 text-xs text-slate-400">
+          <button type="button" onClick={() => { window.location.hash = ''; }} className="inline-flex items-center gap-1 hover:text-teal-300 transition-colors"><Home className="w-3 h-3" />Home</button>
+          <ChevronRight className="w-3 h-3 text-slate-600" />
+          <button type="button" onClick={() => onNavigate('dashboard')} className="hover:text-teal-300 transition-colors">Public Contact Marketing</button>
+          {pageLabel !== 'Marketing Dashboard' && <><ChevronRight className="w-3 h-3 text-slate-600" /><span className="font-medium text-slate-200">{pageLabel}</span></>}
+        </nav>
         <p className="text-xs sm:text-sm text-slate-400 mt-0.5">
           Permission-aware contact collection for the marketing team.
         </p>

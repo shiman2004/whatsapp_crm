@@ -14,7 +14,6 @@ import {
   ChevronRight,
   ChevronDown,
   User,
-  Eye,
   Phone,
   MessageSquare,
   Lock,
@@ -24,6 +23,10 @@ import {
   X,
   Loader2,
   AlertTriangle,
+  Pencil,
+  Trash2,
+  Calendar,
+  RotateCcw,
 } from 'lucide-react';
 
 interface MarketingContactsProps {
@@ -46,6 +49,10 @@ interface MarketingContactsProps {
   onLifecycleFilterChange: (val: string) => void;
   assignmentFilter: string;
   onAssignmentFilterChange: (val: string) => void;
+  dateFilter?: string;
+  onDateFilterChange?: (val: string) => void;
+  sortFilter?: string;
+  onSortFilterChange?: (val: string) => void;
 }
 
 export const MarketingContacts: React.FC<MarketingContactsProps> = ({
@@ -68,6 +75,10 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   onLifecycleFilterChange,
   assignmentFilter,
   onAssignmentFilterChange,
+  dateFilter = 'all',
+  onDateFilterChange,
+  sortFilter = 'date_desc',
+  onSortFilterChange,
 }) => {
   const { setSelectedLeadId, setActiveNavTab, leads, users, currentUser } = useCrm();
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
@@ -87,6 +98,68 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   } | null>(null);
   const [reassignReason, setReassignReason] = React.useState('');
   const [reassignSubmitting, setReassignSubmitting] = React.useState(false);
+
+  // Delete modal state (supports single and bulk delete)
+  const [deleteTarget, setDeleteTarget] = React.useState<
+    | { mode: 'single'; contact: MarketingContact }
+    | { mode: 'bulk'; count: number; ids: string[] }
+    | null
+  >(null);
+  const [deleteReason, setDeleteReason] = React.useState('');
+  const [isDeleting, setIsDeleting] = React.useState(false);
+
+  // Quick Edit Contact Modal state (Numbers update)
+  const [editingContact, setEditingContact] = React.useState<MarketingContact | null>(null);
+  const [editPhone, setEditPhone] = React.useState('');
+  const [editSource, setEditSource] = React.useState('');
+  const [editGroupName, setEditGroupName] = React.useState('');
+  const [editStatus, setEditStatus] = React.useState('new');
+  const [editNotes, setEditNotes] = React.useState('');
+  const [editSubmitting, setEditSubmitting] = React.useState(false);
+  const [editError, setEditError] = React.useState('');
+
+  const handleOpenEdit = (contact: MarketingContact, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingContact(contact);
+    setEditPhone(contact.normalizedPhone);
+    setEditSource(contact.originalSource || '');
+    setEditGroupName(contact.sourceGroupName || '');
+    setEditStatus(contact.lifecycleStatus || 'new');
+    setEditNotes(contact.qualificationNote || '');
+    setEditError('');
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingContact || !onRequestApi) return;
+    if (!editPhone.trim()) {
+      setEditError('Phone number is required.');
+      return;
+    }
+    setEditSubmitting(true);
+    setEditError('');
+    try {
+      await onRequestApi(`/api/marketing/contacts/${editingContact.id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          phone: editPhone.trim(),
+          source: editSource.trim(),
+          sourceGroupName: editGroupName.trim(),
+          status: editStatus,
+          notes: editNotes.trim(),
+        }),
+      });
+      setNotice({
+        type: 'success',
+        message: `Successfully updated contact ${editingContact.serialNumber} (${editPhone.trim()}).`,
+      });
+      setEditingContact(null);
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setEditError(err.message || 'Failed to update contact number and details.');
+    } finally {
+      setEditSubmitting(false);
+    }
+  };
 
   // Auto-dismiss notification after 4 seconds
   React.useEffect(() => {
@@ -245,6 +318,54 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
     }
   };
 
+  const handleSingleDelete = (contact: MarketingContact) => {
+    setDeleteTarget({ mode: 'single', contact });
+    setDeleteReason('');
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    setDeleteTarget({ mode: 'bulk', count: selectedIds.size, ids: Array.from(selectedIds) });
+    setDeleteReason('');
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget || !onRequestApi) return;
+    setIsDeleting(true);
+    try {
+      if (deleteTarget.mode === 'single') {
+        await onRequestApi(`/api/marketing/contacts/${deleteTarget.contact.id}`, {
+          method: 'DELETE',
+          body: JSON.stringify({ reason: deleteReason.trim() || 'Soft delete' }),
+        });
+        setNotice({
+          type: 'success',
+          message: `Successfully deleted contact ${deleteTarget.contact.serialNumber || deleteTarget.contact.normalizedPhone}.`,
+        });
+      } else {
+        await onRequestApi('/api/marketing/contacts/bulk-delete', {
+          method: 'POST',
+          body: JSON.stringify({ contactIds: deleteTarget.ids, reason: deleteReason.trim() || 'Bulk delete' }),
+        });
+        setNotice({
+          type: 'success',
+          message: `Successfully deleted ${deleteTarget.count} selected contacts.`,
+        });
+        setSelectedIds(new Set());
+      }
+      setDeleteTarget(null);
+      setDeleteReason('');
+      if (onRefresh) onRefresh();
+    } catch (err: any) {
+      setNotice({
+        type: 'error',
+        message: err.message || 'Failed to delete contact(s).',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const totalPages = Math.ceil(totalContacts / pageSize) || 1;
 
   return (
@@ -329,6 +450,43 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             <option value="true">Assigned Only</option>
           </select>
 
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+            <Calendar className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <select
+              value={dateFilter}
+              onChange={e => onDateFilterChange && onDateFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer"
+              style={{ colorScheme: 'dark' }}
+              title="Filter by Added Date"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="yesterday">Yesterday</option>
+              <option value="last7days">Last 7 Days</option>
+              <option value="this_month">This Month</option>
+              <option value="last_month">Last Month</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
+            <ArrowUpDown className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+            <select
+              value={sortFilter}
+              onChange={e => onSortFilterChange && onSortFilterChange(e.target.value)}
+              className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
+              title="Sort by Date, Number, Serial, or Source"
+            >
+              <option value="date_desc">Date: Newest First</option>
+              <option value="date_asc">Date: Oldest First</option>
+              <option value="phone_asc">Numbers: A to Z (0-9)</option>
+              <option value="phone_desc">Numbers: Z to A (9-0)</option>
+              <option value="serial_asc">Serial: A to Z</option>
+              <option value="serial_desc">Serial: Z to A</option>
+              <option value="source_asc">Source: A to Z</option>
+              <option value="source_desc">Source: Z to A</option>
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={exportCleanedCsv}
@@ -360,6 +518,13 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-950 text-rose-300 border border-rose-800 font-bold text-xs hover:bg-rose-900 transition-colors"
             >
               <ShieldAlert className="w-3.5 h-3.5" /> Suppress (DND)
+            </button>
+            <button
+              type="button"
+              onClick={handleBulkDelete}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs transition-colors shadow-sm"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete Selected ({selectedIds.size})
             </button>
             <button
               type="button"
@@ -685,14 +850,6 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                     {/* 10. Actions */}
                     <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1.5 justify-end">
-                        <button
-                          type="button"
-                          onClick={() => onSelectContact(contact)}
-                          className="p-1.5 rounded-lg border border-slate-700 bg-slate-800 text-teal-300 hover:text-white hover:bg-slate-700 transition-colors"
-                          title="View contact drawer"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
                         <a
                           href={`tel:${contact.normalizedPhone}`}
                           className="p-1.5 rounded-lg border border-emerald-800/80 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60 transition-colors"
@@ -747,6 +904,22 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                             </button>
                           );
                         })()}
+                        <button
+                          type="button"
+                          onClick={e => handleOpenEdit(contact, e)}
+                          className="p-1.5 rounded-lg border border-teal-800/80 bg-teal-950/60 text-teal-300 hover:text-white hover:bg-teal-900/80 transition-colors"
+                          title="Quick Edit Number & Details"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSingleDelete(contact)}
+                          className="p-1.5 rounded-lg border border-rose-800/80 bg-rose-950/60 text-rose-400 hover:text-white hover:bg-rose-800 transition-colors"
+                          title="Delete contact"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -881,6 +1054,85 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
           </div>
         </div>
       )}
+      {/* Delete Confirmation Modal (Supports Single & Bulk Delete) */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl border border-rose-500/30 bg-slate-950 p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2 text-rose-400">
+                <Trash2 className="w-5 h-5" />
+                <h3 className="font-bold text-white text-sm">
+                  {deleteTarget.mode === 'single' ? 'Delete Marketing Contact?' : `Delete ${deleteTarget.count} Selected Contacts?`}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDeleteTarget(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {deleteTarget.mode === 'single' ? (
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
+                <div className="font-semibold text-slate-200">
+                  Contact: <span className="font-mono text-teal-300">{deleteTarget.contact.normalizedPhone}</span>
+                </div>
+                <div className="text-slate-400 text-[11px]">
+                  Serial: <span className="font-mono text-slate-300">{deleteTarget.contact.serialNumber}</span>
+                </div>
+              </div>
+            ) : (
+              <div className="p-3 rounded-xl bg-slate-900 border border-slate-800 text-xs space-y-1">
+                <div className="font-semibold text-rose-300">
+                  {deleteTarget.count} contacts selected for deletion
+                </div>
+                <div className="text-slate-400 text-[11px]">
+                  All selected records will be removed from active marketing lists.
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-400 leading-relaxed">
+              This action will remove the contact{deleteTarget.mode === 'bulk' ? 's' : ''} from active marketing lists and assignments. Historical activity and consent audit records will be preserved according to data retention policy.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-[11px] font-semibold text-slate-300">
+                Reason for Deletion <span className="text-slate-500 font-normal">(optional)</span>
+              </label>
+              <input
+                value={deleteReason}
+                onChange={e => setDeleteReason(e.target.value)}
+                placeholder="e.g. Requested removal, duplicate entry, campaign concluded..."
+                className="w-full rounded-lg border border-slate-800 bg-slate-900 p-2.5 text-xs text-white placeholder-slate-500 outline-none focus:border-rose-400"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={() => setDeleteTarget(null)}
+                className="px-3.5 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={isDeleting}
+                onClick={handleConfirmDelete}
+                className="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition-all flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

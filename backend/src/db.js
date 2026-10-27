@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
 import dotenv from 'dotenv';
 import { ensureSchema } from './schemaBootstrap.js';
 import { assertIsolatedTestDatabase, isTestRun } from './testDbGuard.js';
@@ -27,7 +28,9 @@ let schemaBootstrapPromise = null;
 export const waitForSchemaBootstrap = () => schemaBootstrapPromise || Promise.resolve();
 
 export const getPrisma = () => {
-  const databaseUrl = process.env.DIRECT_URL || process.env.DATABASE_URL;
+  // Runtime traffic must use Supabase's transaction pooler. DIRECT_URL is only
+  // for Prisma CLI operations, otherwise session-mode clients exhaust its cap.
+  const databaseUrl = process.env.DATABASE_URL || process.env.DIRECT_URL;
   if (!databaseUrl) {
     return null;
   }
@@ -35,10 +38,8 @@ export const getPrisma = () => {
   if (!prismaInstance) {
     try {
       prismaInstance = new PrismaClient({
-        // The pooled endpoint can be unavailable to long-running local workers.
-        // Use the configured direct URL for runtime queries when it is present;
-        // testDbGuard promotes the isolated test URL into both variables first.
-        datasources: { db: { url: databaseUrl } },
+        adapter: new PrismaPg({ connectionString: databaseUrl }),
+        // Test isolation promotes the throwaway test URL into both variables.
         log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
       });
     } catch (e) {

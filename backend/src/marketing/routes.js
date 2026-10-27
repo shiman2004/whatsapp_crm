@@ -1,6 +1,6 @@
 import { CAPABILITIES, assertMarketingCapability, hasMarketingCapability, marketingRoleSummary } from './permissions.js';
 import { getPrisma } from '../db.js';
-import { normalizeE164, normalizeMany } from './normalization.js';
+import { normalizeE164, normalizeMany, parseStandardsCompliantCsv } from './normalization.js';
 import crypto from 'node:crypto';
 import { requestConversion, approveConversion } from './conversion.js';
 import {
@@ -176,7 +176,10 @@ async function createContact(req, res, authUser) {
   const prisma = getPrisma();
   if (!prisma) return failure(res, 503, 'DATABASE_UNAVAILABLE', 'Marketing database is unavailable.');
 
-  const company = payload.company || companyOf(authUser);
+  const company = companyOf(authUser);
+  if (payload.company && payload.company !== company) {
+    return failure(res, 403, 'MARKETING_COMPANY_FORBIDDEN', 'Contacts must be created in your company scope.');
+  }
 
   // Check duplicate within marketing contacts
   const existingMarketing = await prisma.marketingContact.findFirst({
@@ -272,6 +275,9 @@ async function listContacts(req, res, authUser) {
   const consent = (url.searchParams.get('consentStatus') || '').trim();
   const status = (url.searchParams.get('lifecycleStatus') || '').trim();
   const assigned = url.searchParams.get('assigned');
+  const dateRange = (url.searchParams.get('dateRange') || '').trim();
+  const sortBy = (url.searchParams.get('sortBy') || 'createdAt').trim();
+  const sortOrder = (url.searchParams.get('sortOrder') || 'desc').toLowerCase();
 
   const where = {
     company: companyOf(authUser),
@@ -291,8 +297,24 @@ async function listContacts(req, res, authUser) {
       : {})
   };
 
+  if (dateRange && dateRange !== 'all') {
+    const { start, end } = getDateBounds(dateRange);
+    where.createdAt = { gte: start, lte: end };
+  }
+  let orderBy = { createdAt: 'desc' };
+  if (sortBy === 'phone' || sortBy === 'normalizedPhone') {
+    orderBy = { normalizedPhone: sortOrder === 'asc' ? 'asc' : 'desc' };
+  } else if (sortBy === 'serial' || sortBy === 'serialNumber') {
+    orderBy = { serialNumber: sortOrder === 'asc' ? 'asc' : 'desc' };
+  } else if (sortBy === 'source' || sortBy === 'originalSource') {
+    orderBy = { originalSource: sortOrder === 'asc' ? 'asc' : 'desc' };
+  } else if (sortBy === 'group' || sortBy === 'sourceGroupName') {
+    orderBy = { sourceGroupName: sortOrder === 'asc' ? 'asc' : 'desc' };
+  } else if (sortBy === 'createdAt' || sortBy === 'date') {
+    orderBy = { createdAt: sortOrder === 'asc' ? 'asc' : 'desc' };
+  }
   const [data, total] = await Promise.all([
-    prisma.marketingContact.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take }),
+    prisma.marketingContact.findMany({ where, orderBy, skip, take }),
     prisma.marketingContact.count({ where })
   ]);
 
@@ -418,7 +440,8 @@ async function updateContactStatus(req, res, authUser, contactId) {
   if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
 
   const payload = await readJson(req);
-  const rawStatus = String(payload.status || payload.lifecycleStatus || '').toLowerCase();
+  const hasStatusUpdate = Boolean(payload.status || payload.lifecycleStatus);
+  const rawStatus = hasStatusUpdate ? String(payload.status || payload.lifecycleStatus).toLowerCase() : null;
 
   const allowed = [
     'new',
@@ -432,7 +455,7 @@ async function updateContactStatus(req, res, authUser, contactId) {
     'converted'
   ];
 
-  if (!allowed.includes(rawStatus)) {
+  if (rawStatus && !allowed.includes(rawStatus)) {
     return failure(res, 400, 'MARKETING_STATUS_INVALID', `Invalid status. Allowed: ${allowed.join(', ')}`);
   }
 
@@ -450,6 +473,27 @@ async function updateContactStatus(req, res, authUser, contactId) {
   if ((suppression || contact.lifecycleStatus === 'do_not_contact') && rawStatus !== 'do_not_contact') {
     if (authUser.role !== 'super_admin' && authUser.role !== 'marketing_admin') {
       return failure(res, 403, 'SUPPRESSION_PROTECTED', 'Suppressed contact cannot be reactivated through status updates. Authorized fresh opt-in required.');
+    }
+  }
+
+  let newNormalizedPhone = null;
+  const rawPhone = String(payload.phone || payload.normalizedPhone || '').trim();
+  if (rawPhone) {
+    newNormalizedPhone = normalizeE164(rawPhone, payload.region || 'LK');
+    if (!newNormalizedPhone) {
+      return failure(res, 400, 'INVALID_PHONE', 'Invalid international telephone number format.');
+    }
+    if (newNormalizedPhone !== contact.normalizedPhone) {
+      const existingDuplicate = await prisma.marketingContact.findFirst({
+        where: {
+          normalizedPhone: newNormalizedPhone,
+          company: contact.company,
+          id: { not: contact.id }
+        }
+      });
+      if (existingDuplicate) {
+        return failure(res, 409, 'DUPLICATE_CONTACT', `A contact with phone number ${newNormalizedPhone} already exists in this company.`);
+      }
     }
   }
 
@@ -472,7 +516,10 @@ async function updateContactStatus(req, res, authUser, contactId) {
     const row = await tx.marketingContact.update({
       where: { id: contact.id },
       data: {
-        lifecycleStatus: rawStatus,
+        ...(newNormalizedPhone ? { normalizedPhone: newNormalizedPhone } : {}),
+        lifecycleStatus: rawStatus || contact.lifecycleStatus,
+        sourceGroupName: payload.sourceGroupName !== undefined ? (payload.sourceGroupName ? String(payload.sourceGroupName).trim() : null) : (payload.name ? String(payload.name).trim() : contact.sourceGroupName),
+        originalSource: payload.originalSource || payload.source ? String(payload.originalSource || payload.source).trim() : contact.originalSource,
         qualificationNote: payload.note || payload.qualificationNote || contact.qualificationNote,
         lastUpdatedById: authUser.id,
         lastActivityAt: new Date()
@@ -489,6 +536,19 @@ async function updateContactStatus(req, res, authUser, contactId) {
         metadata: { from: contact.lifecycleStatus, to: rawStatus }
       }
     });
+
+    if (newNormalizedPhone && newNormalizedPhone !== contact.normalizedPhone) {
+      await tx.marketingContactActivity.create({
+        data: {
+          id: id(),
+          contactId,
+          actorId: authUser.id,
+          type: 'PHONE_UPDATED',
+          note: `Phone number updated from ${contact.normalizedPhone} to ${newNormalizedPhone}`,
+          metadata: { oldPhone: contact.normalizedPhone, newPhone: newNormalizedPhone }
+        }
+      });
+    }
 
     return row;
   });
@@ -662,6 +722,75 @@ async function deleteContact(req, res, authUser, contactId) {
   }
 }
 // -------------------------------------------------------------
+// Bulk Update
+async function bulkUpdateContacts(req, res, authUser) {
+  const authorization = assertMarketingCapability(authUser, CAPABILITIES.updateAssignedTasks);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+
+  const payload = await readJson(req);
+  const { contactIds, status, source, notes } = payload;
+  if (!Array.isArray(contactIds) || contactIds.length === 0) {
+    return failure(res, 400, 'INVALID_PAYLOAD', 'contactIds array is required.');
+  }
+
+  const prisma = getPrisma();
+  const company = companyOf(authUser);
+
+  const updateData = { lastUpdatedById: authUser.id, lastActivityAt: new Date() };
+  if (status) updateData.lifecycleStatus = status;
+  if (source) updateData.originalSource = source;
+  if (notes) updateData.qualificationNote = notes;
+
+  const result = await prisma.marketingContact.updateMany({
+    where: {
+      id: { in: contactIds },
+      company,
+      ...(authUser.role === 'coordinator' || authUser.role === 'marketing_officer' ? { currentOwnerId: authUser.id } : {})
+    },
+    data: updateData
+  });
+
+  return sendJson(res, 200, { success: true, count: result.count });
+}
+
+// Bulk Delete
+async function bulkDeleteContacts(req, res, authUser) {
+  const authorization = assertMarketingCapability(authUser, CAPABILITIES.deleteContacts);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+
+  const payload = await readJson(req);
+  const { contactIds, reason } = payload;
+  if (!Array.isArray(contactIds) || contactIds.length === 0) {
+    return failure(res, 400, 'INVALID_PAYLOAD', 'contactIds array is required.');
+  }
+
+  const prisma = getPrisma();
+  const company = companyOf(authUser);
+
+  let deletedCount = 0;
+  for (const contactId of contactIds) {
+    try {
+      await prisma.$transaction(async tx => {
+        const contact = await tx.marketingContact.findFirst({ where: { id: contactId, company } });
+        if (!contact || contact.convertedLeadId) return;
+
+        await tx.marketingImportRow.updateMany({ where: { contactId }, data: { contactId: null } });
+        await tx.marketingContactContribution.updateMany({ where: { contactId }, data: { contactId: null } });
+        await tx.marketingTask.deleteMany({ where: { contactId } });
+        await tx.marketingAssignmentHistory.deleteMany({ where: { contactId } });
+        await tx.marketingConsentEvent.deleteMany({ where: { marketingContactId: contactId } });
+        await tx.marketingSuppression.deleteMany({ where: { contactId } });
+        await tx.marketingContactActivity.deleteMany({ where: { contactId } });
+        await tx.marketingLeadConversion.deleteMany({ where: { contactId } });
+        await tx.marketingContact.delete({ where: { id: contactId } });
+        deletedCount++;
+      });
+    } catch (_) {}
+  }
+
+  return sendJson(res, 200, { success: true, count: deletedCount });
+}
+
 // 3. CONTACT INGESTION & BATCH IMPORT
 // -------------------------------------------------------------
 async function createImport(req, res, authUser) {
@@ -671,7 +800,19 @@ async function createImport(req, res, authUser) {
   const payload = await readJson(req);
   const source = String(payload.source || '').trim();
   const sourceGroupName = String(payload.sourceGroupName || '').trim() || null;
-  const values = Array.isArray(payload.numbers) ? payload.numbers : String(payload.text || '').split(/[\n,;\t]+/);
+  let values = [];
+  if (payload.csvText) {
+    values = parseStandardsCompliantCsv(payload.csvText);
+  } else if (Array.isArray(payload.numbers)) {
+    values = payload.numbers;
+  } else if (payload.text) {
+    if (payload.text.includes('\n') && (payload.text.includes(',') || payload.text.includes('\t') || payload.text.includes(';'))) {
+      const parsedCsv = parseStandardsCompliantCsv(payload.text);
+      values = parsedCsv.length > 0 ? parsedCsv : String(payload.text).split(/[\n,;\t]+/);
+    } else {
+      values = String(payload.text).split(/[\n,;\t]+/);
+    }
+  }
 
   if (!source) return failure(res, 400, 'MARKETING_SOURCE_REQUIRED', 'Contact source is required.');
   if (!values.length || values.length > 10000) {
@@ -759,8 +900,9 @@ async function createImport(req, res, authUser) {
             serialNumber: serial,
             normalizedPhone: row.normalizedPhone,
             company: companyOf(authUser),
-            originalSource: source,
-            sourceGroupName,
+            originalSource: row.source || source,
+            sourceGroupName: row.sourceGroupName || sourceGroupName,
+            qualificationNote: row.notes || null,
             firstAddedById: authUser.id,
             lifecycleStatus: 'new',
             consentStatus: 'unknown'
@@ -846,8 +988,9 @@ async function getUploadDetail(req, res, authUser, batchId) {
   if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
 
   const prisma = getPrisma();
+  const isElevated = authUser.role === 'super_admin' || authUser.role === 'marketing_admin';
   const batch = await prisma.marketingImportBatch.findFirst({
-    where: { id: batchId, company: companyOf(authUser) }
+    where: { id: batchId, company: companyOf(authUser), ...(isElevated ? {} : { uploadedById: authUser.id }) }
   });
   if (!batch) return failure(res, 404, 'BATCH_NOT_FOUND', 'Upload batch not found.');
 
@@ -860,15 +1003,119 @@ async function getUploadDetail(req, res, authUser, batchId) {
   return sendJson(res, 200, { success: true, data: { batch, rows } });
 }
 
+function assertBatchManagement(authUser) {
+  return authUser.role === 'super_admin'
+    ? null
+    : { status: 403, code: 'MARKETING_FORBIDDEN', message: 'Only Super Admin can manage upload batches.' };
+}
+
+async function updateUpload(req, res, authUser, batchId) {
+  const authorization = assertBatchManagement(authUser);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+
+  const payload = await readJson(req);
+  const source = String(payload.source || '').trim();
+  if (!source) return failure(res, 400, 'MARKETING_SOURCE_REQUIRED', 'A source is required.');
+
+  const prisma = getPrisma();
+  const batch = await prisma.marketingImportBatch.findFirst({ where: { id: batchId, company: companyOf(authUser) } });
+  if (!batch) return failure(res, 404, 'BATCH_NOT_FOUND', 'Upload batch not found.');
+
+  const updated = await prisma.$transaction(async tx => {
+    const result = await tx.marketingImportBatch.update({
+      where: { id: batch.id },
+      data: { source, sourceGroupName: String(payload.sourceGroupName || '').trim() || null }
+    });
+    await tx.marketingAuditLog.create({
+      data: { id: id(), company: batch.company, actorId: authUser.id, action: 'marketing_import_batch_updated', entityType: 'MarketingImportBatch', entityId: batch.id }
+    });
+    return result;
+  });
+  return sendJson(res, 200, { success: true, data: updated });
+}
+
+async function deleteUpload(req, res, authUser, batchId) {
+  const authorization = assertBatchManagement(authUser);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+
+  const prisma = getPrisma();
+  const batch = await prisma.marketingImportBatch.findFirst({ where: { id: batchId, company: companyOf(authUser) } });
+  if (!batch) return failure(res, 404, 'BATCH_NOT_FOUND', 'Upload batch not found.');
+
+  await prisma.$transaction(async tx => {
+    await tx.marketingImportRow.deleteMany({ where: { batchId: batch.id } });
+    await tx.marketingContactContribution.deleteMany({ where: { batchId: batch.id } });
+    await tx.marketingLeadConversion.updateMany({ where: { sourceBatchId: batch.id }, data: { sourceBatchId: null } });
+    await tx.marketingImportBatch.delete({ where: { id: batch.id } });
+    await tx.marketingAuditLog.create({
+      data: { id: id(), company: batch.company, actorId: authUser.id, action: 'marketing_import_batch_deleted', entityType: 'MarketingImportBatch', entityId: batch.id }
+    });
+  });
+  return sendJson(res, 200, { success: true, data: { id: batch.id } });
+}
+
 // -------------------------------------------------------------
 // 4. ASSIGNMENT ENGINE
 // -------------------------------------------------------------
+function uniqueIds(value) {
+  return [...new Set((Array.isArray(value) ? value : []).filter(id => typeof id === 'string' && id))];
+}
+
+async function resolveAssignmentContacts(prisma, authUser, payload, { allowAssigned = false } = {}) {
+  const requestedIds = uniqueIds(payload.contactIds);
+  let contactIds = requestedIds;
+  if (payload.batchId) {
+    const batch = await prisma.marketingImportBatch.findFirst({ where: { id: String(payload.batchId), company: companyOf(authUser) }, select: { id: true } });
+    if (!batch) throw Object.assign(new Error('Marketing batch not found.'), { status: 404, code: 'BATCH_NOT_FOUND' });
+    const rows = await prisma.marketingImportRow.findMany({ where: { batchId: batch.id, contactId: { not: null } }, select: { contactId: true } });
+    contactIds = rows.map(row => row.contactId).filter(Boolean);
+  }
+  const where = {
+    company: companyOf(authUser),
+    ...(allowAssigned ? {} : { currentOwnerId: null }),
+    ...(payload.allUnassigned ? {} : { id: { in: contactIds } })
+  };
+  const contacts = await prisma.marketingContact.findMany({
+    where,
+    select: { id: true, company: true, currentOwnerId: true, lifecycleStatus: true },
+    orderBy: { createdAt: 'asc' }
+  });
+  return { contacts, requested: contactIds.length, excluded: contactIds.length ? Math.max(contactIds.length - contacts.length, 0) : 0 };
+}
+
+async function getAssignmentPreview(req, res, authUser) {
+  const authorization = assertMarketingCapability(authUser, CAPABILITIES.assign);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+  const payload = await readJson(req);
+  const officerIds = uniqueIds(payload.officerIds || payload.assigneeIds);
+  if (!officerIds.length) return failure(res, 400, 'ASSIGNMENT_SELECTION_REQUIRED', 'Select at least one authorized staff member.');
+  const prisma = getPrisma();
+  const { contacts, requested, excluded } = await resolveAssignmentContacts(prisma, authUser, payload, { allowAssigned: Boolean(payload.allowReassign) });
+  const officers = await prisma.user.findMany({
+    where: { id: { in: officerIds }, active: true, marketingAccess: true, role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] }, OR: [{ company: companyOf(authUser) }, { company: null }] },
+    select: { id: true, fullName: true, role: true }
+  });
+  if (officers.length !== officerIds.length) return failure(res, 400, 'ASSIGNEE_UNAVAILABLE', 'One or more selected staff members are inactive, unauthorized, or outside this company.');
+  const allocation = officers.map((officer, index) => ({ ...officer, allocated: contacts.filter((_, contactIndex) => contactIndex % officers.length === index).length }));
+  return sendJson(res, 200, { success: true, data: { totalContacts: contacts.length, requested, excluded, unassignedCount: contacts.length, staff: allocation } });
+}
+
+async function updateMarketingAccess(req, res, authUser, userId) {
+  if (authUser.role !== 'super_admin') return failure(res, 403, 'MARKETING_FORBIDDEN', 'Only Super Admin can change marketing access.');
+  const payload = await readJson(req);
+  const prisma = getPrisma();
+  const user = await prisma.user.findFirst({ where: { id: userId, active: true, role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] }, OR: [{ company: companyOf(authUser) }, { company: null }] } });
+  if (!user) return failure(res, 404, 'MARKETING_STAFF_NOT_FOUND', 'Active staff member not found in this company.');
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { marketingAccess: Boolean(payload.authorized) }, select: { id: true, fullName: true, role: true, marketingAccess: true } });
+  return sendJson(res, 200, { success: true, data: updated });
+}
+
 async function listAssignable(req, res, authUser) {
   const authorization = assertMarketingCapability(authUser, CAPABILITIES.assign);
   if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
 
   const prisma = getPrisma();
-  const [contacts, officers] = await Promise.all([
+  const [contacts, officers, batches, workload, staff] = await Promise.all([
     prisma.marketingContact.findMany({
       where: { company: companyOf(authUser), currentOwnerId: null },
       orderBy: { createdAt: 'asc' },
@@ -877,14 +1124,23 @@ async function listAssignable(req, res, authUser) {
     prisma.user.findMany({
       where: {
         active: true,
+        marketingAccess: true,
         OR: [{ company: companyOf(authUser) }, { company: null }],
         role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] }
       },
-      select: { id: true, fullName: true, email: true, role: true, company: true }
-    })
+      select: { id: true, fullName: true, email: true, role: true, company: true, marketingAccess: true }
+    }),
+    prisma.marketingImportBatch.findMany({ where: { company: companyOf(authUser) }, select: { id: true, batchNumber: true, source: true, savedCount: true }, orderBy: { createdAt: 'desc' }, take: 50 }),
+    prisma.marketingContact.groupBy({ by: ['currentOwnerId', 'lifecycleStatus'], where: { company: companyOf(authUser), currentOwnerId: { not: null } }, _count: { _all: true } }),
+    prisma.user.findMany({ where: { active: true, role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] }, OR: [{ company: companyOf(authUser) }, { company: null }] }, select: { id: true, fullName: true, email: true, role: true, marketingAccess: true }, orderBy: { fullName: 'asc' } })
   ]);
 
-  return sendJson(res, 200, { success: true, data: { contacts, officers } });
+  const workloads = officers.map(officer => ({
+    userId: officer.id,
+    total: workload.filter(row => row.currentOwnerId === officer.id).reduce((sum, row) => sum + row._count._all, 0),
+    statuses: Object.fromEntries(workload.filter(row => row.currentOwnerId === officer.id).map(row => [row.lifecycleStatus, row._count._all]))
+  }));
+  return sendJson(res, 200, { success: true, data: { contacts, officers, batches, workloads, staff } });
 }
 
 async function assignContacts(req, res, authUser, targetContactId = null, isExplicitReassign = false) {
@@ -895,13 +1151,13 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
   const singleContactId = targetContactId || payload.contactId;
   const isReassignment = isExplicitReassign || Boolean(payload.isReassignment || payload.reassign);
 
-  const contactIds = Array.isArray(payload.contactIds)
+  let contactIds = Array.isArray(payload.contactIds)
     ? payload.contactIds
     : singleContactId
     ? [singleContactId]
     : [];
 
-  const officerIds = Array.isArray(payload.officerIds)
+  const officerIds = uniqueIds(Array.isArray(payload.officerIds)
     ? payload.officerIds
     : Array.isArray(payload.assigneeIds)
     ? payload.assigneeIds
@@ -911,25 +1167,20 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
     ? [payload.coordinatorId]
     : payload.officerId
     ? [payload.officerId]
-    : [];
+    : []);
 
-  if (!contactIds.length || !officerIds.length) {
+  if ((!contactIds.length && !payload.allUnassigned && !payload.batchId) || !officerIds.length) {
     return failure(res, 400, 'ASSIGNMENT_SELECTION_REQUIRED', 'Select contacts and at least one coordinator/officer.');
   }
 
   const prisma = getPrisma();
   try {
     const result = await prisma.$transaction(async tx => {
-      const contacts = await tx.marketingContact.findMany({
-        where: {
-          id: { in: contactIds },
-          company: companyOf(authUser),
-          ...((!isReassignment && !payload.allowReassign && contactIds.length > 1) ? { currentOwnerId: null } : {})
-        },
-        select: { id: true, company: true, currentOwnerId: true, lifecycleStatus: true }
-      });
+      const selection = await resolveAssignmentContacts(tx, authUser, { ...payload, contactIds }, { allowAssigned: isReassignment || Boolean(payload.allowReassign) });
+      const contacts = selection.contacts;
+      contactIds = contacts.map(contact => contact.id);
 
-      if (contacts.length !== contactIds.length) {
+      if (!contacts.length || selection.excluded) {
         throw Object.assign(new Error('Some contacts are already assigned or unavailable.'), { status: 409 });
       }
 
@@ -937,7 +1188,9 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
         where: {
           id: { in: officerIds },
           active: true,
-          role: { in: ['coordinator', 'marketing_officer', 'leads_officer', 'super_admin'] }
+          marketingAccess: true,
+          role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] },
+          OR: [{ company: companyOf(authUser) }, { company: null }]
         },
         select: { id: true, fullName: true, company: true, role: true }
       });
@@ -973,8 +1226,8 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
         const isReassign = Boolean(previousOwnerId && previousOwnerId !== ownerId);
         const officer = officers.find(o => o.id === ownerId);
 
-        await tx.marketingContact.update({
-          where: { id: contactId },
+        const claim = await tx.marketingContact.updateMany({
+          where: { id: contactId, company: companyOf(authUser), ...(isReassign || payload.allowReassign ? { currentOwnerId: previousOwnerId } : { currentOwnerId: null }) },
           data: {
             currentOwnerId: ownerId,
             assignedById: authUser.id,
@@ -984,6 +1237,7 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
             lastActivityAt: new Date()
           }
         });
+        if (claim.count !== 1) throw Object.assign(new Error('Contact was assigned by another request. Refresh and try again.'), { status: 409, code: 'ASSIGNMENT_CONFLICT' });
 
         await tx.marketingAssignmentHistory.create({
           data: {
@@ -1057,6 +1311,7 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
       data: {
         requested: contactIds.length,
         successfullyAssigned: result.length,
+        assigned: result.length,
         assignments: result,
         assignedById: authUser.id,
         assignedByName: authUser.fullName
@@ -1185,7 +1440,7 @@ async function updateTask(req, res, authUser, taskId) {
   const suppression = await prisma.marketingSuppression.findUnique({ where: { contactId: task.contactId } });
   if (suppression || contact?.lifecycleStatus === 'do_not_contact') {
     if (payload.status && payload.status !== 'completed') {
-      // auto-close on opt-out is handled elsewhere; block progressing
+      return failure(res, 409, 'CONTACT_SUPPRESSED', 'Suppressed contacts cannot progress through marketing outreach.');
     }
   }
 
@@ -1324,7 +1579,7 @@ async function campaigns(req, res, authUser) {
     if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
     const data = await prisma.marketingCampaign.findMany({
       where: { company: companyOf(authUser) },
-      include: { officers: true },
+
       orderBy: { createdAt: 'desc' }
     });
     return sendJson(res, 200, { success: true, data });
@@ -1368,6 +1623,10 @@ async function reports(req, res, authUser) {
   const customStart = url.searchParams.get('startDate');
   const customEnd = url.searchParams.get('endDate');
   const isExport = url.searchParams.get('export') === 'csv';
+  if (isExport) {
+    const exportAuthorization = assertMarketingCapability(authUser, CAPABILITIES.export);
+    if (exportAuthorization) return failure(res, exportAuthorization.status, exportAuthorization.code, exportAuthorization.message);
+  }
 
   const { start, end } = getDateBounds(range, customStart, customEnd);
 
@@ -1508,6 +1767,12 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     if (req.method === 'POST' && pathname === '/api/marketing/contacts') {
       return await createContact(req, res, authUser);
     }
+    if (req.method === 'POST' && pathname === '/api/marketing/contacts/bulk-update') {
+      return await bulkUpdateContacts(req, res, authUser);
+    }
+    if (req.method === 'POST' && pathname === '/api/marketing/contacts/bulk-delete') {
+      return await bulkDeleteContacts(req, res, authUser);
+    }
 
     // Imports & Batches
     if (req.method === 'POST' && (pathname === '/api/marketing/imports' || pathname === '/api/marketing/import')) {
@@ -1520,6 +1785,8 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     if (uploadMatch && req.method === 'GET') {
       return await getUploadDetail(req, res, authUser, uploadMatch[1]);
     }
+    if (uploadMatch && req.method === 'PATCH') return await updateUpload(req, res, authUser, uploadMatch[1]);
+    if (uploadMatch && req.method === 'DELETE') return await deleteUpload(req, res, authUser, uploadMatch[1]);
 
     // Assignments
     if (req.method === 'GET' && (pathname === '/api/marketing/assignable' || pathname === '/api/marketing/assignments/unassigned')) {
@@ -1528,6 +1795,11 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     if (req.method === 'POST' && pathname === '/api/marketing/assignments') {
       return await assignContacts(req, res, authUser);
     }
+    if (req.method === 'POST' && pathname === '/api/marketing/assignments/preview') {
+      return await getAssignmentPreview(req, res, authUser);
+    }
+    const marketingAccessMatch = pathname.match(/^\/api\/marketing\/staff\/([^/]+)\/access$/);
+    if (marketingAccessMatch && req.method === 'PATCH') return await updateMarketingAccess(req, res, authUser, marketingAccessMatch[1]);
     const assignSingleMatch = pathname.match(/^\/api\/marketing\/contacts\/([^/]+)\/(assign|reassign)$/);
     if (assignSingleMatch && req.method === 'POST') {
       return await assignContacts(req, res, authUser, assignSingleMatch[1], assignSingleMatch[2] === 'reassign');
@@ -1584,7 +1856,11 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
       const payload = await readJson(req);
       const prisma = getPrisma();
       const contact = await prisma.marketingContact.findFirst({
-        where: { id: requestMatch[1], company: companyOf(authUser) }
+        where: {
+          id: requestMatch[1],
+          company: companyOf(authUser),
+          ...(authUser.role === 'coordinator' || authUser.role === 'marketing_officer' ? { currentOwnerId: authUser.id } : {})
+        }
       });
       if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found.');
       const reqRecord = await requestConversion(prisma, contact, authUser, payload.note);

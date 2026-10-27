@@ -204,18 +204,41 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
     setSelectedOfficerIds(next);
   };
 
-  const assignmentPayload = () => ({
-    contactIds: Array.from(selectedContactIds),
+  const selectAllPool = () => {
+    setSelectedContactIds(new Set(unassignedContacts.map(c => c.id)));
+  };
+
+  const clearSelection = () => {
+    setSelectedContactIds(new Set());
+    if (selectedBatchId === 'all_unassigned') {
+      setSelectedBatchId('');
+    }
+  };
+
+  const isAllUnassignedSelected = selectedBatchId === 'all_unassigned';
+  const effectiveContactCount = isAllUnassignedSelected
+    ? unassignedContacts.length
+    : selectedContactIds.size;
+
+  const assignmentPayload = (): {
+    contactIds?: string[];
+    allUnassigned?: boolean;
+    officerIds: string[];
+    batchId?: string;
+    reason: string;
+    mode: 'round_robin' | 'single';
+  } => ({
+    ...(isAllUnassignedSelected ? { allUnassigned: true } : { contactIds: Array.from(selectedContactIds) }),
     officerIds: mode === 'round_robin' ? Array.from(selectedOfficerIds) : singleOfficerId ? [singleOfficerId] : [],
-    ...(selectedBatchId ? { batchId: selectedBatchId } : {}),
+    ...(selectedBatchId && selectedBatchId !== 'all_unassigned' ? { batchId: selectedBatchId } : {}),
     reason,
     mode,
   });
 
   const handlePreview = async () => {
     const payload = assignmentPayload();
-    if (!payload.contactIds.length && !payload.batchId) {
-      setError('Please select contacts or an upload batch.');
+    if (!payload.contactIds?.length && !payload.batchId && !payload.allUnassigned) {
+      setError('Please select contacts or choose an allocation pool.');
       return;
     }
     if (!payload.officerIds.length) {
@@ -425,13 +448,36 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                 </span>
               )}
             </div>
-            <button
-              type="button"
-              onClick={toggleSelectAllFiltered}
-              className="text-xs text-teal-400 hover:text-teal-300 font-semibold"
-            >
-              {isAllFilteredSelected ? 'Deselect visible' : 'Select visible'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={toggleSelectAllFiltered}
+                className="text-xs text-teal-400 hover:text-teal-300 font-semibold"
+              >
+                {isAllFilteredSelected ? 'Deselect visible' : 'Select visible'}
+              </button>
+              <span className="text-slate-600 text-xs">·</span>
+              <button
+                type="button"
+                onClick={selectAllPool}
+                className="text-xs text-teal-400 hover:text-teal-300 font-semibold"
+                title="Select all unassigned contacts in the entire pool"
+              >
+                Select All Pool ({unassignedContacts.length})
+              </button>
+              {selectedContactIds.size > 0 && (
+                <>
+                  <span className="text-slate-600 text-xs">·</span>
+                  <button
+                    type="button"
+                    onClick={clearSelection}
+                    className="text-xs text-rose-400 hover:text-rose-300 font-semibold"
+                  >
+                    Clear
+                  </button>
+                </>
+              )}
+            </div>
           </div>
 
           {/* Search, Date Filter, and A-to-Z Sort Toolbar */}
@@ -683,7 +729,10 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                 }}
                 className="w-full rounded-lg border border-slate-700 bg-slate-900 p-2.5 text-xs text-white outline-none focus:border-teal-400"
               >
-                <option value="">Use selected contacts</option>
+                <option value="">Use selected contacts ({selectedContactIds.size})</option>
+                <option value="all_unassigned">
+                  All Unassigned Contacts ({unassignedContacts.length} in Pool)
+                </option>
                 {batches.map(batch => (
                   <option key={batch.id} value={batch.id}>
                     {batch.batchNumber} · {batch.source} ({batch.savedCount})
@@ -725,7 +774,7 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
             <div className="p-3 rounded-lg border border-slate-800 bg-slate-900/80 text-xs space-y-1">
               <div className="flex justify-between text-slate-400">
                 <span>Selected Contacts:</span>
-                <strong className="text-white font-mono">{selectedContactIds.size}</strong>
+                <strong className="text-white font-mono">{effectiveContactCount}</strong>
               </div>
               <div className="flex justify-between text-slate-400">
                 <span>Distribution Mode:</span>
@@ -735,7 +784,7 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                 <div className="flex justify-between text-slate-400">
                   <span>Avg per Officer:</span>
                   <strong className="text-teal-300 font-mono">
-                    ~{Math.round(selectedContactIds.size / selectedOfficerIds.size)}
+                    ~{Math.round(effectiveContactCount / selectedOfficerIds.size)}
                   </strong>
                 </div>
               )}
@@ -743,7 +792,11 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
 
             <button
               type="button"
-              disabled={submitting || (!selectedContactIds.size && !selectedBatchId)}
+              disabled={
+                submitting ||
+                (!effectiveContactCount && !selectedBatchId) ||
+                (mode === 'round_robin' ? !selectedOfficerIds.size : !singleOfficerId)
+              }
               onClick={preview ? handleAssign : handlePreview}
               className="w-full py-2.5 rounded-lg bg-teal-400 text-slate-950 font-bold text-xs hover:bg-teal-300 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-sm flex items-center justify-center gap-2"
             >

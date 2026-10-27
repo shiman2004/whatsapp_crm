@@ -349,6 +349,16 @@ export const MarketingModule: React.FC = () => {
                   setAssignmentFilter(val);
                   setContactPage(1);
                 }}
+                dateFilter={dateFilter}
+                onDateFilterChange={val => {
+                  setDateFilter(val);
+                  setContactPage(1);
+                }}
+                sortFilter={sortFilter}
+                onSortFilterChange={val => {
+                  setSortFilter(val);
+                  setContactPage(1);
+                }}
               />
             )}
 

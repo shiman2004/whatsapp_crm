@@ -24,6 +24,7 @@ const WebhookSimulatorPlayground = lazy(() => import('./components/admin/Webhook
 const SuperAdminSettingsView = lazy(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then(m => ({ default: m.SuperAdminSettingsView })));
 const TeamBroadcastView = lazy(() => import('./components/broadcast/TeamBroadcastView').then(m => ({ default: m.TeamBroadcastView })));
 const AppointmentSchedulerView = lazy(() => import('./components/appointments/AppointmentSchedulerView').then(m => ({ default: m.AppointmentSchedulerView })));
+const ExamDepartmentWorkspace = lazy(() => import('./components/exam/ExamDepartmentWorkspace').then(m => ({ default: m.ExamDepartmentWorkspace })));
 const MarketingModule = lazy(() => import('./components/marketing/MarketingModule').then(m => ({ default: m.MarketingModule })));
 const WhatsAppSimulator = lazy(() => import('./components/simulator/WhatsAppSimulator').then(m => ({ default: m.WhatsAppSimulator })));
 
@@ -119,6 +120,7 @@ const MainLayout: React.FC = () => {
         <main className={`flex-1 min-h-0 flex flex-col overflow-hidden ${
           activeTab === 'chat' ? 'p-0 bg-[#efeae2] dark:bg-[#0b141a]' : 
           activeTab === 'appointment-rooms' ? 'p-0 overflow-hidden bg-slate-950' : 
+          (activeTab === 'exam-department' || activeTab.startsWith('exam-')) ? 'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-[#0b141a]' :
           'p-3 sm:p-6 overflow-y-auto bg-slate-50 dark:bg-slate-900/30'
         }`}>
           <Suspense fallback={<ViewLoader />}>
@@ -127,6 +129,16 @@ const MainLayout: React.FC = () => {
             {activeTab === 'chat' && <LeadDetailWorkspace onBackToKanban={() => setActiveTab('leads-kanban')} />}
             {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
             {activeTab === 'marketing' && <MarketingModule />}
+            {(activeTab === 'exam-department' || activeTab.startsWith('exam-')) && (
+              <ExamDepartmentWorkspace
+                initialSubTab={
+                  activeTab === 'exam-department' || activeTab === 'exam-dashboard'
+                    ? 'dashboard'
+                    : activeTab.replace('exam-', '')
+                }
+                onSubTabChange={(sub) => setActiveTab(`exam-${sub}` as any)}
+              />
+            )}
             {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
             {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
             {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}

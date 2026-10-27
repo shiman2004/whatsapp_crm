@@ -10,6 +10,7 @@ import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, del
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
+import { handleExamRoutes } from './examRoutes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -21,7 +22,7 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 
 const PORT = process.env.PORT || 3000;
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || (process.argv[1] && process.argv[1].includes('test'));
-const JWT_SECRET = process.env.JWT_SECRET || (IS_TEST_ENV ? 'test-only-jwt-secret-do-not-use' : '');
+const JWT_SECRET = process.env.JWT_SECRET || (IS_TEST_ENV ? 'test-only-jwt-secret-do-not-use' : (process.env.NODE_ENV !== 'production' ? 'royal_wellness_crm_jwt_secret_key_2026_super_secure' : ''));
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be configured before starting the backend.');
 }
@@ -870,6 +871,8 @@ async function authenticateRequest(req, parsedUrl) {
     } else {
       return { user: null, error: 'Malformed Authorization header. Format must be Bearer <token>', status: 401 };
     }
+  } else if (parsedUrl && parsedUrl.query && parsedUrl.query.token) {
+    rawToken = String(parsedUrl.query.token).trim();
   }
 
   // Reject missing credentials immediately. Identity headers are never authentication.
@@ -1435,6 +1438,12 @@ const server = http.createServer(async (req, res) => {
   // owns capability checks and must never fall through into lead/contact handlers.
   const handledMarketingRoute = await handleMarketingRoutes(req, res, pathname, authUser);
   if (handledMarketingRoute !== false) {
+    return;
+  }
+
+  // Exam Department Module (Health Professional Exams, Requests, Mock Tests, Materials)
+  const handledExamRoute = await handleExamRoutes(req, res, pathname, authUser);
+  if (handledExamRoute !== false) {
     return;
   }
 

@@ -24,5 +24,5 @@ const isOutdatedOrInvalid = !envUrl ||
   (!isLocal && (envUrl.includes('localhost') || envUrl.includes('127.0.0.1')));
 
 export const API_BASE_URL: string = (import.meta.env.DEV || isLocal)
-  ? (envUrl && !envUrl.includes('onrender.com') ? envUrl : 'http://localhost:3000')
+  ? (envUrl && !envUrl.includes('onrender.com') ? envUrl : 'http://localhost:3001')
   : (isOutdatedOrInvalid ? 'https://royal-wellness-backend.onrender.com' : envUrl);

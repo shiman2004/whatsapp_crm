@@ -1040,9 +1040,9 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                           <div className="font-medium text-slate-200 truncate max-w-[130px]">
                             {contact.assignedBy?.fullName || contact.assignedByName}
                           </div>
-                          {contact.assignedBy?.roleTitle && (
+                          {(contact.assignedBy?.roleTitle || contact.assignedBy?.role) && (
                             <span className="text-[10px] text-slate-500 block truncate">
-                              {contact.assignedBy.roleTitle}
+                              {contact.assignedBy.roleTitle || contact.assignedBy.role}
                             </span>
                           )}
                         </div>

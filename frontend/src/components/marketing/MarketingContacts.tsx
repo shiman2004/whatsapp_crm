@@ -474,6 +474,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               value={sortFilter}
               onChange={e => onSortFilterChange && onSortFilterChange(e.target.value)}
               className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
+              style={{ colorScheme: 'dark' }}
               title="Sort by Date, Number, Serial, or Source"
             >
               <option value="date_desc">Date: Newest First</option>

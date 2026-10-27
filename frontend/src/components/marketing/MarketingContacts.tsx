@@ -556,12 +556,9 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               <th className="px-3 py-3">Contact</th>
               {/* 3. Source & Group */}
               <th className="px-3 py-3">Source & Group</th>
-              {/* 4. Assign By */}
-              <th className="px-3 py-3">Assign By</th>
-              {/* 5. Assign Who */}
-              <th className="px-3 py-3">Assign Who</th>
-              {/* 6. Assign Coordinator */}
-              <th className="px-3 py-3">Assign Coordinator</th>
+              <th className="px-3 py-3">Assigned By</th>
+              <th className="px-3 py-3">Assignment Details</th>
+              <th className="px-3 py-3">Manage Assignment</th>
               <th className="px-3 py-3">Consent</th>
               {/* 8. Status */}
               <th className="px-3 py-3">Status</th>
@@ -659,9 +656,9 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                           <div className="font-medium text-slate-200 truncate max-w-[130px]">
                             {contact.assignedBy?.fullName || contact.assignedByName}
                           </div>
-                          {contact.assignedBy?.roleTitle && (
+                          {(contact.assignedBy?.roleTitle || contact.assignedBy?.role) && (
                             <span className="text-[10px] text-slate-500 block truncate">
-                              {contact.assignedBy.roleTitle}
+                              {contact.assignedBy.roleTitle || contact.assignedBy.role}
                             </span>
                           )}
                         </div>
@@ -678,9 +675,14 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                             <User className="w-3 h-3 text-indigo-400 shrink-0" />
                             <span className="truncate">{contact.assignedOwner.fullName}</span>
                           </span>
-                          {contact.assignedOwner.roleTitle && (
+                          {(contact.assignedOwner.roleTitle || contact.assignedOwner.role) && (
                             <span className="text-[10px] text-slate-400 block truncate">
-                              {contact.assignedOwner.roleTitle}
+                              {contact.assignedOwner.roleTitle || contact.assignedOwner.role}
+                            </span>
+                          )}
+                          {contact.assignedAt && (
+                            <span className="mt-0.5 block text-[10px] text-slate-500">
+                              {new Date(contact.assignedAt).toLocaleString()}
                             </span>
                           )}
                         </div>
@@ -695,10 +697,6 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                     </td>
 
                     {/* 6. Assigned At */}
-                    <td className="hidden">
-                      {contact.assignedAt ? new Date(contact.assignedAt).toLocaleString() : '—'}
-                    </td>
-
                     {/* 7. Assign Coordinator (Interactive Searchable Dropdown) */}
                     <td className="px-3 py-3 coordinator-dropdown-container relative" onClick={e => e.stopPropagation()}>
                       {!canAssignContacts ? (

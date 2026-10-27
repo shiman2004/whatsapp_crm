@@ -358,6 +358,7 @@ export const MarketingModule: React.FC = () => {
                 onRequestApi={marketingRequest}
                 onAssignmentComplete={() => {
                   void refreshAll();
+                  navigateToPage('contacts');
                 }}
               />
             )}

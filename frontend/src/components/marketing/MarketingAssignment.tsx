@@ -467,11 +467,11 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                 style={{ colorScheme: 'dark' }}
                 title="Filter by Added Date"
               >
-                <option value="all">All Dates</option>
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="last7days">Last 7 Days</option>
-                <option value="this_month">This Month</option>
+                <option className="bg-slate-900 text-slate-200" value="all">All Dates</option>
+                <option className="bg-slate-900 text-slate-200" value="today">Today</option>
+                <option className="bg-slate-900 text-slate-200" value="yesterday">Yesterday</option>
+                <option className="bg-slate-900 text-slate-200" value="last7days">Last 7 Days</option>
+                <option className="bg-slate-900 text-slate-200" value="this_month">This Month</option>
               </select>
             </div>
 
@@ -484,13 +484,13 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                 className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
                 title="Sort by Number, Serial, or Date"
               >
-                <option value="date_desc">Date: Newest First</option>
-                <option value="date_asc">Date: Oldest First</option>
-                <option value="phone_asc">Numbers: A to Z (0-9)</option>
-                <option value="phone_desc">Numbers: Z to A (9-0)</option>
-                <option value="serial_asc">Serial: A to Z</option>
-                <option value="serial_desc">Serial: Z to A</option>
-                <option value="source_asc">Source: A to Z</option>
+                <option className="bg-slate-900 text-slate-200" value="date_desc">Date: Newest First</option>
+                <option className="bg-slate-900 text-slate-200" value="date_asc">Date: Oldest First</option>
+                <option className="bg-slate-900 text-slate-200" value="phone_asc">Numbers: A to Z (0-9)</option>
+                <option className="bg-slate-900 text-slate-200" value="phone_desc">Numbers: Z to A (9-0)</option>
+                <option className="bg-slate-900 text-slate-200" value="serial_asc">Serial: A to Z</option>
+                <option className="bg-slate-900 text-slate-200" value="serial_desc">Serial: Z to A</option>
+                <option className="bg-slate-900 text-slate-200" value="source_asc">Source: A to Z</option>
               </select>
             </div>
           </div>

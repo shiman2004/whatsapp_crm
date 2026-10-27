@@ -482,6 +482,7 @@ export const MarketingAssignment: React.FC<MarketingAssignmentProps> = ({
                 value={sortOption}
                 onChange={e => setSortOption(e.target.value as any)}
                 className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
+                style={{ colorScheme: 'dark' }}
                 title="Sort by Number, Serial, or Date"
               >
                 <option value="date_desc">Date: Newest First</option>

@@ -929,7 +929,8 @@ async function authenticateRequest(req, parsedUrl) {
       email: dbUser.email,
       fullName: dbUser.fullName,
       branch: dbUser.branch || 'Colombo',
-      company: dbUser.company || 'RWC'
+      company: dbUser.company || 'RWC',
+      marketingAccess: dbUser.marketingAccess
     }
   };
 }

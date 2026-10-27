@@ -120,6 +120,9 @@ jobs:
       - name: Install backend dependencies
         working-directory: backend
         run: npm ci
+        env:
+          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
+          DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
 
       # prisma generate only needs a syntactically valid DATABASE_URL string.
       # It does NOT open a real database connection during code generation.

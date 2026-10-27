@@ -27,16 +27,22 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
   const [report, setReport] = React.useState<any | null>(null);
   const [fetching, setFetching] = React.useState(true);
   const [exporting, setExporting] = React.useState(false);
+  const [error, setError] = React.useState('');
+  const [lastUpdated, setLastUpdated] = React.useState<Date | null>(null);
+  const requestId = React.useRef(0);
 
   const loadReports = React.useCallback(async (selectedRange: DateRange) => {
+    const currentRequest = ++requestId.current;
     setFetching(true);
+    setError('');
     try {
       const response = await onRequestApi(`/api/marketing/reports?range=${selectedRange}`);
-      if (response?.data) {
+      if (currentRequest === requestId.current && response?.data) {
         setReport(response.data);
+        setLastUpdated(new Date());
       }
     } catch (e) {
-      console.error('Failed to load reports', e);
+      if (currentRequest === requestId.current) setError(e instanceof Error ? e.message : 'Unable to load marketing reports.');
     } finally {
       setFetching(false);
     }
@@ -48,6 +54,7 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
 
   const handleExportCsv = async () => {
     setExporting(true);
+    setError('');
     try {
       const token = localStorage.getItem('rw_crm_auth_token') || '';
       const response = await fetch(`${API_BASE_URL}/api/marketing/reports?range=${range}&export=csv`, {
@@ -64,7 +71,7 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
       a.remove();
       window.URL.revokeObjectURL(url);
     } catch (err) {
-      console.error('Failed to export CSV', err);
+      setError(err instanceof Error ? err.message : 'Unable to download the report CSV.');
     } finally {
       setExporting(false);
     }
@@ -77,6 +84,10 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
         <span>Calculating marketing funnel analytics...</span>
       </div>
     );
+  }
+
+  if (error && !report) {
+    return <div className="p-16 text-center"><p className="text-sm font-bold text-rose-300">{error}</p><button type="button" onClick={() => void loadReports(range)} className="mt-3 rounded-lg bg-slate-800 px-3 py-2 text-xs font-bold text-white">Retry</button></div>;
   }
 
   const totalContacts = report?.contacts || 0;
@@ -97,19 +108,19 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
 
   return (
     <div className="p-4 sm:p-6 space-y-6">
-      {/* Top Header with Date Filter and Export */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-bold text-white flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-teal-400" />
-            Marketing Funnel & Conversion Analytics
-          </h3>
-          <p className="text-xs text-slate-400">
-            Measure lead acquisition productivity, opt-in consent compliance, and CRM lead conversion ROI.
-          </p>
-        </div>
+      {/* Report identity, controls, and the primary outcome sit above the analytical detail. */}
+      <div className="rounded-2xl border border-teal-500/20 bg-gradient-to-r from-teal-950/45 via-[#0D1526] to-[#0D1526] p-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="mb-2 flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.16em] text-teal-300">
+              <BarChart3 className="h-3.5 w-3.5" /> Marketing performance report
+            </div>
+            <h3 className="text-lg font-black text-white">Funnel health and conversion outcomes</h3>
+            <p className="mt-1 text-xs text-slate-400">Track intake quality, consent readiness, staff coverage, and CRM progression for the selected period.</p>
+            {lastUpdated && <p className="mt-2 text-[11px] text-slate-500">Last refreshed {lastUpdated.toLocaleTimeString()}</p>}
+          </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
           {/* Date Range Selector */}
           <div className="inline-flex rounded-lg border border-slate-700/80 bg-slate-900 p-0.5 text-xs">
             {[
@@ -134,8 +145,7 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
             ))}
           </div>
 
-          {/* Export CSV button */}
-          <button
+            <button
             type="button"
             onClick={handleExportCsv}
             disabled={exporting}
@@ -143,31 +153,44 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
           >
             {exporting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5" />}
             Export CSV
-          </button>
+            </button>
+            <button type="button" onClick={() => void loadReports(range)} disabled={fetching || exporting} className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs font-bold text-slate-200 hover:text-teal-300 disabled:opacity-50">Refresh</button>
+          </div>
+        </div>
+      </div>
+      {error && <div role="status" className="rounded-lg border border-amber-700/50 bg-amber-950/30 px-3 py-2 text-xs text-amber-200">Showing the last successful report. Refresh failed: {error} <button type="button" onClick={() => void loadReports(range)} className="ml-2 font-bold underline">Retry</button></div>}
+
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-slate-500">Executive snapshot</p>
+          <h4 className="mt-1 text-sm font-bold text-white">What changed in this period</h4>
+        </div>
+        <div className="rounded-lg border border-teal-500/25 bg-teal-500/10 px-3 py-2 text-right">
+          <p className="text-[10px] font-bold uppercase text-teal-200">Conversion yield</p>
+          <p className="text-lg font-black text-teal-300">{conversionRate}%</p>
         </div>
       </div>
 
-      {/* Top ROI KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1526]/80 space-y-1">
+        <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1526]/80 space-y-1 shadow-sm shadow-black/20">
           <span className="text-[10px] uppercase font-bold text-slate-400">Total Contacts</span>
           <p className="text-2xl font-black text-white">{totalContacts.toLocaleString()}</p>
           <span className="text-[11px] text-teal-400 font-medium">Public Ingest Pool</span>
         </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1526]/80 space-y-1">
+        <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10 space-y-1 shadow-sm shadow-black/20">
           <span className="text-[10px] uppercase font-bold text-slate-400">Verified Consent</span>
           <p className="text-2xl font-black text-emerald-400">{verifiedConsent.toLocaleString()}</p>
           <span className="text-[11px] text-emerald-300 font-medium">{consentRate}% compliance rate</span>
         </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1526]/80 space-y-1">
+        <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-950/10 space-y-1 shadow-sm shadow-black/20">
           <span className="text-[10px] uppercase font-bold text-slate-400">Assigned to Officers</span>
           <p className="text-2xl font-black text-indigo-300">{assigned.toLocaleString()}</p>
           <span className="text-[11px] text-slate-400 font-medium">{unassigned} unassigned in pool</span>
         </div>
 
-        <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1526]/80 space-y-1">
+        <div className="p-4 rounded-xl border border-teal-500/30 bg-teal-950/25 space-y-1 shadow-sm shadow-black/20">
           <span className="text-[10px] uppercase font-bold text-slate-400">Converted to CRM Leads</span>
           <p className="text-2xl font-black text-teal-400">{converted.toLocaleString()}</p>
           <span className="text-[11px] text-teal-300 font-medium">{conversionRate}% conversion yield</span>

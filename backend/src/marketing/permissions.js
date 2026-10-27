@@ -25,7 +25,9 @@ const ROLE_CAPABILITIES = Object.freeze({
 export { CAPABILITIES };
 
 export function hasMarketingCapability(user, capability) {
-  return Boolean(user?.active !== false && ROLE_CAPABILITIES[user?.role]?.has(capability));
+  if (user?.active === false || !ROLE_CAPABILITIES[user?.role]?.has(capability)) return false;
+  // Undefined keeps pre-migration sessions compatible; persisted false is an explicit revoke.
+  return user?.role === 'super_admin' || user?.marketingAccess !== false;
 }
 
 export function assertMarketingCapability(user, capability) {

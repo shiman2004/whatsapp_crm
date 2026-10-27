@@ -574,6 +574,9 @@ const STATEMENTS = [
   `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS is_suppressed BOOLEAN NOT NULL DEFAULT FALSE;`,
   `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS suppression_reason VARCHAR(255);`,
   `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS suppressed_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS marketing_access BOOLEAN NOT NULL DEFAULT FALSE;`,
+  `UPDATE public.users SET marketing_access = TRUE
+     WHERE active = TRUE AND role IN ('coordinator', 'marketing_officer', 'leads_officer') AND marketing_access = FALSE;`,
 
   // --- marketing consent events additive columns & indexes --------------------
   `ALTER TABLE public.marketing_consent_events ADD COLUMN IF NOT EXISTS company_id VARCHAR(50);`,

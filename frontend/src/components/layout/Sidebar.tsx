@@ -17,7 +17,7 @@ import {
   CalendarDays,
   Upload,
   Contact,
-  ClipboardList
+  ClipboardList,
   GraduationCap,
   ChevronDown,
   ChevronRight

@@ -275,7 +275,13 @@ async function listContacts(req, res, authUser) {
   const consent = (url.searchParams.get('consentStatus') || '').trim();
   const status = (url.searchParams.get('lifecycleStatus') || '').trim();
   const assigned = url.searchParams.get('assigned');
+  const ownerId = (url.searchParams.get('ownerId') || '').trim();
+  const coordinatorId = (url.searchParams.get('coordinatorId') || '').trim();
+  const batchId = (url.searchParams.get('batchId') || '').trim();
+  const leadStatus = (url.searchParams.get('leadStatus') || '').trim();
   const dateRange = (url.searchParams.get('dateRange') || '').trim();
+  const assignedDateRange = (url.searchParams.get('assignedDateRange') || '').trim();
+  const reassignedDateRange = (url.searchParams.get('reassignedDateRange') || '').trim();
   const sortBy = (url.searchParams.get('sortBy') || 'createdAt').trim();
   const sortOrder = (url.searchParams.get('sortOrder') || 'desc').toLowerCase();
 
@@ -284,22 +290,47 @@ async function listContacts(req, res, authUser) {
     ...(authUser.role === 'coordinator' || authUser.role === 'marketing_officer' ? { currentOwnerId: authUser.id } : {}),
     ...(consent && consent !== 'all' ? { consentStatus: consent === 'denied' ? { in: ['denied', 'opted_out'] } : consent } : {}),
     ...(status && status !== 'all' ? { lifecycleStatus: status } : {}),
-    ...(assigned === 'true' ? { currentOwnerId: { not: null } } : assigned === 'false' ? { currentOwnerId: null } : {}),
-    ...(search
-      ? {
-          OR: [
-            { normalizedPhone: { contains: search, mode: 'insensitive' } },
-            { serialNumber: { contains: search, mode: 'insensitive' } },
-            { originalSource: { contains: search, mode: 'insensitive' } },
-            { sourceGroupName: { contains: search, mode: 'insensitive' } }
-          ]
-        }
-      : {})
+    ...(ownerId && ownerId !== 'all' ? { currentOwnerId: ownerId } : {}),
+    ...(coordinatorId && coordinatorId !== 'all' ? { OR: [{ currentOwnerId: coordinatorId }, { assignedById: coordinatorId }] } : {}),
+    ...(leadStatus === 'converted' ? { convertedLeadId: { not: null } } : leadStatus === 'not_converted' ? { convertedLeadId: null } : {}),
+    ...(assigned === 'true' || assigned === 'assigned' ? { currentOwnerId: { not: null } } : assigned === 'false' || assigned === 'unassigned' ? { currentOwnerId: null } : assigned === 'reassigned' ? { lastReassignedAt: { not: null } } : {}),
   };
+
+  if (batchId && batchId !== 'all') {
+    const rows = await prisma.marketingImportRow.findMany({
+      where: { batchId, contactId: { not: null } },
+      select: { contactId: true }
+    });
+    const batchContactIds = rows.map(r => r.contactId).filter(Boolean);
+    where.id = { in: batchContactIds };
+  }
+
+  if (search) {
+    const matchingStaff = await prisma.user.findMany({
+      where: { fullName: { contains: search, mode: 'insensitive' } },
+      select: { id: true }
+    });
+    const matchingStaffIds = matchingStaff.map(s => s.id);
+    where.OR = [
+      { normalizedPhone: { contains: search, mode: 'insensitive' } },
+      { serialNumber: { contains: search, mode: 'insensitive' } },
+      { originalSource: { contains: search, mode: 'insensitive' } },
+      { sourceGroupName: { contains: search, mode: 'insensitive' } },
+      ...(matchingStaffIds.length ? [{ currentOwnerId: { in: matchingStaffIds } }] : [])
+    ];
+  }
 
   if (dateRange && dateRange !== 'all') {
     const { start, end } = getDateBounds(dateRange);
     where.createdAt = { gte: start, lte: end };
+  }
+  if (assignedDateRange && assignedDateRange !== 'all') {
+    const { start, end } = getDateBounds(assignedDateRange);
+    where.assignedAt = { gte: start, lte: end };
+  }
+  if (reassignedDateRange && reassignedDateRange !== 'all') {
+    const { start, end } = getDateBounds(reassignedDateRange);
+    where.lastReassignedAt = { gte: start, lte: end };
   }
   let orderBy = { createdAt: 'desc' };
   if (sortBy === 'phone' || sortBy === 'normalizedPhone') {
@@ -431,6 +462,75 @@ async function contactDetail(req, res, authUser, contactId) {
       consent,
       conversion,
       tasks
+    }
+  });
+}
+
+
+async function contactHistory(req, res, authUser, contactId) {
+  const authorization = assertMarketingCapability(authUser, CAPABILITIES.dashboard);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
+
+  const prisma = getPrisma();
+  if (!prisma) return failure(res, 503, 'DATABASE_UNAVAILABLE', 'Marketing database is unavailable.');
+
+  const contact = await prisma.marketingContact.findFirst({
+    where: { id: contactId, company: companyOf(authUser) },
+    select: {
+      id: true,
+      serialNumber: true,
+      normalizedPhone: true,
+      name: true,
+      company: true,
+      assignedAt: true,
+      lastReassignedAt: true,
+      currentOwnerId: true,
+      assignedById: true,
+      consentStatus: true,
+      lifecycleStatus: true,
+      originalSource: true,
+      sourceGroupName: true,
+    }
+  });
+  if (!contact) return failure(res, 404, 'MARKETING_CONTACT_NOT_FOUND', 'Marketing contact not found.');
+
+  const histories = await prisma.marketingAssignmentHistory.findMany({
+    where: { contactId },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const userIds = [
+    ...new Set(
+      histories.flatMap(h => [h.previousOwnerId, h.newOwnerId, h.assignedById]).filter(Boolean)
+    )
+  ];
+  if (contact.currentOwnerId) userIds.push(contact.currentOwnerId);
+  if (contact.assignedById) userIds.push(contact.assignedById);
+
+  const users = userIds.length
+    ? await prisma.user.findMany({
+        where: { id: { in: userIds } },
+        select: { id: true, fullName: true, role: true, company: true }
+      })
+    : [];
+  const userMap = new Map(users.map(u => [u.id, u]));
+
+  const enrichedHistories = histories.map(h => ({
+    ...h,
+    previousOwner: h.previousOwnerId ? userMap.get(h.previousOwnerId) || null : null,
+    newOwner: h.newOwnerId ? userMap.get(h.newOwnerId) || null : null,
+    assignedBy: h.assignedById ? userMap.get(h.assignedById) || null : null,
+  }));
+
+  return sendJson(res, 200, {
+    success: true,
+    data: {
+      contact: {
+        ...contact,
+        assignedOwner: contact.currentOwnerId ? userMap.get(contact.currentOwnerId) || null : null,
+        assignedBy: contact.assignedById ? userMap.get(contact.assignedById) || null : null,
+      },
+      history: enrichedHistories,
     }
   });
 }
@@ -1077,7 +1177,7 @@ async function resolveAssignmentContacts(prisma, authUser, payload, { allowAssig
   };
   const contacts = await prisma.marketingContact.findMany({
     where,
-    select: { id: true, company: true, currentOwnerId: true, lifecycleStatus: true },
+    select: { id: true, company: true, currentOwnerId: true, assignedAt: true, lifecycleStatus: true },
     orderBy: { createdAt: 'asc' }
   });
   return { contacts, requested: contactIds.length, excluded: contactIds.length ? Math.max(contactIds.length - contacts.length, 0) : 0 };
@@ -1144,12 +1244,11 @@ async function listAssignable(req, res, authUser) {
 }
 
 async function assignContacts(req, res, authUser, targetContactId = null, isExplicitReassign = false) {
-  const authorization = assertMarketingCapability(authUser, CAPABILITIES.assign);
-  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
-
   const payload = await readJson(req);
   const singleContactId = targetContactId || payload.contactId;
   const isReassignment = isExplicitReassign || Boolean(payload.isReassignment || payload.reassign);
+  const authorization = assertMarketingCapability(authUser, isReassignment ? CAPABILITIES.reassign : CAPABILITIES.assign);
+  if (authorization) return failure(res, authorization.status, authorization.code, authorization.message);
 
   let contactIds = Array.isArray(payload.contactIds)
     ? payload.contactIds
@@ -1225,13 +1324,18 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
         const previousOwnerId = contact.currentOwnerId || null;
         const isReassign = Boolean(previousOwnerId && previousOwnerId !== ownerId);
         const officer = officers.find(o => o.id === ownerId);
+        if (isReassignment && previousOwnerId === ownerId) {
+          throw Object.assign(new Error('Select a different staff member to reassign this contact.'), { status: 400, code: 'REASSIGNMENT_SAME_OWNER' });
+        }
+        const assignedAt = new Date();
 
         const claim = await tx.marketingContact.updateMany({
           where: { id: contactId, company: companyOf(authUser), ...(isReassign || payload.allowReassign ? { currentOwnerId: previousOwnerId } : { currentOwnerId: null }) },
           data: {
             currentOwnerId: ownerId,
             assignedById: authUser.id,
-            assignedAt: new Date(),
+            assignedAt: contact.assignedAt || assignedAt,
+            ...(isReassign ? { lastReassignedAt: assignedAt } : {}),
             lifecycleStatus: contact.lifecycleStatus === 'new' ? 'assigned' : contact.lifecycleStatus,
             lastUpdatedById: authUser.id,
             lastActivityAt: new Date()
@@ -1246,8 +1350,9 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
             previousOwnerId,
             newOwnerId: ownerId,
             assignedById: authUser.id,
+            eventType: isReassign ? 'reassigned' : 'assigned',
             reason: payload.reason || (isReassign ? 'Coordinator Reassignment' : (payload.mode === 'round_robin' ? 'Round-Robin Assignment' : 'Direct Assignment')),
-            createdAt: new Date(),
+            createdAt: assignedAt,
           }
         });
 
@@ -1633,7 +1738,7 @@ async function reports(req, res, authUser) {
   const companyContacts = await prisma.marketingContact.findMany({ where: { company }, select: { id: true } });
   const companyContactIds = companyContacts.map(c => c.id);
 
-  const [contacts, batches, tasks, assigned, converted, verifiedConsent, users] = await Promise.all([
+  const [contacts, batches, tasks, assigned, converted, verifiedConsent, reassignedContacts, reassignmentEvents, users] = await Promise.all([
     prisma.marketingContact.count({ where: { company, createdAt: { gte: start, lte: end } } }),
     prisma.marketingImportBatch.aggregate({
       where: { company, createdAt: { gte: start, lte: end } },
@@ -1647,6 +1752,8 @@ async function reports(req, res, authUser) {
     prisma.marketingContact.count({ where: { company, currentOwnerId: { not: null }, createdAt: { gte: start, lte: end } } }),
     prisma.marketingContact.count({ where: { company, lifecycleStatus: 'converted', updatedAt: { gte: start, lte: end } } }),
     prisma.marketingContact.count({ where: { company, consentStatus: 'verified' } }),
+    prisma.marketingContact.count({ where: { company, lastReassignedAt: { not: null } } }),
+    prisma.marketingAssignmentHistory.count({ where: { contactId: { in: companyContactIds }, eventType: 'reassigned' } }),
     prisma.user.findMany({
       where: {
         active: true,
@@ -1701,6 +1808,8 @@ async function reports(req, res, authUser) {
       ['Unassigned Contacts', String(contacts - assigned)],
       ['Converted CRM Leads', String(converted)],
       ['Verified Consent Contacts', String(verifiedConsent)],
+      ['Reassigned Contacts', String(reassignedContacts)],
+      ['Total Reassignment Events', String(reassignmentEvents)],
       [],
       ['Coordinator Name', 'Role', 'Assigned', 'Contacted', 'Interested', 'Completed'],
       ...officerStats.map(o => [o.name, o.role, String(o.assigned), String(o.contacted), String(o.interested), String(o.completed)])
@@ -1725,6 +1834,8 @@ async function reports(req, res, authUser) {
       unassigned: Math.max(0, contacts - assigned),
       converted,
       verifiedConsent,
+      reassignedContacts,
+      reassignmentEvents,
       imports: batches._sum,
       tasks,
       coordinatorPerformance: officerStats
@@ -1819,6 +1930,9 @@ export async function handleMarketingRoutes(req, res, pathname, authUser) {
     }
 
     // Single Contact Operations & Drawer Sub-routes
+    const historyMatch = pathname.match(/^\/api\/marketing\/contacts\/([^/]+)\/(?:history|assignments)$/);
+    if (historyMatch && req.method === 'GET') return await contactHistory(req, res, authUser, historyMatch[1]);
+
     const contactMatch = pathname.match(/^\/api\/marketing\/contacts\/([^/]+)$/);
     if (contactMatch && req.method === 'GET') return await contactDetail(req, res, authUser, contactMatch[1]);
     if (contactMatch && req.method === 'PATCH') return await updateContactStatus(req, res, authUser, contactMatch[1]);

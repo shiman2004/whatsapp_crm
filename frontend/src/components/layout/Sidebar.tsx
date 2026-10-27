@@ -363,12 +363,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div className="ml-7 border-l border-slate-700/70 pl-2 space-y-0.5 py-1">
                       {[
                         { id: 'dashboard', label: 'Marketing Dashboard', icon: LayoutDashboard },
-                        { id: 'add', label: 'Add Contact', icon: Upload },
+                        { id: 'add', label: 'Add Public Numbers', icon: Upload },
                         { id: 'uploads', label: 'My Uploads', icon: FileText },
                         { id: 'contacts', label: 'Contact Database', icon: Contact },
-                        { id: 'assignment', label: 'Staff Assignment', icon: Users },
+                        { id: 'assignment', label: 'Contact Assignment', icon: Users },
                         { id: 'tasks', label: 'My Marketing Tasks', icon: ClipboardList },
-                        { id: 'campaigns', label: 'Campaigns & Templates', icon: FileText },
+                        { id: 'campaigns', label: 'Campaign Content', icon: FileText },
                         { id: 'reports', label: 'Marketing Reports', icon: BarChart3 },
                       ].map(sub => (
                         <button

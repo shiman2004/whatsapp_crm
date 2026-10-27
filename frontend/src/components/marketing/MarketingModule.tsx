@@ -33,12 +33,12 @@ import { MarketingContactDrawer } from './MarketingContactDrawer';
 
 const pages: Array<{ id: MarketingPage; label: string; icon: React.ElementType; description: string }> = [
   { id: 'dashboard', label: 'Marketing Dashboard', icon: LayoutDashboard, description: 'Module health, KPIs and conversion rates' },
-  { id: 'add', label: 'Add Contact', icon: Plus, description: 'Add contacts individually, in bulk, or from CSV' },
+  { id: 'add', label: 'Add Public Numbers', icon: Plus, description: 'Add contacts individually, in bulk, or from CSV' },
   { id: 'uploads', label: 'My Uploads', icon: Upload, description: 'Batch ingestion records & upload error reports' },
   { id: 'contacts', label: 'Contact Database', icon: Contact, description: 'Centralized directory, consent governance & contact profiles' },
-  { id: 'assignment', label: 'Staff Assignment', icon: Users, description: 'Round-robin or direct coordinator allocation' },
+  { id: 'assignment', label: 'Contact Assignment', icon: Users, description: 'Round-robin or direct coordinator allocation' },
   { id: 'tasks', label: 'My Marketing Tasks', icon: ClipboardList, description: 'Due today, overdue follow-ups, outreach & qualification' },
-  { id: 'campaigns', label: 'Campaigns & Templates', icon: FileText, description: 'Prepare campaign drafts and approved-template content' },
+  { id: 'campaigns', label: 'Campaign Content', icon: FileText, description: 'Prepare campaign drafts and approved-template content' },
   { id: 'reports', label: 'Marketing Reports', icon: BarChart3, description: 'Performance metrics, source analytics & CSV export' },
 ];
 
@@ -89,6 +89,9 @@ export const MarketingModule: React.FC = () => {
   const [consentFilter, setConsentFilter] = React.useState('all');
   const [lifecycleFilter, setLifecycleFilter] = React.useState('all');
   const [assignmentFilter, setAssignmentFilter] = React.useState('all');
+  const [staffFilter, setStaffFilter] = React.useState('all');
+  const [batchFilter, setBatchFilter] = React.useState('all');
+  const [leadStatusFilter, setLeadStatusFilter] = React.useState('all');
   const [dateFilter, setDateFilter] = React.useState('all');
   const [sortFilter, setSortFilter] = React.useState('date_desc');
 
@@ -111,6 +114,9 @@ export const MarketingModule: React.FC = () => {
         ...(consentFilter !== 'all' ? { consentStatus: consentFilter } : {}),
         ...(lifecycleFilter !== 'all' ? { lifecycleStatus: lifecycleFilter } : {}),
         ...(assignmentFilter !== 'all' ? { assigned: assignmentFilter } : {}),
+        ...(staffFilter !== 'all' ? { ownerId: staffFilter } : {}),
+        ...(batchFilter !== 'all' ? { batchId: batchFilter } : {}),
+        ...(leadStatusFilter !== 'all' ? { leadStatus: leadStatusFilter } : {}),
       });
 
       let sortBy = 'createdAt';
@@ -136,7 +142,7 @@ export const MarketingModule: React.FC = () => {
         setTotalContacts(res.pagination?.total ?? res.data.length);
       }
     } catch (e) { throw e; }
-  }, [contactPage, contactPageSize, search, consentFilter, lifecycleFilter, assignmentFilter, dateFilter, sortFilter]);
+  }, [contactPage, contactPageSize, search, consentFilter, lifecycleFilter, assignmentFilter, staffFilter, batchFilter, leadStatusFilter, dateFilter, sortFilter]);
 
   // Load uploads
   const loadUploads = React.useCallback(async () => {
@@ -285,6 +291,7 @@ export const MarketingModule: React.FC = () => {
                   setNotice('Contact successfully added and normalized.');
                 }}
                 onRequestApi={marketingRequest}
+                onNavigateToAssignment={() => navigateToPage('assignment')}
               />
             )}
 
@@ -349,6 +356,21 @@ export const MarketingModule: React.FC = () => {
                   setAssignmentFilter(val);
                   setContactPage(1);
                 }}
+                staffFilter={staffFilter}
+                onStaffFilterChange={val => {
+                  setStaffFilter(val);
+                  setContactPage(1);
+                }}
+                batchFilter={batchFilter}
+                onBatchFilterChange={val => {
+                  setBatchFilter(val);
+                  setContactPage(1);
+                }}
+                leadStatusFilter={leadStatusFilter}
+                onLeadStatusFilterChange={val => {
+                  setLeadStatusFilter(val);
+                  setContactPage(1);
+                }}
                 dateFilter={dateFilter}
                 onDateFilterChange={val => {
                   setDateFilter(val);
@@ -359,6 +381,7 @@ export const MarketingModule: React.FC = () => {
                   setSortFilter(val);
                   setContactPage(1);
                 }}
+                uploads={uploads}
               />
             )}
 

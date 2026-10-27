@@ -27,6 +27,8 @@ import {
   Trash2,
   Calendar,
   RotateCcw,
+  Eye,
+  Clock,
 } from 'lucide-react';
 
 interface MarketingContactsProps {
@@ -49,10 +51,17 @@ interface MarketingContactsProps {
   onLifecycleFilterChange: (val: string) => void;
   assignmentFilter: string;
   onAssignmentFilterChange: (val: string) => void;
+  staffFilter?: string;
+  onStaffFilterChange?: (val: string) => void;
+  batchFilter?: string;
+  onBatchFilterChange?: (val: string) => void;
+  leadStatusFilter?: string;
+  onLeadStatusFilterChange?: (val: string) => void;
   dateFilter?: string;
   onDateFilterChange?: (val: string) => void;
   sortFilter?: string;
   onSortFilterChange?: (val: string) => void;
+  uploads?: any[];
 }
 
 export const MarketingContacts: React.FC<MarketingContactsProps> = ({
@@ -75,10 +84,17 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   onLifecycleFilterChange,
   assignmentFilter,
   onAssignmentFilterChange,
+  staffFilter = 'all',
+  onStaffFilterChange,
+  batchFilter = 'all',
+  onBatchFilterChange,
+  leadStatusFilter = 'all',
+  onLeadStatusFilterChange,
   dateFilter = 'all',
   onDateFilterChange,
   sortFilter = 'date_desc',
   onSortFilterChange,
+  uploads = [],
 }) => {
   const { setSelectedLeadId, setActiveNavTab, leads, users, currentUser } = useCrm();
   const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
@@ -90,6 +106,32 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   const [openDropdownContactId, setOpenDropdownContactId] = React.useState<string | null>(null);
   const [coordinatorSearch, setCoordinatorSearch] = React.useState<string>('');
   const [assigningContactId, setAssigningContactId] = React.useState<string | null>(null);
+
+  // Assignment history modal state
+  const [historyTarget, setHistoryTarget] = React.useState<MarketingContact | null>(null);
+  const [historyList, setHistoryList] = React.useState<any[]>([]);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyError, setHistoryError] = React.useState('');
+
+  const handleOpenHistory = async (contact: MarketingContact, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setHistoryTarget(contact);
+    setHistoryLoading(true);
+    setHistoryError('');
+    setHistoryList([]);
+    try {
+      if (onRequestApi) {
+        const res = await onRequestApi(`/api/marketing/contacts/${contact.id}/history`);
+        if (res?.data?.history) {
+          setHistoryList(res.data.history);
+        }
+      }
+    } catch (err: any) {
+      setHistoryError(err.message || 'Failed to load assignment history.');
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
 
   // Reassignment modal state
   const [reassignModal, setReassignModal] = React.useState<{
@@ -471,6 +513,53 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             <option className="bg-slate-900 text-slate-200" value="all">All Allocation</option>
             <option className="bg-slate-900 text-slate-200" value="false">Unassigned Only</option>
             <option className="bg-slate-900 text-slate-200" value="true">Assigned Only</option>
+            <option className="bg-slate-900 text-slate-200" value="reassigned">Reassigned Only</option>
+          </select>
+
+          {/* Assigned Staff Filter */}
+          {users && users.length > 0 && (
+            <select
+              value={staffFilter}
+              onChange={e => onStaffFilterChange && onStaffFilterChange(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
+              title="Filter by Assigned Staff"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Staff</option>
+              {users.filter(u => u.active).map(u => (
+                <option key={u.id} className="bg-slate-900 text-slate-200" value={u.id}>
+                  {u.fullName}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Import Batch Filter */}
+          {uploads && uploads.length > 0 && (
+            <select
+              value={batchFilter}
+              onChange={e => onBatchFilterChange && onBatchFilterChange(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
+              title="Filter by Ingest Batch"
+            >
+              <option className="bg-slate-900 text-slate-200" value="all">All Batches</option>
+              {uploads.map(b => (
+                <option key={b.id} className="bg-slate-900 text-slate-200" value={b.id}>
+                  Batch #{b.batchNumber}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Lead Conversion Filter */}
+          <select
+            value={leadStatusFilter}
+            onChange={e => onLeadStatusFilterChange && onLeadStatusFilterChange(e.target.value)}
+            className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
+            title="Filter by Lead Conversion"
+          >
+            <option className="bg-slate-900 text-slate-200" value="all">All Lead Statuses</option>
+            <option className="bg-slate-900 text-slate-200" value="converted">Converted to Lead</option>
+            <option className="bg-slate-900 text-slate-200" value="not_converted">Not Converted</option>
           </select>
 
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
@@ -560,9 +649,9 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
         </div>
       )}
 
-      {/* Main Contacts Table - Required 10 Column Order (+ Checkbox) */}
+      {/* Main Contacts Table - Required 13 Column Order (+ Checkbox) */}
       <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#0D1526]/70 min-h-[420px]">
-        <table className="w-full text-left text-xs">
+        <table className="w-full text-left text-xs whitespace-nowrap">
           <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
             <tr>
               <th className="px-3 py-3 w-8">
@@ -575,29 +664,36 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               </th>
               {/* 1. Serial */}
               <th className="px-3 py-3">Serial</th>
-              {/* 2. Contact */}
-              <th className="px-3 py-3">Contact</th>
+              {/* 2. Contact Number */}
+              <th className="px-3 py-3">Contact Number</th>
               {/* 3. Source & Group */}
               <th className="px-3 py-3">Source & Group</th>
-              {/* 4. Assign By */}
-              <th className="px-3 py-3">Assign By</th>
-              {/* 5. Assign Who */}
-              <th className="px-3 py-3">Assign Who</th>
-              {/* 6. Assign Coordinator */}
-              <th className="px-3 py-3">Assign Coordinator</th>
-              <th className="px-3 py-3">Consent</th>
-              {/* 8. Status */}
-              <th className="px-3 py-3">Status</th>
-              {/* 9. Date */}
-              <th className="px-3 py-3">Date</th>
-              {/* 10. Actions */}
+              {/* 4. Assigned Staff */}
+              <th className="px-3 py-3">Assigned Staff</th>
+              {/* 5. Assign / Reassign */}
+              <th className="px-3 py-3">Assign / Reassign</th>
+              {/* 6. Assigned By */}
+              <th className="px-3 py-3">Assigned By</th>
+              {/* 7. Coordinator */}
+              <th className="px-3 py-3">Coordinator</th>
+              {/* 8. Assigned At */}
+              <th className="px-3 py-3">Assigned At</th>
+              {/* 9. Reassigned At */}
+              <th className="px-3 py-3">Reassigned At</th>
+              {/* 10. Assignment Status */}
+              <th className="px-3 py-3">Assignment Status</th>
+              {/* 11. Consent Status */}
+              <th className="px-3 py-3">Consent Status</th>
+              {/* 12. Lead Status */}
+              <th className="px-3 py-3">Lead Status</th>
+              {/* 13. Actions */}
               <th className="px-3 py-3 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
             {loading ? (
               <tr>
-                <td colSpan={11} className="p-8 text-center text-slate-400">
+                <td colSpan={14} className="p-8 text-center text-slate-400">
                   <div className="flex items-center justify-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
                     <span>Loading marketing contacts...</span>
@@ -606,7 +702,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               </tr>
             ) : displayContacts.length === 0 ? (
               <tr>
-                <td colSpan={11} className="p-12 text-center text-slate-500">
+                <td colSpan={14} className="p-12 text-center text-slate-500">
                   No marketing contacts found matching the filters.
                 </td>
               </tr>
@@ -653,7 +749,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       {contact.serialNumber}
                     </td>
 
-                    {/* 2. Contact */}
+                    {/* 2. Contact Number */}
                     <td className="px-3 py-3">
                       {contact.name && (
                         <div className="font-semibold text-slate-100 truncate max-w-[150px]">
@@ -675,25 +771,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       )}
                     </td>
 
-                    {/* 4. Assign By */}
-                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
-                      {contact.assignedBy?.fullName || contact.assignedByName ? (
-                        <div>
-                          <div className="font-medium text-slate-200 truncate max-w-[130px]">
-                            {contact.assignedBy?.fullName || contact.assignedByName}
-                          </div>
-                          {contact.assignedBy?.roleTitle && (
-                            <span className="text-[10px] text-slate-500 block truncate">
-                              {contact.assignedBy.roleTitle}
-                            </span>
-                          )}
-                        </div>
-                      ) : (
-                        <span className="text-slate-600 font-mono">—</span>
-                      )}
-                    </td>
-
-                    {/* 5. Assign Who */}
+                    {/* 4. Assigned Staff */}
                     <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
                       {contact.assignedOwner ? (
                         <div className="max-w-[140px]">
@@ -713,16 +791,11 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                           Assigned
                         </span>
                       ) : (
-                        <span className="text-slate-500 text-[11px] font-medium">Unassigned</span>
+                        <span className="text-slate-600 font-mono text-[11px]">—</span>
                       )}
                     </td>
 
-                    {/* 6. Assigned At */}
-                    <td className="hidden">
-                      {contact.assignedAt ? new Date(contact.assignedAt).toLocaleString() : '—'}
-                    </td>
-
-                    {/* 7. Assign Coordinator (Interactive Searchable Dropdown) */}
+                    {/* 5. Assign / Reassign (Interactive Searchable Dropdown) */}
                     <td className="px-3 py-3 coordinator-dropdown-container relative" onClick={e => e.stopPropagation()}>
                       {!canAssignContacts ? (
                         <button
@@ -855,24 +928,106 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                       )}
                     </td>
 
-                    {/* 7. Consent */}
+                    {/* 6. Assigned By */}
+                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
+                      {contact.assignedBy?.fullName || contact.assignedByName ? (
+                        <div>
+                          <div className="font-medium text-slate-200 truncate max-w-[130px]">
+                            {contact.assignedBy?.fullName || contact.assignedByName}
+                          </div>
+                          {contact.assignedBy?.roleTitle && (
+                            <span className="text-[10px] text-slate-500 block truncate">
+                              {contact.assignedBy.roleTitle}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-slate-600 font-mono text-[11px]">—</span>
+                      )}
+                    </td>
+
+                    {/* 7. Coordinator */}
+                    <td className="px-3 py-3 text-slate-300 whitespace-nowrap">
+                      {(() => {
+                        const isCoordinator = (role?: string) => (role || '').toLowerCase().includes('coordinator');
+                        let coordName = null;
+                        if (contact.assignedOwner && isCoordinator(contact.assignedOwner.roleTitle || (contact.assignedOwner as any).role)) {
+                          coordName = contact.assignedOwner.fullName;
+                        } else if (contact.assignedBy && isCoordinator(contact.assignedBy.roleTitle || (contact.assignedBy as any).role)) {
+                          coordName = contact.assignedBy.fullName;
+                        }
+                        return coordName ? (
+                          <span className="text-slate-200 font-medium text-[11px]">{coordName}</span>
+                        ) : (
+                          <span className="text-slate-600 font-mono text-[11px]">—</span>
+                        );
+                      })()}
+                    </td>
+
+                    {/* 8. Assigned At */}
+                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">
+                      {contact.assignedAt ? new Date(contact.assignedAt).toLocaleString() : '—'}
+                    </td>
+
+                    {/* 9. Reassigned At */}
+                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">
+                      {contact.lastReassignedAt ? new Date(contact.lastReassignedAt).toLocaleString() : '—'}
+                    </td>
+
+                    {/* 10. Assignment Status */}
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {contact.lastReassignedAt ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-950 text-indigo-300 border border-indigo-800/80 inline-flex items-center gap-1">
+                          <RotateCcw className="w-2.5 h-2.5" /> Reassigned
+                        </span>
+                      ) : (contact.assignedOwner || contact.currentOwnerId) ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-950 text-emerald-300 border border-emerald-800/80 inline-flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Assigned
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-400 border border-slate-700">
+                          Unassigned
+                        </span>
+                      )}
+                    </td>
+
+                    {/* 11. Consent Status */}
                     <td className="px-3 py-3 whitespace-nowrap">
                       <ConsentBadge status={contact.consentStatus} />
                     </td>
 
-                    {/* 8. Status */}
+                    {/* 12. Lead Status */}
                     <td className="px-3 py-3 whitespace-nowrap">
-                      <LifecycleBadge status={contact.lifecycleStatus} />
+                      {contact.convertedLeadId || contact.lifecycleStatus === 'converted' ? (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-teal-950 text-teal-300 border border-teal-800 inline-flex items-center gap-1">
+                          <Check className="w-2.5 h-2.5" /> Converted
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 rounded text-[10px] font-medium bg-slate-900 text-slate-500 border border-slate-800">
+                          Not Converted
+                        </span>
+                      )}
                     </td>
 
-                    {/* 9. Date */}
-                    <td className="px-3 py-3 text-slate-400 whitespace-nowrap font-mono text-[11px]">
-                      {new Date(contact.createdAt).toLocaleDateString()}
-                    </td>
-
-                    {/* 10. Actions */}
-                    <td className="px-3 py-3 text-right" onClick={e => e.stopPropagation()}>
+                    {/* 13. Actions */}
+                    <td className="px-3 py-3 text-right whitespace-nowrap" onClick={e => e.stopPropagation()}>
                       <div className="inline-flex items-center gap-1.5 justify-end">
+                        <button
+                          type="button"
+                          onClick={() => onSelectContact(contact)}
+                          className="p-1.5 rounded-lg border border-slate-700 bg-slate-900 text-slate-300 hover:text-white hover:bg-slate-800 transition-colors"
+                          title="View contact details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={e => handleOpenHistory(contact, e)}
+                          className="p-1.5 rounded-lg border border-indigo-800/80 bg-indigo-950/60 text-indigo-300 hover:text-white hover:bg-indigo-900/80 transition-colors"
+                          title="View assignment history"
+                        >
+                          <Clock className="w-3.5 h-3.5" />
+                        </button>
                         <a
                           href={`tel:${contact.normalizedPhone}`}
                           className="p-1.5 rounded-lg border border-emerald-800/80 bg-emerald-950/60 text-emerald-300 hover:bg-emerald-900/60 transition-colors"
@@ -1150,6 +1305,108 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               >
                 {isDeleting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 <span>Confirm Delete</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Assignment History Timeline Modal */}
+      {historyTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-2xl rounded-2xl border border-slate-800 bg-slate-950 p-6 shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-indigo-500/10 border border-indigo-500/30 text-indigo-400">
+                  <Clock className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-white">Contact Assignment History</h3>
+                  <p className="text-xs text-slate-400">
+                    Serial: <span className="font-mono text-teal-300 font-semibold">{historyTarget.serialNumber}</span> &bull; Number: <span className="font-mono text-slate-200 font-semibold">{historyTarget.normalizedPhone}</span>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryTarget(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-3">
+              {historyLoading ? (
+                <div className="p-10 text-center text-xs text-slate-400 flex items-center justify-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin text-teal-400" />
+                  <span>Loading assignment timeline...</span>
+                </div>
+              ) : historyError ? (
+                <div className="p-4 rounded-xl bg-rose-950/40 border border-rose-800 text-rose-300 text-xs">
+                  {historyError}
+                </div>
+              ) : historyList.length === 0 ? (
+                <div className="p-8 text-center text-xs text-slate-500">
+                  No previous assignment records found for this contact.
+                </div>
+              ) : (
+                <div className="rounded-xl border border-slate-800 bg-[#0D1526]/70 overflow-hidden">
+                  <table className="w-full text-left text-xs">
+                    <thead className="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                      <tr>
+                        <th className="px-3 py-2.5">Event</th>
+                        <th className="px-3 py-2.5">From Staff</th>
+                        <th className="px-3 py-2.5">To Staff</th>
+                        <th className="px-3 py-2.5">Date & Time</th>
+                        <th className="px-3 py-2.5">Performed By</th>
+                        <th className="px-3 py-2.5">Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-800/60 font-sans text-[11px]">
+                      {historyList.map(item => (
+                        <tr key={item.id} className="hover:bg-slate-900/40">
+                          <td className="px-3 py-2.5 font-bold">
+                            {item.eventType === 'reassigned' || item.previousOwnerId ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-indigo-950 text-indigo-300 border border-indigo-800/60">
+                                Reassignment
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-emerald-950 text-emerald-300 border border-emerald-800/60">
+                                Initial Assignment
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-400">
+                            {item.previousOwner?.fullName || (item.previousOwnerId ? 'Previous Staff' : '—')}
+                          </td>
+                          <td className="px-3 py-2.5 font-semibold text-slate-200">
+                            {item.newOwner?.fullName || '—'}
+                          </td>
+                          <td className="px-3 py-2.5 font-mono text-slate-400">
+                            {new Date(item.createdAt).toLocaleString()}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-300">
+                            {item.assignedBy?.fullName || 'System'}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-400 italic max-w-[160px] truncate" title={item.reason || ''}>
+                            {item.reason || '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setHistoryTarget(null)}
+                className="px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-white transition-colors"
+              >
+                Close
               </button>
             </div>
           </div>

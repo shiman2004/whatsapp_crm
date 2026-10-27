@@ -171,7 +171,7 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
         </div>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-4 rounded-xl border border-slate-800 bg-[#0D1526]/80 space-y-1 shadow-sm shadow-black/20">
           <span className="text-[10px] uppercase font-bold text-slate-400">Total Contacts</span>
           <p className="text-2xl font-black text-white">{totalContacts.toLocaleString()}</p>
@@ -181,19 +181,31 @@ export const MarketingReports: React.FC<MarketingReportsProps> = ({ loading, onR
         <div className="p-4 rounded-xl border border-emerald-500/20 bg-emerald-950/10 space-y-1 shadow-sm shadow-black/20">
           <span className="text-[10px] uppercase font-bold text-slate-400">Verified Consent</span>
           <p className="text-2xl font-black text-emerald-400">{verifiedConsent.toLocaleString()}</p>
-          <span className="text-[11px] text-emerald-300 font-medium">{consentRate}% compliance rate</span>
+          <span className="text-[11px] text-emerald-300 font-medium">{consentRate}% compliance</span>
         </div>
 
         <div className="p-4 rounded-xl border border-indigo-500/20 bg-indigo-950/10 space-y-1 shadow-sm shadow-black/20">
-          <span className="text-[10px] uppercase font-bold text-slate-400">Assigned to Officers</span>
+          <span className="text-[10px] uppercase font-bold text-slate-400">Assigned Staff</span>
           <p className="text-2xl font-black text-indigo-300">{assigned.toLocaleString()}</p>
-          <span className="text-[11px] text-slate-400 font-medium">{unassigned} unassigned in pool</span>
+          <span className="text-[11px] text-slate-400 font-medium">{unassigned} unassigned</span>
+        </div>
+
+        <div className="p-4 rounded-xl border border-violet-500/20 bg-violet-950/10 space-y-1 shadow-sm shadow-black/20">
+          <span className="text-[10px] uppercase font-bold text-slate-400">Reassigned Contacts</span>
+          <p className="text-2xl font-black text-violet-300">{(report?.reassignedContacts || 0).toLocaleString()}</p>
+          <span className="text-[11px] text-violet-400 font-medium">{report?.reassignmentEvents || 0} total events</span>
         </div>
 
         <div className="p-4 rounded-xl border border-teal-500/30 bg-teal-950/25 space-y-1 shadow-sm shadow-black/20">
-          <span className="text-[10px] uppercase font-bold text-slate-400">Converted to CRM Leads</span>
+          <span className="text-[10px] uppercase font-bold text-slate-400">Converted Leads</span>
           <p className="text-2xl font-black text-teal-400">{converted.toLocaleString()}</p>
-          <span className="text-[11px] text-teal-300 font-medium">{conversionRate}% conversion yield</span>
+          <span className="text-[11px] text-teal-300 font-medium">{conversionRate}% yield</span>
+        </div>
+
+        <div className="p-4 rounded-xl border border-amber-500/20 bg-amber-950/10 space-y-1 shadow-sm shadow-black/20">
+          <span className="text-[10px] uppercase font-bold text-slate-400">Clean Intake</span>
+          <p className="text-2xl font-black text-amber-300">{savedClean.toLocaleString()}</p>
+          <span className="text-[11px] text-amber-400 font-medium">{duplicates} dupes excluded</span>
         </div>
       </div>
 

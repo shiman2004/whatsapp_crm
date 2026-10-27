@@ -107,7 +107,7 @@ run(psql, psqlArgs(dbName).concat('DROP SCHEMA IF EXISTS public CASCADE; CREATE 
 console.log('  reset public schema');
 
 // 3. Push the Prisma schema from the hardcoded-local test schema.
-execFileSync('npx', ['prisma', 'db', 'push', '--schema', 'prisma/schema.test.prisma', '--skip-generate'], {
+execFileSync('npx', ['prisma', 'db', 'push', '--config', 'prisma/prisma.config.test.ts'], {
   cwd: backendDir,
   stdio: 'inherit',
   shell: true,

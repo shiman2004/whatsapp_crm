@@ -75,13 +75,13 @@ await ensureSchema(prisma);
 // Ensure test coordinators exist in database
 await prisma.user.upsert({
   where: { id: coordinator1.id },
-  create: { id: coordinator1.id, email: 'coord1@test.com', fullName: 'Coordinator One', role: 'coordinator', company: 'RWC', active: true },
-  update: { active: true, company: 'RWC', role: 'coordinator' }
+  create: { id: coordinator1.id, email: 'coord1@test.com', fullName: 'Coordinator One', role: 'coordinator', company: 'RWC', active: true, marketingAccess: true },
+  update: { active: true, company: 'RWC', role: 'coordinator', marketingAccess: true }
 });
 await prisma.user.upsert({
   where: { id: coordinator2.id },
-  create: { id: coordinator2.id, email: 'coord2@test.com', fullName: 'Coordinator Two', role: 'coordinator', company: 'RWC', active: true },
-  update: { active: true, company: 'RWC', role: 'coordinator' }
+  create: { id: coordinator2.id, email: 'coord2@test.com', fullName: 'Coordinator Two', role: 'coordinator', company: 'RWC', active: true, marketingAccess: true },
+  update: { active: true, company: 'RWC', role: 'coordinator', marketingAccess: true }
 });
 
 const testPhones = ['+94770000001', '+94770000002', '+94770000003', '+94770000004'];
@@ -218,6 +218,28 @@ assert.equal(c2.lifecycleStatus, 'assigned');
 assert.notEqual(c1.currentOwnerId, null);
 assert.notEqual(c2.currentOwnerId, null);
 console.log('✅ Pass 8 & 9: Round-robin distribution assigned contacts evenly to coordinators.\n');
+
+// ======================================================================
+// SCENARIO 9A: Reassignment preserves original assignment audit fields
+// ======================================================================
+const originalAssignedAt = c1.assignedAt;
+const reassignRes = mockRes();
+await handleMarketingRoutes(
+  mockReq('POST', `/api/marketing/contacts/${c1.id}/reassign`, {
+    assignedToId: coordinator2.id,
+    reason: 'Workload rebalancing'
+  }),
+  reassignRes,
+  `/api/marketing/contacts/${c1.id}/reassign`,
+  superAdmin
+);
+assert.equal(reassignRes.status, 201, 'Authorized reassignment should succeed');
+const reassignedContact = await prisma.marketingContact.findUnique({ where: { id: c1.id } });
+assert.equal(reassignedContact.assignedAt.getTime(), originalAssignedAt.getTime(), 'Reassignment must preserve the original assignment timestamp');
+assert.notEqual(reassignedContact.lastReassignedAt, null, 'Reassignment must record the latest reassignment timestamp');
+const reassignmentHistory = await prisma.marketingAssignmentHistory.findMany({ where: { contactId: c1.id }, orderBy: { createdAt: 'asc' } });
+assert.equal(reassignmentHistory.at(-1).eventType, 'reassigned', 'History must identify reassignment events');
+console.log('Pass 9A: Reassignment preserves original assignment and records latest reassignment.\n');
 
 // ======================================================================
 // SCENARIO 10 & 11: Coordinator Queue Isolation & Status Progression

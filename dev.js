@@ -15,7 +15,7 @@ const npmArgs = [npmCli, 'run', 'dev'];
 const backendDir = fileURLToPath(new URL('./backend/', import.meta.url));
 const frontendDir = fileURLToPath(new URL('./frontend/', import.meta.url));
 
-const backendPort = Number(process.env.PORT || 3001);
+const backendPort = Number(process.env.PORT || 3000);
 const frontendPort = Number(process.env.FRONTEND_PORT || 5173);
 
 function isPortAvailable(port) {

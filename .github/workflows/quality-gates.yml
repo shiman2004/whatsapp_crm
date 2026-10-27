@@ -1,6 +1,6 @@
 # Royal Wellness CRM — Quality Gates CI
 #
-# Runs on every push to main and on every PR.
+# Runs on every push to main and feature/fix branches, and on every pull request.
 # These checks are ADVISORY/BLOCKING quality gates — they never auto-deploy.
 # Production deployment is handled exclusively by Render's own build pipeline
 # triggered from the main branch. This workflow does NOT touch production.
@@ -39,10 +39,6 @@ jobs:
 
   # ──────────────────────────────────────────────────────────
   # JOB 1  Frontend — TypeScript type-check, oxlint, Vite build
-  #
-  # This is an npm workspaces monorepo. The root package-lock.json
-  # covers all workspaces. There is no frontend/package-lock.json.
-  # Install is done from the repo root using --workspace=frontend.
   # ──────────────────────────────────────────────────────────
   frontend:
     name: "Frontend - Type-check, Lint, Build"
@@ -52,9 +48,6 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Pin to Node 24 - same major version used in local dev.
-      # Cache key uses root package-lock.json (the only lockfile for all workspaces).
-      # There is no frontend/package-lock.json - this monorepo uses a single root lockfile.
       - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
@@ -62,7 +55,7 @@ jobs:
           cache: "npm"
           cache-dependency-path: package-lock.json
 
-      # Install frontend workspace deps from repo root using the root lockfile.
+      # Install frontend workspace dependencies from repo root
       - name: Install frontend workspace dependencies
         run: npm ci --workspace=frontend --ignore-scripts
 
@@ -72,7 +65,6 @@ jobs:
         run: npx tsc -b --noEmit
 
       # oxlint config is at frontend/.oxlintrc.json
-      # 212 known warnings exist, 0 errors - errors block the build.
       - name: Lint (oxlint)
         working-directory: frontend
         run: npm run lint
@@ -96,14 +88,26 @@ jobs:
 
 
   # ──────────────────────────────────────────────────────────
-  # JOB 2  Backend — Prisma generate + 37-test security suite
-  #
-  # Backend has its own backend/package-lock.json and can be
-  # installed independently from within the backend directory.
+  # JOB 2  Backend — Prisma generate + Security & Unit Suites
   # ──────────────────────────────────────────────────────────
   backend:
-    name: "Backend - Prisma Generate, Security Tests"
+    name: "Backend - Prisma Generate, Security & Unit Tests"
     runs-on: ubuntu-24.04
+
+    # Job-level environment variables: available across all steps (install, generate, tests)
+    env:
+      DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_test"
+      DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_test"
+      TEST_DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_test"
+      JWT_SECRET: "ci-placeholder-jwt-secret-do-not-use-in-prod"
+      META_ACCESS_TOKEN: "ci-placeholder-meta-token"
+      META_VERIFY_TOKEN: "ci-placeholder-verify-token"
+      META_PHONE_NUMBER_ID: "000000000000000"
+      META_PHONE_NUMBER_ID_RWC: "000000000000001"
+      META_PHONE_NUMBER_ID_CRAS: "000000000000002"
+      FRONTEND_URL: "http://localhost:5173"
+      PORT: "3001"
+      NODE_ENV: "test"
 
     steps:
       - name: Checkout repository
@@ -116,27 +120,18 @@ jobs:
           cache: "npm"
           cache-dependency-path: backend/package-lock.json
 
-      # Install backend deps using its own lockfile (backend/package-lock.json exists).
+      # Install backend dependencies cleanly without running postinstall scripts early
       - name: Install backend dependencies
         working-directory: backend
-        run: npm ci
-        env:
-          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
-          DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
+        run: npm ci --ignore-scripts
 
-      # prisma generate only needs a syntactically valid DATABASE_URL string.
-      # It does NOT open a real database connection during code generation.
+      # Explicitly generate Prisma Client using Prisma 7 CLI and schema
       - name: Generate Prisma client
         working-directory: backend
         run: npx prisma generate --schema=prisma/schema.prisma
-        env:
-          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
-          DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
 
-      # Full test suite - all 37 tests must pass (exit 0).
-      # Covers: Meta token security, bell notifications, sender audit,
-      #         RBAC/auth, login credential security, rate-limiting.
-      - name: Run security and auth test suite
+      # Run security, auth, and unit test suites
+      - name: Run security and unit test suite
         working-directory: backend
         run: |
           node test-meta-token-security.js
@@ -144,26 +139,11 @@ jobs:
           node test-sender-audit.js
           node test-auth-security.js
           node test-login-security.js
-        env:
-          # Stub values - tests import server.js which reads process.env.
-          # These are non-secret CI placeholders, not real credentials.
-          DATABASE_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
-          DIRECT_URL: "postgresql://ci:ci@localhost:5432/ci_stub"
-          JWT_SECRET: "ci-placeholder-jwt-secret"
-          META_ACCESS_TOKEN: "ci-placeholder-meta-token"
-          META_VERIFY_TOKEN: "ci-placeholder-verify-token"
-          META_PHONE_NUMBER_ID: "000000000000000"
-          META_PHONE_NUMBER_ID_RWC: "000000000000001"
-          META_PHONE_NUMBER_ID_CRAS: "000000000000002"
-          FRONTEND_URL: "http://localhost:5173"
-          PORT: "3001"
-          NODE_ENV: "test"
+          node test-csv-and-bulk-paste.js
 
 
   # ──────────────────────────────────────────────────────────
   # JOB 3  Dependency audit - advisory, never auto-upgrades
-  # Known high/moderate findings are documented and non-blocking.
-  # Only CRITICAL CVEs hard-fail this job.
   # ──────────────────────────────────────────────────────────
   audit:
     name: "Dependency Audit (Advisory)"
@@ -220,8 +200,6 @@ jobs:
 
   # ──────────────────────────────────────────────────────────
   # JOB 4  Secret leak scan
-  # Hard-fails only if live API tokens or DB passwords are found
-  # in git-tracked JS/TS SOURCE files (not in .env, which is gitignored).
   # ──────────────────────────────────────────────────────────
   secret-scan:
     name: "Secret Leak Scan"
@@ -239,9 +217,7 @@ jobs:
 
           echo "Scanning JS/TS source files for live Meta Graph API tokens..."
           # Live Meta tokens start with EAAP followed by 30+ alphanumeric chars.
-          # Scope: only JS/TS source files. Not .env.example or CI docs.
-          MATCH=$(git ls-files -- "*.js" "*.ts" | \
-            xargs grep -lE "EAAP[a-zA-Z0-9]{30,}" 2>/dev/null || true)
+          MATCH=$(git grep -lE "EAAP[a-zA-Z0-9]{30,}" -- "*.js" "*.ts" 2>/dev/null || true)
           if [ -n "$MATCH" ]; then
             echo "::error::Live Meta Graph API token found in tracked source file: $MATCH"
             FAIL=1
@@ -251,9 +227,7 @@ jobs:
 
           echo "Scanning JS/TS/JSON source files for hardcoded database passwords..."
           # Looks for postgresql:// URLs with a real password embedded.
-          # .env is gitignored; .env.example has only placeholders (checked separately).
-          DBMATCH=$(git ls-files -- "*.js" "*.ts" "*.json" | \
-            xargs grep -lE "postgresql://[^:]+:[^@]{8,}@" 2>/dev/null || true)
+          DBMATCH=$(git grep -lE "postgresql://[^:]+:[^@]{8,}@" -- "*.js" "*.ts" "*.json" 2>/dev/null || true)
           if [ -n "$DBMATCH" ]; then
             echo "::error::Hardcoded database URL with password found: $DBMATCH"
             FAIL=1

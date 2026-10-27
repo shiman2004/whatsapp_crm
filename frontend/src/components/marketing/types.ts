@@ -53,6 +53,7 @@ export interface MarketingContact {
   } | null;
   assignedByName?: string | null;
   assignedAt?: string | null;
+  lastReassignedAt?: string | null;
   isSuppressed?: boolean;
   suppressionReason?: string | null;
   createdAt: string;
@@ -144,6 +145,7 @@ export interface MarketingAssignmentHistory {
   previousOwnerId?: string | null;
   newOwnerId?: string | null;
   assignedById: string;
+  eventType?: 'assigned' | 'reassigned' | string;
   reason?: string | null;
   createdAt: string;
 }

@@ -282,7 +282,7 @@ async function listContacts(req, res, authUser) {
   const where = {
     company: companyOf(authUser),
     ...(authUser.role === 'coordinator' || authUser.role === 'marketing_officer' ? { currentOwnerId: authUser.id } : {}),
-    ...(consent && consent !== 'all' ? { consentStatus: consent } : {}),
+    ...(consent && consent !== 'all' ? { consentStatus: consent === 'denied' ? { in: ['denied', 'opted_out'] } : consent } : {}),
     ...(status && status !== 'all' ? { lifecycleStatus: status } : {}),
     ...(assigned === 'true' ? { currentOwnerId: { not: null } } : assigned === 'false' ? { currentOwnerId: null } : {}),
     ...(search

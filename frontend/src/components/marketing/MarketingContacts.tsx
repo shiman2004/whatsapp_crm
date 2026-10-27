@@ -189,12 +189,35 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   // Permission check for assignment: super_admin or users with assign capability
   const canAssignContacts = currentUser?.role === 'super_admin';
 
+  // Deterministic displayContacts with sort order
+  const displayContacts = React.useMemo(() => {
+    let result = [...contacts];
+    if (sortFilter === "phone_asc") {
+      result.sort((a, b) => a.normalizedPhone.localeCompare(b.normalizedPhone));
+    } else if (sortFilter === "phone_desc") {
+      result.sort((a, b) => b.normalizedPhone.localeCompare(a.normalizedPhone));
+    } else if (sortFilter === "serial_asc") {
+      result.sort((a, b) => (a.serialNumber || "").localeCompare(b.serialNumber || ""));
+    } else if (sortFilter === "serial_desc") {
+      result.sort((a, b) => (b.serialNumber || "").localeCompare(a.serialNumber || ""));
+    } else if (sortFilter === "source_asc") {
+      result.sort((a, b) => (a.originalSource || "").localeCompare(b.originalSource || ""));
+    } else if (sortFilter === "source_desc") {
+      result.sort((a, b) => (b.originalSource || "").localeCompare(a.originalSource || ""));
+    } else if (sortFilter === "date_asc") {
+      result.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    } else if (sortFilter === "date_desc") {
+      result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }
+    return result;
+  }, [contacts, sortFilter]);
+
   // Toggle selection
   const toggleSelectAll = () => {
-    if (selectedIds.size === contacts.length) {
+    if (selectedIds.size === displayContacts.length) {
       setSelectedIds(new Set());
     } else {
-      setSelectedIds(new Set(contacts.map(c => c.id)));
+      setSelectedIds(new Set(displayContacts.map(c => c.id)));
     }
   };
 
@@ -208,7 +231,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
 
   // Export CSV
   const exportCleanedCsv = () => {
-    if (contacts.length === 0) return;
+    if (displayContacts.length === 0) return;
     const headers = [
       'Serial Number',
       'Phone',
@@ -220,7 +243,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
       'Lifecycle Status',
       'Created At',
     ];
-    const rows = contacts.map(c => [
+    const rows = displayContacts.map(c => [
       c.serialNumber,
       c.normalizedPhone,
       `"${c.originalSource.replace(/"/g, '""')}"`,
@@ -416,10 +439,10 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             onChange={e => onConsentFilterChange(e.target.value)}
             className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
           >
-            <option value="all">All Consent</option>
-            <option value="verified">Verified Opt-in</option>
-            <option value="unknown">Pending Consent</option>
-            <option value="denied">Denied / Opted-out</option>
+            <option className="bg-slate-900 text-slate-200" value="all">All Consent</option>
+            <option className="bg-slate-900 text-slate-200" value="verified">Verified Opt-in</option>
+            <option className="bg-slate-900 text-slate-200" value="unknown">Pending Consent</option>
+            <option className="bg-slate-900 text-slate-200" value="denied">Denied / Opted-out</option>
           </select>
 
           {/* Lifecycle Filter */}
@@ -428,15 +451,15 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             onChange={e => onLifecycleFilterChange(e.target.value)}
             className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
           >
-            <option value="all">All Statuses</option>
-            <option value="new">New</option>
-            <option value="assigned">Assigned</option>
-            <option value="contacted">Contacted</option>
-            <option value="follow_up_pending">Follow-up Pending</option>
-            <option value="interested">Interested</option>
-            <option value="not_interested">Not Interested</option>
-            <option value="converted">Converted to Lead</option>
-            <option value="do_not_contact">Do Not Contact</option>
+            <option className="bg-slate-900 text-slate-200" value="all">All Statuses</option>
+            <option className="bg-slate-900 text-slate-200" value="new">New</option>
+            <option className="bg-slate-900 text-slate-200" value="assigned">Assigned</option>
+            <option className="bg-slate-900 text-slate-200" value="contacted">Contacted</option>
+            <option className="bg-slate-900 text-slate-200" value="follow_up_pending">Follow-up Pending</option>
+            <option className="bg-slate-900 text-slate-200" value="interested">Interested</option>
+            <option className="bg-slate-900 text-slate-200" value="not_interested">Not Interested</option>
+            <option className="bg-slate-900 text-slate-200" value="converted">Converted to Lead</option>
+            <option className="bg-slate-900 text-slate-200" value="do_not_contact">Do Not Contact</option>
           </select>
 
           {/* Assignment Filter */}
@@ -445,9 +468,9 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             onChange={e => onAssignmentFilterChange(e.target.value)}
             className="rounded-lg border border-slate-700 bg-slate-900 py-1.5 px-2.5 text-xs text-slate-200 outline-none focus:border-teal-400 cursor-pointer"
           >
-            <option value="all">All Allocation</option>
-            <option value="false">Unassigned Only</option>
-            <option value="true">Assigned Only</option>
+            <option className="bg-slate-900 text-slate-200" value="all">All Allocation</option>
+            <option className="bg-slate-900 text-slate-200" value="false">Unassigned Only</option>
+            <option className="bg-slate-900 text-slate-200" value="true">Assigned Only</option>
           </select>
 
           <div className="flex items-center gap-1.5 bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-xs text-slate-300">
@@ -459,12 +482,12 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               style={{ colorScheme: 'dark' }}
               title="Filter by Added Date"
             >
-              <option value="all">All Dates</option>
-              <option value="today">Today</option>
-              <option value="yesterday">Yesterday</option>
-              <option value="last7days">Last 7 Days</option>
-              <option value="this_month">This Month</option>
-              <option value="last_month">Last Month</option>
+              <option className="bg-slate-900 text-slate-200" value="all">All Dates</option>
+              <option className="bg-slate-900 text-slate-200" value="today">Today</option>
+              <option className="bg-slate-900 text-slate-200" value="yesterday">Yesterday</option>
+              <option className="bg-slate-900 text-slate-200" value="last7days">Last 7 Days</option>
+              <option className="bg-slate-900 text-slate-200" value="this_month">This Month</option>
+              <option className="bg-slate-900 text-slate-200" value="last_month">Last Month</option>
             </select>
           </div>
 
@@ -476,14 +499,14 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               className="bg-transparent text-xs text-slate-200 outline-none cursor-pointer font-medium"
               title="Sort by Date, Number, Serial, or Source"
             >
-              <option value="date_desc">Date: Newest First</option>
-              <option value="date_asc">Date: Oldest First</option>
-              <option value="phone_asc">Numbers: A to Z (0-9)</option>
-              <option value="phone_desc">Numbers: Z to A (9-0)</option>
-              <option value="serial_asc">Serial: A to Z</option>
-              <option value="serial_desc">Serial: Z to A</option>
-              <option value="source_asc">Source: A to Z</option>
-              <option value="source_desc">Source: Z to A</option>
+              <option className="bg-slate-900 text-slate-200" value="date_desc">Date: Newest First</option>
+              <option className="bg-slate-900 text-slate-200" value="date_asc">Date: Oldest First</option>
+              <option className="bg-slate-900 text-slate-200" value="phone_asc">Numbers: A to Z (0-9)</option>
+              <option className="bg-slate-900 text-slate-200" value="phone_desc">Numbers: Z to A (9-0)</option>
+              <option className="bg-slate-900 text-slate-200" value="serial_asc">Serial: A to Z</option>
+              <option className="bg-slate-900 text-slate-200" value="serial_desc">Serial: Z to A</option>
+              <option className="bg-slate-900 text-slate-200" value="source_asc">Source: A to Z</option>
+              <option className="bg-slate-900 text-slate-200" value="source_desc">Source: Z to A</option>
             </select>
           </div>
 
@@ -545,7 +568,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
               <th className="px-3 py-3 w-8">
                 <input
                   type="checkbox"
-                  checked={contacts.length > 0 && selectedIds.size === contacts.length}
+                  checked={displayContacts.length > 0 && selectedIds.size === displayContacts.length}
                   onChange={toggleSelectAll}
                   className="rounded border-slate-700 bg-slate-900 text-teal-400 focus:ring-0 cursor-pointer"
                 />
@@ -581,14 +604,14 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
                   </div>
                 </td>
               </tr>
-            ) : contacts.length === 0 ? (
+            ) : displayContacts.length === 0 ? (
               <tr>
                 <td colSpan={11} className="p-12 text-center text-slate-500">
                   No marketing contacts found matching the filters.
                 </td>
               </tr>
             ) : (
-              contacts.map(contact => {
+              displayContacts.map(contact => {
                 const isSelected = selectedIds.has(contact.id);
                 const rawPhoneDigits = contact.normalizedPhone.replace(/[^0-9]/g, '');
                 const isAssigned = Boolean(contact.assignedOwner?.id || contact.currentOwnerId);
@@ -933,7 +956,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
       {/* Pagination Controls */}
       <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
         <span>
-          Showing {contacts.length} of {totalContacts} contacts
+          Showing {displayContacts.length} of {totalContacts} contacts
         </span>
         <div className="flex items-center gap-2">
           <button

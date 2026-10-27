@@ -1409,7 +1409,7 @@ async function assignContacts(req, res, authUser, targetContactId = null, isExpl
       }
 
       return assignments;
-    });
+    }, { maxWait: 10_000, timeout: 30_000 });
 
     return sendJson(res, 201, {
       success: true,

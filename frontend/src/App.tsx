@@ -71,6 +71,25 @@ const MainLayout: React.FC = () => {
     }
   }, [currentUser?.role, activeTab, setActiveTab]);
 
+  React.useEffect(() => {
+    const syncMarketingHash = () => {
+      if (window.location.hash.startsWith('#/marketing')) {
+        setActiveTab('marketing');
+        const sub = window.location.hash.replace(/^#\/marketing\/?/, '');
+        if (sub) {
+          window.dispatchEvent(new CustomEvent('marketing-page-change', { detail: sub }));
+        }
+      }
+    };
+    syncMarketingHash();
+    window.addEventListener('hashchange', syncMarketingHash);
+    window.addEventListener('popstate', syncMarketingHash);
+    return () => {
+      window.removeEventListener('hashchange', syncMarketingHash);
+      window.removeEventListener('popstate', syncMarketingHash);
+    };
+  }, [setActiveTab]);
+
   const handleSelectLead = (leadId: string) => {
     setSelectedLeadId(leadId);
     setActiveTab('chat');

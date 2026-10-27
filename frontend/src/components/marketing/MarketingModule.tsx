@@ -32,13 +32,25 @@ import { MarketingReports } from './MarketingReports';
 import { MarketingContactDrawer } from './MarketingContactDrawer';
 
 const pages: Array<{ id: MarketingPage; label: string; icon: React.ElementType; description: string }> = [
-  { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, description: 'Module health, KPIs and conversion rates' },
-  { id: 'add', label: 'Add Contacts', icon: Plus, description: 'Single entry, bulk paste, CSV/Excel upload & batch history' },
-  { id: 'contacts', label: 'Contacts', icon: Contact, description: 'Centralized directory, consent governance & contact profiles' },
-  { id: 'assignment', label: 'Assignment', icon: Users, description: 'Round-robin or direct coordinator allocation' },
-  { id: 'tasks', label: 'My Tasks', icon: ClipboardList, description: 'Due today, overdue follow-ups, outreach & qualification' },
-  { id: 'reports', label: 'Reports', icon: BarChart3, description: 'Performance metrics, source analytics & CSV export' },
+  { id: 'dashboard', label: 'Marketing Dashboard', icon: LayoutDashboard, description: 'Module health, KPIs and conversion rates' },
+  { id: 'add', label: 'Add Contact', icon: Plus, description: 'Add contacts individually, in bulk, or from CSV' },
+  { id: 'uploads', label: 'My Uploads', icon: Upload, description: 'Batch ingestion records & upload error reports' },
+  { id: 'contacts', label: 'Contact Database', icon: Contact, description: 'Centralized directory, consent governance & contact profiles' },
+  { id: 'assignment', label: 'Staff Assignment', icon: Users, description: 'Round-robin or direct coordinator allocation' },
+  { id: 'tasks', label: 'My Marketing Tasks', icon: ClipboardList, description: 'Due today, overdue follow-ups, outreach & qualification' },
+  { id: 'campaigns', label: 'Campaigns & Templates', icon: FileText, description: 'Prepare campaign drafts and approved-template content' },
+  { id: 'reports', label: 'Marketing Reports', icon: BarChart3, description: 'Performance metrics, source analytics & CSV export' },
 ];
+
+const pageFromHash = (): MarketingPage => {
+  const hash = window.location.hash;
+  if (hash.includes('content-hub') || hash.includes('/content')) {
+    window.location.hash = '#/marketing/dashboard';
+    return 'dashboard';
+  }
+  const page = hash.match(/^#\/marketing\/([^/?#]+)/)?.[1] as MarketingPage | undefined;
+  return page && pages.some(item => item.id === page) ? page : 'dashboard';
+};
 
 function authToken() {
   return localStorage.getItem('rw_crm_auth_token') || '';
@@ -62,7 +74,7 @@ async function marketingRequest(path: string, init?: RequestInit) {
 
 export const MarketingModule: React.FC = () => {
   const { currentUser } = useCrm();
-  const [page, setPage] = React.useState<MarketingPage>('dashboard');
+  const [page, setPage] = React.useState<MarketingPage>(pageFromHash);
 
   // Core Data
   const [contacts, setContacts] = React.useState<MarketingContact[]>([]);
@@ -77,9 +89,12 @@ export const MarketingModule: React.FC = () => {
   const [consentFilter, setConsentFilter] = React.useState('all');
   const [lifecycleFilter, setLifecycleFilter] = React.useState('all');
   const [assignmentFilter, setAssignmentFilter] = React.useState('all');
+  const [dateFilter, setDateFilter] = React.useState('all');
+  const [sortFilter, setSortFilter] = React.useState('date_desc');
 
   // Selected Contact Drawer
   const [selectedContactId, setSelectedContactId] = React.useState<string | null>(null);
+  const [transferredContactIds, setTransferredContactIds] = React.useState<string[]>([]);
 
   // States
   const [loading, setLoading] = React.useState(false);
@@ -98,15 +113,30 @@ export const MarketingModule: React.FC = () => {
         ...(assignmentFilter !== 'all' ? { assigned: assignmentFilter } : {}),
       });
 
+      let sortBy = 'createdAt';
+      let sortOrder = 'desc';
+      if (sortFilter === 'date_asc') { sortBy = 'createdAt'; sortOrder = 'asc'; }
+      else if (sortFilter === 'date_desc') { sortBy = 'createdAt'; sortOrder = 'desc'; }
+      else if (sortFilter === 'phone_asc') { sortBy = 'phone'; sortOrder = 'asc'; }
+      else if (sortFilter === 'phone_desc') { sortBy = 'phone'; sortOrder = 'desc'; }
+      else if (sortFilter === 'serial_asc') { sortBy = 'serial'; sortOrder = 'asc'; }
+      else if (sortFilter === 'serial_desc') { sortBy = 'serial'; sortOrder = 'desc'; }
+      else if (sortFilter === 'source_asc') { sortBy = 'source'; sortOrder = 'asc'; }
+      else if (sortFilter === 'source_desc') { sortBy = 'source'; sortOrder = 'desc'; }
+
+      if (dateFilter !== 'all') {
+        queryParams.set('dateRange', dateFilter);
+      }
+      queryParams.set('sortBy', sortBy);
+      queryParams.set('sortOrder', sortOrder);
+
       const res = await marketingRequest(`/api/marketing/contacts?${queryParams.toString()}`);
       if (res?.data) {
         setContacts(res.data);
         setTotalContacts(res.pagination?.total ?? res.data.length);
       }
-    } catch (e) {
-      console.error('Failed to load contacts', e);
-    }
-  }, [contactPage, contactPageSize, search, consentFilter, lifecycleFilter, assignmentFilter]);
+    } catch (e) { throw e; }
+  }, [contactPage, contactPageSize, search, consentFilter, lifecycleFilter, assignmentFilter, dateFilter, sortFilter]);
 
   // Load uploads
   const loadUploads = React.useCallback(async () => {
@@ -115,9 +145,7 @@ export const MarketingModule: React.FC = () => {
       if (res?.data) {
         setUploads(res.data);
       }
-    } catch (e) {
-      console.error('Failed to load uploads', e);
-    }
+    } catch (e) { throw e; }
   }, []);
 
   // Load tasks
@@ -127,9 +155,7 @@ export const MarketingModule: React.FC = () => {
       if (res?.data) {
         setTasks(res.data);
       }
-    } catch (e) {
-      console.error('Failed to load tasks', e);
-    }
+    } catch (e) { throw e; }
   }, []);
 
   // Master refresh
@@ -154,17 +180,33 @@ export const MarketingModule: React.FC = () => {
   React.useEffect(() => {
     const handleMarketingPage = (event: Event) => {
       const targetPage = (event as CustomEvent<MarketingPage>).detail;
-      if (targetPage) setPage(targetPage);
+      if (targetPage && pages.some(item => item.id === targetPage)) {
+        setPage(targetPage);
+        window.history.pushState({}, '', `#/marketing/${targetPage}`);
+      }
     };
     window.addEventListener('marketing-page-change', handleMarketingPage);
-    return () => window.removeEventListener('marketing-page-change', handleMarketingPage);
+    const handleBrowserNavigation = () => {
+      const targetPage = pageFromHash();
+      setPage(targetPage);
+      window.dispatchEvent(new CustomEvent('marketing-page-change', { detail: targetPage }));
+    };
+    window.addEventListener('popstate', handleBrowserNavigation);
+    window.addEventListener('hashchange', handleBrowserNavigation);
+    return () => {
+      window.removeEventListener('marketing-page-change', handleMarketingPage);
+      window.removeEventListener('popstate', handleBrowserNavigation);
+      window.removeEventListener('hashchange', handleBrowserNavigation);
+    };
   }, []);
 
   const navigateToPage = (target: MarketingPage | string) => {
-    setPage(target as MarketingPage);
+    const nextPage = target as MarketingPage;
+    setPage(nextPage);
     setError('');
     setNotice('');
-    window.dispatchEvent(new CustomEvent('marketing-page-change', { detail: target }));
+    window.history.pushState({}, '', `#/marketing/${nextPage}`);
+    window.dispatchEvent(new CustomEvent('marketing-page-change', { detail: nextPage }));
   };
 
   const currentTab = pages.find(item => item.id === page) || pages[0];
@@ -172,34 +214,36 @@ export const MarketingModule: React.FC = () => {
   return (
     <section className="h-full min-h-0 flex flex-col gap-4 text-slate-100 p-3 sm:p-5 overflow-y-auto">
       {/* 1. Header & Breadcrumbs */}
-      <MarketingHeader />
+      <MarketingHeader pageLabel={currentTab.label} onNavigate={navigateToPage} />
 
-      {/* 2. Top Metric KPI Cards */}
-      <MarketingStats
-        contactsCount={totalContacts || contacts.length}
-        batchesCount={uploads.length}
-      />
+      {page !== 'dashboard' && (
+        <MarketingStats
+          contactsCount={totalContacts || contacts.length}
+          batchesCount={uploads.length}
+        />
+      )}
 
       {/* 3. Module Workspace with Sub-Navigation */}
       <div className="flex-1 min-h-0 grid grid-cols-1 gap-4 items-start">
         {/* Main Content Pane */}
-        <main className="min-w-0 rounded-xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden shadow-lg flex flex-col">
-          {/* Main Sub-header */}
-          <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-950/60 shrink-0">
-            <div>
-              <h2 className="font-extrabold text-white text-sm">{currentTab.label}</h2>
-              <p className="text-[11px] text-slate-400 mt-0.5">{currentTab.description}</p>
+        <main className={page === 'dashboard' ? 'min-w-0 flex flex-col' : 'min-w-0 rounded-xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden shadow-lg flex flex-col'}>
+          {page !== 'dashboard' && (
+            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-950/60 shrink-0">
+              <div>
+                <h2 className="font-extrabold text-white text-sm">{currentTab.label}</h2>
+                <p className="text-[11px] text-slate-400 mt-0.5">{currentTab.description}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void refreshAll()}
+                className="p-2 rounded-lg text-slate-400 hover:text-teal-300 hover:bg-slate-800 transition-colors"
+                aria-label="Refresh marketing data"
+                title="Refresh marketing data"
+              >
+                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-teal-400' : ''}`} />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => void refreshAll()}
-              className="p-2 rounded-lg text-slate-400 hover:text-teal-300 hover:bg-slate-800 transition-colors"
-              aria-label="Refresh marketing data"
-              title="Refresh marketing data"
-            >
-              <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin text-teal-400' : ''}`} />
-            </button>
-          </div>
+          )}
 
           {/* Inline Feedback Alerts */}
           {error && (
@@ -236,10 +280,9 @@ export const MarketingModule: React.FC = () => {
 
             {page === 'add' && (
               <MarketingAddNumbers
-                loading={loading}
-                onImportComplete={() => {
+                onContactCreated={() => {
                   void refreshAll();
-                  setNotice('Contacts successfully ingested and normalized.');
+                  setNotice('Contact successfully added and normalized.');
                 }}
                 onRequestApi={marketingRequest}
               />
@@ -250,6 +293,7 @@ export const MarketingModule: React.FC = () => {
                 uploads={uploads}
                 loading={loading}
                 onRequestApi={marketingRequest}
+                onRefresh={loadUploads}
               />
             )}
 
@@ -328,7 +372,7 @@ export const MarketingModule: React.FC = () => {
               />
             )}
 
-            {page === 'content' && (
+            {page === 'campaigns' && (
               <MarketingCampaigns
                 loading={loading}
                 onRequestApi={marketingRequest}

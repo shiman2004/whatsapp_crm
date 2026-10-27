@@ -7,9 +7,7 @@ generator client {
 }
 
 datasource db {
-  provider  = "postgresql"
-  url       = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
+  provider = "postgresql"
 }
 
 enum UserRole {
@@ -147,6 +145,7 @@ model User {
   language            LanguageCode       @default(en)
   avatar              String?            @db.VarChar(500)
   active              Boolean            @default(true)
+  marketingAccess     Boolean            @default(false) @map("marketing_access")
   createdAt           DateTime           @default(now())
   updatedAt           DateTime           @updatedAt
 

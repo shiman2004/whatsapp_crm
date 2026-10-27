@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { assertDatabaseOperationAllowed } from '../src/databasePolicy.js';
+
+const require = createRequire(import.meta.url);
 
 const operation = process.argv[2];
 const commands = {
@@ -20,7 +23,7 @@ try {
   process.exit(1);
 }
 
-const child = spawn(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['prisma', ...commands[operation]], { stdio: 'inherit' });
+const child = spawn(process.execPath, [require.resolve('prisma/build/index.js'), ...commands[operation]], { stdio: 'inherit' });
 child.on('error', (error) => {
   console.error(`Unable to start Prisma: ${error.message}`);
   process.exit(1);

@@ -113,6 +113,8 @@ export const CustomerProfileCard: React.FC<CustomerProfileCardProps> = ({ lead }
               <option value="contacted">🟣 Contacted</option>
               <option value="interested">🟢 Interested</option>
               <option value="follow_up">🟣 Follow-Up Sequence</option>
+              <option value="forwarded_to_exam_department">🧪 Forwarded to Exam Department</option>
+              <option value="forwarded_to_processing_department">⚙️ Forwarded to Processing Department</option>
               <option value="converted">🎉 Converted (Closed Won)</option>
               <option value="lost">🔴 Lost / Closed</option>
             </select>

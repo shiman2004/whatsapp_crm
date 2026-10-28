@@ -14,8 +14,15 @@ enum UserRole {
   super_admin
   leads_officer
   coordinator
+  sales_coordinator
+  exam_department_manager
+  exam_coordinator
+  exam_providing_officer
   marketing_officer
   marketing_admin
+  clinical_nurse
+  clinical_doctor
+  report_analyst
 }
 
 enum MarketingConsentStatus {
@@ -89,6 +96,8 @@ enum LeadStage {
   contacted
   potential
   under_discussion
+  forwarded_to_exam_department
+  forwarded_to_processing_department
   not_relevant
   not_eligible
   converted
@@ -961,3 +970,52 @@ model MarketingCampaignOfficer {
   @@map("marketing_campaign_officers")
 }
 
+
+// ------------------------------------------------------------
+// Exam Department models – added for Alpha Health Group CRM
+// ------------------------------------------------------------
+model Exam {
+  id          String    @id @default(cuid())
+  title       String
+  description String?
+  category    ExamCategory @relation(fields: [categoryId], references: [id])
+  categoryId  String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  active      Boolean  @default(true)
+  durationMinutes Int @default(60)
+  questions   Question[]
+  studentExams StudentExam[]
+}
+
+model ExamCategory {
+  id    String @id @default(cuid())
+  name  String
+  description String?
+  exams Exam[]
+}
+
+model Question {
+  id          String   @id @default(cuid())
+  exam        Exam     @relation(fields: [examId], references: [id])
+  examId      String
+  text        String
+  explanation String?
+  // simplified answer model – could be expanded for MCQ, etc.
+  answer      String
+  order       Int      @default(0)
+  createdAt   DateTime @default(now())
+}
+
+model StudentExam {
+  id          String   @id @default(cuid())
+  studentId   String   // references a User (role: student)
+  examId      String
+  exam        Exam     @relation(fields: [examId], references: [id])
+  startedAt   DateTime @default(now())
+  completedAt DateTime?
+  score       Float?
+  attempts    Int      @default(0)
+  // JSON blob storing answers per question (questionId -> answer)
+  answers     Json?
+}

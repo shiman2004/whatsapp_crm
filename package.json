@@ -18,7 +18,9 @@
     "test": "npm test --prefix backend",
     "test:setup": "npm run test:setup --prefix backend",
     "start": "node backend/server.js",
-    "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend"
+    "install:all": "npm install && npm install --prefix frontend && npm install --prefix backend",
+    "test:exam-upgrade": "node --test backend/test-exam-upgrade.test.js",
+    "test:runtime-config": "node --test backend/test-runtime-config.test.js"
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",

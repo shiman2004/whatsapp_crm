@@ -60,17 +60,58 @@ interface NotificationToast {
   timestamp: string;
 }
 
+export type ExamHandoffDetails = {
+  requirementType: 'international' | 'country_specific';
+  examCountry: string;
+  examTitle: string;
+  authority: string;
+  priority: 'urgent' | 'regular_work';
+  services: string[];
+  quotationNumber: string;
+  clientName: string;
+  clientEmail: string;
+  contactNumber: string;
+  paymentReceiptUrl: string;
+  paymentReceiptFileName: string;
+  receiptVoucherUrl: string;
+  receiptVoucherFileName: string;
+  receiptVoucherNo: string;
+};
+
+const getStaffRoleTitle = (user: any): string => {
+  if (user?.role === 'super_admin') return 'Super Admin';
+  if (user?.role === 'leads_officer') return 'Leads Officer';
+  if (user?.role === 'exam_department_manager') return 'Head of Exam Department';
+  if (user?.role === 'exam_coordinator') return 'Exam Coordinator';
+  if (user?.role === 'exam_providing_officer') return 'Exam Providing Officer';
+  if (user?.role === 'clinical_nurse') return 'Clinical Nurse';
+  if (user?.role === 'clinical_doctor') return 'Clinical Doctor';
+  if (user?.role === 'report_analyst') return 'Report Analyst';
+  if (user?.role === 'marketing_admin') return 'Marketing Administrator';
+  if (user?.role === 'marketing_officer') return 'Marketing Officer';
+  return user?.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator';
+};
+
 export const DEFAULT_STAGES: LeadStageConfig[] = [
   { id: 'stage-new', key: 'new', label: 'New Inquiry', orderIndex: 0, isActive: true, isSystem: true, color: '#f43f5e' },
   { id: 'stage-assigned', key: 'assigned', label: 'Accepted', orderIndex: 1, isActive: true, isSystem: false, color: '#22c55e' },
   { id: 'stage-contacted', key: 'contacted', label: 'Contacted', orderIndex: 2, isActive: true, isSystem: false, color: '#10b981' },
   { id: 'stage-potential', key: 'potential', label: 'Potential', orderIndex: 3, isActive: true, isSystem: false, color: '#a855f7' },
   { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', orderIndex: 4, isActive: true, isSystem: false, color: '#0ea5e9' },
-  { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', orderIndex: 5, isActive: true, isSystem: false, color: '#64748b' },
-  { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', orderIndex: 6, isActive: true, isSystem: false, color: '#71717a' },
-  { id: 'stage-converted', key: 'converted', label: 'Converted', orderIndex: 7, isActive: true, isSystem: true, color: '#14b8a6' },
-  { id: 'stage-lost', key: 'lost', label: 'Lost', orderIndex: 8, isActive: true, isSystem: true, color: '#ef4444' }
+  { id: 'stage-forwarded-exam', key: 'forwarded_to_exam_department', label: 'Forwarded to Exam Department', orderIndex: 5, isActive: true, isSystem: false, color: '#06b6d4' },
+  { id: 'stage-forwarded-processing', key: 'forwarded_to_processing_department', label: 'Forwarded to Processing Department', orderIndex: 6, isActive: true, isSystem: false, color: '#f97316' },
+  { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', orderIndex: 7, isActive: true, isSystem: false, color: '#64748b' },
+  { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', orderIndex: 8, isActive: true, isSystem: false, color: '#71717a' },
+  { id: 'stage-converted', key: 'converted', label: 'Converted', orderIndex: 9, isActive: true, isSystem: true, color: '#14b8a6' },
+  { id: 'stage-lost', key: 'lost', label: 'Lost', orderIndex: 10, isActive: true, isSystem: true, color: '#ef4444' }
 ];
+
+const mergeDefaultStages = (stageList: LeadStageConfig[]): LeadStageConfig[] => {
+  const existing = Array.isArray(stageList) ? stageList : [];
+  const existingKeys = new Set(existing.map(stage => stage.key));
+  return [...existing, ...DEFAULT_STAGES.filter(stage => !existingKeys.has(stage.key))]
+    .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
+};
 
 interface CrmContextType {
   // Authentication & RBAC
@@ -112,7 +153,10 @@ interface CrmContextType {
 
   // Lead actions
   assignLead: (leadId: string, coordinatorId: string) => Promise<boolean>;
-  updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string) => void;
+  updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string, examDetails?: ExamHandoffDetails) => void;
+  examHandoffDraft: { leadId: string; reason?: string } | null;
+  cancelExamHandoff: () => void;
+  submitExamHandoff: (details: ExamHandoffDetails) => void;
   updateLeadTreatment: (leadId: string, treatmentId: string, customSerial?: string) => void;
   updateLeadLanguage: (leadId: string, language: 'en' | 'si' | 'ta') => void;
   updateLeadCompany: (leadId: string, company: CompanyCode) => void;
@@ -178,7 +222,7 @@ interface CrmContextType {
   fetchTreatments: () => Promise<void>;
   fetchSuperAdmins: () => Promise<void>;
   createSuperAdmin: (data: { fullName: string; email: string; password?: string; pin?: string }) => Promise<{ success: boolean; error?: string }>;
-  updateSuperAdmin: (id: string, data: { fullName?: string; active?: boolean }) => Promise<{ success: boolean; error?: string }>;
+  updateSuperAdmin: (id: string, data: { fullName?: string; active?: boolean; pin?: string }) => Promise<{ success: boolean; error?: string }>;
   deleteSuperAdmin: (id: string) => Promise<{ success: boolean; error?: string }>;
 
   // Team Broadcast Channel
@@ -237,6 +281,7 @@ interface CrmContextType {
   // Desktop Notifications
   desktopNotifications: DesktopNotificationItem[];
   notificationSettings: NotificationSettings;
+  dispatchDesktopNotification: (item: DesktopNotificationItem) => void;
   dismissDesktopNotification: (id: string) => void;
   updateNotificationSettings: (settings: Partial<NotificationSettings>) => void;
   dispatchTestNotification: () => void;
@@ -335,8 +380,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return filteredUsers.map(u => ({
       ...u,
       branch: u.branch || 'Colombo',
-      company: u.role === 'leads_officer' ? undefined : (u.company || 'RWC'),
-      roleTitle: u.role === 'super_admin' ? 'Super Admin' : (u.role === 'leads_officer' ? 'Leads Officer' : (u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')),
+        company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || 'RWC'),
+      roleTitle: getStaffRoleTitle(u),
     }));
   });
 
@@ -359,7 +404,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const stored = getStored<Treatment[]>('rw_crm_courses', []);
     return stored.length > 0 ? stored : INITIAL_TREATMENTS.filter(t => t.company === 'CRAS');
   });
-  const [stages, setStages] = useState<LeadStageConfig[]>(() => getStored('rw_crm_stages', DEFAULT_STAGES));
+  const [stages, setStages] = useState<LeadStageConfig[]>(() => mergeDefaultStages(getStored('rw_crm_stages', DEFAULT_STAGES)));
   const [superAdmins, setSuperAdmins] = useState<User[]>(() => {
     const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
     return storedUsers.filter(u => 
@@ -446,6 +491,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return cachedLeads.length > 0 ? cachedLeads[0].id : null;
   });
   const [notifications, setNotifications] = useState<NotificationToast[]>([]);
+  const [examHandoffDraft, setExamHandoffDraft] = useState<{ leadId: string; reason?: string } | null>(null);
   const [simulatorOpen, setSimulatorOpen] = useState<boolean>(false);
   const [replyingMessage, setReplyingMessage] = useState<Message | null>(null);
   const [whatsappStatus, setWhatsappStatus] = useState<WhatsAppConnectionStatus>('connecting');
@@ -521,8 +567,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         ...user,
         active: true,
         branch: user.branch || 'Colombo',
-        company: user.role === 'leads_officer' ? undefined : (user.company || 'RWC'),
-        roleTitle: user.role === 'super_admin' ? 'Super Admin' : (user.role === 'leads_officer' ? 'Leads Officer' : (user.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'))
+        company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(user.role) ? undefined : (user.company || 'RWC'),
+        roleTitle: getStaffRoleTitle(user)
       } as User;
     } catch {
       return null;
@@ -613,6 +659,75 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }, notificationSettingsRef.current.autoDismissSeconds * 1000);
     }
   }, []);
+
+  // Poll the durable exam handoff inbox globally so Heads of Exam and assigned
+  // officers receive an alert even while working in another CRM module.
+  const seenExamHandoffsRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const role = String(currentUser?.role || '').toLowerCase();
+    const title = String(currentUser?.roleTitle || '').toLowerCase();
+    const canReceiveAsHead = role === 'super_admin' || role === 'exam_department_manager' || title.includes('head of exam') || title.includes('exam department manager');
+    const canReceiveAsOfficer = role === 'coordinator' || role === 'exam_coordinator' || role === 'exam_providing_officer' || title.includes('exam providing') || title.includes('exam officer');
+    if (!canReceiveAsHead && !canReceiveAsOfficer) return;
+    let stopped = false;
+    let running = false;
+    const poll = async () => {
+      if (stopped || running || document.hidden) return;
+      running = true;
+      try {
+        const response = await fetch(`${API_BASE_URL}/api/exam-ops/handoffs`, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
+        const payload = await response.json();
+        if (!response.ok || !payload.success || !Array.isArray(payload.data)) return;
+        payload.data.forEach((handoff: any) => {
+          const isNewForHead = canReceiveAsHead && ['PENDING_ACCEPTANCE', 'OFFICER_ACCEPTED', 'IN_PROGRESS', 'DELIVERED_TO_CRM'].includes(handoff.status);
+          const isAssignedToOfficer = canReceiveAsOfficer && handoff.assignedOfficerId === currentUser?.id && handoff.status === 'ASSIGNED';
+          if (!isNewForHead && !isAssignedToOfficer) return;
+          const eventKey = `${handoff.id}:${handoff.status}:${canReceiveAsHead ? 'head' : 'officer'}`;
+          if (seenExamHandoffsRef.current.has(eventKey)) return;
+          seenExamHandoffsRef.current.add(eventKey);
+          const eventTimestamp = handoff.status === 'ASSIGNED'
+            ? handoff.assignedAt
+            : handoff.status === 'OFFICER_ACCEPTED'
+              ? handoff.officerAcceptedAt
+              : handoff.status === 'IN_PROGRESS'
+                ? handoff.startedAt
+                : handoff.status === 'DELIVERED_TO_CRM'
+                  ? handoff.completedAt
+                  : handoff.submittedAt;
+          const notificationTime = eventTimestamp || new Date().toISOString();
+          const message = handoff.status === 'PENDING_ACCEPTANCE'
+            ? `New exam materials handoff ${handoff.number || ''} is waiting for acceptance.`.trim()
+            : handoff.status === 'ASSIGNED'
+              ? `Exam handoff ${handoff.number || ''} was assigned to you.`.trim()
+              : handoff.status === 'OFFICER_ACCEPTED'
+                ? `${handoff.officerAcceptedByName || 'Exam officer'} accepted exam handoff ${handoff.number || ''}.`.trim()
+                : handoff.status === 'IN_PROGRESS'
+                  ? `${handoff.assignedOfficerName || 'Exam officer'} started work on exam handoff ${handoff.number || ''}.`.trim()
+                  : `Exam materials for handoff ${handoff.number || ''} were provided successfully.`.trim();
+          dispatchDesktopNotification({
+            id: `exam-handoff-${eventKey}`,
+            leadId: handoff.leadId,
+            customerId: handoff.leadId,
+            contactName: handoff.leadName || 'Exam handoff',
+            contactPhone: handoff.phone || '',
+            messageText: message,
+            timestamp: notificationTime,
+            timeDisplay: new Date(notificationTime).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
+            unreadCount: 1,
+            company: 'EXAM',
+          });
+          if (notificationSettingsRef.current.nativeBrowser && 'Notification' in window && Notification.permission === 'granted') {
+            showDesktopNativeNotification('Exam Department — Handoff Update', { body: message, icon: '/logo.png', badge: '/favicon.png', leadId: handoff.leadId, tag: `exam-handoff-${eventKey}` });
+          }
+        });
+      } catch (_) {
+        // The Operations inbox displays storage errors; background polling stays quiet.
+      } finally { running = false; }
+    };
+    void poll();
+    const timer = window.setInterval(() => void poll(), 30000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [currentUser?.id, currentUser?.role, currentUser?.roleTitle, dispatchDesktopNotification]);
 
   const dispatchTestNotification = useCallback(() => {
     if (notificationSettingsRef.current.sound) {
@@ -812,8 +927,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...existingLocal,
               ...u,
               branch: u.branch || existingLocal?.branch || 'Colombo',
-              company: u.role === 'leads_officer' ? undefined : (u.company || existingLocal?.company || 'RWC'),
-              roleTitle: u.role === 'super_admin' ? 'Super Admin' : (u.role === 'leads_officer' ? 'Leads Officer' : (u.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')),
+              company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || existingLocal?.company || 'RWC'),
+              roleTitle: getStaffRoleTitle(u),
               password: u.password || existingLocal?.password || (isSuper ? 'admin' : 'staff'),
               pin: u.pin || existingLocal?.pin || (isSuper ? '1234' : '2026'),
               active: u.active ?? true,
@@ -1304,11 +1419,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 setUsers(prev => {
                   const existingIdx = prev.findIndex(u => u.id === incomingUser.id);
                   const isSuper = incomingUser.role === 'super_admin' || incomingUser.id === 'user-admin-1';
-                  const roleTitle = incomingUser.role === 'super_admin' ? 'Super Admin' : (incomingUser.role === 'leads_officer' ? 'Leads Officer' : (incomingUser.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'));
+                  const roleTitle = getStaffRoleTitle(incomingUser);
                   const safeUserItem: User = {
                     ...incomingUser,
                     branch: incomingUser.branch || 'Colombo',
-                    company: incomingUser.role === 'leads_officer' ? undefined : (incomingUser.company || 'RWC'),
+                    company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(incomingUser.role) ? undefined : (incomingUser.company || 'RWC'),
                     roleTitle,
                     password: incomingUser.password || (isSuper ? 'admin' : 'staff'),
                     pin: incomingUser.pin || (isSuper ? '1234' : '2026'),
@@ -2056,13 +2171,20 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Update lead stage
-  const updateLeadStage = (leadId: string, newStage: LeadStage, reason?: string) => {
+  const updateLeadStage = (leadId: string, newStage: LeadStage, reason?: string, examDetails?: ExamHandoffDetails) => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead) return;
 
     if (lead.stage === newStage && !(newStage === 'assigned' && !lead.acceptedAt)) return;
 
     const prevStage = lead.stage;
+    const stageLabel = stages.find(stage => stage.key === newStage)?.label?.toLowerCase() || '';
+    const forwardedToExam = newStage === 'forwarded_to_exam_department' || stageLabel.includes('forwarded to exam');
+    if (forwardedToExam && !examDetails) {
+      setExamHandoffDraft({ leadId, reason });
+      notify('Exam handoff details required', 'Complete the exam country, title, authority, services, client and payment details before forwarding.', 'warning');
+      return;
+    }
 
     // Trigger celebration confetti on conversion!
     if (newStage === 'converted') {
@@ -2110,6 +2232,49 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       })
     }).catch(err => console.warn('Could not sync lead stage update to backend:', err));
 
+    // A sales handoff to the exam department creates a durable inbox item for
+    // the Head of Exam Department. The lead stage remains the source of truth;
+    // this side-effect adds the departmental work queue without blocking the
+    // optimistic pipeline update.
+    if (forwardedToExam) {
+      fetch(`${API_BASE_URL}/api/exam-ops/handoffs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({
+          leadId: lead.id,
+            leadName: examDetails?.clientName || lead.customer?.displayName || 'Unnamed lead',
+            phone: examDetails?.contactNumber || lead.customer?.whatsappNumber || lead.customer?.phoneNumber || '',
+            email: examDetails?.clientEmail || '',
+          profession: lead.categoryId || lead.treatmentId || '',
+            examCountry: examDetails?.examCountry,
+            examTitle: examDetails?.examTitle,
+            authority: examDetails?.authority,
+            priority: examDetails?.priority,
+            services: examDetails?.services,
+            quotationNumber: examDetails?.quotationNumber,
+            clientName: examDetails?.clientName,
+            clientEmail: examDetails?.clientEmail,
+            contactNumber: examDetails?.contactNumber,
+            paymentReceiptUrl: examDetails?.paymentReceiptUrl,
+            paymentReceiptFileName: examDetails?.paymentReceiptFileName,
+            receiptVoucherUrl: examDetails?.receiptVoucherUrl,
+            receiptVoucherFileName: examDetails?.receiptVoucherFileName,
+            receiptVoucherNo: examDetails?.receiptVoucherNo,
+          source: 'Sales Pipeline',
+          company: lead.company || 'RWC',
+          notes: reason || 'Sales forwarded this lead for exam materials and delivery.'
+        })
+      }).then(async response => {
+        if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || 'Exam Department handoff failed');
+        notify('Exam Department Notified', `${lead.customer?.displayName || 'Lead'} was added to the Exam Department inbox.`, 'success');
+      }).catch(err => {
+        notify('Exam Handoff Warning', err.message || 'The lead moved locally, but the Exam Department inbox could not be updated.', 'warning');
+      });
+    }
+
     // Record stage history
     const hist: LeadStageHistory = {
       id: 'hist-' + Date.now(),
@@ -2126,6 +2291,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Audit log
     logAudit('STAGE_CHANGED', 'Lead', leadId, { stage: prevStage }, { stage: newStage, reason });
   };
+
+  const cancelExamHandoff = useCallback(() => setExamHandoffDraft(null), []);
+  const submitExamHandoff = useCallback((details: ExamHandoffDetails) => {
+    if (!examHandoffDraft) return;
+    const draft = examHandoffDraft;
+    setExamHandoffDraft(null);
+    updateLeadStage(draft.leadId, 'forwarded_to_exam_department', draft.reason, details);
+  }, [examHandoffDraft, updateLeadStage]);
 
   // Update lead treatment & generate/save serial number
   const updateLeadTreatment = (leadId: string, treatmentId: string, customSerial?: string) => {
@@ -2927,8 +3100,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         const data = await res.json();
         const stageList = Array.isArray(data) ? data : (data?.stages || []);
         if (Array.isArray(stageList) && stageList.length > 0) {
-          setStages(stageList);
-          localStorage.setItem('rw_crm_stages', JSON.stringify(stageList));
+          const mergedStages = mergeDefaultStages(stageList);
+          setStages(mergedStages);
+          localStorage.setItem('rw_crm_stages', JSON.stringify(mergedStages));
         }
       }
     } catch (e) {
@@ -3349,53 +3523,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const updateSuperAdmin = async (id: string, data: { fullName?: string; active?: boolean }) => {
-    // 1. Optimistically update local superAdmins list
-    setSuperAdmins(prev => prev.map(u => u.id === id ? { ...u, ...data } : u));
-    
-    // 2. Optimistically update users list and localStorage
-    setUsers(prev => {
-      const updated = prev.map(u => u.id === id ? { ...u, ...data } : u);
-      try {
-        localStorage.setItem('rw_crm_users', JSON.stringify(updated));
-      } catch (e) {}
-      return updated;
-    });
-
-    // 3. If currently logged in as this user, update active user state
-    if (currentUser?.id === id) {
-      setCurrentUser(prev => prev ? { ...prev, ...data } : prev);
-      try {
-        const storedAuth = localStorage.getItem('rw_crm_auth_user');
-        if (storedAuth) {
-          const parsed = JSON.parse(storedAuth);
-          localStorage.setItem('rw_crm_auth_user', JSON.stringify({ ...parsed, ...data }));
-        }
-      } catch (e) {}
-    }
-
+  const updateSuperAdmin = async (id: string, data: { fullName?: string; active?: boolean; pin?: string }) => {
     try {
       const token = await ensureValidAuthToken();
-      const res = await fetch(`${API_BASE_URL}/api/admin/super-admins/${id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${token}`
-        },
+      const res = await fetch(API_BASE_URL + '/api/admin/super-admins/' + encodeURIComponent(id), {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
         body: JSON.stringify(data)
       });
-      const resData = await res.json().catch(() => ({}));
-      if (res.ok) {
-        await fetchSuperAdmins();
-      }
-    } catch (e: any) {
-      console.warn('Backend updateSuperAdmin network sync warning:', e.message);
+      const result = await res.json().catch(() => ({}));
+      if (!res.ok || result.success === false) return { success: false, error: result.error || 'Account update failed.' };
+      // Never merge a submitted PIN into browser state or localStorage.
+      await fetchSuperAdmins();
+      const publicChanges = { ...(data.fullName !== undefined ? { fullName: data.fullName } : {}), ...(data.active !== undefined ? { active: data.active } : {}) };
+      setUsers(prev => prev.map(u => u.id === id ? { ...u, ...publicChanges } : u));
+      if (currentUser?.id === id) setCurrentUser(prev => prev ? { ...prev, ...publicChanges } : prev);
+      notify('Account Updated', 'Account changes saved successfully.', 'success');
+      return { success: true };
+    } catch {
+      return { success: false, error: 'Unable to save account changes. Check the connection and retry.' };
     }
-
-    notify('Account Updated', 'Account name saved successfully.', 'success');
-    return { success: true };
   };
-
   const deleteSuperAdmin = async (id: string) => {
     // 1. Optimistic removal
     setSuperAdmins(prev => prev.filter(u => u.id !== id));
@@ -3479,9 +3626,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
-    const role: UserRole = data.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
-    const cleanCompany: CompanyCode | undefined = role === 'leads_officer' ? undefined : (data.company || 'RWC');
-    const newCoordId = (role === 'leads_officer' ? 'officer-' : 'coord-') + Date.now();
+    const role: UserRole = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
+    const cleanCompany: CompanyCode | undefined = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? undefined : (data.company || 'RWC');
+    const newCoordId = (role === 'leads_officer' ? 'officer-' : role.startsWith('exam_') ? 'exam-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
     const cleanPin = String(data.pin || '2026').trim().slice(0, 10);
     const autoEmail = data.email || `${data.fullName.toLowerCase().replace(/[^a-z0-9]/g, '') || (role === 'leads_officer' ? 'officer' : 'coord') + Date.now()}@royalwellness.lk`;
@@ -4137,7 +4284,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     initialMessage?: string;
     templateName?: string;
     templateParams?: string[];
-  }): Promise<{ success: boolean; leadId?: string; error?: string; messageSent?: boolean; messageError?: string }> => {
+  }): Promise<{ success: boolean; leadId?: string; error?: string; messageSent?: boolean; messageError?: string; duplicateContact?: { id?: string; displayName?: string; whatsappNumber?: string; company?: string | null; addedById?: string | null; addedByName?: string | null; addedAt?: string | null } }> => {
     try {
       const authHeaders = {
         'Content-Type': 'application/json',
@@ -4163,8 +4310,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       const resData = await res.json();
       if (!res.ok || !resData.success) {
-        notify('Contact Error', resData.error || 'Failed to create contact', 'warning');
-        return { success: false, error: resData.error };
+        const duplicateContact = resData.existingContact;
+        const duplicateDetails = resData.errorCode === 'DUPLICATE_CONTACT' && duplicateContact
+          ? `${resData.error || 'This WhatsApp number is already registered.'} Existing contact: ${duplicateContact.displayName || 'Unnamed contact'}.${duplicateContact.company ? ` Company: ${duplicateContact.company}.` : ''}`
+          : resData.error;
+        notify(
+          resData.errorCode === 'DUPLICATE_CONTACT' || resData.duplicate ? 'Duplicate Contact' : 'Contact Error',
+          duplicateDetails || 'Failed to create contact',
+          'warning'
+        );
+        return { success: false, error: duplicateDetails || resData.error, duplicateContact };
       }
 
       const { customer: dbCust, lead: dbLead, message: dbMsg, leadId, messageSent, messageError } = resData;
@@ -4279,6 +4434,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     selectedLead: resolvedSelectedLead,
     assignLead,
     updateLeadStage,
+    examHandoffDraft,
+    cancelExamHandoff,
+    submitExamHandoff,
     updateLeadTreatment,
     updateLeadLanguage,
     updateLeadCompany,
@@ -4361,6 +4519,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setHasMetaConfig,
     desktopNotifications,
     notificationSettings,
+    dispatchDesktopNotification,
     dismissDesktopNotification,
     updateNotificationSettings,
     dispatchTestNotification,

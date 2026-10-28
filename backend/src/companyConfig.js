@@ -5,7 +5,8 @@
 export const COMPANIES = {
   RWC: {
     code: 'RWC',
-    tag: '(RWC)',
+    // Keep RWC as the internal company code while displaying AHC in the CRM.
+    tag: 'AHC',
     name: 'Royal Wellness Center',
     shortName: 'Royal Wellness',
     colorHex: '#008000', // Green requested by user

@@ -82,7 +82,7 @@ export const DashboardOverview: React.FC = () => {
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${activeCompany === 'RWC' ? 'bg-white' : 'bg-emerald-500 dark:bg-emerald-400'}`}></span>
-              <span>(RWC) Royal Wellness</span>
+              <span>RWC Royal Wellness</span>
               <span className="text-[10px] opacity-90 font-mono bg-black/10 dark:bg-black/20 px-1.5 py-0.5 rounded">
                 {rwcCount}
               </span>
@@ -100,7 +100,7 @@ export const DashboardOverview: React.FC = () => {
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${activeCompany === 'CRAS' ? 'bg-white' : 'bg-rose-500 dark:bg-rose-400'}`}></span>
-              <span>(CRAS) CRAS Academy</span>
+              <span>CRAS Academy</span>
               <span className="text-[10px] opacity-90 font-mono bg-black/10 dark:bg-black/20 px-1.5 py-0.5 rounded">
                 {crasCount}
               </span>
@@ -135,7 +135,7 @@ export const DashboardOverview: React.FC = () => {
               style={{ backgroundColor: activeCompany === 'CRAS' ? '#800000' : '#008000' }}
               className="px-3.5 py-1.5 rounded-xl font-black text-xs text-white uppercase tracking-wider shadow border border-white/10"
             >
-              {activeCompany === 'CRAS' ? '(CRAS)' : '(RWC)'}
+              {activeCompany === 'CRAS' ? 'CRAS' : 'RWC'}
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">

@@ -671,7 +671,7 @@ export const TeamBroadcastView: React.FC = () => {
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            Royal Wellness (RWC)
+            Royal Wellness RWC
           </button>
           <button
             type="button"

@@ -184,6 +184,8 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
       { key: 'contacted', label: 'Contacted', color: '#10b981' },
       { key: 'potential', label: 'Potential', color: '#a855f7' },
       { key: 'under_discussion', label: 'Under Discussion', color: '#0ea5e9' },
+      { key: 'forwarded_to_exam_department', label: 'Forwarded to Exam Department', color: '#06b6d4' },
+      { key: 'forwarded_to_processing_department', label: 'Forwarded to Processing Department', color: '#f97316' },
       { key: 'not_relevant', label: 'Not Relevant', color: '#64748b' },
       { key: 'not_eligible', label: 'Not Eligible', color: '#71717a' },
       { key: 'converted', label: 'Converted', color: '#14b8a6' },
@@ -278,7 +280,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
               )}
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Workload distribution across Patient Coordinators (RWC) & Education Counsellors (CRAS)
+              Workload distribution across Patient Coordinators RWC & Education Counsellors CRAS
             </p>
           </div>
         </div>
@@ -660,7 +662,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/60">
-                            Royal Wellness (RWC)
+                            Royal Wellness RWC
                           </span>
                         )}
                       </td>

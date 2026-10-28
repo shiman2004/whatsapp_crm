@@ -24,8 +24,8 @@ export const CompanyTagBadge: React.FC<CompanyTagBadgeProps> = ({
   const isCras = comp.code === 'CRAS';
 
   // User requested exact hex codes:
-  // Royal Wellness Center (RWC): Green #008000
-  // College of Royal Aesthetic of Sri Lanka (CRAS): Maroon #800000
+  // AHC (internal company code RWC): Green #008000
+  // College of Royal Aesthetic of Sri Lanka CRAS: Maroon #800000
   const badgeStyle: React.CSSProperties = isCras
     ? {
         backgroundColor: '#800000',
@@ -50,11 +50,12 @@ export const CompanyTagBadge: React.FC<CompanyTagBadgeProps> = ({
       } ${className}`}
       title={comp.name}
     >
-      <span>{comp.tag}</span>
-      {showFullName && (
+      {showFullName ? (
         <span className="font-semibold normal-case text-[10px] opacity-90 hidden sm:inline">
-          {comp.shortName}
+          {comp.shortName || comp.name}
         </span>
+      ) : (
+        <span>{comp.tag}</span>
       )}
     </span>
   );

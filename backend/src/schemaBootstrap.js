@@ -16,6 +16,19 @@
  */
 
 const STATEMENTS = [
+  // --- departmental staff roles ----------------------------------------------
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'sales_coordinator';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'exam_department_manager';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'exam_coordinator';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'exam_providing_officer';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'clinical_nurse';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'clinical_doctor';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'report_analyst';`,
+
+  // --- lead workflow forwarding stages ---------------------------------------
+  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'forwarded_to_exam_department';`,
+  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'forwarded_to_processing_department';`,
+
   // --- leads table shape -------------------------------------------------------
   `ALTER TABLE "leads" ALTER COLUMN "categoryId" DROP NOT NULL;`,
   `ALTER TABLE "leads" ALTER COLUMN "treatmentId" DROP NOT NULL;`,
@@ -94,6 +107,29 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_security_audit_created ON public.security_audit_events(created_at DESC);`,
   `CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON public.security_audit_events(actor_id, created_at DESC);`,
+
+  // --- patient assessment and report workflow -------------------------------
+  `CREATE TABLE IF NOT EXISTS public.clinical_ops_records (
+     kind VARCHAR(80) NOT NULL,
+     id VARCHAR(100) NOT NULL,
+     data JSONB NOT NULL,
+     revision INTEGER NOT NULL DEFAULT 1,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY(kind, id)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_kind_updated ON public.clinical_ops_records(kind, updated_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_status ON public.clinical_ops_records(kind, (data->>'status'));`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_doctor ON public.clinical_ops_records(kind, (data->>'assignedDoctorId'));`,
+  `CREATE TABLE IF NOT EXISTS public.clinical_ops_audit (
+     id BIGSERIAL PRIMARY KEY,
+     actor_id VARCHAR(100),
+     action VARCHAR(120) NOT NULL,
+     target VARCHAR(120) NOT NULL,
+     details JSONB NOT NULL DEFAULT '{}'::jsonb,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_audit_created ON public.clinical_ops_audit(created_at DESC);`,
 
   // --- staff broadcasts --------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.team_broadcasts (
@@ -378,6 +414,19 @@ const SEED_STATEMENTS = [
     ON CONFLICT (id) DO NOTHING;`
 ];
 
+const FORWARDING_STAGE_STATEMENTS = [
+  `INSERT INTO public.lead_stages (id, key, label, description, color, order_index, is_active, is_system, company, updated_at)
+   VALUES
+     ('stage-forwarded-exam', 'forwarded_to_exam_department', 'Forwarded to Exam Department', 'Lead handed over to the healthcare exam preparation team.', 'cyan', 5, TRUE, FALSE, 'ALL', NOW()),
+     ('stage-forwarded-processing', 'forwarded_to_processing_department', 'Forwarded to Processing Department', 'Lead handed over to the document and application processing team.', 'orange', 6, TRUE, FALSE, 'ALL', NOW())
+   ON CONFLICT (key) DO UPDATE SET
+     label = EXCLUDED.label,
+     description = EXCLUDED.description,
+     color = EXCLUDED.color,
+     is_active = TRUE,
+     updated_at = NOW();`
+];
+
 async function runAll(prisma, statements, failures) {
   for (const sql of statements) {
     try {
@@ -402,6 +451,7 @@ export async function ensureSchema(prisma) {
   if (seeded && seeded[0] && seeded[0].count === 0) {
     await runAll(prisma, SEED_STATEMENTS, failures);
   }
+  await runAll(prisma, FORWARDING_STAGE_STATEMENTS, failures);
 
   if (failures.length > 0) {
     console.warn(`⚠️ [Schema] ${failures.length} bootstrap statement(s) did not apply:`);

@@ -468,7 +468,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             </button>
           )}
 
-          {/* Company Filter Badges: (RWC) in Green & (CRAS) in Maroon */}
+          {/* Company Filter Badges: RWC in Green & CRAS in Maroon */}
           <button
             onClick={() => handleFilterSelect('rwc')}
             className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
@@ -479,7 +479,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             title="Filter Royal Wellness Center messages"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#008000]" />
-            <span>(RWC)</span>
+            <span>RWC</span>
             {rwcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#008000]/15 dark:bg-[#008000]/20 text-[#15803d] dark:text-[#22c55e]">{rwcCount}</span>}
           </button>
 
@@ -493,7 +493,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             title="Filter College of Royal Aesthetic messages"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
-            <span>(CRAS)</span>
+            <span>CRAS</span>
             {crasCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#800000]/15 dark:bg-[#800000]/25 text-[#9f1239] dark:text-[#f87171]">{crasCount}</span>}
           </button>
 
@@ -733,7 +733,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         {displayName}
                       </span>
 
-                      {/* Company Tag Badge (RWC) or (CRAS) */}
+                      {/* Company Tag Badge RWC or CRAS */}
                       <CompanyTagBadge lead={lead} size="xs" />
 
                       {/* Locked Chat Indicator */}
@@ -984,7 +984,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
                     }`}
                   >
-                    (RWC)
+                    RWC
                   </button>
                   <button
                     onClick={() => {
@@ -997,7 +997,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
                     }`}
                   >
-                    (CRAS)
+                    CRAS
                   </button>
                 </div>
               </div>

@@ -43,7 +43,7 @@ const getUserRoleInfo = (user: any) => {
     };
   }
 
-  // 3. Education Counsellor (CRAS)
+  // 3. Education Counsellor CRAS
   if (user?.company === 'CRAS' || roleTitle.toLowerCase().includes('education') || roleTitle.toLowerCase().includes('counsellor')) {
     return {
       title: roleTitle || 'Education Counsellor',
@@ -59,7 +59,7 @@ const getUserRoleInfo = (user: any) => {
     };
   }
 
-  // 5. Patient Coordinator / Sales Officer (RWC)
+  // 5. Patient Coordinator / Sales Officer RWC
   return {
     title: roleTitle || (user?.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'),
     className: 'bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300 border border-teal-300/60 dark:border-teal-700/60'

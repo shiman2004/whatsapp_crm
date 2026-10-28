@@ -41,6 +41,8 @@ const DEFAULT_FALLBACK_STAGES: LeadStage[] = [
   'contacted',
   'potential',
   'under_discussion',
+  'forwarded_to_exam_department',
+  'forwarded_to_processing_department',
   'not_relevant',
   'not_eligible',
   'converted',

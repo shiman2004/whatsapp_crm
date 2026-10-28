@@ -16,9 +16,10 @@ export interface CompanyConfig {
 export const COMPANIES: Record<CompanyCode, CompanyConfig> = {
   RWC: {
     code: 'RWC',
-    tag: '(RWC)',
+    // RWC remains the internal routing/company code. AHC is the public CRM label.
+    tag: 'AHC',
     name: 'Royal Wellness Center',
-    shortName: 'Royal Wellness',
+    shortName: 'AHC',
     colorHex: '#008000', // User requested green: #008000
     color: '#008000',
     phoneId: '1358157244046701',
@@ -28,7 +29,7 @@ export const COMPANIES: Record<CompanyCode, CompanyConfig> = {
   },
   CRAS: {
     code: 'CRAS',
-    tag: '(CRAS)',
+    tag: 'CRAS',
     name: 'College of Royal Aesthetic of Sri Lanka',
     shortName: 'CRAS College',
     colorHex: '#800000', // User requested maroon: #800000

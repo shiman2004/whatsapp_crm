@@ -38,55 +38,12 @@ import {
   getLatestCustomerMessageTime 
 } from '../../utils/window24hUtils';
 
+const compactContactName = (value?: string) => Array.from(value || 'Customer').slice(0, 10).join('');
+
 interface TableViewProps {
   leads: Lead[];
   onSelectLead: (leadId: string) => void;
   company?: 'RWC' | 'CRAS' | 'ALL';
-}
-
-/**
- * Generates clean 2-letter initials from customer display name
- */
-function getCustomerInitials(name?: string): string {
-  if (!name) return 'WA';
-  const clean = name.replace(/[\u{1F600}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu, '')
-                    .replace(/[^a-zA-Z0-9\s]/g, '')
-                    .trim();
-  const parts = clean.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  if (parts.length === 1 && parts[0].length >= 1) return parts[0].slice(0, 2).toUpperCase();
-  return name.trim().slice(0, 2).toUpperCase() || 'WA';
-}
-
-/**
- * Deterministically assigns a vibrant, premium avatar color based on customer name
- */
-function getAvatarColor(name?: string): string {
-  const colors = [
-    'bg-teal-600 text-white',
-    'bg-sky-600 text-white',
-    'bg-indigo-600 text-white',
-    'bg-purple-600 text-white',
-    'bg-rose-600 text-white',
-    'bg-amber-600 text-white',
-    'bg-emerald-600 text-white',
-    'bg-blue-600 text-white',
-    'bg-cyan-600 text-white'
-  ];
-  let hash = 0;
-  const str = name || 'Customer';
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
-/**
- * Filter out known placeholder stock photos
- */
-function isFakeAvatar(url?: string): boolean {
-  if (!url) return true;
-  return url.includes('photo-1534528741775-53994a69daeb') || url.includes('unsplash.com/photo-');
 }
 
 export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, company = 'RWC' }) => {
@@ -364,35 +321,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         </svg>
       )
     };
-  };
-
-  /**
-   * Renders the authentic customer profile avatar (Initials circle or verified custom uploaded image)
-   */
-  const renderCustomerAvatar = (displayName?: string, avatarUrl?: string) => {
-    const hasCustomPhoto = Boolean(avatarUrl && !isFakeAvatar(avatarUrl));
-    const initials = getCustomerInitials(displayName);
-    const colorClass = getAvatarColor(displayName);
-
-    if (hasCustomPhoto) {
-      return (
-        <img
-          src={avatarUrl}
-          alt={displayName || 'Customer'}
-          className="w-9 h-9 rounded-full object-cover border border-slate-700/80 shrink-0 shadow-xs"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-      );
-    }
-
-    return (
-      <div 
-        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/10 shadow-xs ${colorClass}`}
-        title={displayName || 'Customer'}
-      >
-        {initials}
-      </div>
-    );
   };
 
   /**
@@ -759,6 +687,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           <span className="text-xs text-slate-400">
             Pipeline Management Table
           </span>
+          <span className="text-slate-600">•</span>
+          <span className="text-[11px] font-semibold text-slate-400">
+            Companies: <span className="text-emerald-300">AHC</span> · <span className="text-rose-300">CRAS</span>
+          </span>
         </div>
 
         {/* Scroll Quick Actions */}
@@ -790,26 +722,34 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       <div 
         ref={tableContainerRef}
         onScroll={handleScroll}
-        className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
+        className="pipeline-table-scroll overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
         <style>{`
+          /* Make the wide pipeline's horizontal grab bar easy to see and drag. */
+          .pipeline-table-scroll { scrollbar-width: auto; scrollbar-color: rgba(45, 212, 190, 0.95) rgba(15, 23, 42, 0.95); scrollbar-gutter: stable both-edges; }
+          /* Larger hit targets make both scroll directions easier to drag on touchpads and laptops. */
+          .pipeline-table-scroll::-webkit-scrollbar { width: 28px; height: 28px; }
+          .pipeline-table-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.98); border: 2px solid rgba(45, 212, 190, 0.32); border-radius: 9999px; }
+          .pipeline-table-scroll::-webkit-scrollbar-thumb { background: rgba(45, 212, 190, 0.98); border: 4px solid rgba(15, 23, 42, 0.98); border-radius: 9999px; min-width: 90px; min-height: 64px; }
+          .pipeline-table-scroll::-webkit-scrollbar-thumb:hover { background: rgba(94, 234, 212, 1); }
+          .pipeline-table-scroll::-webkit-scrollbar-corner { background: rgba(15, 23, 42, 0.98); }
           /* One grid definition keeps header and every row aligned while scrolling. */
-          .pipeline-table { display: block; width: max-content; min-width: 2835px; }
+          .pipeline-table { display: block; width: max-content; min-width: 2845px; }
           .pipeline-table thead, .pipeline-table tbody { display: block; }
           .pipeline-table thead tr, .pipeline-table tbody tr {
             display: grid;
-            grid-template-columns: 60px 120px 280px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
-            min-width: 2835px;
+            grid-template-columns: 60px 120px 180px 110px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
+            min-width: 2845px;
           }
           .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
           .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { grid-column: 1; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { grid-column: 2; }
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { grid-column: 3; }
-          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 15; }
+          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 4; }
           .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 16; }
           .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 17; }
-          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 4; }
+          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 18; }
           .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 5; }
           .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 6; }
           .pipeline-table th:nth-child(10), .pipeline-table td:nth-child(10) { grid-column: 7; }
@@ -818,9 +758,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(13), .pipeline-table td:nth-child(13) { grid-column: 10; }
           .pipeline-table th:nth-child(14), .pipeline-table td:nth-child(14) { grid-column: 11; }
           .pipeline-table th:nth-child(15), .pipeline-table td:nth-child(15) { grid-column: 12; }
-          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 18; }
-          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 13; }
+          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 13; }
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 19; }
           .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 14; }
+          .pipeline-table th:nth-child(19), .pipeline-table td:nth-child(19) { grid-column: 15; }
 
           /* Sticky cells are deliberately limited to No., Serial No., Contact, and Actions. */
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1),
@@ -833,7 +774,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { left: 0; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { left: 60px; }
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { left: 180px; }
-          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) {
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) {
             position: sticky;
             right: 0;
             z-index: 5;
@@ -850,7 +791,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table thead th:nth-child(1),
           .pipeline-table thead th:nth-child(2),
           .pipeline-table thead th:nth-child(3),
-          .pipeline-table thead th:nth-child(16) { z-index: 30; }
+          .pipeline-table thead th:nth-child(17) { z-index: 30; }
         `}</style>
         <table className="pipeline-table text-left text-xs">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
@@ -871,6 +812,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{contactSort === 'asc' ? 'â†‘' : contactSort === 'desc' ? 'â†“' : 'â†•'}</span>
                 </button>
               </th>
+              <th className="py-3.5 px-3">Company</th>
               <th className="py-3.5 px-2">Source</th>
               <th className="py-3.5 px-2 text-center">Lang</th>
               <th className="py-3.5 px-2 text-center">Note</th>
@@ -904,7 +846,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           <tbody className="divide-y divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={18} className="py-16 text-center text-slate-500">
+                <td colSpan={19} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -944,19 +886,27 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
                     {/* 3. Name */}
                     <td className="py-3.5 px-4" onClick={(event) => { event.stopPropagation(); handlePatientClick(lead.id); }} onDoubleClick={(event) => { event.stopPropagation(); handlePatientDoubleClick(lead.id); }}>
-                      <div className="flex items-center gap-3">
-                        {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
+                      <div className="flex items-center">
                         <div className="min-w-0 flex flex-col">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="font-bold text-slate-100 text-xs truncate">{lead.customer?.displayName}</p>
-                            <CompanyTagBadge lead={lead} size="xs" />
+                            <p
+                              className="font-bold text-slate-100 text-xs truncate"
+                              title={compactContactName(lead.customer?.displayName)}
+                            >
+                              {compactContactName(lead.customer?.displayName)}
+                            </p>
                           </div>
                           <p className="text-[11px] text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber || 'No contact'}</p>
                         </div>
                       </div>
                     </td>
 
-                    {/* 6. Source Channel (icon-only) */}
+                    {/* 4. Company — kept separate from contact identity */}
+                    <td className="py-3.5 px-3 min-w-[90px] whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
+                      <CompanyTagBadge lead={lead} size="sm" />
+                    </td>
+
+                    {/* 5. Source Channel (icon-only) */}
                     <td className="py-3.5 px-2 min-w-[90px]" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <div 

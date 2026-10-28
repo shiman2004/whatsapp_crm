@@ -1204,7 +1204,17 @@ async function updateMarketingAccess(req, res, authUser, userId) {
   if (authUser.role !== 'super_admin') return failure(res, 403, 'MARKETING_FORBIDDEN', 'Only Super Admin can change marketing access.');
   const payload = await readJson(req);
   const prisma = getPrisma();
-  const user = await prisma.user.findFirst({ where: { id: userId, active: true, role: { in: ['coordinator', 'marketing_officer', 'leads_officer'] }, OR: [{ company: companyOf(authUser) }, { company: null }] } });
+  const companyScope = authUser.role === 'super_admin'
+    ? {}
+    : { OR: [{ company: companyOf(authUser) }, { company: null }] };
+  const user = await prisma.user.findFirst({
+    where: {
+      id: userId,
+      active: true,
+      role: { in: ['coordinator', 'marketing_officer', 'marketing_admin', 'leads_officer'] },
+      ...companyScope
+    }
+  });
   if (!user) return failure(res, 404, 'MARKETING_STAFF_NOT_FOUND', 'Active staff member not found in this company.');
   const updated = await prisma.user.update({ where: { id: user.id }, data: { marketingAccess: Boolean(payload.authorized) }, select: { id: true, fullName: true, role: true, marketingAccess: true } });
   return sendJson(res, 200, { success: true, data: updated });

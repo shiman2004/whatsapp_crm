@@ -18,8 +18,11 @@ import {
   Upload,
   Contact,
   ClipboardList,
+  ClipboardCheck,
+  ShieldCheck,
   ChevronDown,
-  ChevronRight
+  ChevronRight,
+  Clock
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -30,6 +33,7 @@ export type NavTab =
   | 'broadcast'
   | 'appointment-rooms'
   | 'settings'
+  | 'security-access'
   | 'treatments' 
   | 'coordinators' 
   | 'templates' 
@@ -37,7 +41,10 @@ export type NavTab =
   | 'audit'
   | 'webhook-sandbox'
   | 'architecture'
-  | 'marketing';
+  | 'exam'
+  | 'marketing'
+  | 'exam-department'
+  | 'patient-assessment'
 
 interface SidebarProps {
   activeTab: NavTab;
@@ -86,6 +93,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const pendingFollowupsCount = followups.filter(f => f.status === 'pending').length;
 
   const navItems = [
+    { id: 'exam-department' as NavTab, label: 'Exam Department', icon: ClipboardList, adminOnly: false, examStaffOnly: true },
+    { id: 'patient-assessment' as NavTab, label: 'Patient Assessment & Reports', icon: ClipboardCheck, adminOnly: false, clinicalStaffOnly: true },
     {
       id: 'chat' as NavTab,
       label: 'Live WhatsApp',
@@ -127,9 +136,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
       adminOnly: false,
     },
     {
+      id: 'exam' as NavTab,
+      label: 'Exam',
+      icon: Clock,
+      adminOnly: false,
+      studentOnly: true,
+    },
+    {
       id: 'settings' as NavTab,
       label: 'System Settings',
       icon: Sliders,
+      adminOnly: true, // Super Admin only
+    },
+    {
+      id: 'security-access' as NavTab,
+      label: 'Security & Access',
+      icon: ShieldCheck,
       adminOnly: true, // Super Admin only
     },
     {
@@ -181,6 +203,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const visibleNav = navItems.filter(item => {
     if (item.id === 'coordinators') return isSuperAdmin;
     if (item.adminOnly) return isSuperAdmin;
+    if ('examStaffOnly' in item && item.examStaffOnly) return ['super_admin','coordinator','leads_officer','exam_department_manager','exam_coordinator','exam_providing_officer'].includes(currentUser?.role || '');
+    if ('clinicalStaffOnly' in item && item.clinicalStaffOnly) return ['super_admin','clinical_nurse','clinical_doctor','report_analyst'].includes(currentUser?.role || '');
+    if (item.studentOnly) return String(currentUser?.role) === 'student';
     return true;
   });
 
@@ -231,6 +256,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               {visibleNav.map((item) => {
                 const Icon = item.icon;
                 const isActive = activeTab === item.id;
+                const activeItemClass = 'bg-emerald-50 text-emerald-800 dark:bg-[#202c33] dark:text-whatsapp font-bold shadow-xs';
+                const activeIconClass = 'text-emerald-600 dark:text-whatsapp';
                 return (
                   <React.Fragment key={item.id}>
                   <button
@@ -245,12 +272,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     }}
                     className={`relative w-full flex items-center ${isCollapsed ? 'justify-center px-2' : 'justify-between px-3'} py-2.5 sm:py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
                       isActive 
-                        ? 'bg-emerald-50 text-emerald-800 dark:bg-[#202c33] dark:text-whatsapp font-bold shadow-xs' 
+                        ? activeItemClass
                         : 'text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-[#202c33]/60 active:bg-slate-200 dark:active:bg-[#202c33]'
                     }`}
                   >
                     <div className={`flex items-center ${isCollapsed ? 'justify-center' : 'gap-2.5'}`}>
-                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-emerald-600 dark:text-whatsapp' : 'text-slate-400 dark:text-slate-400'}`} />
+                      <Icon className={`w-4 h-4 shrink-0 ${isActive ? activeIconClass : 'text-slate-400 dark:text-slate-400'}`} />
                       {!isCollapsed && <span className="truncate">{item.label}</span>}
                     </div>
                     {!isCollapsed && item.badge !== undefined && (

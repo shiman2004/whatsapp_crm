@@ -37,7 +37,7 @@ const checkIsAdminAllowed = (): boolean => {
   }
 };
 
-export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'leads_officer' | 'super_admin';
+export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'leads_officer' | 'super_admin' | 'student';
 
 export const LoginScreen: React.FC = () => {
   const { users, login } = useCrm() as any;
@@ -368,7 +368,7 @@ export const LoginScreen: React.FC = () => {
             {/* Portal Cards List */}
             <div className="space-y-3 pt-1">
               
-              {/* 1. Royal Wellness Center (RWC) Card */}
+              {/* 1. Royal Wellness Center RWC Card */}
               <button
                 type="button"
                 onClick={() => setPortalView('rwc')}
@@ -396,7 +396,7 @@ export const LoginScreen: React.FC = () => {
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
-              {/* 2. College of Royal Aesthetic (CRAS) Card */}
+              {/* 2. College of Royal Aesthetic CRAS Card */}
               <button
                 type="button"
                 onClick={() => setPortalView('cras')}

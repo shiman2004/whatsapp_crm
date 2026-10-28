@@ -36,12 +36,13 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
   } = useCrm();
 
   const isCrasUser = currentUser?.company === 'CRAS';
+  const isAhcUser = currentUser?.company === 'AHC';
   const crasDefaultCat = categories.find(c => c.id === 'cat-cras-courses' || c.name.toLowerCase().includes('cras') || c.name.toLowerCase().includes('course'));
   const rwcDefaultCat = categories.find(c => c.id !== 'cat-cras-courses' && !c.name.toLowerCase().includes('cras')) || categories[0];
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
-  const [company, setCompany] = useState<CompanyCode>(isCrasUser ? 'CRAS' : 'RWC');
+  const [company, setCompany] = useState<CompanyCode>(isCrasUser ? 'CRAS' : isAhcUser ? 'AHC' : 'RWC');
   const [categoryId, setCategoryId] = useState(isCrasUser ? (crasDefaultCat?.id || 'cat-cras-courses') : (rwcDefaultCat?.id || 'cat-hair-care'));
   const [treatmentId, setTreatmentId] = useState(isCrasUser ? 'crs-adi' : (treatments[0]?.id || 'trt-hair-prp'));
   const [language, setLanguage] = useState<'en' | 'si' | 'ta'>('en');
@@ -69,8 +70,25 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
           setAssignedTo('');
         }
       }
-      if (sendInitial || !initialMessage || initialMessage.includes('Royal Wellness')) {
+      if (sendInitial || !initialMessage || initialMessage.includes('Royal Wellness') || initialMessage.includes('Alpha Health Consultancy')) {
         setInitialMessage('Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka CRAS! How can we assist you today?');
+      }
+    } else if (newComp === 'AHC') {
+      const ahcCat = categories.find(c => c.name.toLowerCase().includes('consult') || c.name.toLowerCase().includes('alpha')) || categories[0];
+      const catId = ahcCat?.id || categories[0]?.id || 'cat-general';
+      setCategoryId(catId);
+      const firstTrt = treatments.find(t => t.categoryId === catId);
+      setTreatmentId(firstTrt?.id || treatments[0]?.id || 'trt-general');
+
+      // Clear coordinator if assigned user is not AHC
+      if (assignedTo) {
+        const currentCoord = users.find(u => u.id === assignedTo);
+        if (currentCoord && currentCoord.company && currentCoord.company !== 'AHC') {
+          setAssignedTo('');
+        }
+      }
+      if (sendInitial || !initialMessage || initialMessage.includes('Royal Wellness') || initialMessage.includes('College of Royal Aesthetic')) {
+        setInitialMessage('Hi, thank you for reaching out to Alpha Health Consultancy! How can we assist you today?');
       }
     } else {
       const rwcCat = categories.find(c => c.id !== 'cat-cras-courses' && !c.name.toLowerCase().includes('cras')) || categories[0];
@@ -79,14 +97,14 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
       const firstTrt = treatments.find(t => t.categoryId === catId && (t as any).company !== 'CRAS');
       setTreatmentId(firstTrt?.id || treatments[0]?.id || 'trt-hair-prp');
 
-      // Clear coordinator if assigned user is CRAS
+      // Clear coordinator if assigned user is CRAS or AHC
       if (assignedTo) {
         const currentCoord = users.find(u => u.id === assignedTo);
-        if (currentCoord && currentCoord.company === 'CRAS') {
+        if (currentCoord && (currentCoord.company === 'CRAS' || currentCoord.company === 'AHC')) {
           setAssignedTo('');
         }
       }
-      if (sendInitial || !initialMessage || initialMessage.includes('College of Royal Aesthetic')) {
+      if (sendInitial || !initialMessage || initialMessage.includes('College of Royal Aesthetic') || initialMessage.includes('Alpha Health Consultancy')) {
         setInitialMessage('Hi, thank you for reaching out to Royal Wellness Center! How can we assist you today?');
       }
     }
@@ -242,7 +260,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
             </div>
           </div>
 
-          {/* Company Selection: CRAS and RWC */}
+          {/* Company Selection: RWC, CRAS, and AHC */}
           <div>
             <label className="block text-xs font-semibold text-[#aebac1] mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1.5">
@@ -251,10 +269,14 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
                 <span className="text-rose-400">*</span>
               </span>
               <span className="text-[11px] font-normal text-[#8696a0]">
-                {company === 'CRAS' ? 'College of Royal Aesthetic of Sri Lanka' : 'Royal Wellness Center'}
+                {company === 'CRAS' 
+                  ? 'College of Royal Aesthetic of Sri Lanka (+94 70 637 3353)' 
+                  : company === 'AHC'
+                  ? 'Alpha Health Consultancy (+971 54 372 3912)'
+                  : 'Royal Wellness Center (+94 70 639 3353)'}
               </span>
             </label>
-            <div className="grid grid-cols-2 gap-2 bg-[#111b21] p-1.5 rounded-xl border border-[#31424d]">
+            <div className="grid grid-cols-3 gap-2 bg-[#111b21] p-1.5 rounded-xl border border-[#31424d]">
               <button
                 type="button"
                 onClick={() => handleCompanyChange('RWC')}
@@ -279,6 +301,18 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
                 <span className={`w-2 h-2 rounded-full ${company === 'CRAS' ? 'bg-white' : 'bg-[#800000]'}`} />
                 <span>CRAS</span>
               </button>
+              <button
+                type="button"
+                onClick={() => handleCompanyChange('AHC')}
+                className={`py-2 px-3 text-xs font-bold rounded-lg transition-all flex items-center justify-center gap-2 cursor-pointer ${
+                  company === 'AHC'
+                    ? 'bg-[#066e77] text-white shadow-md shadow-[#066e77]/40 ring-1 ring-teal-300'
+                    : 'text-[#8696a0] hover:text-[#e9edef] hover:bg-[#2a3942]'
+                }`}
+              >
+                <span className={`w-2 h-2 rounded-full ${company === 'AHC' ? 'bg-white' : 'bg-[#066e77]'}`} />
+                <span>AHC</span>
+              </button>
             </div>
           </div>
 
@@ -287,7 +321,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
             <div>
               <label className="block text-xs font-semibold text-[#aebac1] mb-1.5 flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5 text-[#00a884]" />
-                <span>{company === 'CRAS' ? 'Academic Program' : 'Treatment Category'}</span>
+                <span>{company === 'CRAS' ? 'Academic Program' : company === 'AHC' ? 'Consultancy Service' : 'Treatment Category'}</span>
               </label>
               <select
                 value={categoryId}
@@ -308,7 +342,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
 
             <div>
               <label className="block text-xs font-semibold text-[#aebac1] mb-1.5">
-                <span>{company === 'CRAS' ? 'Specific Course' : 'Specific Treatment'}</span>
+                <span>{company === 'CRAS' ? 'Specific Course' : company === 'AHC' ? 'Specific Package' : 'Specific Treatment'}</span>
               </label>
               <select
                 value={treatmentId}
@@ -357,7 +391,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
               <div>
                 <label className="block text-xs font-semibold text-[#aebac1] mb-1.5 flex items-center gap-1.5">
                   <Users className="w-3.5 h-3.5 text-[#00a884]" />
-                  <span>Assign {company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator'}</span>
+                  <span>Assign {company === 'CRAS' ? 'Education Counsellor' : company === 'AHC' ? 'Consultancy Advisor' : 'Patient Coordinator'}</span>
                 </label>
                 <select
                   value={assignedTo}
@@ -368,7 +402,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
                     -- Unassigned (Pool) --
                   </option>
                   {users
-                    .filter(u => u.role === 'coordinator' && (company === 'CRAS' ? u.company === 'CRAS' : (u.company === 'RWC' || !u.company)))
+                    .filter(u => u.role === 'coordinator' && (company === 'CRAS' ? u.company === 'CRAS' : company === 'AHC' ? u.company === 'AHC' : (u.company === 'RWC' || !u.company)))
                     .map((u) => (
                       <option key={u.id} value={u.id} className="bg-[#111b21] text-[#d1d7db]">
                         {u.fullName} {u.company ? `(${u.company})` : ''} {u.branch ? `(${u.branch})` : ''}

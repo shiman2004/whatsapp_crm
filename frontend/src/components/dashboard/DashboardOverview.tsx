@@ -18,7 +18,7 @@ export const DashboardOverview: React.FC = () => {
   // Determine active company
   const [activeCompany, setActiveCompany] = useState<CompanyCode | 'all'>(() => {
     if (currentUser?.role === 'coordinator') {
-      return currentUser.company === 'CRAS' ? 'CRAS' : 'RWC';
+      return currentUser.company === 'CRAS' ? 'CRAS' : (currentUser.company === 'AHC' ? 'AHC' : 'RWC');
     }
     return 'all';
   });
@@ -26,7 +26,7 @@ export const DashboardOverview: React.FC = () => {
   // Keep synced if user switches profile
   useEffect(() => {
     if (currentUser?.role === 'coordinator') {
-      setActiveCompany(currentUser.company === 'CRAS' ? 'CRAS' : 'RWC');
+      setActiveCompany(currentUser.company === 'CRAS' ? 'CRAS' : (currentUser.company === 'AHC' ? 'AHC' : 'RWC'));
     }
   }, [currentUser?.role, currentUser?.company]);
 
@@ -39,6 +39,7 @@ export const DashboardOverview: React.FC = () => {
   // Counts for selected company
   const rwcCount = useMemo(() => leads.filter(l => getLeadCompany(l).code === 'RWC').length, [leads]);
   const crasCount = useMemo(() => leads.filter(l => getLeadCompany(l).code === 'CRAS').length, [leads]);
+  const ahcCount = useMemo(() => leads.filter(l => getLeadCompany(l).code === 'AHC').length, [leads]);
 
   // Language stats for filtered leads
   const enCount = filteredLeads.filter(l => l.language === 'en').length;
@@ -105,6 +106,24 @@ export const DashboardOverview: React.FC = () => {
                 {crasCount}
               </span>
             </button>
+
+            {/* AHC Brand Tab */}
+            <button
+              type="button"
+              onClick={() => setActiveCompany('AHC')}
+              style={activeCompany === 'AHC' ? { backgroundColor: '#066e77', color: '#ffffff' } : {}}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
+                activeCompany === 'AHC'
+                  ? 'shadow-lg shadow-teal-950/60 ring-2 ring-[#066e77]/40'
+                  : 'text-teal-800 dark:text-slate-300 bg-teal-50 dark:bg-[#066e77]/20 border border-teal-200 dark:border-[#066e77]/40 hover:bg-teal-100 dark:hover:bg-[#066e77]/30'
+              }`}
+            >
+              <span className={`w-2 h-2 rounded-full ${activeCompany === 'AHC' ? 'bg-white' : 'bg-[#066e77]'}`}></span>
+              <span>Alpha Health</span>
+              <span className="text-[10px] opacity-90 font-mono bg-black/10 dark:bg-black/20 px-1.5 py-0.5 rounded">
+                {ahcCount}
+              </span>
+            </button>
           </div>
 
           {/* Active Company Subtitle Indicator */}
@@ -119,6 +138,11 @@ export const DashboardOverview: React.FC = () => {
                 <GraduationCap className="w-3.5 h-3.5" />
                 <span>CRAS Academy &bull; Student Admissions & Academic Courses</span>
               </span>
+            ) : activeCompany === 'AHC' ? (
+              <span className="text-teal-700 dark:text-teal-300 font-medium flex items-center gap-1.5">
+                <Building2 className="w-3.5 h-3.5 text-[#066e77]" />
+                <span>Alpha Health Consultancy &bull; Advisory & International Services</span>
+              </span>
             ) : (
               <span className="text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1.5">
                 <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
@@ -132,22 +156,26 @@ export const DashboardOverview: React.FC = () => {
         <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div 
-              style={{ backgroundColor: activeCompany === 'CRAS' ? '#800000' : '#008000' }}
+              style={{ backgroundColor: activeCompany === 'CRAS' ? '#800000' : (activeCompany === 'AHC' ? '#066e77' : '#008000') }}
               className="px-3.5 py-1.5 rounded-xl font-black text-xs text-white uppercase tracking-wider shadow border border-white/10"
             >
-              {activeCompany === 'CRAS' ? 'CRAS' : 'RWC'}
+              {activeCompany === 'CRAS' ? 'CRAS' : (activeCompany === 'AHC' ? 'AHC' : 'RWC')}
             </div>
             <div>
               <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
                 <span>
                   {activeCompany === 'CRAS' 
                     ? 'College of Royal Aesthetic — Education Counsellor Dashboard' 
+                    : activeCompany === 'AHC'
+                    ? 'Alpha Health Consultancy — Advisory Dashboard'
                     : 'Royal Wellness Center — Patient Coordinator Clinic Dashboard'}
                 </span>
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
                 {activeCompany === 'CRAS'
                   ? 'Viewing CRAS academic leads, student enrollments, and inquiries only'
+                  : activeCompany === 'AHC'
+                  ? 'Viewing Alpha Health consultancy leads, services, and client inquiries only'
                   : 'Viewing Royal Wellness clinic leads, treatments, and patient inquiries only'}
               </p>
             </div>

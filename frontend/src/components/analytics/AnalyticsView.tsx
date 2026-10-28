@@ -39,9 +39,10 @@ import {
 } from 'lucide-react';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { CompanyCode, LeadStage } from '../../types';
+import { getLeadCompany } from '../../utils/companyUtils';
 
 type TimeRange = 'today' | '7d' | '30d' | 'all';
-type EntityFilter = 'all' | 'RWC' | 'CRAS';
+type EntityFilter = 'all' | 'RWC' | 'CRAS' | 'AHC';
 type BranchFilter = 'all' | 'Colombo' | 'Maruthamunai';
 
 const CHART_COLORS = ['#10b981', '#f59e0b', '#6366f1', '#ec4899', '#06b6d4', '#8b5cf6', '#14b8a6'];
@@ -69,9 +70,8 @@ export const AnalyticsView: React.FC = () => {
 
       // 2. Entity filter
       if (selectedEntity !== 'all') {
-        const isCras = lead.company === 'CRAS' || lead.source === 'CRAS';
-        if (selectedEntity === 'CRAS' && !isCras) return false;
-        if (selectedEntity === 'RWC' && isCras) return false;
+        const leadCompany = getLeadCompany(lead).code;
+        if (leadCompany !== selectedEntity) return false;
       }
 
       // 3. Branch filter (matched through assigned coordinator)
@@ -318,6 +318,15 @@ export const AnalyticsView: React.FC = () => {
               }`}
             >
               CRAS
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedEntity('AHC')}
+              className={`px-2.5 py-1.5 rounded-lg font-semibold transition-all cursor-pointer ${
+                selectedEntity === 'AHC' ? 'bg-[#066e77] text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+              }`}
+            >
+              AHC
             </button>
           </div>
 

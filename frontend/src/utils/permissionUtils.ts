@@ -21,11 +21,14 @@ export function isLeadAccessibleForUser(lead: Lead, user: User | null | undefine
 
   // Check company scope if user is tied to a specific company
   const userCompany = user.company;
-  const isCrasLead = lead.company === 'CRAS' ||
-    lead.source?.toUpperCase() === 'CRAS' ||
+  const compUpper = String(lead.company || '').toUpperCase();
+  const srcUpper = String(lead.source || '').toUpperCase();
+  const isAhcLead = compUpper === 'AHC' || srcUpper === 'AHC' || (lead as any).assignedCoordinator?.company === 'AHC';
+  const isCrasLead = !isAhcLead && (compUpper === 'CRAS' ||
+    srcUpper === 'CRAS' ||
     lead.categoryId === 'cat-cras-courses' ||
-    (lead as any).assignedCoordinator?.company === 'CRAS';
-  const leadCompany = isCrasLead ? 'CRAS' : (lead.company || 'RWC');
+    (lead as any).assignedCoordinator?.company === 'CRAS');
+  const leadCompany = isAhcLead ? 'AHC' : (isCrasLead ? 'CRAS' : 'RWC');
 
   // If this lead is directly assigned to this staff member, always grant them access
   if (lead.assignedTo && lead.assignedTo === user.id) {

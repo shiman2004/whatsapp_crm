@@ -65,7 +65,7 @@ export interface Customer {
   avatarUrl?: string;
 }
 
-export type CompanyCode = 'RWC' | 'CRAS';
+export type CompanyCode = 'RWC' | 'CRAS' | 'AHC';
 
 export interface Lead {
   id: string;
@@ -82,7 +82,7 @@ export interface Lead {
   acceptedAt?: string;
   assignmentHistories?: LeadAssignmentHistory[];
   stage: LeadStage;
-  source: string; // 'whatsapp' | 'RWC' | 'CRAS'
+  source: string; // 'whatsapp' | 'RWC' | 'CRAS' | 'AHC'
   company?: CompanyCode;
   companyTag?: string;
   companyColor?: string;

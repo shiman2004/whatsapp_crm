@@ -25,7 +25,7 @@ const BRANCH_OPTIONS = [
   'Colombo'
 ];
 
-type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc' | 'coordinator_ahc' | 'exam_department_manager' | 'exam_providing_officer' | 'clinical_nurse' | 'clinical_doctor' | 'report_analyst' | 'marketing_officer_rwc' | 'marketing_officer_cras' | 'marketing_admin_rwc' | 'marketing_admin_cras';
+type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc' | 'coordinator_ahc' | 'exam_department_manager' | 'exam_providing_officer' | 'clinical_nurse' | 'clinical_doctor' | 'report_analyst' | 'marketing_officer_rwc' | 'marketing_officer_cras' | 'marketing_officer_ahc' | 'marketing_admin_rwc' | 'marketing_admin_cras' | 'marketing_admin_ahc';
 type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras' | 'coordinator_ahc';
 
 const generateRandomPin = () => {
@@ -71,20 +71,49 @@ export const CoordinatorsManager: React.FC = () => {
   const canViewPins = currentUser?.role === 'super_admin';
   const isStoredPinHash = (value?: string) => Boolean(value && (/^scrypt:/i.test(value) || /^\$2[aby]?\$/i.test(value)));
 
+  const isCommonRole = (choice: StaffRoleChoice) => [
+    'leads_officer', 
+    'exam_department_manager', 
+    'exam_providing_officer', 
+    'clinical_nurse', 
+    'clinical_doctor', 
+    'report_analyst'
+  ].includes(choice);
+
   const handleRoleChange = (choice: StaffRoleChoice) => {
     setSelectedRoleChoice(choice);
-    if (choice === 'coordinator_rwc') {
+    if (choice === 'coordinator_rwc' || choice === 'marketing_officer_rwc' || choice === 'marketing_admin_rwc') {
       setCompany('RWC');
-    } else if (choice === 'coordinator_cras') {
+    } else if (choice === 'coordinator_cras' || choice === 'marketing_officer_cras' || choice === 'marketing_admin_cras') {
       setCompany('CRAS');
-    } else if (choice === 'coordinator_ahc') {
+    } else if (choice === 'coordinator_ahc' || choice === 'marketing_officer_ahc' || choice === 'marketing_admin_ahc') {
       setCompany('AHC');
-    } else if (choice === 'exam_department_manager' || choice === 'exam_providing_officer' || choice === 'clinical_nurse' || choice === 'clinical_doctor' || choice === 'report_analyst') {
-      setCompany('RWC');
-    } else if (choice.endsWith('_cras')) {
-      setCompany('CRAS');
-    } else if (choice.startsWith('marketing_')) {
-      setCompany('RWC');
+    }
+  };
+
+  const handleCompanyChange = (val: string) => {
+    if (val === 'ALL') {
+      if (!isCommonRole(selectedRoleChoice)) {
+        setSelectedRoleChoice('leads_officer');
+      }
+      return;
+    }
+
+    const newCompany = val as CompanyCode;
+    setCompany(newCompany);
+
+    if (selectedRoleChoice.startsWith('marketing_officer')) {
+      if (newCompany === 'CRAS') setSelectedRoleChoice('marketing_officer_cras');
+      else if (newCompany === 'AHC') setSelectedRoleChoice('marketing_officer_ahc');
+      else setSelectedRoleChoice('marketing_officer_rwc');
+    } else if (selectedRoleChoice.startsWith('marketing_admin')) {
+      if (newCompany === 'CRAS') setSelectedRoleChoice('marketing_admin_cras');
+      else if (newCompany === 'AHC') setSelectedRoleChoice('marketing_admin_ahc');
+      else setSelectedRoleChoice('marketing_admin_rwc');
+    } else if (isCommonRole(selectedRoleChoice) || selectedRoleChoice.startsWith('coordinator_')) {
+      if (newCompany === 'CRAS') setSelectedRoleChoice('coordinator_cras');
+      else if (newCompany === 'AHC') setSelectedRoleChoice('coordinator_ahc');
+      else setSelectedRoleChoice('coordinator_rwc');
     }
   };
 
@@ -139,27 +168,18 @@ export const CoordinatorsManager: React.FC = () => {
     let systemRole: UserRole = 'coordinator';
     let assignedCompany: CompanyCode | undefined = undefined;
 
-    if (selectedRoleChoice === 'leads_officer') {
-      systemRole = 'leads_officer';
-      assignedCompany = undefined; // Common role for all leads across both companies
-    } else if (['exam_department_manager', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(selectedRoleChoice)) {
+    if (isCommonRole(selectedRoleChoice)) {
       systemRole = selectedRoleChoice as UserRole;
-      assignedCompany = undefined;
+      assignedCompany = undefined; // Common role for all leads across companies
     } else if (selectedRoleChoice.startsWith('marketing_officer')) {
       systemRole = 'marketing_officer';
-      assignedCompany = selectedRoleChoice.endsWith('_cras') ? 'CRAS' : 'RWC';
+      assignedCompany = company;
     } else if (selectedRoleChoice.startsWith('marketing_admin')) {
       systemRole = 'marketing_admin';
-      assignedCompany = selectedRoleChoice.endsWith('_cras') ? 'CRAS' : 'RWC';
-    } else if (selectedRoleChoice === 'coordinator_cras') {
-      systemRole = 'coordinator';
-      assignedCompany = 'CRAS';
-    } else if (selectedRoleChoice === 'coordinator_ahc') {
-      systemRole = 'coordinator';
-      assignedCompany = 'AHC';
+      assignedCompany = company;
     } else {
       systemRole = 'coordinator';
-      assignedCompany = 'RWC';
+      assignedCompany = company;
     }
 
     setIsSubmittingAdd(true);
@@ -302,6 +322,7 @@ export const CoordinatorsManager: React.FC = () => {
             const isOfficer = staff.role === 'leads_officer';
             const isExamStaff = ['exam_department_manager', 'exam_coordinator', 'exam_providing_officer'].includes(staff.role);
             const isCras = staff.company === 'CRAS';
+            const isAhc = staff.company === 'AHC';
             const activeLeads = leads.filter(l => l.assignedTo === staff.id && l.stage !== 'converted' && l.stage !== 'lost');
             const convertedLeads = leads.filter(l => l.assignedTo === staff.id && l.stage === 'converted');
             const rawPin = typeof staff.pin === 'string' ? staff.pin.trim() : '';
@@ -333,6 +354,8 @@ export const CoordinatorsManager: React.FC = () => {
                           ? 'bg-indigo-50 dark:bg-indigo-700/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30'
                           : isCras
                           ? 'bg-rose-50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-700/40'
+                          : isAhc
+                          ? 'bg-teal-50 dark:bg-[#066e77]/30 text-[#066e77] dark:text-teal-300 border-teal-200 dark:border-[#066e77]/50'
                           : 'bg-emerald-50 dark:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30'
                       }`}>
                         {staff.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -379,12 +402,14 @@ export const CoordinatorsManager: React.FC = () => {
                           ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40'
                           : isCras
                           ? 'bg-rose-50 dark:bg-[#800000]/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-[#800000]/60'
+                          : isAhc
+                          ? 'bg-teal-50 dark:bg-[#066e77]/30 text-[#066e77] dark:text-teal-300 border-teal-200 dark:border-[#066e77]/60'
                           : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40'
                       }`}>
                         {isOfficer ? (
                           <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                         ) : (
-                          <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
+                          <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-600 dark:text-rose-400' : isAhc ? 'text-[#066e77] dark:text-teal-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
                         )}
                         {roleDisplay}
                       </span>
@@ -525,34 +550,38 @@ export const CoordinatorsManager: React.FC = () => {
                     <option value="clinical_nurse">Clinical Nurse</option>
                     <option value="clinical_doctor">Clinical Doctor</option>
                     <option value="report_analyst">Report Analyst</option>
-                    <option value="marketing_officer_rwc">Marketing Officer — AHC</option>
+                    <option value="marketing_officer_rwc">Marketing Officer — RWC</option>
                     <option value="marketing_officer_cras">Marketing Officer — CRAS</option>
-                    <option value="marketing_admin_rwc">Marketing Administrator — AHC</option>
+                    <option value="marketing_officer_ahc">Marketing Officer — AHC</option>
+                    <option value="marketing_admin_rwc">Marketing Administrator — RWC</option>
                     <option value="marketing_admin_cras">Marketing Administrator — CRAS</option>
+                    <option value="marketing_admin_ahc">Marketing Administrator — AHC</option>
                   </select>
                 </div>
 
-                {/* Company */}
+                {/* Company Dropdown */}
                 <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Company</span>
-                    {!['leads_officer', 'exam_department_manager', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(selectedRoleChoice) && <span className="text-rose-500">*</span>}
-                  </label>
-                  {['leads_officer', 'exam_department_manager', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(selectedRoleChoice) ? (
-                    <div className="w-full bg-slate-50 dark:bg-[#202c33]/70 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-xs flex items-center justify-between text-slate-800 dark:text-slate-200">
-                      <span className="text-indigo-700 dark:text-indigo-300 font-bold flex items-center gap-1.5 text-xs">
-                        <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                        <span>All Companies (Common)</span>
-                      </span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Receives all leads</span>
-                    </div>
-                  ) : (
-                    <div className="w-full bg-slate-50 dark:bg-[#202c33]/70 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs flex items-center justify-between text-slate-800 dark:text-slate-200">
-                      <CompanyTagBadge company={company} size="sm" showFullName={true} />
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 italic">Auto-assigned</span>
-                    </div>
-                  )}
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Company</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    {!isCommonRole(selectedRoleChoice) && (
+                      <CompanyTagBadge company={company} size="xs" showFullName={false} />
+                    )}
+                  </div>
+                  <select
+                    id="add-staff-company-select"
+                    value={isCommonRole(selectedRoleChoice) ? 'ALL' : company}
+                    onChange={(e) => handleCompanyChange(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
+                  >
+                    <option value="RWC">Royal Wellness Center (RWC)</option>
+                    <option value="CRAS">College of Royal Aesthetic (CRAS)</option>
+                    <option value="AHC">Alpha Health Consultancy (AHC)</option>
+                    <option value="ALL">All Companies (Common / Cross-Department)</option>
+                  </select>
                 </div>
               </div>
 

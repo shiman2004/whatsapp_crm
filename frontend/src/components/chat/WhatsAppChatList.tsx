@@ -246,6 +246,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const archivedCount = accessibleLeads.filter(l => archivedLeadIds.has(l.id)).length;
   const rwcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'RWC').length;
   const crasCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'CRAS').length;
+  const ahcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'AHC').length;
 
   // Filter leads based on role & search & category/stage/archive filters
   const filteredLeads = accessibleLeads.filter((lead) => {
@@ -262,6 +263,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     // Company filter pills
     if (activeFilter === 'rwc' && getLeadCompany(lead).code !== 'RWC') return false;
     if (activeFilter === 'cras' && getLeadCompany(lead).code !== 'CRAS') return false;
+    if (activeFilter === 'ahc' && getLeadCompany(lead).code !== 'AHC') return false;
 
     // Filter pills
     if (activeFilter === 'unread') {
@@ -495,6 +497,20 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
             <span>CRAS</span>
             {crasCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#800000]/15 dark:bg-[#800000]/25 text-[#9f1239] dark:text-[#f87171]">{crasCount}</span>}
+          </button>
+
+          <button
+            onClick={() => handleFilterSelect('ahc')}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
+              activeFilter === 'ahc'
+                ? 'bg-teal-100 text-[#066e77] border-[#066e77] dark:bg-[#066e77]/30 dark:text-teal-300 dark:border-[#066e77] font-bold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+            }`}
+            title="Filter Alpha Health Consultancy messages"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#066e77]" />
+            <span>AHC</span>
+            {ahcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#066e77]/15 dark:bg-[#066e77]/25 text-[#066e77] dark:text-teal-300">{ahcCount}</span>}
           </button>
 
           {newCount > 0 && (

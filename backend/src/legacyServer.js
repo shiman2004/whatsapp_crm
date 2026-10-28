@@ -6816,6 +6816,41 @@ async function autoSeedDbIfEmpty() {
   }
 }
 
+async function ensureWabaWebhookSubscriptions() {
+  const token = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim();
+  if (!token || IS_TEST_ENV) return;
+
+  const wabaIds = [
+    (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim(),
+    (metaConfig.wabaIdAhc || process.env.META_WABA_ID_AHC || '1691829932493235').trim()
+  ].filter(Boolean);
+
+  const callbackUrl = 'https://royal-wellness-backend.onrender.com/api/webhook';
+  const verifyToken = (metaConfig.verifyToken || process.env.META_VERIFY_TOKEN || 'royal_wellness_token_2026').trim();
+
+  for (const wabaId of wabaIds) {
+    try {
+      const res = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/subscribed_apps`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          override_callback_uri: callbackUrl,
+          verify_token: verifyToken
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        console.log(`✅ [Meta Cloud API] Subscribed WABA ${wabaId} to webhook (${callbackUrl})`);
+      }
+    } catch (err) {
+      console.warn(`⚠️ [Meta Cloud API] Could not auto-subscribe WABA ${wabaId}:`, err.message);
+    }
+  }
+}
+
 export async function initializeServer() {
   // checkDbConnection() applies the idempotent schema delta (see schemaBootstrap.js).
   // Startup itself only verifies connectivity and loads persisted configuration.
@@ -6832,6 +6867,7 @@ export async function initializeServer() {
   const savedVerifyToken = await getSystemSetting('META_VERIFY_TOKEN');
   if (savedVerifyToken && savedVerifyToken.trim()) metaConfig.verifyToken = savedVerifyToken.trim();
   await autoSeedDbIfEmpty();
+  ensureWabaWebhookSubscriptions().catch(() => {});
   return res;
 }
 

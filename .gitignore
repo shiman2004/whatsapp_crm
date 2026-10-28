@@ -46,6 +46,7 @@ media_*
 !frontend/public/cras-logo.jpg
 !frontend/public/rwc-logo.png
 !frontend/public/ahc-logo.png
+!frontend/public/inquiries-logo.png
 !frontend/src/assets/logo.png
 *.mp4
 *.ogg

@@ -47,7 +47,7 @@ export const CoordinatorsManager: React.FC = () => {
 
   // Form State
   const [selectedRoleChoice, setSelectedRoleChoice] = useState<StaffRoleChoice>('coordinator_rwc');
-  const [company, setCompany] = useState<CompanyCode>('RWC');
+  const [company, setCompany] = useState<CompanyCode | 'ALL'>('RWC');
   const [fullName, setFullName] = useState('');
   const [branch, setBranch] = useState('Colombo');
   const [pin, setPin] = useState(generateRandomPin());
@@ -81,40 +81,13 @@ export const CoordinatorsManager: React.FC = () => {
   ].includes(choice);
 
   const handleRoleChange = (choice: StaffRoleChoice) => {
+    // Select role manually without auto-changing the company
     setSelectedRoleChoice(choice);
-    if (choice === 'coordinator_rwc' || choice === 'marketing_officer_rwc' || choice === 'marketing_admin_rwc') {
-      setCompany('RWC');
-    } else if (choice === 'coordinator_cras' || choice === 'marketing_officer_cras' || choice === 'marketing_admin_cras') {
-      setCompany('CRAS');
-    } else if (choice === 'coordinator_ahc' || choice === 'marketing_officer_ahc' || choice === 'marketing_admin_ahc') {
-      setCompany('AHC');
-    }
   };
 
   const handleCompanyChange = (val: string) => {
-    if (val === 'ALL') {
-      if (!isCommonRole(selectedRoleChoice)) {
-        setSelectedRoleChoice('leads_officer');
-      }
-      return;
-    }
-
-    const newCompany = val as CompanyCode;
-    setCompany(newCompany);
-
-    if (selectedRoleChoice.startsWith('marketing_officer')) {
-      if (newCompany === 'CRAS') setSelectedRoleChoice('marketing_officer_cras');
-      else if (newCompany === 'AHC') setSelectedRoleChoice('marketing_officer_ahc');
-      else setSelectedRoleChoice('marketing_officer_rwc');
-    } else if (selectedRoleChoice.startsWith('marketing_admin')) {
-      if (newCompany === 'CRAS') setSelectedRoleChoice('marketing_admin_cras');
-      else if (newCompany === 'AHC') setSelectedRoleChoice('marketing_admin_ahc');
-      else setSelectedRoleChoice('marketing_admin_rwc');
-    } else if (isCommonRole(selectedRoleChoice) || selectedRoleChoice.startsWith('coordinator_')) {
-      if (newCompany === 'CRAS') setSelectedRoleChoice('coordinator_cras');
-      else if (newCompany === 'AHC') setSelectedRoleChoice('coordinator_ahc');
-      else setSelectedRoleChoice('coordinator_rwc');
-    }
+    // Select company manually without auto-changing the role
+    setCompany(val as CompanyCode | 'ALL');
   };
 
   const handleOpenModal = () => {
@@ -166,21 +139,18 @@ export const CoordinatorsManager: React.FC = () => {
     if (!fullName.trim() || isSubmittingAdd) return;
 
     let systemRole: UserRole = 'coordinator';
-    let assignedCompany: CompanyCode | undefined = undefined;
-
-    if (isCommonRole(selectedRoleChoice)) {
-      systemRole = selectedRoleChoice as UserRole;
-      assignedCompany = undefined; // Common role for all leads across companies
+    if (selectedRoleChoice.startsWith('coordinator_')) {
+      systemRole = 'coordinator';
     } else if (selectedRoleChoice.startsWith('marketing_officer')) {
       systemRole = 'marketing_officer';
-      assignedCompany = company;
     } else if (selectedRoleChoice.startsWith('marketing_admin')) {
       systemRole = 'marketing_admin';
-      assignedCompany = company;
     } else {
-      systemRole = 'coordinator';
-      assignedCompany = company;
+      systemRole = selectedRoleChoice as UserRole;
     }
+
+    const assignedCompany: CompanyCode | undefined = 
+      company === 'ALL' ? undefined : (company as CompanyCode);
 
     setIsSubmittingAdd(true);
     try {
@@ -567,13 +537,13 @@ export const CoordinatorsManager: React.FC = () => {
                       <span>Company</span>
                       <span className="text-rose-500">*</span>
                     </label>
-                    {!isCommonRole(selectedRoleChoice) && (
-                      <CompanyTagBadge company={company} size="xs" showFullName={false} />
+                    {company !== 'ALL' && (
+                      <CompanyTagBadge company={company as CompanyCode} size="xs" showFullName={false} />
                     )}
                   </div>
                   <select
                     id="add-staff-company-select"
-                    value={isCommonRole(selectedRoleChoice) ? 'ALL' : company}
+                    value={company}
                     onChange={(e) => handleCompanyChange(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
                   >

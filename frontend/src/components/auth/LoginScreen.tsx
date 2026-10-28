@@ -294,15 +294,15 @@ export const LoginScreen: React.FC = () => {
         };
       case 'leads_officer':
         return {
-          title: 'Central Leads Intake',
-          subtitle: 'Leads Officers (Cross-Company: RWC + CRAS)',
-          accountLabel: 'Leads Officer Account',
-          logoSrc: '/logo.png',
-          accentColor: '#6366f1',
-          badgeText: 'Common for Both Brands',
-          badgeClass: 'bg-indigo-950 text-indigo-300 border-indigo-800/60',
-          focusBorderClass: 'focus:border-indigo-500',
-          activeKeyClass: 'bg-indigo-900/50 border-indigo-500 ring-indigo-500/60'
+          title: 'Inquiries Handling Department',
+          subtitle: 'Inquiries & Leads Intake Portal',
+          accountLabel: 'Inquiries Officer Account',
+          logoSrc: '/inquiries-logo.png',
+          accentColor: '#1d8cf8',
+          badgeText: 'Common Gateway',
+          badgeClass: 'bg-blue-950 text-blue-300 border-blue-800/60',
+          focusBorderClass: 'focus:border-blue-500',
+          activeKeyClass: 'bg-blue-900/50 border-blue-500 ring-blue-500/60'
         };
       case 'super_admin':
         return {
@@ -405,12 +405,6 @@ export const LoginScreen: React.FC = () => {
                       RWC
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-emerald-400 mt-0.5">
-                    Patient Coordinators
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    Clinical patient care, treatments & consultations
-                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
@@ -433,12 +427,6 @@ export const LoginScreen: React.FC = () => {
                       CRAS
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-rose-400 mt-0.5">
-                    Education Counsellors
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    Diploma courses, student enrollments & aesthetics
-                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
@@ -461,42 +449,30 @@ export const LoginScreen: React.FC = () => {
                       AHC
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-teal-400 mt-0.5">
-                    Consultancy Advisors
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    International consultancy, advisory & client relations (+971 54 372 3912)
-                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
-              {/* 4. Central Leads Management Card (Common for every lead officer) */}
+              {/* 4. Inquiries Handling Department Card (Common for every lead officer) */}
               <button
                 type="button"
                 onClick={() => setPortalView('leads_officer')}
                 className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#151a2b] hover:to-[#1a2137] border border-indigo-900/50 hover:border-indigo-500/70 shadow-lg hover:shadow-indigo-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
               >
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-indigo-950 to-[#202c33] border border-indigo-500/40 flex items-center justify-center shadow-md shrink-0 group-hover:border-indigo-400 group-hover:scale-105 transition-all text-indigo-400">
-                  <ShieldCheck className="w-7 h-7" />
+                <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-blue-500/30 group-hover:ring-blue-400 group-hover:scale-105 transition-all overflow-hidden">
+                  <img src="/inquiries-logo.png" alt="Inquiries Handling Department" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
-                      Central Leads Intake
+                    <span className="text-sm font-bold text-white group-hover:text-blue-300 transition-colors">
+                      Inquiries Handling Department
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">
                       Common
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-indigo-300 mt-0.5">
-                    Leads Officers (Both Companies)
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    Cross-company unified triage & assignment (RWC + CRAS)
-                  </p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
               {/* 4. Super Admin (Discreetly rendered when unlocked via ?admin=true or shortcut) */}
@@ -650,7 +626,7 @@ export const LoginScreen: React.FC = () => {
                 >
                   {leadsOfficers.map((o: any) => (
                     <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
-                      {o.fullName} — Leads Officer (Common / Both Brands)
+                      {o.fullName} — Inquiries & Leads Officer (Common Gateway)
                     </option>
                   ))}
                 </select>

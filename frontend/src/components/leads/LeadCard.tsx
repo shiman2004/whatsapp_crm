@@ -79,35 +79,16 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           <div className="text-slate-400 dark:text-slate-600 group-hover:text-slate-600 dark:group-hover:text-slate-400 transition-colors shrink-0 -ml-1">
             <GripVertical className="w-3.5 h-3.5" />
           </div>
-          <div className="relative shrink-0">
-            {lead.customer?.avatarUrl && !lead.customer.avatarUrl.includes('photo-1534528741775-53994a69daeb') ? (
-              <img
-                src={lead.customer.avatarUrl}
-                alt={lead.customer?.displayName}
-                className="w-7 h-7 rounded-full object-cover border border-slate-200 dark:border-slate-700"
-                onError={(e) => { e.currentTarget.style.display = 'none'; }}
-              />
-            ) : (
-              <div 
-                className="w-7 h-7 rounded-full flex items-center justify-center font-bold text-[10px] bg-teal-600 text-white border border-teal-500/30 shrink-0 shadow-xs"
-              >
-                {(lead.customer?.displayName || 'W').replace(/[^a-zA-Z0-9]/g, '').slice(0, 2).toUpperCase() || 'WA'}
-              </div>
-            )}
-            {(lead.unreadCount || 0) > 0 && (
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400 ring-2 ring-white dark:ring-slate-900 absolute -top-0.5 -right-0.5"></span>
-            )}
-          </div>
           <div className="min-w-0">
-            <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 truncate group-hover:text-teal-600 dark:group-hover:text-teal-300 transition-colors">
+            <h4 className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 truncate group-hover:text-teal-600 dark:group-hover:text-teal-300 transition-colors">
               {lead.customer?.displayName || 'WhatsApp Customer'}
+              {(lead.unreadCount || 0) > 0 && <span aria-label="Unread messages" title="Unread messages" className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400 shrink-0" />}
             </h4>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber}</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5 shrink-0">
-          <CompanyTagBadge lead={lead} size="xs" />
           <span className={`px-1.5 py-0.5 text-[9px] font-bold rounded ${langBadge.bg} ${langBadge.text}`}>
             {langBadge.label}
           </span>
@@ -116,6 +97,12 @@ export const LeadCard: React.FC<LeadCardProps> = ({
             {timeString}
           </span>
         </div>
+      </div>
+
+      {/* Company is shown as its own labeled field, separate from contact identity. */}
+      <div className="mt-2 flex items-center gap-2 text-[10px]">
+        <span className="font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Company</span>
+        <CompanyTagBadge lead={lead} size="xs" />
       </div>
 
       {/* Middle row: Treatment Category & Specific Service / Course */}

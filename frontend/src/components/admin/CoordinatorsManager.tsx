@@ -11,8 +11,6 @@ import {
   ShieldCheck, 
   Sparkles, 
   MapPin, 
-  Eye, 
-  EyeOff,
   User as UserIcon,
   Briefcase,
   Lock,
@@ -27,7 +25,7 @@ const BRANCH_OPTIONS = [
   'Colombo'
 ];
 
-type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc';
+type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc' | 'exam_department_manager' | 'exam_providing_officer' | 'clinical_nurse' | 'clinical_doctor' | 'report_analyst' | 'marketing_officer_rwc' | 'marketing_officer_cras' | 'marketing_admin_rwc' | 'marketing_admin_cras';
 type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras';
 
 const generateRandomPin = () => {
@@ -35,10 +33,9 @@ const generateRandomPin = () => {
 };
 
 export const CoordinatorsManager: React.FC = () => {
-  const { users, leads, addCoordinator, updateCoordinator, deleteCoordinator } = useCrm();
+  const { currentUser, users, leads, addCoordinator, updateCoordinator, deleteCoordinator } = useCrm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<StaffFilter>('all');
-  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
 
   // Edit Staff State (Name, Branch, PIN & Password)
   const [editingStaff, setEditingStaff] = useState<User | null>(null);
@@ -57,7 +54,7 @@ export const CoordinatorsManager: React.FC = () => {
   const [password, setPassword] = useState('staff');
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
 
-  const staffMembers = users.filter(u => u.role === 'coordinator' || u.role === 'leads_officer');
+  const staffMembers = users.filter(u => ['coordinator', 'leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'].includes(u.role));
   const leadsOfficers = users.filter(u => u.role === 'leads_officer');
   const rwcCoordinators = users.filter(u => u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
   const crasCoordinators = users.filter(u => u.role === 'coordinator' && u.company === 'CRAS');
@@ -69,12 +66,21 @@ export const CoordinatorsManager: React.FC = () => {
     return true;
   });
 
+  const canViewPins = currentUser?.role === 'super_admin';
+  const isStoredPinHash = (value?: string) => Boolean(value && (/^scrypt:/i.test(value) || /^\$2[aby]?\$/i.test(value)));
+
   const handleRoleChange = (choice: StaffRoleChoice) => {
     setSelectedRoleChoice(choice);
     if (choice === 'coordinator_rwc') {
       setCompany('RWC');
     } else if (choice === 'coordinator_cras') {
       setCompany('CRAS');
+    } else if (choice === 'exam_department_manager' || choice === 'exam_providing_officer' || choice === 'clinical_nurse' || choice === 'clinical_doctor' || choice === 'report_analyst') {
+      setCompany('RWC');
+    } else if (choice.endsWith('_cras')) {
+      setCompany('CRAS');
+    } else if (choice.startsWith('marketing_')) {
+      setCompany('RWC');
     }
   };
 
@@ -96,7 +102,9 @@ export const CoordinatorsManager: React.FC = () => {
     setEditingStaff(staff);
     setEditFullName(staff.fullName || '');
     setEditBranch(staff.branch || 'Colombo');
-    setEditPin(staff.pin || generateRandomPin());
+    // Never copy a persisted PIN hash into an editable field. A new PIN is only
+    // sent when the Super Admin explicitly enters one.
+    setEditPin('');
     setEditPassword(staff.password || '');
   };
 
@@ -130,6 +138,15 @@ export const CoordinatorsManager: React.FC = () => {
     if (selectedRoleChoice === 'leads_officer') {
       systemRole = 'leads_officer';
       assignedCompany = undefined; // Common role for all leads across both companies
+    } else if (['exam_department_manager', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(selectedRoleChoice)) {
+      systemRole = selectedRoleChoice as UserRole;
+      assignedCompany = undefined;
+    } else if (selectedRoleChoice.startsWith('marketing_officer')) {
+      systemRole = 'marketing_officer';
+      assignedCompany = selectedRoleChoice.endsWith('_cras') ? 'CRAS' : 'RWC';
+    } else if (selectedRoleChoice.startsWith('marketing_admin')) {
+      systemRole = 'marketing_admin';
+      assignedCompany = selectedRoleChoice.endsWith('_cras') ? 'CRAS' : 'RWC';
     } else if (selectedRoleChoice === 'coordinator_cras') {
       systemRole = 'coordinator';
       assignedCompany = 'CRAS';
@@ -169,7 +186,7 @@ export const CoordinatorsManager: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-serif">Staff & Team Management</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Manage Leads Officers, Patient Coordinators (RWC), and Education Counsellors (CRAS), assign branch locations, and generate access PINs.
+            Manage AHC/CRAS coordinators, exam staff, clinical staff, and marketing roles, assign branch locations, and generate access PINs.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -221,7 +238,7 @@ export const CoordinatorsManager: React.FC = () => {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#008000]" />
-            <span>Patient Coordinators (RWC) ({rwcCoordinators.length})</span>
+            <span>Patient Coordinators RWC ({rwcCoordinators.length})</span>
           </button>
 
           <button
@@ -234,7 +251,7 @@ export const CoordinatorsManager: React.FC = () => {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#800000]" />
-            <span>Education Counsellors (CRAS) ({crasCoordinators.length})</span>
+            <span>Education Counsellors CRAS ({crasCoordinators.length})</span>
           </button>
         </div>
       </div>
@@ -263,11 +280,18 @@ export const CoordinatorsManager: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredStaff.map((staff) => {
             const isOfficer = staff.role === 'leads_officer';
+            const isExamStaff = ['exam_department_manager', 'exam_coordinator', 'exam_providing_officer'].includes(staff.role);
             const isCras = staff.company === 'CRAS';
             const activeLeads = leads.filter(l => l.assignedTo === staff.id && l.stage !== 'converted' && l.stage !== 'lost');
             const convertedLeads = leads.filter(l => l.assignedTo === staff.id && l.stage === 'converted');
+            const rawPin = typeof staff.pin === 'string' ? staff.pin.trim() : '';
+            const canRevealStoredPin = canViewPins && Boolean(rawPin) && !isStoredPinHash(rawPin);
 
-            const roleDisplay = isOfficer 
+            const roleDisplay = isExamStaff
+              ? (staff.role === 'exam_department_manager' ? 'Head of Exam Department' : 'Exam Providing Officer')
+              : staff.role === 'marketing_admin' ? 'Marketing Administrator'
+              : staff.role === 'marketing_officer' ? 'Marketing Officer'
+              : isOfficer
               ? 'Leads Officer' 
               : isCras 
               ? 'Education Counsellor' 
@@ -369,16 +393,8 @@ export const CoordinatorsManager: React.FC = () => {
                       <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         <KeyRound className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Quick PIN:
                       </span>
-                      <div className="flex items-center gap-1.5 font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 px-2 py-0.5 rounded-md tracking-wider">
-                        <span>{revealedPins[staff.id] !== false ? (staff.pin || '••••') : '••••'}</span>
-                        <button
-                          type="button"
-                          onClick={() => setRevealedPins(prev => ({ ...prev, [staff.id]: prev[staff.id] === false ? true : false }))}
-                          className="text-amber-600 hover:text-amber-800 dark:text-amber-400/80 dark:hover:text-amber-200 transition-colors ml-0.5 cursor-pointer"
-                          title={revealedPins[staff.id] === false ? "Show PIN" : "Hide PIN"}
-                        >
-                          {revealedPins[staff.id] === false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                        </button>
+                      <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 px-2 py-0.5 rounded-md">
+                        <span>{canRevealStoredPin ? rawPin : (staff.pinConfigured ?? Boolean(rawPin)) ? 'Configured (reset required)' : 'Not configured'}</span>
                       </div>
                     </div>
                   </div>
@@ -467,14 +483,27 @@ export const CoordinatorsManager: React.FC = () => {
                     className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
                   >
                     <option value="coordinator_rwc">
-                      Patient Coordinator (RWC)
+                      Patient Coordinator RWC
                     </option>
                     <option value="coordinator_cras">
-                      Education Counsellor (CRAS)
+                      Education Counsellor CRAS
                     </option>
                     <option value="leads_officer">
                       Leads Officer (Common)
                     </option>
+                    <option value="exam_department_manager">
+                      Head of Exam Department
+                    </option>
+                    <option value="exam_providing_officer">
+                      Exam Providing Officer
+                    </option>
+                    <option value="clinical_nurse">Clinical Nurse</option>
+                    <option value="clinical_doctor">Clinical Doctor</option>
+                    <option value="report_analyst">Report Analyst</option>
+                    <option value="marketing_officer_rwc">Marketing Officer — AHC</option>
+                    <option value="marketing_officer_cras">Marketing Officer — CRAS</option>
+                    <option value="marketing_admin_rwc">Marketing Administrator — AHC</option>
+                    <option value="marketing_admin_cras">Marketing Administrator — CRAS</option>
                   </select>
                 </div>
 
@@ -483,9 +512,9 @@ export const CoordinatorsManager: React.FC = () => {
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
                     <Building2 className="w-3.5 h-3.5 text-slate-400" />
                     <span>Company</span>
-                    {selectedRoleChoice !== 'leads_officer' && <span className="text-rose-500">*</span>}
+                    {!['leads_officer', 'exam_department_manager', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(selectedRoleChoice) && <span className="text-rose-500">*</span>}
                   </label>
-                  {selectedRoleChoice === 'leads_officer' ? (
+                  {['leads_officer', 'exam_department_manager', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(selectedRoleChoice) ? (
                     <div className="w-full bg-slate-50 dark:bg-[#202c33]/70 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-xs flex items-center justify-between text-slate-800 dark:text-slate-200">
                       <span className="text-indigo-700 dark:text-indigo-300 font-bold flex items-center gap-1.5 text-xs">
                         <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
@@ -649,7 +678,16 @@ export const CoordinatorsManager: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px]">Role:</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {editingStaff.role === 'leads_officer' 
+                  {editingStaff.role === 'exam_department_manager'
+                    ? 'Head of Exam Department'
+                    : ['exam_coordinator', 'exam_providing_officer'].includes(editingStaff.role)
+                    ? 'Exam Providing Officer'
+                    : editingStaff.role === 'clinical_nurse' ? 'Clinical Nurse'
+                    : editingStaff.role === 'clinical_doctor' ? 'Clinical Doctor'
+                    : editingStaff.role === 'report_analyst' ? 'Report Analyst'
+                    : editingStaff.role === 'marketing_admin' ? 'Marketing Administrator'
+                    : editingStaff.role === 'marketing_officer' ? 'Marketing Officer'
+                    : editingStaff.role === 'leads_officer'
                     ? 'Leads Officer' 
                     : (editingStaff.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')}
                 </span>
@@ -718,7 +756,7 @@ export const CoordinatorsManager: React.FC = () => {
                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                       <KeyRound className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                       <span>Security PIN (4-Digits)</span>
-                      <span className="text-rose-500">*</span>
+                      <span className="text-slate-400 font-normal">(optional reset)</span>
                     </label>
                     <button
                       type="button"
@@ -733,7 +771,6 @@ export const CoordinatorsManager: React.FC = () => {
                   <input
                     type="text"
                     maxLength={4}
-                    required
                     placeholder="e.g. 5839"
                     value={editPin}
                     onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ''))}

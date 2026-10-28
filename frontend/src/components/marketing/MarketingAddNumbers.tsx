@@ -662,8 +662,8 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
             onChange={e => setCompany(e.target.value as any)}
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-teal-400 cursor-pointer"
           >
-            <option value="RWC">Royal Wellness Clinic (RWC)</option>
-            <option value="CRAS">Alpha CRAS Education (CRAS)</option>
+            <option value="RWC">Royal Wellness Clinic RWC</option>
+            <option value="CRAS">Alpha CRAS Education CRAS</option>
           </select>
         </div>
 

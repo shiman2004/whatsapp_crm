@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyCode } from '../../types';
+import { getCleanWhatsAppDigits } from '../../utils/phoneUtils';
 
 interface AddContactModalProps {
   isOpen: boolean;
@@ -27,6 +28,8 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     categories, 
     treatments, 
     users, 
+    customers,
+    leads,
     isSuperAdmin, 
     isLeadsOfficer,
     currentUser
@@ -67,7 +70,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
         }
       }
       if (sendInitial || !initialMessage || initialMessage.includes('Royal Wellness')) {
-        setInitialMessage('Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka (CRAS)! How can we assist you today?');
+        setInitialMessage('Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka CRAS! How can we assist you today?');
       }
     } else {
       const rwcCat = categories.find(c => c.id !== 'cat-cras-courses' && !c.name.toLowerCase().includes('cras')) || categories[0];
@@ -115,6 +118,28 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
     const cleanDigits = phone.replace(/[^0-9]/g, '');
     if (!cleanDigits || cleanDigits.length < 8) {
       setError('Please enter a valid WhatsApp phone number (e.g. +94 77 123 4567 or 0771234567).');
+      return;
+    }
+
+    // Give an immediate warning when the number is already present in the
+    // loaded CRM data. The backend performs the authoritative check as well,
+    // so contacts not currently loaded in the browser are also protected.
+    const normalizedDigits = getCleanWhatsAppDigits(phone);
+    const numberMatches = (value?: string) => {
+      const digits = getCleanWhatsAppDigits(value);
+      return Boolean(normalizedDigits && digits && digits === normalizedDigits);
+    };
+    const matchingCustomer = customers.find(customer =>
+      numberMatches(customer.whatsappNumber) || numberMatches(customer.whatsappId)
+    );
+    const matchingLead = leads.find(lead =>
+      numberMatches(lead.customer?.whatsappNumber) || numberMatches(lead.customer?.whatsappId)
+    );
+    const duplicateExists = Boolean(matchingCustomer || matchingLead);
+    if (duplicateExists) {
+      const existingName = matchingCustomer?.displayName || matchingLead?.customer?.displayName || 'existing CRM record';
+      const addedBy = matchingLead?.assignedByName || matchingLead?.assignedCoordinator?.fullName;
+      setError(`Duplicate contact: this WhatsApp number is already registered. Existing contact: ${existingName}.${addedBy ? ` Added by ${addedBy}.` : ' The original staff member is not recorded.'} The contact was not added.`);
       return;
     }
 
@@ -189,12 +214,13 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
             <div>
               <label className="block text-xs font-semibold text-[#aebac1] mb-1.5 flex items-center gap-1.5">
                 <User className="w-3.5 h-3.5 text-[#00a884]" />
-                <span>Contact Name</span>
+                <span>Contact Name <span className="text-[10px] font-normal text-[#8696a0]">(10 characters max)</span></span>
               </label>
               <input
                 type="text"
                 value={name}
-                onChange={(e) => setName(e.target.value)}
+                onChange={(e) => setName(Array.from(e.target.value).slice(0, 10).join(''))}
+                maxLength={10}
                 placeholder="e.g. Kasun Bandara"
                 className="w-full bg-[#111b21] border border-[#31424d] rounded-xl px-3.5 py-2.5 text-xs text-[#d1d7db] placeholder-[#667781] outline-none focus:border-[#00a884] focus:ring-1 focus:ring-[#00a884] transition-all"
               />
@@ -365,7 +391,7 @@ export const AddContactModal: React.FC<AddContactModalProps> = ({ isOpen, onClos
                     setSendInitial(e.target.checked);
                     if (e.target.checked && !initialMessage) {
                       setInitialMessage(company === 'CRAS' 
-                        ? 'Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka (CRAS)! How can we assist you today?'
+                        ? 'Hi, thank you for reaching out to College of Royal Aesthetic of Sri Lanka CRAS! How can we assist you today?'
                         : 'Hi, thank you for reaching out to Royal Wellness Center! How can we assist you today?');
                     }
                   }}

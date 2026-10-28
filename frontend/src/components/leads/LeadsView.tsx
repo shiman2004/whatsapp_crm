@@ -174,7 +174,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
     const dateStr = new Date().toISOString().slice(0, 10);
     const fileName = isCrasExport 
       ? `cras_students_pipeline_${dateStr}.csv` 
-      : `royal_wellness_leads_pipeline_${dateStr}.csv`;
+      : `ahc_patient_pipeline_${dateStr}.csv`;
     link.setAttribute('download', fileName);
     document.body.appendChild(link);
     link.click();
@@ -210,7 +210,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
                   {selectedCompany === 'CRAS' 
                     ? 'CRAS College Admissions Pipeline' 
                     : selectedCompany === 'RWC'
-                    ? 'Royal Wellness Patient Pipeline'
+                    ? 'AHC Patient Pipeline'
                     : 'Unified Multi-Company Pipeline'}
                 </h2>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
@@ -227,7 +227,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
                 {selectedCompany === 'CRAS' 
                   ? 'College of Royal Aesthetic Studies • Academic Courses & Students • WhatsApp +94 70 637 3353' 
                   : selectedCompany === 'RWC'
-                  ? 'Royal Wellness Center • Clinical Care & Patient Inquiries • WhatsApp +94 70 639 3353'
+                  ? 'AHC • Clinical Care & Patient Inquiries • WhatsApp +94 70 639 3353'
                   : 'Consolidated overview across all companies (Super Admin & Leads Officer view)'}
               </p>
             </div>
@@ -235,7 +235,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
 
           {/* Company Pipeline Switcher Tabs */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-950/90 p-1 rounded-[10px] border border-slate-200 dark:border-slate-800 gap-1 self-start lg:self-auto shrink-0 shadow-inner">
-            {/* RWC Wellness Pipeline Tab */}
+            {/* AHC Pipeline Tab (internal code: RWC) */}
             <button
               type="button"
               onClick={() => handleCompanyChange('RWC')}
@@ -246,7 +246,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
-              <span>(RWC) Wellness</span>
+              <span>AHC</span>
               <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
                 {rwcCount}
               </span>
@@ -263,7 +263,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400"></span>
-              <span>(CRAS) College</span>
+              <span>CRAS College</span>
               <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800/60">
                 {crasCount}
               </span>
@@ -306,8 +306,8 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               <div className="flex items-center gap-2">
                 <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                   {isCrasUser 
-                    ? 'College of Royal Aesthetic Studies (CRAS) — Admissions Pipeline' 
-                    : 'Royal Wellness Center (RWC) — Patient Care Pipeline'}
+                    ? 'College of Royal Aesthetic Studies CRAS — Admissions Pipeline'
+                    : 'AHC — Patient Care Pipeline'}
                 </h2>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                   isCrasUser ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/40' : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40'
@@ -318,14 +318,14 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               <p className="text-[10.5px] text-slate-600 dark:text-slate-300/80">
                 {isCrasUser 
                   ? 'Student academic inquiries and course admissions • Connected line: +94 70 637 3353' 
-                  : 'Clinical patient treatments and consultations • Connected line: +94 70 639 3353'}
+                  : 'AHC clinical patient treatments and consultations • Connected line: +94 70 639 3353'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-400 shrink-0 shadow-sm">
             <Lock className="w-3 h-3 text-amber-500 dark:text-amber-400" />
-            <span>{isCrasUser ? '(CRAS) Locked Line' : '(RWC) Locked Line'}</span>
+            <span>{isCrasUser ? 'CRAS Locked Line' : 'AHC Locked Line'}</span>
           </div>
         </div>
       )}

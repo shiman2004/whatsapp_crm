@@ -459,7 +459,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <span className={`inline-flex items-center gap-1 text-[10px] font-semibold px-2 py-0.5 rounded border ${
                 isCras ? 'bg-rose-500/15 text-rose-300 border-rose-500/30' : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
               }`}>
-                <Lock className="w-2.5 h-2.5" /> {isCras ? '(CRAS) Locked Line' : '(RWC) Locked Line'}
+                <Lock className="w-2.5 h-2.5" /> {isCras ? 'CRAS Locked Line' : 'RWC Locked Line'}
               </span>
             )}
           </div>
@@ -484,7 +484,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-extrabold flex items-center gap-1.5 text-emerald-300">
                     <span className="w-2 h-2 rounded-full bg-[#008000]" />
-                    (RWC) Wellness
+                    RWC Wellness
                   </span>
                   {!isCras && <Check className="w-3.5 h-3.5 text-emerald-400" />}
                 </div>
@@ -510,7 +510,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-extrabold flex items-center gap-1.5 text-rose-300">
                     <span className="w-2 h-2 rounded-full bg-[#800000]" />
-                    (CRAS) College
+                    CRAS College
                   </span>
                   {isCras && <Check className="w-3.5 h-3.5 text-rose-400" />}
                 </div>
@@ -525,7 +525,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#800000]/25 border-[#800000]/70 text-rose-300 shadow-sm">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#800000] shadow-sm" />
-                  <span>(CRAS) College of Royal Aesthetic Studies</span>
+                  <span>CRAS College of Royal Aesthetic Studies</span>
                 </div>
                 <span className="text-[10px] font-mono font-medium text-rose-400/90 bg-rose-950/70 px-2 py-0.5 rounded border border-rose-800/60">
                   +94 70 637 3353
@@ -535,7 +535,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#008000]/20 border-[#008000]/70 text-emerald-300 shadow-sm">
                 <div className="flex items-center gap-2">
                   <span className="w-2.5 h-2.5 rounded-full bg-[#008000] shadow-sm" />
-                  <span>(RWC) Royal Wellness Center</span>
+                  <span>RWC Royal Wellness Center</span>
                 </div>
                 <span className="text-[10px] font-mono font-medium text-emerald-400/90 bg-emerald-950/70 px-2 py-0.5 rounded border border-emerald-800/60">
                   +94 70 639 3353
@@ -759,6 +759,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               <option value="contacted">🟢 Contacted</option>
               <option value="potential">🟣 Potential</option>
               <option value="under_discussion">💬 Under Discussion</option>
+              <option value="forwarded_to_exam_department">🧪 Forwarded to Exam Department</option>
+              <option value="forwarded_to_processing_department">⚙️ Forwarded to Processing Department</option>
               <option value="not_relevant">⚪ Not Relevant Inquiry</option>
               <option value="not_eligible">🚫 Not Eligible</option>
               <option value="converted">🎉 {isCras ? 'Enrolled (Closed Won)' : 'Converted (Closed Won)'}</option>

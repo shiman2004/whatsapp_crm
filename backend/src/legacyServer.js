@@ -1,3 +1,10 @@
+import { startExamMonitor } from './examMonitor.js';
+import { handleExamOperations } from './examOperationsRoutes.js';
+import { handleStudentDatabaseRoutes } from './studentDatabaseRoutes.js';
+import { handleClinicalRoutes } from './clinicalRoutes.js';
+import { handleStudentRoutes } from './studentRoutes.js';
+import { handleExamRoutes } from './examRoutes.js';
+import { JWT_SECRET } from './runtimeConfig.js';
 import http from 'http';
 import url from 'url';
 import fs from 'fs';
@@ -13,6 +20,7 @@ import { handleMarketingRoutes } from './marketing/routes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
+import { Server as SocketIOServer } from 'socket.io';
 
 dotenv.config();
 if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
@@ -21,7 +29,6 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 
 const PORT = process.env.PORT || 3000;
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || (process.argv[1] && process.argv[1].includes('test'));
-const JWT_SECRET = process.env.JWT_SECRET || (IS_TEST_ENV ? 'test-only-jwt-secret-do-not-use' : (process.env.NODE_ENV !== 'production' ? 'royal_wellness_crm_jwt_secret_key_2026_super_secure' : ''));
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be configured before starting the backend.');
 }
@@ -31,9 +38,11 @@ const DEFAULT_TRUSTED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
+  'http://localhost:5174',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
-  'http://127.0.0.1:5173'
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
 ];
 
 const TRUSTED_ORIGINS = [
@@ -77,6 +86,10 @@ const sseTickets = new Map();
 // grow without limit on a long-running process.
 const MAX_SSE_TICKETS = 5000;
 const MAX_LOGIN_ATTEMPT_ENTRIES = 10000;
+// Contact creation can fall back to memory while the database is unavailable.
+// Keep a process-local normalized index so that fallback mode still rejects a
+// second manual contact for the same WhatsApp number.
+const inMemoryContactNumbers = new Map();
 
 function sweepExpiredSseTickets() {
   const cutoff = Date.now() - SSE_TICKET_TTL_MS;
@@ -803,6 +816,28 @@ const CANONICAL_USERS = [
     active: true
   },
   {
+    id: 'user-rwcc-admin-1',
+    fullName: 'RWCC',
+    email: 'rwcc@royalwellness.lk',
+    branch: 'Colombo (Head Office)',
+    password: hashSecret('1234'),
+    pin: DEFAULT_ADMIN_PIN_HASH,  // PIN: 1234
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: 'user-student-1',
+    fullName: 'Demo Student',
+    email: 'student@royalwellness.lk',
+    branch: 'Colombo',
+    company: 'CRAS',
+    roleTitle: 'Student',
+    password: hashSecret('student'),
+    pin: hashSecret('1234'),
+    role: 'student',
+    active: true
+  },
+  {
     id: 'user-faiha-1',
     fullName: 'Faiha',
     email: 'faiha@royalwellness.lk',
@@ -967,6 +1002,7 @@ function isPublicRoute(req, pathname) {
 
 // Start HTTP REST & SSE Gateway Server
 const server = http.createServer(async (req, res) => {
+// Socket.io will be attached after this file is imported
   const correlationId = createCorrelationId(req.headers['x-request-id']);
   res.setHeader('X-Correlation-Id', correlationId);
   // CORS Headers
@@ -1396,6 +1432,8 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (await handleStudentRoutes(req, res, pathname)) return;
+
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
   if (!isPublicRoute(req, pathname)) {
@@ -1427,6 +1465,11 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (await handleExamOperations(req, res, pathname, authUser)) return;
+  if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
+  if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
+  if (await handleExamRoutes(req, res, pathname, authUser)) return;
+
   // 0. Appointment Booking & Room Scheduling Module
   const handledAppointmentRoute = await handleAppointmentRoutes(req, res, pathname, authUser);
   if (handledAppointmentRoute !== false) {
@@ -1442,6 +1485,11 @@ const server = http.createServer(async (req, res) => {
 
   // 0a. File Upload Endpoint (Authenticated staff base64 or DataURL upload for Images, Audio, Voice Notes, PDFs)
   if (req.method === 'POST' && pathname === '/api/upload') {
+    if (!authUser?.id) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Sign in first.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
@@ -3032,10 +3080,12 @@ const server = http.createServer(async (req, res) => {
       { id: 'stage-contacted', key: 'contacted', label: 'Contacted', description: 'Initial outreach made via WhatsApp or call', color: '#10b981', orderIndex: 2, isActive: true, isSystem: false, company: 'ALL' },
       { id: 'stage-potential', key: 'potential', label: 'Potential', description: 'Qualified prospect showing active interest', color: '#8b5cf6', orderIndex: 3, isActive: true, isSystem: false, company: 'ALL' },
       { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', description: 'Ongoing treatment / course consultation & quotation', color: '#0ea5e9', orderIndex: 4, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: '#64748b', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: '#71717a', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: '#0d9488', orderIndex: 7, isActive: true, isSystem: true, company: 'ALL' },
-      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: '#ef4444', orderIndex: 8, isActive: true, isSystem: true, company: 'ALL' }
+      { id: 'stage-forwarded-exam', key: 'forwarded_to_exam_department', label: 'Forwarded to Exam Department', description: 'Lead handed over to the healthcare exam preparation team.', color: '#06b6d4', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-forwarded-processing', key: 'forwarded_to_processing_department', label: 'Forwarded to Processing Department', description: 'Lead handed over to the document and application processing team.', color: '#f97316', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: '#64748b', orderIndex: 7, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: '#71717a', orderIndex: 8, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: '#0d9488', orderIndex: 9, isActive: true, isSystem: true, company: 'ALL' },
+      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: '#ef4444', orderIndex: 10, isActive: true, isSystem: true, company: 'ALL' }
     ];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, stages: defaultStages }));
@@ -4768,7 +4818,8 @@ const server = http.createServer(async (req, res) => {
 
         const cleanDigits = norm.clean;
         const canonicalPhone = norm.canonical;
-        const contactName = (name || '').trim() || canonicalPhone;
+        // Keep newly created contact names compact for the CRM list while preserving the phone fallback.
+        const contactName = ((name || '').trim().slice(0, 10)) || canonicalPhone;
 
         const prisma = getPrisma();
         let savedCustomer = null;
@@ -4778,18 +4829,55 @@ const server = http.createServer(async (req, res) => {
         let dispatchErrorMessage = null;
 
         if (prisma && getDbStatus()) {
-          // 1. Find or create Customer in Supabase PostgreSQL
-          savedCustomer = await prisma.customer.findFirst({
+          // Contact numbers are globally unique in the CRM. Do not silently
+          // update an existing customer or create another company lead from
+          // the Add Contact form; return a clear conflict instead.
+          const duplicateCustomer = await prisma.customer.findFirst({
             where: {
               OR: [
                 { whatsappNumber: canonicalPhone },
                 { whatsappNumber: cleanDigits },
-                { whatsappId: cleanDigits }
+                { whatsappId: cleanDigits },
+                ...(cleanDigits.length >= 9 ? [{ whatsappNumber: { contains: cleanDigits.slice(-9) } }] : [])
               ]
+            },
+            select: {
+              id: true,
+              displayName: true,
+              whatsappNumber: true,
+              leads: {
+                select: { company: true, source: true, assignedById: true, assignedByName: true, createdAt: true },
+                orderBy: { createdAt: 'asc' },
+                take: 1
+              }
             }
           });
 
-          if (!savedCustomer) {
+          if (duplicateCustomer) {
+            const existingLead = duplicateCustomer.leads?.[0];
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              duplicate: true,
+              errorCode: 'DUPLICATE_CONTACT',
+              error: `Duplicate contact: this WhatsApp number is already registered. Added by ${existingLead?.assignedByName || 'not recorded for this existing CRM record'}. The contact was not added.`,
+              existingContact: {
+                id: duplicateCustomer.id,
+                displayName: duplicateCustomer.displayName,
+                whatsappNumber: duplicateCustomer.whatsappNumber,
+                company: existingLead?.company || existingLead?.source || null,
+                addedById: existingLead?.assignedById || null,
+                addedByName: existingLead?.assignedByName || null,
+                addedAt: existingLead?.createdAt || null
+              }
+            }));
+            return;
+          }
+
+          // The Customer model also has a unique WhatsApp-number constraint.
+          // It protects against two simultaneous requests passing the check
+          // above; map that race to the same user-facing conflict response.
+          try {
             savedCustomer = await prisma.customer.create({
               data: {
                 whatsappNumber: canonicalPhone,
@@ -4799,17 +4887,48 @@ const server = http.createServer(async (req, res) => {
                 preferredLanguage: language || 'en'
               }
             });
-          } else {
-            savedCustomer = await prisma.customer.update({
-              where: { id: savedCustomer.id },
-              data: {
-                whatsappNumber: canonicalPhone,
-                phoneNumber: canonicalPhone,
-                whatsappId: cleanDigits,
-                displayName: contactName,
-                preferredLanguage: language || savedCustomer.preferredLanguage || 'en'
-              }
-            });
+          } catch (createError) {
+            if (createError?.code === 'P2002') {
+              const existingCustomer = await prisma.customer.findFirst({
+                where: {
+                  OR: [
+                    { whatsappNumber: canonicalPhone },
+                    { whatsappNumber: cleanDigits },
+                    { whatsappId: cleanDigits },
+                    ...(cleanDigits.length >= 9 ? [{ whatsappNumber: { contains: cleanDigits.slice(-9) } }] : [])
+                  ]
+                },
+                select: {
+                  id: true,
+                  displayName: true,
+                  whatsappNumber: true,
+                  leads: {
+                    select: { company: true, source: true, assignedById: true, assignedByName: true, createdAt: true },
+                    orderBy: { createdAt: 'asc' },
+                    take: 1
+                  }
+                }
+              }).catch(() => null);
+              const existingLead = existingCustomer?.leads?.[0];
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                duplicate: true,
+                errorCode: 'DUPLICATE_CONTACT',
+                error: `Duplicate contact: this WhatsApp number is already registered. Added by ${existingLead?.assignedByName || 'not recorded for this existing CRM record'}. The contact was not added.`,
+                existingContact: existingCustomer ? {
+                  id: existingCustomer.id,
+                  displayName: existingCustomer.displayName,
+                  whatsappNumber: existingCustomer.whatsappNumber,
+                  company: existingLead?.company || existingLead?.source || null,
+                  addedById: existingLead?.assignedById || null,
+                  addedByName: existingLead?.assignedByName || null,
+                  addedAt: existingLead?.createdAt || null
+                } : undefined
+              }));
+              return;
+            }
+            throw createError;
           }
 
           // 2. Resolve or create Category & Treatment based on targetCompany
@@ -4969,8 +5088,10 @@ const server = http.createServer(async (req, res) => {
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-prp'),
                 stage: leadStage,
                 assignedTo: targetCoordinatorId,
-                assignedById: targetCoordinatorId ? (authUser?.id || null) : null,
-                assignedByName: targetCoordinatorId ? (authUser?.fullName || 'Admin') : null,
+                // Preserve who created the original contact so duplicate attempts
+                // can explain where the existing CRM record came from.
+                assignedById: authUser?.id || null,
+                assignedByName: authUser?.fullName || 'System',
                 assignedAt: targetCoordinatorId ? new Date() : null,
                 language: language || 'en',
                 lastCustomerMessageAt: null
@@ -5024,6 +5145,10 @@ const server = http.createServer(async (req, res) => {
                   assignedById: authUser?.id || null,
                   assignedByName: authUser?.fullName || 'Admin',
                   assignedAt: new Date(),
+                } : {}),
+                ...(!savedLead.assignedByName ? {
+                  assignedById: authUser?.id || savedLead.assignedById || null,
+                  assignedByName: authUser?.fullName || savedLead.assignedByName || 'System'
                 } : {}),
                 stage: initialMessage ? 'contacted' : savedLead.stage,
                 language: language || savedLead.language,
@@ -5268,7 +5393,20 @@ const server = http.createServer(async (req, res) => {
 
           console.log(`✅ [Contact Created] ${contactName} (${canonicalPhone}) saved to Supabase PostgreSQL. Lead ID: ${savedLead.id}, Company: ${compCode}`);
         } else {
-          // In-memory fallback
+          // In-memory fallback. This is still protected against duplicates
+          // created during the current process lifetime.
+          const existingMemoryContact = inMemoryContactNumbers.get(cleanDigits);
+          if (existingMemoryContact) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              duplicate: true,
+              errorCode: 'DUPLICATE_CONTACT',
+              error: `Duplicate contact: this WhatsApp number is already registered. Added by ${existingMemoryContact.addedByName || 'not recorded for this existing CRM record'}. The contact was not added.`,
+              existingContact: existingMemoryContact
+            }));
+            return;
+          }
           savedCustomer = {
             id: 'cust-' + Date.now(),
             whatsappNumber: canonicalPhone,
@@ -5276,6 +5414,15 @@ const server = http.createServer(async (req, res) => {
             displayName: contactName,
             preferredLanguage: language || 'en'
           };
+          inMemoryContactNumbers.set(cleanDigits, {
+            id: savedCustomer.id,
+            displayName: savedCustomer.displayName,
+            whatsappNumber: savedCustomer.whatsappNumber,
+            company: targetCompany,
+            addedById: authUser?.id || null,
+            addedByName: authUser?.fullName || 'System',
+            addedAt: new Date().toISOString()
+          });
           const compConfig = COMPANIES[targetCompany] || COMPANIES.RWC;
           savedLead = {
             id: 'lead-' + Date.now(),
@@ -5290,6 +5437,8 @@ const server = http.createServer(async (req, res) => {
             companyColor: compConfig.color,
             companyPhoneNumberId: compConfig.phoneId,
             companyPhoneNumber: compConfig.phone,
+            assignedById: authUser?.id || null,
+            assignedByName: authUser?.fullName || 'System',
             language: language || 'en',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
@@ -5500,12 +5649,12 @@ const server = http.createServer(async (req, res) => {
     const defaultCoordinators = (IS_TEST_ENV ? CANONICAL_USERS : [])
       .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
       .map(u => {
-        const { password, ...safeUser } = u;
+        const { password, pin, ...safeUser } = u;
         return {
           ...safeUser,
-          pin: isSuperAdmin ? u.pin : undefined,
+          pinConfigured: Boolean(pin),
           branch: safeUser.branch || 'Colombo',
-          company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+          company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(safeUser.role) ? null : (safeUser.company || 'RWC'),
           createdAt: '2026-01-01T08:00:00Z',
           activeLeadsCount: 0,
         };
@@ -5523,12 +5672,12 @@ const server = http.createServer(async (req, res) => {
             const mappedUsers = users
               .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
               .map(u => {
-                const { password, ...safeUser } = u;
+                const { password, pin, ...safeUser } = u;
                 return {
                   ...safeUser,
-                  pin: isSuperAdmin ? u.pin : undefined,
+                  pinConfigured: Boolean(pin),
                   branch: safeUser.branch || 'Colombo',
-                  company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+                  company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(safeUser.role) ? null : (safeUser.company || 'RWC'),
                 };
               });
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5559,9 +5708,10 @@ const server = http.createServer(async (req, res) => {
           const cleanPin = String(payload.pin || '').trim().slice(0, 10);
           const cleanPassword = String(payload.password || '');
           const phone = payload.phone || null;
-          const role = payload.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
+          const allowedStaffRoles = ['leads_officer', 'coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'];
+          const role = allowedStaffRoles.includes(payload.role) ? payload.role : 'coordinator';
           const branch = (payload.branch || 'Colombo').trim();
-          const company = role === 'leads_officer' ? null : (payload.company || 'RWC').trim();
+          const company = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? null : (payload.company || 'RWC').trim();
 
           if (!fullName || cleanPassword.length < 12 || (cleanPin && cleanPin.length < 4)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -5633,6 +5783,7 @@ const server = http.createServer(async (req, res) => {
             branch: newUser.branch,
             company: newUser.company,
             pin: cleanPin,
+            pinConfigured: Boolean(cleanPin),
             active: newUser.active ?? true,
             createdAt: newUser.createdAt ? newUser.createdAt.toISOString() : new Date().toISOString()
           } : {
@@ -5644,6 +5795,7 @@ const server = http.createServer(async (req, res) => {
             branch,
             company,
             pin: cleanPin,
+            pinConfigured: Boolean(cleanPin),
             active: true,
             createdAt: new Date().toISOString()
           };
@@ -5651,7 +5803,7 @@ const server = http.createServer(async (req, res) => {
           // Broadcast staff created event via SSE
           broadcastScopedSSE(null, {
             type: 'STAFF_CREATED',
-            user: safeUserPayload
+            user: { ...safeUserPayload, pin: undefined }
           });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -6665,7 +6817,12 @@ export async function startServer() {
   await initializeServer();
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(PORT, '0.0.0.0', () => resolve(server));
+    server.listen(PORT, '0.0.0.0', async () => {
+      // Initialize Socket.io after server starts listening
+      // Legacy exam socket disabled: it trusted client-supplied student identity.
+      startExamMonitor();
+      resolve(server);
+    });
   });
 }
 

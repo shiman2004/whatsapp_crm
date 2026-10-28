@@ -12,6 +12,7 @@ import { MessageSquare, KanbanSquare, LayoutDashboard, Menu, Loader2 } from 'luc
 import { NotificationContainer } from './components/notifications/NotificationContainer';
 import { NotificationSettingsModal } from './components/notifications/NotificationSettingsModal';
 import { DesktopNotificationBanner } from './components/notifications/DesktopNotificationBanner';
+import { ExamHandoffRequestModal } from './components/exam/ExamHandoffRequestModal';
 
 // Lazy-loaded secondary & admin modules for code-splitting and small initial chunk sizes
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
@@ -20,12 +21,18 @@ const CoordinatorsManager = lazy(() => import('./components/admin/CoordinatorsMa
 const TemplatesManager = lazy(() => import('./components/admin/TemplatesManager').then(m => ({ default: m.TemplatesManager })));
 const AuditLogsViewer = lazy(() => import('./components/admin/AuditLogsViewer').then(m => ({ default: m.AuditLogsViewer })));
 const ArchitectureBlueprint = lazy(() => import('./components/admin/ArchitectureBlueprint').then(m => ({ default: m.ArchitectureBlueprint })));
+const StudentExamPage = lazy(() => import('./components/StudentExamPage').then(m => ({ default: m.StudentExamPage })));
 const WebhookSimulatorPlayground = lazy(() => import('./components/admin/WebhookSimulatorPlayground').then(m => ({ default: m.WebhookSimulatorPlayground })));
 const SuperAdminSettingsView = lazy(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then(m => ({ default: m.SuperAdminSettingsView })));
+const SecurityAccessView = lazy(() => import('./components/admin/SecurityAccessView').then(m => ({ default: m.SecurityAccessView })));
 const TeamBroadcastView = lazy(() => import('./components/broadcast/TeamBroadcastView').then(m => ({ default: m.TeamBroadcastView })));
 const AppointmentSchedulerView = lazy(() => import('./components/appointments/AppointmentSchedulerView').then(m => ({ default: m.AppointmentSchedulerView })));
 const MarketingModule = lazy(() => import('./components/marketing/MarketingModule').then(m => ({ default: m.MarketingModule })));
 const WhatsAppSimulator = lazy(() => import('./components/simulator/WhatsAppSimulator').then(m => ({ default: m.WhatsAppSimulator })));
+
+const ExamDepartmentWorkspace = lazy(() => import('./components/exam/ExamDepartmentWorkspace').then(m => ({ default: m.ExamDepartmentWorkspace })));
+const StudentPortal = lazy(() => import('./components/exam/StudentPortal').then(m => ({ default: m.StudentPortal })));
+const PatientAssessmentWorkspace = lazy(() => import('./components/clinical/PatientAssessmentWorkspace').then(m => ({ default: m.PatientAssessmentWorkspace })));
 
 const ViewLoader: React.FC = () => (
   <div className="flex-1 flex flex-col items-center justify-center p-12 text-slate-400 min-h-[300px]">
@@ -59,6 +66,7 @@ const MainLayout: React.FC = () => {
   React.useEffect(() => {
     const adminOnlyTabs: NavTab[] = [
       'settings',
+      'security-access',
       'coordinators',
       'audit',
       'treatments',
@@ -69,10 +77,14 @@ const MainLayout: React.FC = () => {
     if (currentUser?.role !== 'super_admin' && adminOnlyTabs.includes(activeTab)) {
       setActiveTab('dashboard');
     }
+    if ((activeTab as string) === 'student-database' || (activeTab as string) === 'patient-database') setActiveTab('dashboard');
   }, [currentUser?.role, activeTab, setActiveTab]);
 
   React.useEffect(() => {
     const syncMarketingHash = () => {
+      if (window.location.hash.startsWith('#/exam-department')) setActiveTab('exam-department');
+      if (window.location.hash.startsWith('#/patient-assessment')) setActiveTab('patient-assessment');
+      if (window.location.hash.startsWith('#/security-access')) setActiveTab('security-access');
       if (window.location.hash.startsWith('#/marketing')) {
         setActiveTab('marketing');
         const sub = window.location.hash.replace(/^#\/marketing\/?/, '');
@@ -104,6 +116,7 @@ const MainLayout: React.FC = () => {
 
       {/* WhatsApp Web Desktop Notification Permission Banner (shown if not yet granted) */}
       <DesktopNotificationBanner />
+      <ExamHandoffRequestModal />
 
       {/* Main Body */}
       <div className="flex-1 flex overflow-hidden min-h-0 relative">
@@ -128,6 +141,7 @@ const MainLayout: React.FC = () => {
             {activeTab === 'appointment-rooms' && <AppointmentSchedulerView />}
             {activeTab === 'marketing' && <MarketingModule />}
             {activeTab === 'settings' && currentUser?.role === 'super_admin' && <SuperAdminSettingsView />}
+            {activeTab === 'security-access' && currentUser?.role === 'super_admin' && <SecurityAccessView />}
             {activeTab === 'treatments' && currentUser?.role === 'super_admin' && <TreatmentsManager />}
             {activeTab === 'coordinators' && currentUser?.role === 'super_admin' && <CoordinatorsManager />}
             {activeTab === 'templates' && <TemplatesManager />}
@@ -135,6 +149,9 @@ const MainLayout: React.FC = () => {
             {activeTab === 'reports' && currentUser?.role === 'super_admin' && <AnalyticsView />}
             {activeTab === 'audit' && currentUser?.role === 'super_admin' && <AuditLogsViewer />}
             {activeTab === 'webhook-sandbox' && currentUser?.role === 'super_admin' && <WebhookSimulatorPlayground />}
+            {activeTab === 'exam-department' && ['super_admin','coordinator','leads_officer','exam_department_manager','exam_coordinator','exam_providing_officer'].includes(currentUser?.role || '') && <ExamDepartmentWorkspace initialSubTab="operations" />}
+            {activeTab === 'patient-assessment' && ['super_admin','clinical_nurse','clinical_doctor','report_analyst'].includes(currentUser?.role || '') && <PatientAssessmentWorkspace />}
+            {activeTab === 'exam' && <StudentExamPage />}
             {activeTab === 'architecture' && currentUser?.role === 'super_admin' && <ArchitectureBlueprint />}
           </Suspense>
         </main>
@@ -230,6 +247,7 @@ const RootApp: React.FC = () => {
 };
 
 export default function App() {
+  if (window.location.pathname === '/student') return <Suspense fallback={<ViewLoader />}><StudentPortal /></Suspense>;
   return (
     <CrmProvider>
       <RootApp />

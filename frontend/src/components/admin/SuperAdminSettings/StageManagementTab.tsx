@@ -449,9 +449,9 @@ export const StageManagementTab: React.FC = () => {
                           : 'bg-purple-500/15 text-purple-700 dark:text-purple-400 border border-purple-500/30'
                       }`}>
                         {stage.company === 'RWC'
-                          ? 'Royal Wellness (RWC)'
+                          ? 'Royal Wellness RWC'
                           : stage.company === 'CRAS'
-                          ? 'CRAS College (CRAS)'
+                          ? 'CRAS College CRAS'
                           : 'Both Companies'}
                       </span>
                     </td>
@@ -674,7 +674,7 @@ export const StageManagementTab: React.FC = () => {
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                     }`}
                   >
-                    Royal Wellness (RWC)
+                    Royal Wellness RWC
                   </button>
                   <button
                     type="button"
@@ -816,7 +816,7 @@ export const StageManagementTab: React.FC = () => {
                         : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200 hover:border-slate-700'
                     }`}
                   >
-                    Royal Wellness (RWC)
+                    Royal Wellness RWC
                   </button>
                   <button
                     type="button"

@@ -20,12 +20,12 @@ export const LeadFunnelChart: React.FC<LeadFunnelChartProps> = ({ leads: propLea
   const { leads: ctxLeads } = useCrm();
   const leads = propLeads || ctxLeads;
 
-  const stages: LeadStage[] = ['new', 'assigned', 'contacted', 'potential', 'under_discussion', 'not_relevant', 'not_eligible', 'converted', 'lost'];
+  const stages: LeadStage[] = ['new', 'assigned', 'contacted', 'potential', 'under_discussion', 'forwarded_to_exam_department', 'forwarded_to_processing_department', 'not_relevant', 'not_eligible', 'converted', 'lost'];
 
   const data = stages.map((st) => ({
     stage: STAGE_CONFIG[st]?.label || st,
     count: leads.filter(l => l.stage === st).length,
-    color: st === 'converted' ? '#10b981' : st === 'new' ? '#f59e0b' : st === 'potential' ? '#a855f7' : st === 'not_eligible' ? '#71717a' : '#6366f1'
+    color: st === 'converted' ? '#10b981' : st === 'new' ? '#f59e0b' : st === 'potential' ? '#a855f7' : st === 'forwarded_to_exam_department' ? '#06b6d4' : st === 'forwarded_to_processing_department' ? '#f97316' : st === 'not_eligible' ? '#71717a' : '#6366f1'
   }));
 
   return (

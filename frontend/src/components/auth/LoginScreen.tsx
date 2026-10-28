@@ -37,7 +37,7 @@ const checkIsAdminAllowed = (): boolean => {
   }
 };
 
-export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'leads_officer' | 'super_admin' | 'student';
+export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'ahc' | 'leads_officer' | 'super_admin' | 'student';
 
 export const LoginScreen: React.FC = () => {
   const { users, login } = useCrm() as any;
@@ -60,6 +60,7 @@ export const LoginScreen: React.FC = () => {
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
   const rwcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
   const crasCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'CRAS');
+  const ahcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'AHC');
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
 
   const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
@@ -159,12 +160,16 @@ export const LoginScreen: React.FC = () => {
       const firstCras = crasCoordinators[0];
       setIdentifierInput(firstCras ? firstCras.email : 'zeenath@royalwellness.lk');
       setPasswordInput('staff');
+    } else if (portalView === 'ahc') {
+      const firstAhc = ahcCoordinators[0];
+      setIdentifierInput(firstAhc ? firstAhc.email : '');
+      setPasswordInput('staff');
     } else if (portalView === 'leads_officer') {
       const firstOfficer = leadsOfficers[0];
       setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('staff');
     }
-  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, leadsOfficers.length]);
+  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, ahcCoordinators.length, leadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
@@ -275,6 +280,18 @@ export const LoginScreen: React.FC = () => {
           focusBorderClass: 'focus:border-rose-600',
           activeKeyClass: 'bg-rose-900/50 border-rose-500 ring-rose-500/60'
         };
+      case 'ahc':
+        return {
+          title: 'Alpha Health Consultancy',
+          subtitle: 'Consultancy Advisor Portal',
+          accountLabel: 'Consultancy Advisor Account',
+          logoSrc: '/ahc-logo.png',
+          accentColor: '#066e77',
+          badgeText: 'AHC Consultancy',
+          badgeClass: 'bg-teal-950 text-teal-300 border-teal-800/60',
+          focusBorderClass: 'focus:border-[#066e77]',
+          activeKeyClass: 'bg-[#066e77]/40 border-[#066e77] ring-[#066e77]/60'
+        };
       case 'leads_officer':
         return {
           title: 'Central Leads Intake',
@@ -326,6 +343,8 @@ export const LoginScreen: React.FC = () => {
             ? '#800000' 
             : portalView === 'rwc' 
             ? '#008000' 
+            : portalView === 'ahc'
+            ? '#066e77'
             : portalView === 'leads_officer'
             ? '#4338ca'
             : '#00a884'
@@ -424,7 +443,35 @@ export const LoginScreen: React.FC = () => {
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
-              {/* 3. Central Leads Management Card (Common for every lead officer) */}
+              {/* 3. Alpha Health Consultancy AHC Card */}
+              <button
+                type="button"
+                onClick={() => setPortalView('ahc')}
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#122325] hover:to-[#173033] border border-teal-900/50 hover:border-[#066e77]/70 shadow-lg hover:shadow-teal-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+              >
+                <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-teal-500/30 group-hover:ring-teal-400 group-hover:scale-105 transition-all">
+                  <img src="/ahc-logo.png" alt="Alpha Health Consultancy" className="w-full h-full object-contain" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white group-hover:text-teal-300 transition-colors">
+                      Alpha Health Consultancy
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-950 text-teal-300 border border-teal-800/60">
+                      AHC
+                    </span>
+                  </div>
+                  <p className="text-xs font-semibold text-teal-400 mt-0.5">
+                    Consultancy Advisors
+                  </p>
+                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
+                    International consultancy, advisory & client relations (+971 54 372 3912)
+                  </p>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+              </button>
+
+              {/* 4. Central Leads Management Card (Common for every lead officer) */}
               <button
                 type="button"
                 onClick={() => setPortalView('leads_officer')}
@@ -572,6 +619,22 @@ export const LoginScreen: React.FC = () => {
                   {crasCoordinators.map((c: any) => (
                     <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
                       {c.fullName} — Education Counsellor ({c.branch || 'Colombo'})
+                    </option>
+                  ))}
+                </select>
+              ) : portalView === 'ahc' && ahcCoordinators.length > 0 ? (
+                <select
+                  value={identifierInput}
+                  onChange={(e) => {
+                    setIdentifierInput(e.target.value);
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#066e77] transition-colors cursor-pointer"
+                >
+                  {ahcCoordinators.map((c: any) => (
+                    <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
+                      {c.fullName} — Consultancy Advisor ({c.branch || 'Dubai / Colombo'})
                     </option>
                   ))}
                 </select>

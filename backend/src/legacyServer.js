@@ -478,7 +478,9 @@ let metaConfig = {
   phoneNumberId: (process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim(),
   phoneNumberIdRwc: (process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim(),
   phoneNumberIdCras: (process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim(),
+  phoneNumberIdAhc: (process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim(),
   wabaId: (process.env.META_WABA_ID || '2332922997481634').trim(),
+  wabaIdAhc: (process.env.META_WABA_ID_AHC || '1691829932493235').trim(),
   appSecret: (process.env.META_APP_SECRET || '').trim(),
   verifyToken: (process.env.META_VERIFY_TOKEN || 'royal_wellness_token_2026').trim()
 };
@@ -1742,13 +1744,17 @@ const server = http.createServer(async (req, res) => {
         let resolvedCompany = payload.company;
         if (!resolvedCompany && leadId && prisma && getDbStatus()) {
           const checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
-          if (checkLead?.source === 'CRAS') {
+          if (checkLead?.company === 'AHC' || checkLead?.source === 'AHC') {
+            resolvedCompany = 'AHC';
+          } else if (checkLead?.company === 'CRAS' || checkLead?.source === 'CRAS') {
             resolvedCompany = 'CRAS';
           }
         }
         let targetPhoneId = payload.phoneNumberId;
         if (!targetPhoneId) {
-          targetPhoneId = resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId);
+          targetPhoneId = resolvedCompany === 'AHC'
+            ? (metaConfig.phoneNumberIdAhc || COMPANIES.AHC.phoneId)
+            : (resolvedCompany === 'CRAS' ? (metaConfig.phoneNumberIdCras || COMPANIES.CRAS.phoneId) : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId));
         }
         const phoneId = (targetPhoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
 
@@ -1840,7 +1846,7 @@ const server = http.createServer(async (req, res) => {
             // 24-hour customer care window closed error (131047) - Auto-fallback to official Meta approved template
             if (errCode === 131047) {
               console.log(`⚠️ [24h Window Closed] Meta error 131047 for ${cleanTo}. Attempting auto-fallback to approved Meta template...`);
-              const fallbackTplName = (resolvedCompany === 'CRAS') ? 'cras_welcome_greeting' : 'rwc_welcome_greeting';
+              const fallbackTplName = (resolvedCompany === 'AHC') ? 'ahc_welcome_greeting' : ((resolvedCompany === 'CRAS') ? 'cras_welcome_greeting' : 'rwc_welcome_greeting');
               let recipientName = resolvedCompany === 'CRAS' ? 'Dr. Perera' : 'Valued Client';
               if (prisma && getDbStatus()) {
                 try {
@@ -1883,7 +1889,9 @@ const server = http.createServer(async (req, res) => {
                 const fbMsgId = fallbackData.messages[0].id;
                 console.log(`✅ [24h Auto-Fallback Success] Meta template "${fallbackTplName}" dispatched! Message ID: ${fbMsgId}`);
                 
-                msgContent = fallbackTplName === 'cras_welcome_greeting'
+                msgContent = fallbackTplName === 'ahc_welcome_greeting'
+                  ? `Hello ${recipientName}, thank you for reaching out to Alpha Health Consultancy. We are delighted to assist you with our health consultancy services. How may our team assist you today?`
+                  : fallbackTplName === 'cras_welcome_greeting'
                   ? `Hello ${recipientName}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?`
                   : `Hello ${recipientName}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?`;
 
@@ -2269,16 +2277,19 @@ const server = http.createServer(async (req, res) => {
         let resolvedCompany = payload.company;
         if (!resolvedCompany && leadId && prisma && getDbStatus()) {
           const checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
-          if (checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
+          if (checkLead?.company === 'AHC' || checkLead?.source === 'AHC') resolvedCompany = 'AHC';
+          else if (checkLead?.company === 'CRAS' || checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
         }
 
-        if (templateName === 'cras_welcome_greeting' || templateName.startsWith('cras_')) {
+        if (templateName.startsWith('ahc_')) {
+          resolvedCompany = 'AHC';
+        } else if (templateName === 'cras_welcome_greeting' || templateName.startsWith('cras_')) {
           resolvedCompany = 'CRAS';
         } else if (templateName.startsWith('rwc_')) {
           resolvedCompany = 'RWC';
         }
 
-        const phoneId = (payload.phoneNumberId || (resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId)) || '1358157244046701').trim();
+        const phoneId = (payload.phoneNumberId || (resolvedCompany === 'AHC' ? (metaConfig.phoneNumberIdAhc || COMPANIES.AHC.phoneId) : (resolvedCompany === 'CRAS' ? (metaConfig.phoneNumberIdCras || COMPANIES.CRAS.phoneId) : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId))) || '1358157244046701').trim();
         const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
 
         if (!metaToken) {
@@ -4125,7 +4136,7 @@ const server = http.createServer(async (req, res) => {
           });
         } else {
           const queryCompany = parsedUrl.query.company;
-          if (queryCompany && ['RWC', 'CRAS'].includes(String(queryCompany).toUpperCase())) {
+          if (queryCompany && ['RWC', 'CRAS', 'AHC'].includes(String(queryCompany).toUpperCase())) {
             finalLeads = finalLeads.filter(l => (l.company || 'RWC').toUpperCase() === String(queryCompany).toUpperCase());
           }
         }
@@ -4598,7 +4609,7 @@ const server = http.createServer(async (req, res) => {
 
           // Company change authorization: Only Super Admin and Leads Officer can change company
           const isExplicitCompanyChange = payload.company !== undefined || 
-            (payload.source !== undefined && ['CRAS', 'RWC'].includes(String(payload.source).toUpperCase()));
+            (payload.source !== undefined && ['CRAS', 'RWC', 'AHC'].includes(String(payload.source).toUpperCase()));
           if (isExplicitCompanyChange) {
             const isAuthorized = authUser.role === 'super_admin' || authUser.role === 'leads_officer';
             if (!isAuthorized) {
@@ -4624,7 +4635,8 @@ const server = http.createServer(async (req, res) => {
           }
 
           if (payload.company !== undefined) {
-            const companyCode = String(payload.company).toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+            const rawComp = String(payload.company).toUpperCase();
+            const companyCode = rawComp === 'AHC' ? 'AHC' : (rawComp === 'CRAS' ? 'CRAS' : 'RWC');
             updateData.company = companyCode;
 
             // When company changes, reset treatment/course and unassign coordinator if they belong to another company
@@ -4650,7 +4662,7 @@ const server = http.createServer(async (req, res) => {
           if (payload.source !== undefined) {
             const rawSrc = String(payload.source).trim();
             const srcUpper = rawSrc.toUpperCase();
-            if (srcUpper === 'CRAS' || srcUpper === 'RWC') {
+            if (srcUpper === 'CRAS' || srcUpper === 'RWC' || srcUpper === 'AHC') {
               updateData.source = srcUpper;
               if (payload.company === undefined) {
                 updateData.company = srcUpper;
@@ -4803,7 +4815,8 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body || '{}');
         const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage, templateName, templateParams, company } = payload;
-        const targetCompany = (company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+        const compRaw = (company || 'RWC').toUpperCase();
+        const targetCompany = compRaw === 'AHC' ? 'AHC' : (compRaw === 'CRAS' ? 'CRAS' : 'RWC');
 
         const rawPhone = (phone || whatsappNumber || '').trim();
         const norm = normalizeE164(rawPhone);
@@ -5218,7 +5231,9 @@ const server = http.createServer(async (req, res) => {
 
           if (dispatchPayload) {
             const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-            const phoneId = targetCompany === 'CRAS'
+            const phoneId = targetCompany === 'AHC'
+              ? (metaConfig.phoneNumberIdAhc || process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim()
+              : targetCompany === 'CRAS'
               ? (metaConfig.phoneNumberIdCras || process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim()
               : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
 
@@ -5239,7 +5254,10 @@ const server = http.createServer(async (req, res) => {
                   console.log(`ℹ️ [Add Contact] 24h window closed. Automatically dispatching approved Meta greeting template...`);
                   let autoTplName = 'rwc_welcome_greeting';
                   let autoTplLang = 'en_US';
-                  if (targetCompany === 'CRAS') {
+                  if (targetCompany === 'AHC') {
+                    autoTplName = 'ahc_welcome_greeting';
+                    autoTplLang = 'en_US';
+                  } else if (targetCompany === 'CRAS') {
                     autoTplName = 'cras_welcome_greeting';
                     autoTplLang = 'en_US';
                   } else if (language === 'ta' || language === 'tamil') {
@@ -5327,12 +5345,14 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => null);
 
             if (savedMessage) {
-              await prisma.messageAudit.create({
-                data: {
-                  messageId: savedMessage.id,
-                  leadId: savedLead.id,
-                  customerId: savedCustomer.id,
-                  company: (targetCompany || savedLead.source || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC',
+                  const targetCompUpper = (targetCompany || savedLead.source || 'RWC').toUpperCase();
+                  const auditComp = targetCompUpper === 'AHC' ? 'AHC' : (targetCompUpper === 'CRAS' ? 'CRAS' : 'RWC');
+                  await prisma.messageAudit.create({
+                    data: {
+                      messageId: savedMessage.id,
+                      leadId: savedLead.id,
+                      customerId: savedCustomer.id,
+                      company: auditComp,
                   whatsappNumber: canonicalPhone,
                   senderId: actualSenderId,
                   senderName: actualSenderName,
@@ -5371,7 +5391,8 @@ const server = http.createServer(async (req, res) => {
           }
 
           // Broadcast Lead Created/Assigned SSE with company metadata
-          const compCode = (targetCompany || savedLead.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          const compCodeRaw = (targetCompany || savedLead.source || '').toUpperCase();
+          const compCode = compCodeRaw === 'AHC' ? 'AHC' : (compCodeRaw === 'CRAS' ? 'CRAS' : 'RWC');
           const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
           const enrichedLead = {
             ...savedLead,
@@ -5445,7 +5466,8 @@ const server = http.createServer(async (req, res) => {
           };
         }
 
-        const compCodeFinal = (savedLead?.company || savedLead?.source || targetCompany).toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+        const compCodeFinalUpper = (savedLead?.company || savedLead?.source || targetCompany).toUpperCase();
+        const compCodeFinal = compCodeFinalUpper === 'AHC' ? 'AHC' : (compCodeFinalUpper === 'CRAS' ? 'CRAS' : 'RWC');
         const finalCompConfig = COMPANIES[compCodeFinal] || COMPANIES.RWC;
         const finalEnrichedLead = {
           ...savedLead,

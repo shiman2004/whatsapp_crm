@@ -25,8 +25,8 @@ const BRANCH_OPTIONS = [
   'Colombo'
 ];
 
-type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc' | 'exam_department_manager' | 'exam_providing_officer' | 'clinical_nurse' | 'clinical_doctor' | 'report_analyst' | 'marketing_officer_rwc' | 'marketing_officer_cras' | 'marketing_admin_rwc' | 'marketing_admin_cras';
-type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras';
+type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc' | 'coordinator_ahc' | 'exam_department_manager' | 'exam_providing_officer' | 'clinical_nurse' | 'clinical_doctor' | 'report_analyst' | 'marketing_officer_rwc' | 'marketing_officer_cras' | 'marketing_admin_rwc' | 'marketing_admin_cras';
+type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras' | 'coordinator_ahc';
 
 const generateRandomPin = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
@@ -58,11 +58,13 @@ export const CoordinatorsManager: React.FC = () => {
   const leadsOfficers = users.filter(u => u.role === 'leads_officer');
   const rwcCoordinators = users.filter(u => u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
   const crasCoordinators = users.filter(u => u.role === 'coordinator' && u.company === 'CRAS');
+  const ahcCoordinators = users.filter(u => u.role === 'coordinator' && u.company === 'AHC');
 
   const filteredStaff = staffMembers.filter(u => {
     if (activeFilter === 'leads_officer') return u.role === 'leads_officer';
     if (activeFilter === 'coordinator_rwc') return u.role === 'coordinator' && (u.company === 'RWC' || !u.company);
     if (activeFilter === 'coordinator_cras') return u.role === 'coordinator' && u.company === 'CRAS';
+    if (activeFilter === 'coordinator_ahc') return u.role === 'coordinator' && u.company === 'AHC';
     return true;
   });
 
@@ -75,6 +77,8 @@ export const CoordinatorsManager: React.FC = () => {
       setCompany('RWC');
     } else if (choice === 'coordinator_cras') {
       setCompany('CRAS');
+    } else if (choice === 'coordinator_ahc') {
+      setCompany('AHC');
     } else if (choice === 'exam_department_manager' || choice === 'exam_providing_officer' || choice === 'clinical_nurse' || choice === 'clinical_doctor' || choice === 'report_analyst') {
       setCompany('RWC');
     } else if (choice.endsWith('_cras')) {
@@ -150,6 +154,9 @@ export const CoordinatorsManager: React.FC = () => {
     } else if (selectedRoleChoice === 'coordinator_cras') {
       systemRole = 'coordinator';
       assignedCompany = 'CRAS';
+    } else if (selectedRoleChoice === 'coordinator_ahc') {
+      systemRole = 'coordinator';
+      assignedCompany = 'AHC';
     } else {
       systemRole = 'coordinator';
       assignedCompany = 'RWC';
@@ -253,6 +260,19 @@ export const CoordinatorsManager: React.FC = () => {
             <span className="w-2 h-2 rounded-full bg-[#800000]" />
             <span>Education Counsellors CRAS ({crasCoordinators.length})</span>
           </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('coordinator_ahc')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'coordinator_ahc'
+                ? 'bg-teal-50 dark:bg-[#066e77]/20 text-[#066e77] dark:text-teal-300 border border-teal-200 dark:border-[#066e77]/40 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#066e77]" />
+            <span>Consultancy Advisors AHC ({ahcCoordinators.length})</span>
+          </button>
         </div>
       </div>
 
@@ -293,6 +313,8 @@ export const CoordinatorsManager: React.FC = () => {
               : staff.role === 'marketing_officer' ? 'Marketing Officer'
               : isOfficer
               ? 'Leads Officer' 
+              : staff.company === 'AHC'
+              ? 'Consultancy Advisor'
               : isCras 
               ? 'Education Counsellor' 
               : 'Patient Coordinator';
@@ -487,6 +509,9 @@ export const CoordinatorsManager: React.FC = () => {
                     </option>
                     <option value="coordinator_cras">
                       Education Counsellor CRAS
+                    </option>
+                    <option value="coordinator_ahc">
+                      Consultancy Advisor AHC
                     </option>
                     <option value="leads_officer">
                       Leads Officer (Common)
@@ -689,7 +714,7 @@ export const CoordinatorsManager: React.FC = () => {
                     : editingStaff.role === 'marketing_officer' ? 'Marketing Officer'
                     : editingStaff.role === 'leads_officer'
                     ? 'Leads Officer' 
-                    : (editingStaff.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')}
+                    : (editingStaff.company === 'AHC' ? 'Consultancy Advisor' : editingStaff.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">

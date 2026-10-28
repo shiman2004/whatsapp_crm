@@ -8,7 +8,7 @@ import { Sparkles, ArrowDownCircle, CheckCircle2 } from 'lucide-react';
 interface KanbanBoardProps {
   leads: Lead[];
   onSelectLead: (leadId: string) => void;
-  company?: 'RWC' | 'CRAS' | 'ALL';
+  company?: 'RWC' | 'CRAS' | 'AHC' | 'ALL';
 }
 
 const STAGE_COLOR_MAP: Record<string, string> = {

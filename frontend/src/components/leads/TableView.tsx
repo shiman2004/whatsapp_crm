@@ -43,7 +43,7 @@ const compactContactName = (value?: string) => Array.from(value || 'Customer').s
 interface TableViewProps {
   leads: Lead[];
   onSelectLead: (leadId: string) => void;
-  company?: 'RWC' | 'CRAS' | 'ALL';
+  company?: 'RWC' | 'CRAS' | 'AHC' | 'ALL';
 }
 
 export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, company = 'RWC' }) => {

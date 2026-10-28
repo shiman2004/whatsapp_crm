@@ -16,10 +16,9 @@ export interface CompanyConfig {
 export const COMPANIES: Record<CompanyCode, CompanyConfig> = {
   RWC: {
     code: 'RWC',
-    // RWC remains the internal routing/company code. AHC is the public CRM label.
-    tag: 'AHC',
+    tag: 'RWC',
     name: 'Royal Wellness Center',
-    shortName: 'AHC',
+    shortName: 'Royal Wellness',
     colorHex: '#008000', // User requested green: #008000
     color: '#008000',
     phoneId: '1358157244046701',
@@ -38,6 +37,18 @@ export const COMPANIES: Record<CompanyCode, CompanyConfig> = {
     phoneNumber: '+94 70 637 3353',
     phone: '+94 70 637 3353',
     displayPhone: '+94 70 637 3353'
+  },
+  AHC: {
+    code: 'AHC',
+    tag: 'AHC',
+    name: 'Alpha Health Consultancy',
+    shortName: 'Alpha Health',
+    colorHex: '#066e77', // User logo color: Deep Teal sampled directly from official logo
+    color: '#066e77',
+    phoneId: '1408148915714830',
+    phoneNumber: '+971 54 372 3912',
+    phone: '+971 54 372 3912',
+    displayPhone: '+971 54 372 3912'
   }
 };
 
@@ -47,6 +58,18 @@ export const COMPANIES: Record<CompanyCode, CompanyConfig> = {
 export const getLeadCompany = (lead?: Partial<Lead> | { company?: string; source?: string; whatsappSessionId?: string } | null): CompanyConfig => {
   if (!lead) return COMPANIES.RWC;
   
+  if (
+    lead.company === 'AHC' ||
+    lead.source === 'AHC' ||
+    (lead as any).whatsappSessionId === 'AHC' ||
+    (lead as any).treatment?.company === 'AHC' ||
+    (lead as any).assignedCoordinator?.company === 'AHC' ||
+    String((lead as any).customer?.whatsappNumber || '').includes('971543723912') ||
+    String((lead as any).customer?.whatsappNumber || '').includes('3723912')
+  ) {
+    return COMPANIES.AHC;
+  }
+
   if (
     lead.company === 'CRAS' || 
     lead.source === 'CRAS' || 
@@ -65,10 +88,14 @@ export const getLeadCompany = (lead?: Partial<Lead> | { company?: string; source
  * Returns the official title for staff coordinators based on their company:
  * - RWC -> "Patient Coordinator"
  * - CRAS -> "Education Counsellor"
+ * - AHC -> "Consultancy Advisor"
  */
 export const getCoordinatorRoleLabel = (company?: string | null): string => {
   if (company === 'CRAS') {
     return 'Education Counsellor';
+  }
+  if (company === 'AHC') {
+    return 'Consultancy Advisor';
   }
   return 'Patient Coordinator';
 };
@@ -79,6 +106,9 @@ export const getCoordinatorRoleLabel = (company?: string | null): string => {
 export const getAssignedStaffLabel = (company?: string | null): string => {
   if (company === 'CRAS') {
     return 'Assigned Education Counsellor';
+  }
+  if (company === 'AHC') {
+    return 'Assigned Advisor';
   }
   return 'Assigned Patient Coordinator';
 };

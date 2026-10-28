@@ -43,12 +43,16 @@ const STATEMENTS = [
      next_value INTEGER NOT NULL DEFAULT 1
    );`,
   `INSERT INTO public.company_lead_serials (company, next_value)
-   VALUES ('RWC', 1), ('CRAS', 1)
+   VALUES ('RWC', 1), ('CRAS', 1), ('AHC', 1)
    ON CONFLICT (company) DO NOTHING;`,
   `CREATE OR REPLACE FUNCTION public.next_company_lead_serial(company_code VARCHAR)
    RETURNS VARCHAR LANGUAGE plpgsql AS $serial$
    DECLARE
-     normalized_company VARCHAR(10) := CASE WHEN upper(company_code) = 'CRAS' THEN 'CRAS' ELSE 'RWC' END;
+     normalized_company VARCHAR(10) := CASE 
+       WHEN upper(company_code) = 'CRAS' THEN 'CRAS' 
+       WHEN upper(company_code) = 'AHC' THEN 'AHC' 
+       ELSE 'RWC' 
+     END;
      allocated_value INTEGER;
      candidate_serial VARCHAR(50);
      serial_exists BOOLEAN;

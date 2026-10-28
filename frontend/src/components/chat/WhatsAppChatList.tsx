@@ -999,6 +999,19 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   >
                     CRAS
                   </button>
+                  <button
+                    onClick={() => {
+                      if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'AHC');
+                      setContextMenuLeadId(null);
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                      activeContextMenuLead?.company === 'AHC'
+                        ? 'bg-[#066e77] text-white border-[#066e77]'
+                        : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
+                    }`}
+                  >
+                    AHC
+                  </button>
                 </div>
               </div>
               <div className="h-px bg-slate-700/60 my-1" />

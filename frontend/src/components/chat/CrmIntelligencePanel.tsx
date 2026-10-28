@@ -95,11 +95,12 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
   const searchInputRef = useRef<HTMLInputElement>(null);
 
   const isCras = lead.company === 'CRAS';
+  const isAhc = lead.company === 'AHC';
   const canChangeCompany = isSuperAdmin || isLeadsOfficer;
 
   const coordinator = users.find(u => u.id === lead.assignedTo);
   const coordinators = users.filter(u => u.role === 'coordinator');
-  const relevantCoordinators = coordinators.filter(c => isCras ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company));
+  const relevantCoordinators = coordinators.filter(c => isCras ? c.company === 'CRAS' : isAhc ? c.company === 'AHC' : (c.company === 'RWC' || !c.company));
 
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
@@ -466,7 +467,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
           {canChangeCompany ? (
             /* Interactive Company Switcher for Super Admin and Leads Officer */
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {/* RWC Selection Card */}
               <button
                 type="button"
@@ -475,21 +476,21 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                     updateLeadCompany(lead.id, 'RWC');
                   }
                 }}
-                className={`py-2 px-2.5 rounded-xl text-left border transition-all flex flex-col gap-1 ${
-                  !isCras
+                className={`py-2 px-2 rounded-xl text-left border transition-all flex flex-col gap-1 ${
+                  !isCras && !isAhc
                     ? 'bg-[#008000]/25 border-[#008000] text-emerald-200 ring-2 ring-emerald-500/40 shadow-md'
                     : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold flex items-center gap-1.5 text-emerald-300">
-                    <span className="w-2 h-2 rounded-full bg-[#008000]" />
-                    RWC Wellness
+                  <span className="text-[10.5px] font-extrabold flex items-center gap-1 text-emerald-300 truncate">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#008000] shrink-0" />
+                    RWC
                   </span>
-                  {!isCras && <Check className="w-3.5 h-3.5 text-emerald-400" />}
+                  {!isCras && !isAhc && <Check className="w-3 h-3 text-emerald-400" />}
                 </div>
-                <span className="text-[9.5px] font-mono text-emerald-400/80">
-                  +94 70 639 3353
+                <span className="text-[8.5px] font-mono text-emerald-400/80 truncate">
+                  +94 70 639
                 </span>
               </button>
 
@@ -501,21 +502,47 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                     updateLeadCompany(lead.id, 'CRAS');
                   }
                 }}
-                className={`py-2 px-2.5 rounded-xl text-left border transition-all flex flex-col gap-1 ${
+                className={`py-2 px-2 rounded-xl text-left border transition-all flex flex-col gap-1 ${
                   isCras
                     ? 'bg-[#800000]/30 border-[#800000] text-rose-200 ring-2 ring-rose-500/40 shadow-md'
                     : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
                 }`}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[11px] font-extrabold flex items-center gap-1.5 text-rose-300">
-                    <span className="w-2 h-2 rounded-full bg-[#800000]" />
-                    CRAS College
+                  <span className="text-[10.5px] font-extrabold flex items-center gap-1 text-rose-300 truncate">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#800000] shrink-0" />
+                    CRAS
                   </span>
-                  {isCras && <Check className="w-3.5 h-3.5 text-rose-400" />}
+                  {isCras && <Check className="w-3 h-3 text-rose-400" />}
                 </div>
-                <span className="text-[9.5px] font-mono text-rose-400/80">
-                  +94 70 637 3353
+                <span className="text-[8.5px] font-mono text-rose-400/80 truncate">
+                  +94 70 637
+                </span>
+              </button>
+
+              {/* AHC Selection Card */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (lead.company !== 'AHC') {
+                    updateLeadCompany(lead.id, 'AHC');
+                  }
+                }}
+                className={`py-2 px-2 rounded-xl text-left border transition-all flex flex-col gap-1 ${
+                  isAhc
+                    ? 'bg-[#066e77]/30 border-[#066e77] text-teal-200 ring-2 ring-[#066e77]/50 shadow-md'
+                    : 'bg-[#111b21] border-slate-700/80 text-slate-400 hover:text-slate-200 hover:border-slate-600'
+                }`}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="text-[10.5px] font-extrabold flex items-center gap-1 text-teal-300 truncate">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#066e77] shrink-0" />
+                    AHC
+                  </span>
+                  {isAhc && <Check className="w-3 h-3 text-teal-400" />}
+                </div>
+                <span className="text-[8.5px] font-mono text-teal-300/80 truncate">
+                  +971 54 372
                 </span>
               </button>
             </div>
@@ -529,6 +556,16 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                 </div>
                 <span className="text-[10px] font-mono font-medium text-rose-400/90 bg-rose-950/70 px-2 py-0.5 rounded border border-rose-800/60">
                   +94 70 637 3353
+                </span>
+              </div>
+            ) : isAhc ? (
+              <div className="w-full py-2 px-3 rounded-lg text-xs font-bold flex items-center justify-between border bg-[#066e77]/25 border-[#066e77]/70 text-teal-300 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-[#066e77] shadow-sm" />
+                  <span>Alpha Health Consultancy</span>
+                </div>
+                <span className="text-[10px] font-mono font-medium text-teal-300/90 bg-teal-950/70 px-2 py-0.5 rounded border border-[#066e77]/60">
+                  +971 54 372 3912
                 </span>
               </div>
             ) : (
@@ -545,11 +582,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           )}
         </div>
 
-        {/* Coordinator / Education Counsellor Assignment (Filtered Strictly by Company) */}
+        {/* Coordinator / Education Counsellor / Consultancy Advisor Assignment */}
         <div className="space-y-1">
           <div className="flex items-center justify-between">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
-              Assigned {isCras ? 'Education Counsellor' : 'Patient Coordinator'}
+              Assigned {isCras ? 'Education Counsellor' : isAhc ? 'Consultancy Advisor' : 'Patient Coordinator'}
             </label>
             {isLeadsOfficer && lead.assignedTo && (
               <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">

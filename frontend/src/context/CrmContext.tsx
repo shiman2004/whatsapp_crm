@@ -3626,7 +3626,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
-    const role: UserRole = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
+    const role: UserRole = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
     const cleanCompany: CompanyCode | undefined = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? undefined : (data.company || 'RWC');
     const newCoordId = (role === 'leads_officer' ? 'officer-' : role.startsWith('exam_') ? 'exam-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
@@ -3722,6 +3722,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('CREATE_USER', 'User', newCoord.id, null, newCoord);
     const roleLabel = role === 'leads_officer' 
       ? 'Leads Officer' 
+      : role === 'marketing_officer'
+      ? `Marketing Officer (${cleanCompany})`
+      : role === 'marketing_admin'
+      ? `Marketing Administrator (${cleanCompany})`
       : `Coordinator (${cleanCompany})`;
     notify('Staff Added', `${roleLabel} ${newCoord.fullName} (${cleanBranch}) registered and saved successfully`, 'success');
   };

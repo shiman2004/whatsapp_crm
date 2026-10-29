@@ -45,6 +45,16 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
 
+  // Sidebar sub-destinations (All Leads / Pipeline Board) reuse this view.
+  React.useEffect(() => {
+    const onViewIntent = (event: Event) => {
+      const next = (event as CustomEvent<string>).detail;
+      if (next === 'kanban' || next === 'table') setViewMode(next);
+    };
+    window.addEventListener('leads-view-change', onViewIntent);
+    return () => window.removeEventListener('leads-view-change', onViewIntent);
+  }, []);
+
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
     : (currentUser.company === 'CRAS' ? 'CRAS' : 'RWC');

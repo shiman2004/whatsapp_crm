@@ -34,7 +34,7 @@ async function cleanup() {
   await prisma.$executeRawUnsafe("DELETE FROM public.security_permission_profiles WHERE subject_type = 'user' AND subject_id = ANY($1::text[])", ids);
   await prisma.$executeRawUnsafe("DELETE FROM public.security_permission_profiles WHERE subject_type = 'role' AND subject_id = ANY($1::text[])", ['exam_coordinator', 'exam_providing_officer']);
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.$executeRawUnsafe("DELETE FROM public.security_audit_events WHERE actor_id = ANY($1::text[])", [FIXTURES.admin.id]);
+  // Audit rows are append-only (DB trigger); the fixture accounts' events stay as history.
 }
 
 function token(fixture) {

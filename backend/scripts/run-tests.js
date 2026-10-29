@@ -47,6 +47,7 @@ const ALL_SUITES = [
   'test-e2e-workflow-matrix.js',
   'test-permission-resolution.test.js',
   'test-security-permissions.js',
+  'test-user-management.js',
   'test-exam-academic-drafts.js',
 ];
 

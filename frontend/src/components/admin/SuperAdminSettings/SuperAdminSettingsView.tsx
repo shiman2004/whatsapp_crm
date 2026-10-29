@@ -18,14 +18,23 @@ import {
 
 type SettingsTab = 'courses' | 'treatments' | 'stages' | 'admins' | 'exam-settings';
 
+const SETTINGS_TABS: SettingsTab[] = ['courses', 'treatments', 'stages', 'admins', 'exam-settings'];
+
+/** Cold-load deep links (#/settings/admins) must open the right tab before the
+ *  sidebar's settings-subtab-change event can reach this lazy-mounted module. */
+const initialSettingsTab = (): SettingsTab => {
+  const segment = window.location.hash.replace(/^#\/?/, '').split('/')[1];
+  return SETTINGS_TABS.includes(segment as SettingsTab) ? (segment as SettingsTab) : 'courses';
+};
+
 export const SuperAdminSettingsView: React.FC = () => {
   const { currentUser, isSuperAdmin } = useCrm();
-  const [activeTab, setActiveTab] = useState<SettingsTab>('courses');
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialSettingsTab);
 
   React.useEffect(() => {
     const handleSettingsTab = (event: Event) => {
       const sub = (event as CustomEvent<SettingsTab>).detail;
-      if (sub && ['courses', 'treatments', 'stages', 'admins', 'exam-settings'].includes(sub)) {
+      if (sub && SETTINGS_TABS.includes(sub)) {
         setActiveTab(sub);
       }
     };

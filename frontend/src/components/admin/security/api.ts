@@ -13,7 +13,7 @@ import type {
 
 // The shell registers the context's token reader once, so every tab reuses the
 // same authenticated client without prop-drilling or stale closures.
-let readToken: () => string = () => '';
+let readToken: () => string = () => (typeof window !== 'undefined' ? localStorage.getItem('rw_crm_auth_token') || '' : '');
 
 export function setSecurityTokenReader(reader: () => string) {
   readToken = reader;
@@ -57,11 +57,18 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   }
   const payload = await response.json().catch(() => null);
   if (!response.ok || !payload?.success) {
-    throw new SecurityApiError(
-      payload?.error || `Request failed with status ${response.status}.`,
-      response.status,
-      payload?.code,
-    );
+    const errorMsg =
+      typeof payload?.error === 'string'
+        ? payload.error
+        : typeof payload?.error?.message === 'string'
+        ? payload.error.message
+        : typeof payload?.message === 'string'
+        ? payload.message
+        : `Request failed with status ${response.status}.`;
+    const errorCode =
+      payload?.code ||
+      (typeof payload?.error === 'object' && payload?.error ? payload.error.code : undefined);
+    throw new SecurityApiError(errorMsg, response.status, errorCode);
   }
   return payload.data as T;
 }

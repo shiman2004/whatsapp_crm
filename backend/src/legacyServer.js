@@ -79,7 +79,7 @@ const REQUEST_BODY_LIMITS = {
   webhook: 2 * 1024 * 1024,
   login: 32 * 1024
 };
-const SSE_TICKET_TTL_MS = 60 * 1000;
+const SSE_TICKET_TTL_MS = 15 * 60 * 1000;
 const sseTickets = new Map();
 
 // Bounded, self-expiring stores. Both hold per-request state that would otherwise
@@ -127,8 +127,11 @@ function issueSseTicket(user) {
 
 function consumeSseTicket(ticket) {
   const record = sseTickets.get(ticket);
-  sseTickets.delete(ticket);
-  if (!record || Date.now() - record.issuedAt > SSE_TICKET_TTL_MS) return null;
+  if (!record || Date.now() - record.issuedAt > SSE_TICKET_TTL_MS) {
+    if (record) sseTickets.delete(ticket);
+    return null;
+  }
+  // Allow ticket reuse during its active TTL window so automatic browser EventSource reconnections succeed seamlessly
   return record.user;
 }
 
@@ -552,9 +555,10 @@ setInterval(() => {
   sseClients.forEach(client => {
     try {
       client.res.write(keepAlive);
+      if (typeof client.res.flush === 'function') client.res.flush();
     } catch (e) {}
   });
-}, 15000).unref();
+}, 10000).unref();
 
 /**
  * Isolated SSE Dispatcher
@@ -582,6 +586,7 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
           clientData = stripped;
         }
         client.res.write(`data: ${JSON.stringify(clientData)}\n\n`);
+        if (typeof client.res.flush === 'function') client.res.flush();
       }
     } catch (e) {}
   });
@@ -1439,8 +1444,15 @@ const server = http.createServer(async (req, res) => {
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
   if (!isPublicRoute(req, pathname)) {
-    if (req.method === 'GET' && pathname === '/api/events' && parsedUrl.query.ticket) {
-      authUser = consumeSseTicket(String(parsedUrl.query.ticket));
+    if (req.method === 'GET' && pathname === '/api/events') {
+      if (parsedUrl.query.ticket) {
+        authUser = consumeSseTicket(String(parsedUrl.query.ticket));
+      } else if (parsedUrl.query.token) {
+        const verified = verifyAuthToken(String(parsedUrl.query.token));
+        if (verified.valid) {
+          authUser = verified.payload;
+        }
+      }
     }
     if (!authUser) {
       const authResult = await authenticateRequest(req, parsedUrl);
@@ -1611,9 +1623,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     });
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
 
     const clientObj = {
       res,

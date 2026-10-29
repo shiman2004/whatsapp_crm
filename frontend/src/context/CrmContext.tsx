@@ -1190,28 +1190,183 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     customersRef.current = customers;
   }, [customers]);
 
+  const messagesRef = useRef<Message[]>(messages);
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
+
+  // Robust Message Sync (Active Polling & SSE Reconnection Fallback)
+  const isSyncingMessagesRef = useRef(false);
+  const syncLatestMessages = useCallback(async (targetLeadId?: string) => {
+    if (isSyncingMessagesRef.current) return;
+    try {
+      isSyncingMessagesRef.current = true;
+      const token = getAuthToken() || await ensureValidAuthToken();
+      if (!token) return;
+
+      const url = targetLeadId
+        ? `${API_BASE_URL}/api/messages?leadId=${encodeURIComponent(targetLeadId)}&limit=100`
+        : `${API_BASE_URL}/api/messages?paginate=1&limit=50`;
+
+      const res = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (!res.ok) return;
+
+      const payload = await res.json().catch(() => null);
+      const incomingRaw: any[] = Array.isArray(payload) ? payload : (payload?.messages || []);
+      if (!Array.isArray(incomingRaw) || incomingRaw.length === 0) return;
+
+      const currentMsgs = messagesRef.current || [];
+      const existingIds = new Set(currentMsgs.map(m => m.id));
+      const newClientMsgs: Message[] = [];
+      let hasNewInbound = false;
+      let latestInboundForChime: Message | null = null;
+      let missingLeadEncountered = false;
+
+      incomingRaw.forEach(m => {
+        if (!existingIds.has(m.id)) {
+          const clientMsg = toClientMessage(m);
+          newClientMsgs.push(clientMsg);
+          if (clientMsg.direction === 'inbound') {
+            hasNewInbound = true;
+            if (!latestInboundForChime || new Date(clientMsg.createdAt).getTime() > new Date(latestInboundForChime.createdAt).getTime()) {
+              latestInboundForChime = clientMsg;
+            }
+          }
+          if (clientMsg.leadId && !leadsRef.current.some(l => l.id === clientMsg.leadId)) {
+            missingLeadEncountered = true;
+          }
+        }
+      });
+
+      if (newClientMsgs.length > 0) {
+        setMessages(prev => {
+          const byId = new Map(prev.map(m => [m.id, m]));
+          newClientMsgs.forEach(m => byId.set(m.id, m));
+          return Array.from(byId.values()).sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+          );
+        });
+
+        // Update unread count & lastCustomerMessageAt for affected leads
+        setLeads(prevLeads => prevLeads.map(l => {
+          const matchingNewInbound = newClientMsgs.filter(m =>
+            m.direction === 'inbound' &&
+            (m.leadId === l.id || (l.customerId && m.customerId === l.customerId))
+          );
+          if (matchingNewInbound.length > 0) {
+            const isCurrentlyActive = selectedLeadIdRef.current === l.id;
+            const latestMsg = matchingNewInbound.sort(
+              (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            )[0];
+            return {
+              ...l,
+              unreadCount: isCurrentlyActive ? 0 : (l.unreadCount || 0) + matchingNewInbound.length,
+              lastCustomerMessageAt: latestMsg.createdAt || l.lastCustomerMessageAt,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return l;
+        }));
+
+        // Chime for new incoming messages when not focused on this chat
+        if (hasNewInbound && latestInboundForChime) {
+          const isChatActiveAndFocused = selectedLeadIdRef.current === (latestInboundForChime as Message).leadId && typeof document !== 'undefined' && document.hasFocus();
+          if (!isChatActiveAndFocused && notificationSettingsRef.current.sound) {
+            playWhatsAppChime();
+          }
+        }
+
+        // If an inbound message arrived for a lead not currently in the leads list, re-sync initial data
+        if (missingLeadEncountered) {
+          fetchInitialData();
+        }
+      }
+    } catch (err) {
+      console.warn('[Sync Messages Error]:', err);
+    } finally {
+      isSyncingMessagesRef.current = false;
+    }
+  }, [playWhatsAppChime]);
+
+  // Continuous background polling interval to sync incoming messages reliably
+  useEffect(() => {
+    const timer = setInterval(() => {
+      syncLatestMessages();
+    }, 4000);
+    return () => clearInterval(timer);
+  }, [syncLatestMessages]);
+
+  // Immediately load fresh message history whenever active chat changes
+  useEffect(() => {
+    if (selectedLeadId) {
+      syncLatestMessages(selectedLeadId);
+    }
+  }, [selectedLeadId, syncLatestMessages]);
+
   // Listen to real-time inbound & phone outbound WhatsApp messages from Webhook / Baileys server scoped to current user
   useEffect(() => {
     let eventSource: EventSource | null = null;
+    let reconnectTimer: any = null;
+    let isMounted = true;
     const handledMsgIds = new Set<string>();
 
-    try {
-      const token = getAuthToken();
-      if (!token) {
-        return;
-      }
-      const connectSse = async () => {
-        const ticketResponse = await fetch(`${API_BASE_URL}/api/events/ticket`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${token}` }
-        });
-        const ticketData = await ticketResponse.json();
-        if (!ticketResponse.ok || !ticketData?.ticket) return;
-        eventSource = new EventSource(`${API_BASE_URL}/api/events?ticket=${encodeURIComponent(ticketData.ticket)}`);
-      
-      eventSource!.onmessage = (event) => {
+    const connectSse = async () => {
+      if (!isMounted) return;
+      try {
+        const token = getAuthToken();
+        if (!token) {
+          if (isMounted) {
+            reconnectTimer = setTimeout(connectSse, 3000);
+          }
+          return;
+        }
+
+        let sseUrl = `${API_BASE_URL}/api/events?token=${encodeURIComponent(token)}`;
         try {
-          const data = JSON.parse(event.data);
+          const ticketResponse = await fetch(`${API_BASE_URL}/api/events/ticket`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${token}` }
+          });
+          if (ticketResponse.ok) {
+            const ticketData = await ticketResponse.json().catch(() => null);
+            if (ticketData?.ticket) {
+              sseUrl = `${API_BASE_URL}/api/events?ticket=${encodeURIComponent(ticketData.ticket)}`;
+            }
+          }
+        } catch (_) {}
+
+        if (!isMounted) return;
+
+        if (eventSource) {
+          try { eventSource.close(); } catch (_) {}
+          eventSource = null;
+        }
+
+        eventSource = new EventSource(sseUrl);
+
+        eventSource.onopen = () => {
+          console.log('🟢 [SSE Connected] Real-time WhatsApp pipeline active');
+          // Immediately sync any messages that arrived while reconnecting
+          syncLatestMessages();
+        };
+
+        eventSource.onerror = (err) => {
+          console.warn('⚠️ [SSE Disconnected] Real-time stream dropped, scheduling reconnect...', err);
+          if (eventSource) {
+            try { eventSource.close(); } catch (_) {}
+            eventSource = null;
+          }
+          if (isMounted) {
+            clearTimeout(reconnectTimer);
+            reconnectTimer = setTimeout(connectSse, 3000);
+          }
+        };
+
+        eventSource.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
 
           if (data.type === 'CONNECTION_STATUS') {
             if (data.status) {
@@ -1912,16 +2067,25 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           console.error('Error handling SSE message:', err);
         }
       };
-      };
-      connectSse().catch(error => console.warn('Webhook SSE connection unavailable:', error));
     } catch (e) {
       console.warn('Webhook SSE connection unavailable:', e);
+      if (isMounted) {
+        clearTimeout(reconnectTimer);
+        reconnectTimer = setTimeout(connectSse, 5000);
+      }
     }
+  };
+
+  connectSse();
 
     return () => {
-      if (eventSource) eventSource.close();
+      isMounted = false;
+      if (reconnectTimer) clearTimeout(reconnectTimer);
+      if (eventSource) {
+        try { (eventSource as EventSource).close(); } catch (_) {}
+      }
     };
-  }, [currentUser?.id, authToken]);
+  }, [currentUser?.id, authToken, syncLatestMessages]);
 
   // Mark chat as read and clear unread badge for the current user
   const markChatAsRead = (leadId: string) => {

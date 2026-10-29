@@ -36,6 +36,7 @@ backend/auth_info_*/
 # Local Media & Uploads
 public/uploads/
 backend/public/
+backend/data/
 media_*
 *.jpg
 *.png

@@ -229,3 +229,23 @@
   animation: bell-ring-wiggle 1.3s ease-in-out infinite;
   transform-origin: top center;
 }
+
+
+/* Sidebar Custom Slim Scrollbar */
+.custom-sidebar-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(45, 212, 190, 0.4) transparent;
+}
+.custom-sidebar-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-sidebar-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-sidebar-scroll::-webkit-scrollbar-thumb {
+  background: rgba(45, 212, 190, 0.35);
+  border-radius: 9999px;
+}
+.custom-sidebar-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(45, 212, 190, 0.7);
+}

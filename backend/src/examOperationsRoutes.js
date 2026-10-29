@@ -6,6 +6,7 @@ import { ExamError } from './examPolicy.js';
 import { canManageExam, requireValue } from './examPolicy.js';
 import { StudentAccess } from './studentAccess.js';
 import { JWT_SECRET } from './runtimeConfig.js';
+import { handleExamAcademicDrafts } from './examAcademicRoutes.js';
 import crypto from 'node:crypto';
 
 export async function readExamJson(req) {
@@ -23,6 +24,7 @@ export function examJson(res, status, value) {
 }
 export async function handleExamOperations(req, res, pathname, user) {
   if (!pathname.startsWith('/api/exam-ops')) return false;
+  if (await handleExamAcademicDrafts(req, res, pathname, user)) return true;
   try {
     if (!user?.id) throw new ExamError(401, 'UNAUTHORIZED', 'Sign in first.');
     const service = new ExamOperations(new ExamStore(getPrisma()));
@@ -68,7 +70,7 @@ export async function handleExamOperations(req, res, pathname, user) {
     } else if (/^\/api\/exam-ops\/students\/[a-f0-9]{64}\/invite$/.test(pathname) && req.method==='POST') {
       requireValue(process.env.STUDENT_EMAIL_ENABLED==='true','EMAIL_NOT_CONFIGURED','Email provider is not configured. No activation email has been sent.',503);
       const id=pathname.split('/')[4];
-      const result=await new StudentAccess(service.store,JWT_SECRET).invite(user,id,process.env.STUDENT_PORTAL_ORIGIN||process.env.FRONTEND_URL||'http://localhost:5174');
+      const result=await new StudentAccess(service.store,JWT_SECRET).invite(user,id,process.env.STUDENT_PORTAL_ORIGIN||process.env.FRONTEND_URL||'http://localhost:5173');
       examJson(res,200,{success:true,data:result});
     } else if (pathname === '/api/exam-ops/handoffs' && req.method === 'GET') {
       examJson(res, 200, { success: true, data: await service.listHandoffs(user) });

@@ -16,7 +16,9 @@ import {
   Inbox,
   BarChart3,
   Settings,
-  Layers
+  Layers,
+  FileEdit,
+  CheckSquare
 } from 'lucide-react';
 import {
   examService,
@@ -48,6 +50,8 @@ import { NewMaterialRequestModal } from './NewMaterialRequestModal';
 import { UploadMaterialModal } from './UploadMaterialModal';
 import { RequestDetailModal } from './RequestDetailModal';
 import { ExamCategoriesModal } from './ExamCategoriesModal';
+import { MyDraftsView } from './MyDraftsView';
+import { ApprovalQueueView } from './ApprovalQueueView';
 
 interface ExamDepartmentWorkspaceProps {
   initialSubTab?: string;
@@ -60,6 +64,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
 }) => {
   const { currentUser } = useCrm();
   const isAcademicAdmin = ['super_admin', 'exam_department_manager'].includes(currentUser?.role || '');
+  const canAccessAcademic = isAcademicAdmin || ['exam_coordinator', 'exam_providing_officer'].includes(currentUser?.role || '');
   const [selectedCourseId, setSelectedCourseId] = useState('course-dha-rn');
   const [activeTab, setActiveTab] = useState<string>(initialSubTab);
 
@@ -69,6 +74,15 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
       setActiveTab(initialSubTab);
     }
   }, [initialSubTab]);
+
+  useEffect(() => {
+    const handleSubTabEvent = (event: Event) => {
+      const sub = (event as CustomEvent<string>).detail;
+      if (sub) setActiveTab(sub);
+    };
+    window.addEventListener('exam-subtab-change', handleSubTabEvent);
+    return () => window.removeEventListener('exam-subtab-change', handleSubTabEvent);
+  }, []);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -102,7 +116,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
   const [isRefreshing, setIsRefreshing] = useState(false);
   // Preserve successful sections and report failures instead of showing empty success.
   const refreshData = useCallback(async () => {
-    if (!isAcademicAdmin) return;
+    if (!canAccessAcademic) return;
     setIsRefreshing(true);
     try {
       const results = await Promise.allSettled([
@@ -123,7 +137,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
     } finally {
       setIsRefreshing(false);
     }
-  }, [isAcademicAdmin]);
+  }, [canAccessAcademic]);
 
   useEffect(() => {
     refreshData();
@@ -179,6 +193,8 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
     { id: 'courses', label: 'Courses', icon: BookOpen },
     { id: 'mcq-practice', label: 'MCQ Practice', icon: Target },
     { id: 'mock-tests', label: 'Mock Tests', icon: FileCheck2 },
+    { id: 'my-drafts', label: 'My Drafts', icon: FileEdit },
+    ...(isAcademicAdmin ? [{ id: 'approval-queue', label: 'Approval Queue', icon: CheckSquare }] : []),
     { id: 'study-materials', label: 'Study Materials', icon: FileText },
     { id: 'guidelines', label: 'Exam Guidelines', icon: ShieldCheck },
     { id: 'question-bank', label: 'Question Bank', icon: Database },
@@ -186,10 +202,9 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
     { id: 'results', label: 'Exam Results', icon: Award },
     { id: 'requests', label: 'Material Requests', icon: Inbox },
     { id: 'reports', label: 'Reports', icon: BarChart3 },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
-  if (!isAcademicAdmin) return <div className="min-w-0 rounded-2xl bg-slate-950 p-4 sm:p-6"><ExamOperationsView /></div>;
+  if (!canAccessAcademic) return <div className="min-w-0 rounded-2xl bg-slate-950 p-4 sm:p-6"><ExamOperationsView /></div>;
 
   return (
     <div className="space-y-6 flex-1 min-w-0 overflow-x-hidden overflow-y-auto rounded-2xl bg-slate-950 p-4 sm:p-6 pb-10">
@@ -263,6 +278,16 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
       {/* ----------------------------------------------------------------- */}
 
       {activeTab === 'operations' && <ExamOperationsView />}
+
+      {/* My Drafts (Personal Drafts & Submissions) */}
+      {activeTab === 'my-drafts' && (
+        <MyDraftsView onNavigateToSection={(section: string) => handleTabChange(section)} />
+      )}
+
+      {/* Approval Queue (Manager & Super Admin) */}
+      {activeTab === 'approval-queue' && isAcademicAdmin && (
+        <ApprovalQueueView />
+      )}
 
       {/* 1. Dashboard */}
       {activeTab === 'dashboard' && (

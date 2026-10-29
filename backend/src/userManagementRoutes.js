@@ -64,6 +64,7 @@ function requireEmail(value) {
 function requireCompany(value, fallback = null) {
   if (value === undefined || value === null || value === '') return fallback;
   const code = text(value, 50).toUpperCase();
+  if (code === 'ALL') return 'ALL';
   if (!COMPANIES[code]) throw new PermissionError(400, 'INVALID_COMPANY', 'Unknown company.');
   return code;
 }
@@ -141,9 +142,21 @@ function buildUserFilters(query) {
   const role = text(query.get('role'), 50);
   if (role && ASSIGNABLE_ROLES.includes(role)) add('u.role = ?::"UserRole"', role);
   const company = text(query.get('company'), 50).toUpperCase();
-  if (company && COMPANIES[company]) add('u.company = ?', company);
+  if (company) {
+    if (company === 'ALL') {
+      // 'ALL' company filter: matches all or accounts specifically designated ALL
+    } else if (COMPANIES[company]) {
+      add('(u.company = ? OR u.company = ?)', company, 'ALL');
+    }
+  }
   const branch = text(query.get('branch'), 100);
-  if (branch) add('u.branch = ?', branch);
+  if (branch) {
+    if (branch.toUpperCase() === 'ALL' || branch === 'All Branches' || branch === 'All Branches (Global)') {
+      // 'ALL' branch matches all branches
+    } else {
+      add('(u.branch = ? OR u.branch = ? OR u.branch = ?)', branch, 'ALL', 'All Branches (Global)');
+    }
+  }
   const department = text(query.get('department'), 36);
   if (department) add('u.department_id = ?', department);
 
@@ -203,7 +216,7 @@ async function assertDepartmentCompany(prisma, departmentId, company) {
   const department = rows?.[0];
   if (!department) throw new PermissionError(400, 'UNKNOWN_DEPARTMENT', 'Department not found.');
   if (!department.active) throw new PermissionError(400, 'INACTIVE_DEPARTMENT', 'That department is inactive.');
-  if (department.company && company && department.company !== company) {
+  if (company !== 'ALL' && department.company && company && department.company !== company) {
     throw new PermissionError(400, 'DEPARTMENT_COMPANY_MISMATCH', 'The department belongs to a different company.');
   }
   return department;
@@ -355,7 +368,7 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
       const pin = input.pin === undefined || input.pin === null || input.pin === '' ? '' : String(input.pin).trim();
       if (pin && (pin.length < 4 || pin.length > 10)) throw new PermissionError(400, 'INVALID_PIN', 'PIN must be 4-10 characters.');
       const branch = text(input.branch, 100) || 'Colombo';
-      const company = requireCompany(input.company, role === 'super_admin' ? 'RWC' : 'RWC');
+      const company = requireCompany(input.company, role === 'super_admin' ? 'ALL' : 'RWC');
       const employeeId = text(input.employeeId, 50) || null;
       const departmentId = optionalId(input.departmentId);
       const managerId = optionalId(input.managerId);

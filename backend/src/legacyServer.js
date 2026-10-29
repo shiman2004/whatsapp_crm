@@ -4116,8 +4116,7 @@ const server = http.createServer(async (req, res) => {
 
         const enrichedLeads = leads.map(l => {
           const compCode = resolveLeadCompany(l);
-          const isCras = compCode === 'CRAS';
-          const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
+          const comp = COMPANIES[compCode] || COMPANIES.RWC;
           const { _count, ...leadFields } = l;
 
           return {
@@ -6360,6 +6359,8 @@ const server = http.createServer(async (req, res) => {
                     const msgType = message.type || 'text';
                     const messageId = message.id;
 
+                    console.log(`📩 [Meta Webhook Event] Inbound on Phone ID: ${incomingPhoneId || 'none'} (${incomingDisplayPhone || 'none'}) -> Company: ${companyInfo.code} (${companyInfo.tag}) | MsgId: ${messageId}`);
+
                     let mediaType = null;
                     let mediaUrl = null;
                     let mediaFileName = null;
@@ -6451,24 +6452,24 @@ const server = http.createServer(async (req, res) => {
 
                         savedCustomerId = cust?.id || null;
 
-                        // 2. Find or create Lead (tagged with company: RWC or CRAS)
+                        // 2. Find or create Lead for this company
                         lead = await prisma.lead.findFirst({
                           where: {
+                            customerId: cust.id,
                             OR: [
-                              { customerId: cust.id, company: companyInfo.code },
-                              { customerId: cust.id, source: companyInfo.code }
+                              { company: companyInfo.code },
+                              { source: companyInfo.code }
                             ]
                           },
                           orderBy: { updatedAt: 'desc' }
                         });
 
+                        // Only adopt legacy unassigned leads that do not belong to another company
                         if (!lead) {
                           lead = await prisma.lead.findFirst({
                             where: {
-                              OR: [
-                                { customerId: cust.id },
-                                { customer: { whatsappNumber: { contains: rawClean.slice(-9) } } }
-                              ]
+                              customerId: cust.id,
+                              company: null
                             },
                             orderBy: { updatedAt: 'desc' }
                           });

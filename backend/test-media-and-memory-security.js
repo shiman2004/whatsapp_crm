@@ -40,15 +40,16 @@ check('1.1 A signed media URL verifies successfully', () => {
   assert.strictEqual(verifyPrivateMediaUrl(fileName, parsed.searchParams.get('exp'), parsed.searchParams.get('sig')), true);
 });
 
-check('1.2 The signature is stable across calls (stored URLs never expire)', () => {
-  const a = createPrivateMediaUrl('meta_111_222.ogg');
-  const b = createPrivateMediaUrl('meta_111_222.ogg');
-  assert.strictEqual(a, b, 'the same file must always produce the same signed URL');
+check('1.2 Signed media URLs carry an expiry and reject expired links', () => {
+  const url = createPrivateMediaUrl('meta_111_222.ogg', -1);
+  const parsed = new URL(url, 'http://localhost');
+  assert(parsed.searchParams.has('exp'), 'media URL must carry an expiry');
+  assert.strictEqual(verifyPrivateMediaUrl('meta_111_222.ogg', parsed.searchParams.get('exp'), parsed.searchParams.get('sig')), false);
 });
 
-check('1.3 No authentication token or expiry is embedded in the media URL', () => {
+check('1.3 No authentication token is embedded in the media URL', () => {
   const url = createPrivateMediaUrl('out_9_z.png');
-  assert(!/token|bearer|exp=/i.test(url), `media URL must not leak auth material: ${url}`);
+  assert(!/token|bearer/i.test(url), `media URL must not leak auth material: ${url}`);
   assert(url.includes('sig='), 'media URL must carry a signature');
 });
 

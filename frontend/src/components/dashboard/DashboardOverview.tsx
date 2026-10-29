@@ -1,249 +1,342 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useMemo, useState } from 'react';
+import {
+  ArrowRight,
+  Building2,
+  Globe2,
+  GraduationCap,
+  MessageSquare,
+  ShieldCheck,
+  Sparkles,
+  Users,
+} from 'lucide-react';
 import { KpiCards } from './KpiCards';
 import { LeadFunnelChart } from './LeadFunnelChart';
 import { TreatmentDistributionChart } from './TreatmentDistributionChart';
 import { CoordinatorLeaderboard } from './CoordinatorLeaderboard';
-import { Building2, Sparkles, GraduationCap, ShieldCheck, CheckCircle2 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { getLeadCompany, COMPANIES } from '../../utils/companyUtils';
-import { CompanyCode } from '../../types';
+import { CompanyCode, LeadStage } from '../../types';
+import { navigateToPath } from '../../config/navigation';
+import { formatChatListTimestamp } from '../../utils/dateUtils';
+import { STAGE_CONFIG } from '../leads/StageBadge';
+import {
+  ActivityTimeline,
+  DataTable,
+  PageHeader,
+  SectionCard,
+  StatusBadge,
+  type StatusTone,
+  type TimelineEntry,
+  cn,
+} from '../ui';
+
+const STAGE_TONE: Record<string, StatusTone> = {
+  new: 'danger',
+  assigned: 'success',
+  contacted: 'info',
+  potential: 'teal',
+  under_discussion: 'warning',
+  forwarded_to_exam_department: 'info',
+  forwarded_to_processing_department: 'info',
+  interested: 'teal',
+  follow_up: 'warning',
+  converted: 'success',
+  lost: 'danger',
+  not_relevant: 'neutral',
+  not_eligible: 'neutral',
+};
 
 export const DashboardOverview: React.FC = () => {
-  const { leads, users, currentUser, isSuperAdmin } = useCrm();
+  const { leads, currentUser, followups, unreadBroadcastsCount, stageHistories, setSelectedLeadId, setActiveNavTab } = useCrm();
 
-  // Super Admin & Leads Officer can switch between both companies and unified view.
-  // Coordinators are restricted to their assigned company only.
   const canSwitchCompany = currentUser?.role === 'super_admin' || currentUser?.role === 'leads_officer';
 
-  // Determine active company
   const [activeCompany, setActiveCompany] = useState<CompanyCode | 'all'>(() => {
     if (currentUser?.role === 'coordinator') {
-      return currentUser.company === 'CRAS' ? 'CRAS' : (currentUser.company === 'AHC' ? 'AHC' : 'RWC');
+      return currentUser.company === 'CRAS' ? 'CRAS' : currentUser.company === 'AHC' ? 'AHC' : 'RWC';
     }
     return 'all';
   });
 
-  // Keep synced if user switches profile
-  useEffect(() => {
+  React.useEffect(() => {
     if (currentUser?.role === 'coordinator') {
-      setActiveCompany(currentUser.company === 'CRAS' ? 'CRAS' : (currentUser.company === 'AHC' ? 'AHC' : 'RWC'));
+      setActiveCompany(currentUser.company === 'CRAS' ? 'CRAS' : currentUser.company === 'AHC' ? 'AHC' : 'RWC');
     }
   }, [currentUser?.role, currentUser?.company]);
 
-  // Filter leads based on active company
-  const filteredLeads = useMemo(() => {
-    if (activeCompany === 'all') return leads;
-    return leads.filter(l => getLeadCompany(l).code === activeCompany);
-  }, [leads, activeCompany]);
+  const filteredLeads = useMemo(
+    () => (activeCompany === 'all' ? leads : leads.filter((l) => getLeadCompany(l).code === activeCompany)),
+    [leads, activeCompany],
+  );
 
-  // Counts for selected company
-  const rwcCount = useMemo(() => leads.filter(l => getLeadCompany(l).code === 'RWC').length, [leads]);
-  const crasCount = useMemo(() => leads.filter(l => getLeadCompany(l).code === 'CRAS').length, [leads]);
-  const ahcCount = useMemo(() => leads.filter(l => getLeadCompany(l).code === 'AHC').length, [leads]);
+  const scopedLeadIds = useMemo(() => new Set(filteredLeads.map((l) => l.id)), [filteredLeads]);
 
-  // Language stats for filtered leads
-  const enCount = filteredLeads.filter(l => l.language === 'en').length;
-  const siCount = filteredLeads.filter(l => l.language === 'si').length;
-  const taCount = filteredLeads.filter(l => l.language === 'ta').length;
+  const rwcCount = useMemo(() => leads.filter((l) => getLeadCompany(l).code === 'RWC').length, [leads]);
+  const crasCount = useMemo(() => leads.filter((l) => getLeadCompany(l).code === 'CRAS').length, [leads]);
+  const ahcCount = useMemo(() => leads.filter((l) => getLeadCompany(l).code === 'AHC').length, [leads]);
+
+  const enCount = filteredLeads.filter((l) => l.language === 'en').length;
+  const siCount = filteredLeads.filter((l) => l.language === 'si').length;
+  const taCount = filteredLeads.filter((l) => l.language === 'ta').length;
+
+  const unassigned = filteredLeads.filter((l) => l.stage === 'new' && !l.assignedTo).length;
+  const pendingFollowups = followups.filter((f) => f.status === 'pending' && scopedLeadIds.has(f.leadId)).length;
+
+  const openLead = (leadId: string) => {
+    setSelectedLeadId(leadId);
+    setActiveNavTab('chat');
+    navigateToPath('/inbox');
+  };
+
+  const recentLeads = useMemo(
+    () =>
+      [...filteredLeads]
+        .sort((a, b) => new Date(b.lastCustomerMessageAt || b.updatedAt).getTime() - new Date(a.lastCustomerMessageAt || a.updatedAt).getTime())
+        .slice(0, 6),
+    [filteredLeads],
+  );
+
+  const activity: TimelineEntry[] = useMemo(
+    () =>
+      stageHistories
+        .filter((h) => scopedLeadIds.has(h.leadId))
+        .slice(0, 5)
+        .map((h) => {
+          const lead = leads.find((l) => l.id === h.leadId);
+          const fromLabel = STAGE_CONFIG[h.fromStage as LeadStage]?.label || h.fromStage;
+          const toLabel = STAGE_CONFIG[h.toStage as LeadStage]?.label || h.toStage;
+          return {
+            id: h.id,
+            tone: STAGE_TONE[h.toStage] || 'neutral',
+            title: (
+              <span className="flex items-center gap-1.5">
+                <span className="font-semibold text-[#111B21] dark:text-[#E9EDEF]">{lead?.customer?.displayName || 'Contact'}</span>
+                <span className="text-[#667781] dark:text-[#8696A0]">moved to</span>
+                <span className="font-medium text-[#128C7E] dark:text-[#25D366]">{toLabel}</span>
+              </span>
+            ),
+            detail: (
+              <span className="text-[10.5px] text-[#667781] dark:text-[#8696A0]">
+                From {fromLabel} · {h.changedByName || 'System'}
+              </span>
+            ),
+            time: formatChatListTimestamp(h.createdAt),
+          };
+        }),
+    [stageHistories, scopedLeadIds, leads],
+  );
+
+  const companies: Array<{ code: CompanyCode | 'all'; label: string; count: number; icon: React.ComponentType<{ className?: string }> }> = [
+    { code: 'all', label: 'All Brands', count: leads.length, icon: Sparkles },
+    { code: 'RWC', label: COMPANIES.RWC.name, count: rwcCount, icon: Building2 },
+    { code: 'CRAS', label: COMPANIES.CRAS.name, count: crasCount, icon: GraduationCap },
+    { code: 'AHC', label: COMPANIES.AHC.name, count: ahcCount, icon: ShieldCheck },
+  ];
 
   return (
-    <div className="space-y-6 flex-1 overflow-y-auto pr-1 pb-8">
-      
-      {/* Top Company Switcher Banner / Company Badge */}
-      {canSwitchCompany ? (
-        /* Super Admin & Leads Officer: Interactive Multi-Company Switcher */
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white dark:bg-[#111b21] p-3 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md">
-          <div className="flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
-            {/* All Overview */}
+    <div className="space-y-4">
+      <PageHeader
+        title="Operations Overview"
+        description="Unified lead performance, team workloads, and WhatsApp conversion funnel across all brands."
+        eyebrow="Alpha Health Group"
+        actions={
+          <div className="flex items-center gap-2">
             <button
               type="button"
-              onClick={() => setActiveCompany('all')}
-              className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
-                activeCompany === 'all'
-                  ? 'bg-slate-900 text-white dark:bg-slate-800 dark:text-white shadow-sm ring-1 ring-slate-700'
-                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800/40'
-              }`}
+              onClick={() => navigateToPath('/leads/all')}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-[#E0E5E7] bg-white px-3 py-1.5 text-xs font-semibold text-[#111B21] shadow-xs transition-colors hover:bg-[#F0F2F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] dark:border-[#222D34] dark:bg-[#202C33] dark:text-[#E9EDEF] dark:hover:bg-[#2A3942]"
             >
-              <Building2 className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
-              <span>All Brands</span>
-              <span className="text-[10px] font-mono bg-slate-100 dark:bg-slate-900/60 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 rounded">
-                {leads.length}
-              </span>
+              View pipeline <ArrowRight className="h-3.5 w-3.5 text-[#667781] dark:text-[#8696A0]" />
             </button>
-
-            {/* RWC Brand Tab */}
             <button
               type="button"
-              onClick={() => setActiveCompany('RWC')}
-              style={activeCompany === 'RWC' ? { backgroundColor: '#008000', color: '#ffffff' } : {}}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-                activeCompany === 'RWC'
-                  ? 'shadow-lg shadow-emerald-950/60 ring-2 ring-emerald-500/40'
-                  : 'text-emerald-800 dark:text-slate-300 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/50 hover:bg-emerald-100 dark:hover:bg-emerald-900/40'
-              }`}
+              onClick={() => navigateToPath('/inbox')}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#128C7E] px-3 py-1.5 text-xs font-semibold text-white shadow-xs transition-colors hover:bg-[#075E54] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] dark:bg-[#005C4B] dark:text-[#25D366] dark:hover:bg-[#00705a]"
             >
-              <span className={`w-2 h-2 rounded-full ${activeCompany === 'RWC' ? 'bg-white' : 'bg-emerald-500 dark:bg-emerald-400'}`}></span>
-              <span>RWC Royal Wellness</span>
-              <span className="text-[10px] opacity-90 font-mono bg-black/10 dark:bg-black/20 px-1.5 py-0.5 rounded">
-                {rwcCount}
-              </span>
-            </button>
-
-            {/* CRAS Brand Tab */}
-            <button
-              type="button"
-              onClick={() => setActiveCompany('CRAS')}
-              style={activeCompany === 'CRAS' ? { backgroundColor: '#800000', color: '#ffffff' } : {}}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-                activeCompany === 'CRAS'
-                  ? 'shadow-lg shadow-rose-950/60 ring-2 ring-rose-500/40'
-                  : 'text-rose-800 dark:text-slate-300 bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 hover:bg-rose-100 dark:hover:bg-rose-900/40'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${activeCompany === 'CRAS' ? 'bg-white' : 'bg-rose-500 dark:bg-rose-400'}`}></span>
-              <span>CRAS Academy</span>
-              <span className="text-[10px] opacity-90 font-mono bg-black/10 dark:bg-black/20 px-1.5 py-0.5 rounded">
-                {crasCount}
-              </span>
-            </button>
-
-            {/* AHC Brand Tab */}
-            <button
-              type="button"
-              onClick={() => setActiveCompany('AHC')}
-              style={activeCompany === 'AHC' ? { backgroundColor: '#066e77', color: '#ffffff' } : {}}
-              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 shrink-0 cursor-pointer ${
-                activeCompany === 'AHC'
-                  ? 'shadow-lg shadow-teal-950/60 ring-2 ring-[#066e77]/40'
-                  : 'text-teal-800 dark:text-slate-300 bg-teal-50 dark:bg-[#066e77]/20 border border-teal-200 dark:border-[#066e77]/40 hover:bg-teal-100 dark:hover:bg-[#066e77]/30'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${activeCompany === 'AHC' ? 'bg-white' : 'bg-[#066e77]'}`}></span>
-              <span>Alpha Health</span>
-              <span className="text-[10px] opacity-90 font-mono bg-black/10 dark:bg-black/20 px-1.5 py-0.5 rounded">
-                {ahcCount}
-              </span>
+              <MessageSquare className="h-3.5 w-3.5" /> WhatsApp inbox
             </button>
           </div>
+        }
+      />
 
-          {/* Active Company Subtitle Indicator */}
-          <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 pl-1 sm:pl-0">
-            {activeCompany === 'RWC' ? (
-              <span className="text-emerald-700 dark:text-emerald-400 font-medium flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5" />
-                <span>Royal Wellness Center &bull; Clinic & Aesthetics Operations</span>
-              </span>
-            ) : activeCompany === 'CRAS' ? (
-              <span className="text-rose-700 dark:text-rose-400 font-medium flex items-center gap-1.5">
-                <GraduationCap className="w-3.5 h-3.5" />
-                <span>CRAS Academy &bull; Student Admissions & Academic Courses</span>
-              </span>
-            ) : activeCompany === 'AHC' ? (
-              <span className="text-teal-700 dark:text-teal-300 font-medium flex items-center gap-1.5">
-                <Building2 className="w-3.5 h-3.5 text-[#066e77]" />
-                <span>Alpha Health Consultancy &bull; Advisory & International Services</span>
-              </span>
-            ) : (
-              <span className="text-slate-600 dark:text-slate-400 font-medium flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
-                <span>Alpha Health Group &bull; Unified Multi-Brand Performance</span>
-              </span>
-            )}
-          </div>
-        </div>
-      ) : (
-        /* Coordinator Locked View: Clean Dedicated Company Identity Banner */
-        <div className="bg-white dark:bg-[#111b21] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-md flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div 
-              style={{ backgroundColor: activeCompany === 'CRAS' ? '#800000' : (activeCompany === 'AHC' ? '#066e77' : '#008000') }}
-              className="px-3.5 py-1.5 rounded-xl font-black text-xs text-white uppercase tracking-wider shadow border border-white/10"
-            >
-              {activeCompany === 'CRAS' ? 'CRAS' : (activeCompany === 'AHC' ? 'AHC' : 'RWC')}
-            </div>
-            <div>
-              <h2 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
-                <span>
-                  {activeCompany === 'CRAS' 
-                    ? 'College of Royal Aesthetic — Education Counsellor Dashboard' 
-                    : activeCompany === 'AHC'
-                    ? 'Alpha Health Consultancy — Advisory Dashboard'
-                    : 'Royal Wellness Center — Patient Coordinator Clinic Dashboard'}
-                </span>
-              </h2>
-              <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                {activeCompany === 'CRAS'
-                  ? 'Viewing CRAS academic leads, student enrollments, and inquiries only'
-                  : activeCompany === 'AHC'
-                  ? 'Viewing Alpha Health consultancy leads, services, and client inquiries only'
-                  : 'Viewing Royal Wellness clinic leads, treatments, and patient inquiries only'}
-              </p>
-            </div>
-          </div>
-          <span className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-[11px] font-mono text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-            {filteredLeads.length} Company Leads
-          </span>
+      {(unassigned > 0 || pendingFollowups > 0 || unreadBroadcastsCount > 0) && (
+        <div className="flex flex-wrap items-center gap-2 rounded-xl border border-amber-200 bg-amber-50/80 px-3 py-2 text-[11px] text-amber-900 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-200">
+          <span className="font-bold uppercase tracking-wide">Needs attention</span>
+          {unassigned > 0 && (
+            <button type="button" onClick={() => navigateToPath('/leads/all')} className="rounded-md bg-white/70 px-2 py-0.5 font-semibold text-amber-950 hover:bg-white dark:bg-[#202C33] dark:text-amber-200 dark:hover:bg-[#2A3942]">
+              {unassigned} unassigned {unassigned === 1 ? 'lead' : 'leads'}
+            </button>
+          )}
+          {pendingFollowups > 0 && (
+            <button type="button" onClick={() => navigateToPath('/templates')} className="rounded-md bg-white/70 px-2 py-0.5 font-semibold text-amber-950 hover:bg-white dark:bg-[#202C33] dark:text-amber-200 dark:hover:bg-[#2A3942]">
+              {pendingFollowups} pending follow-ups
+            </button>
+          )}
+          {unreadBroadcastsCount > 0 && (
+            <button type="button" onClick={() => navigateToPath('/broadcast')} className="rounded-md bg-white/70 px-2 py-0.5 font-semibold text-amber-950 hover:bg-white dark:bg-[#202C33] dark:text-amber-200 dark:hover:bg-[#2A3942]">
+              {unreadBroadcastsCount} unread broadcasts
+            </button>
+          )}
         </div>
       )}
 
-      {/* KPI Cards (Filtered by active company) */}
-      <KpiCards leads={filteredLeads} />
-
-      {/* Multilingual Share & Language Distribution Banner (Filtered by active company) */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-500/15 text-blue-600 dark:text-blue-400 font-bold flex items-center justify-center text-sm border border-blue-200 dark:border-blue-500/30">
-              EN
-            </span>
-            <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">English Inquiries</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{enCount} Active conversations</p>
-            </div>
-          </div>
-          <span className="text-base font-bold font-mono text-blue-600 dark:text-blue-400">
-            {filteredLeads.length > 0 ? ((enCount / filteredLeads.length) * 100).toFixed(0) : 0}%
-          </span>
+      {/* Brand scope */}
+      <div className="flex flex-col gap-2 rounded-xl border border-[#E0E5E7] bg-white p-2 shadow-sm sm:flex-row sm:items-center sm:justify-between dark:border-[#222D34] dark:bg-[#202C33]">
+        <div className="flex items-center gap-1.5 overflow-x-auto">
+          {companies.map(({ code, label, count, icon: Icon }) => {
+            const active = activeCompany === code;
+            const disabled = !canSwitchCompany && (code === 'all' || code !== activeCompany);
+            return (
+              <button
+                key={code}
+                type="button"
+                disabled={disabled}
+                onClick={() => setActiveCompany(code)}
+                className={cn(
+                  'flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[11px] font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366]',
+                  active
+                    ? 'bg-[#128C7E] text-white shadow-xs dark:bg-[#005C4B] dark:text-[#E9EDEF] dark:border dark:border-[#25D366]/40'
+                    : 'text-[#667781] hover:bg-[#F0F2F5] hover:text-[#111B21] dark:text-[#8696A0] dark:hover:bg-[#2A3942] dark:hover:text-[#E9EDEF]',
+                  disabled && !active && 'cursor-default opacity-40',
+                )}
+                aria-pressed={active}
+              >
+                <Icon className={cn('h-3.5 w-3.5', active ? 'text-white dark:text-[#25D366]' : 'text-[#667781] dark:text-[#8696A0]')} />
+                {label}
+                <span className={cn('rounded px-1 text-[10px] font-mono', active ? 'bg-white/20 text-white dark:bg-black/25 dark:text-[#25D366]' : 'bg-[#F0F2F5] text-[#667781] dark:bg-[#2A3942] dark:text-[#8696A0]')}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
-
-        <div className="bg-white dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-500/15 text-amber-600 dark:text-amber-400 font-bold flex items-center justify-center text-sm border border-amber-200 dark:border-amber-500/30">
-              SI
-            </span>
-            <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">සිංහල (Sinhala)</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{siCount} Active conversations</p>
-            </div>
-          </div>
-          <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400">
-            {filteredLeads.length > 0 ? ((siCount / filteredLeads.length) * 100).toFixed(0) : 0}%
-          </span>
-        </div>
-
-        <div className="bg-white dark:bg-slate-900/80 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <span className="w-10 h-10 rounded-xl bg-rose-50 dark:bg-rose-500/15 text-rose-600 dark:text-rose-400 font-bold flex items-center justify-center text-sm border border-rose-200 dark:border-rose-500/30">
-              TA
-            </span>
-            <div>
-              <p className="text-xs font-bold text-slate-800 dark:text-slate-200">தமிழ் (Tamil)</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{taCount} Active conversations</p>
-            </div>
-          </div>
-          <span className="text-base font-bold font-mono text-rose-600 dark:text-rose-400">
-            {filteredLeads.length > 0 ? ((taCount / filteredLeads.length) * 100).toFixed(0) : 0}%
-          </span>
-        </div>
+        <p className="flex items-center gap-1.5 px-2 text-[10.5px] text-[#667781] dark:text-[#8696A0]">
+          <Globe2 className="h-3 w-3 text-[#128C7E] dark:text-[#25D366]" />
+          {activeCompany === 'all'
+            ? 'Unified multi-brand performance'
+            : `${COMPANIES[activeCompany].name} · scoped metrics`}
+        </p>
       </div>
 
-      {/* Main Charts Row (Filtered by active company) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <KpiCards leads={filteredLeads} />
+
+      {/* Language distribution */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+        {[
+          { code: 'EN', label: 'English', count: enCount, color: 'blue' },
+          { code: 'SI', label: 'Sinhala', count: siCount, color: 'amber' },
+          { code: 'TA', label: 'Tamil', count: taCount, color: 'rose' },
+        ].map((lang) => {
+          const pct = filteredLeads.length > 0 ? Math.round((lang.count / filteredLeads.length) * 100) : 0;
+          const bar = lang.color === 'blue' ? 'bg-[#34B7F1]' : lang.color === 'amber' ? 'bg-amber-500' : 'bg-rose-500';
+          const chip = lang.color === 'blue'
+            ? 'bg-sky-50 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300'
+            : lang.color === 'amber'
+            ? 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'
+            : 'bg-rose-50 text-rose-700 dark:bg-rose-500/15 dark:text-rose-300';
+          return (
+            <div key={lang.code} className="rounded-xl border border-[#E0E5E7] bg-white p-3.5 shadow-sm dark:border-[#222D34] dark:bg-[#202C33]">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className={cn('flex h-8 w-8 items-center justify-center rounded-lg text-[11px] font-bold', chip)}>{lang.code}</span>
+                  <div>
+                    <p className="text-xs font-bold text-[#111B21] dark:text-[#E9EDEF]">{lang.label}</p>
+                    <p className="text-[10px] text-[#667781] dark:text-[#8696A0]">{lang.count} conversations</p>
+                  </div>
+                </div>
+                <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">{pct}%</span>
+              </div>
+              <div className="mt-2.5 h-1.5 overflow-hidden rounded-full bg-[#F0F2F5] dark:bg-[#2A3942]">
+                <div className={cn('h-full rounded-full transition-all', bar)} style={{ width: `${pct}%` }} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <LeadFunnelChart leads={filteredLeads} />
         <TreatmentDistributionChart leads={filteredLeads} />
       </div>
 
-      {/* Coordinator Leaderboard (Filtered by active company) */}
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <SectionCard
+          title="Recent conversations"
+          description="Latest customer activity in the selected brand"
+          action={
+            <button type="button" onClick={() => navigateToPath('/inbox')} className="text-[11px] font-semibold text-[#128C7E] hover:underline dark:text-[#25D366]">
+              Open inbox
+            </button>
+          }
+          className="xl:col-span-2"
+          bodyClassName="p-0"
+        >
+          <DataTable
+            caption="Recent conversations"
+            rows={recentLeads}
+            getRowKey={(lead) => lead.id}
+            onRowClick={(lead) => openLead(lead.id)}
+            empty={
+              <div className="px-4 py-10 text-center">
+                <Users className="mx-auto h-5 w-5 text-[#667781] dark:text-[#8696A0]" />
+                <p className="mt-2 text-xs font-medium text-[#111B21] dark:text-[#E9EDEF]">No conversations in this scope</p>
+                <p className="mt-0.5 text-[10.5px] text-[#667781] dark:text-[#8696A0]">New WhatsApp inquiries will appear here.</p>
+              </div>
+            }
+            columns={[
+              {
+                key: 'contact',
+                header: 'Contact',
+                render: (lead) => (
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF]">{lead.customer?.displayName || 'Unknown contact'}</p>
+                    <p className="truncate font-mono text-[10px] text-[#667781] dark:text-[#8696A0]">{lead.customer?.whatsappNumber || lead.serialNumber || lead.id.slice(0, 8)}</p>
+                  </div>
+                ),
+              },
+              {
+                key: 'company',
+                header: 'Brand',
+                render: (lead) => (
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-[#667781] dark:text-[#8696A0]">{getLeadCompany(lead).code}</span>
+                ),
+              },
+              {
+                key: 'stage',
+                header: 'Stage',
+                render: (lead) => (
+                  <StatusBadge tone={STAGE_TONE[lead.stage] || 'neutral'}>
+                    {STAGE_CONFIG[lead.stage as LeadStage]?.label || lead.stage}
+                  </StatusBadge>
+                ),
+              },
+              {
+                key: 'activity',
+                header: 'Last activity',
+                align: 'right',
+                render: (lead) => (
+                  <span className="whitespace-nowrap text-[10.5px] text-[#667781] dark:text-[#8696A0]">
+                    {formatChatListTimestamp(lead.lastCustomerMessageAt || lead.updatedAt)}
+                  </span>
+                ),
+              },
+            ]}
+          />
+        </SectionCard>
+
+        <SectionCard title="Recent lead activity" description="Stage changes from the audit history">
+          <ActivityTimeline
+            entries={activity}
+            empty={
+              <div className="py-6 text-center">
+                <p className="text-xs font-medium text-[#111B21] dark:text-[#E9EDEF]">No stage changes yet</p>
+                <p className="mt-0.5 text-[10.5px] text-[#667781] dark:text-[#8696A0]">Lead movements will be listed here.</p>
+              </div>
+            }
+          />
+        </SectionCard>
+      </div>
+
       <CoordinatorLeaderboard leads={filteredLeads} companyFilter={activeCompany} />
     </div>
   );

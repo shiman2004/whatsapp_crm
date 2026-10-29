@@ -45,6 +45,10 @@ const ALL_SUITES = [
   'test-marketing-e2e.js',
   'test-consent-governance.js',
   'test-e2e-workflow-matrix.js',
+  'test-permission-resolution.test.js',
+  'test-security-permissions.js',
+  'test-user-management.js',
+  'test-exam-academic-drafts.js',
 ];
 
 if (!fs.existsSync(path.join(backendDir, '.env.test'))) {

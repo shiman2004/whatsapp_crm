@@ -17,7 +17,7 @@ export async function handleStudentAssessmentRoutes(req, res, pathname, browser,
     const store = new ExamStore(getPrisma());
     const access = new StudentAccess(store, JWT_SECRET);
     const session = cookies.exam_session;
-    if (req.method !== 'GET') requireValue(req.headers.origin === new URL(process.env.STUDENT_PORTAL_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5174').origin, 'ORIGIN_DENIED', 'Request origin is not permitted.', 403);
+    if (req.method !== 'GET') requireValue(req.headers.origin === new URL(process.env.STUDENT_PORTAL_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173').origin, 'ORIGIN_DENIED', 'Request origin is not permitted.', 403);
     if (pathname === '/api/student/assessments' && req.method === 'GET') {
       const params = new URL(req.url, 'http://localhost').searchParams;
       const courseId = params.get('courseId'); const mode = params.get('mode') || 'practice';

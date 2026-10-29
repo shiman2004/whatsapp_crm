@@ -352,9 +352,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   }, [leadMessages]);
 
   return (
-    <div className="flex-1 flex flex-col bg-[#efeae2] dark:bg-[#0b141a] relative min-w-0 h-full overflow-hidden">
+    <div className="flex-1 flex flex-col bg-whatsapp-bg dark:bg-whatsapp-canvas relative min-w-0 h-full overflow-hidden">
       {/* 1. WhatsApp Top Chat Header (Exact 1:1 Match of Real WhatsApp Web) */}
-      <div className="h-14 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#d1d7db] dark:border-[#222e35] flex items-center justify-between gap-3 shrink-0 select-none z-10">
+      <div className="h-14 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#E0E5E7] dark:border-[#222D34] flex items-center justify-between gap-3 shrink-0 select-none z-10">
         {/* Left: Mobile Back Button + Contact Info */}
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           {onBack && (
@@ -523,7 +523,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             onClick={() => setCrmPanelOpen(!crmPanelOpen)}
             className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all border shrink-0 cursor-pointer ${
               crmPanelOpen
-                ? 'bg-[#d9fdd3] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border-[#00a884]/40 shadow-xs'
+                ? 'bg-[#DCF8C6] dark:bg-[#00a884]/20 text-[#008069] dark:text-[#00a884] border-[#00a884]/40 shadow-xs'
                 : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#d1d7db] border-slate-300 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-[#2a3942]'
             }`}
             title="Toggle Clinical Lead CRM Profile"
@@ -536,7 +536,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
       {/* In-Chat Search Bar (When triggered) */}
       {searchInChat && (
-        <div className="px-4 py-2 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-[#222e35] flex items-center gap-2 text-xs">
+        <div className="px-4 py-2 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-[#222D34] flex items-center gap-2 text-xs">
           <Search className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
           <input
             type="text"

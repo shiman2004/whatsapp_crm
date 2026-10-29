@@ -331,6 +331,48 @@ const STATEMENTS = [
   `INSERT INTO public.marketing_contact_serials (id, next_value) 
    VALUES (1, 1) 
    ON CONFLICT (id) DO NOTHING;`,
+
+  // --- exam academic content workflow ----------------------------------------
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Draft';`,
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Draft';`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS course_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS subject_id VARCHAR(100);`,
+
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Draft';`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_academic_audit (
+     id VARCHAR(100) PRIMARY KEY,
+     entity_type VARCHAR(50) NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     action VARCHAR(50) NOT NULL,
+     from_status VARCHAR(50),
+     to_status VARCHAR(50),
+     actor_id VARCHAR(100) NOT NULL,
+     actor_name VARCHAR(150),
+     actor_role VARCHAR(50),
+     comments TEXT,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_academic_audit_entity ON public.exam_academic_audit(entity_type, entity_id);`
+,
   `CREATE OR REPLACE FUNCTION public.next_marketing_contact_serial() RETURNS VARCHAR LANGUAGE plpgsql AS $mkt$
    DECLARE allocated_value BIGINT;
    BEGIN
@@ -384,7 +426,128 @@ const STATEMENTS = [
 
   // --- leads marketing linkage -------------------------------------------------
   `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS marketing_contact_id VARCHAR(36);`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS leads_marketing_contact_id_key ON public.leads(marketing_contact_id);`
+  `CREATE UNIQUE INDEX IF NOT EXISTS leads_marketing_contact_id_key ON public.leads(marketing_contact_id);`,
+
+  // --- security role/user permission profiles ----------------------------------
+  `CREATE TABLE IF NOT EXISTS public.security_permission_profiles (
+     subject_type VARCHAR(10) NOT NULL,
+     subject_id VARCHAR(100) NOT NULL,
+     overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
+     scope VARCHAR(20),
+     revision INTEGER NOT NULL DEFAULT 1,
+     updated_by VARCHAR(100),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (subject_type, subject_id)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_security_profiles_subject ON public.security_permission_profiles(subject_type, updated_at DESC);`,
+
+  // --- user management & session security (additive only) ----------------------
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(50);`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS department_id VARCHAR(36);`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS manager_id VARCHAR(36);`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS users_employee_id_key ON public.users(employee_id) WHERE employee_id IS NOT NULL;`,
+  `CREATE TABLE IF NOT EXISTS public.departments (
+     id VARCHAR(36) PRIMARY KEY,
+     name VARCHAR(120) NOT NULL,
+     company VARCHAR(50),
+     branch VARCHAR(100),
+     description TEXT,
+     active BOOLEAN NOT NULL DEFAULT TRUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS departments_company_idx ON public.departments(company, branch);`,
+  `CREATE TABLE IF NOT EXISTS public.teams (
+     id VARCHAR(36) PRIMARY KEY,
+     department_id VARCHAR(36),
+     name VARCHAR(120) NOT NULL,
+     company VARCHAR(50),
+     branch VARCHAR(100),
+     lead_user_id VARCHAR(36),
+     active BOOLEAN NOT NULL DEFAULT TRUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS teams_department_idx ON public.teams(department_id);`,
+  `CREATE TABLE IF NOT EXISTS public.team_members (
+     team_id VARCHAR(36) NOT NULL,
+     user_id VARCHAR(36) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (team_id, user_id)
+   );`,
+  `CREATE TABLE IF NOT EXISTS public.user_invitations (
+     id VARCHAR(36) PRIMARY KEY,
+     email VARCHAR(255) NOT NULL,
+     full_name VARCHAR(255) NOT NULL,
+     role VARCHAR(50) NOT NULL,
+     company VARCHAR(50),
+     branch VARCHAR(100),
+     department_id VARCHAR(36),
+     token_hash VARCHAR(128) NOT NULL UNIQUE,
+     invited_by VARCHAR(36),
+     expires_at TIMESTAMPTZ NOT NULL,
+     accepted_at TIMESTAMPTZ,
+     revoked_at TIMESTAMPTZ,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS user_invitations_email_idx ON public.user_invitations(LOWER(email));`,
+  `CREATE INDEX IF NOT EXISTS user_invitations_pending_idx ON public.user_invitations(expires_at) WHERE accepted_at IS NULL AND revoked_at IS NULL;`,
+  `CREATE TABLE IF NOT EXISTS public.user_sessions (
+     id VARCHAR(36) PRIMARY KEY,
+     user_id VARCHAR(36) NOT NULL,
+     token_version INTEGER NOT NULL DEFAULT 0,
+     ip VARCHAR(100),
+     user_agent VARCHAR(500),
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     revoked_at TIMESTAMPTZ,
+     revoked_by VARCHAR(36),
+     revoke_reason VARCHAR(255)
+   );`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON public.user_sessions(user_id, created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_active_idx ON public.user_sessions(user_id) WHERE revoked_at IS NULL;`,
+  `CREATE INDEX IF NOT EXISTS security_audit_events_created_idx ON public.security_audit_events(created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS security_audit_events_action_idx ON public.security_audit_events(action, created_at DESC);`,
+  // Append-only: the trail is INSERT-only at the API and the database refuses rewrites.
+  `CREATE OR REPLACE FUNCTION public.security_audit_events_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+     BEGIN RAISE EXCEPTION 'security_audit_events is append-only'; END;
+   $$;`,
+  `DROP TRIGGER IF EXISTS security_audit_events_no_rewrite ON public.security_audit_events;`,
+  `CREATE TRIGGER security_audit_events_no_rewrite BEFORE UPDATE OR DELETE ON public.security_audit_events
+     FOR EACH ROW EXECUTE FUNCTION public.security_audit_events_immutable();`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_department_id_fkey') THEN
+       ALTER TABLE public.users ADD CONSTRAINT users_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_manager_id_fkey') THEN
+       ALTER TABLE public.users ADD CONSTRAINT users_manager_id_fkey FOREIGN KEY (manager_id) REFERENCES public.users(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'teams_department_id_fkey') THEN
+       ALTER TABLE public.teams ADD CONSTRAINT teams_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'teams_lead_user_id_fkey') THEN
+       ALTER TABLE public.teams ADD CONSTRAINT teams_lead_user_id_fkey FOREIGN KEY (lead_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'team_members_team_id_fkey') THEN
+       ALTER TABLE public.team_members ADD CONSTRAINT team_members_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'team_members_user_id_fkey') THEN
+       ALTER TABLE public.team_members ADD CONSTRAINT team_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_invitations_department_id_fkey') THEN
+       ALTER TABLE public.user_invitations ADD CONSTRAINT user_invitations_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_invitations_invited_by_fkey') THEN
+       ALTER TABLE public.user_invitations ADD CONSTRAINT user_invitations_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.users(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_sessions_user_id_fkey') THEN
+       ALTER TABLE public.user_sessions ADD CONSTRAINT user_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+     END IF;
+   END $$;`
 ];
 
 const SEED_STATEMENTS = [

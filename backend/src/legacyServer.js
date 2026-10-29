@@ -17,6 +17,9 @@ import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, del
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
+import { handleSecurityRoutes } from './securityRoutes.js';
+import { handleUserManagementRoutes } from './userManagementRoutes.js';
+import { hashSecret, verifySecret } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -79,6 +82,7 @@ const REQUEST_BODY_LIMITS = {
   webhook: 2 * 1024 * 1024,
   login: 32 * 1024
 };
+const MEDIA_URL_TTL_MS = 15 * 60 * 1000;
 const SSE_TICKET_TTL_MS = 15 * 60 * 1000;
 const sseTickets = new Map();
 
@@ -157,24 +161,22 @@ function timingSafeStringEqual(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-// Media URLs are persisted in message rows, so the signature must stay valid for as
-// long as the row exists. Signing a per-file constant (rather than a timestamp) keeps
-// stored URLs working while still rejecting forged or tampered filenames. Access is
-// additionally gated by the authenticated sender-assignment check in the route handler.
-function signMediaFile(fileName) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+// Media URLs are short-lived bearer links for browser media elements; authenticated
+// callers can still access files after a link expires.
+function signMediaFile(fileName, expires) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}:${expires}`).digest('base64url');
 }
 
-function createPrivateMediaUrl(fileName, ttlMs = 0) {
-  void ttlMs;
-  const signature = signMediaFile(fileName);
-  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
+function createPrivateMediaUrl(fileName, ttlMs = MEDIA_URL_TTL_MS) {
+  const expires = Date.now() + ttlMs;
+  const signature = signMediaFile(fileName, expires);
+  return `/uploads/${encodeURIComponent(fileName)}?exp=${expires}&sig=${signature}`;
 }
 
 function verifyPrivateMediaUrl(fileName, expires, signature) {
-  void expires;
-  if (!fileName || typeof signature !== 'string' || !signature) return false;
-  const expected = signMediaFile(fileName);
+  const expiry = Number(expires);
+  if (!fileName || !Number.isSafeInteger(expiry) || expiry < Date.now() || typeof signature !== 'string' || !signature) return false;
+  const expected = signMediaFile(fileName, expiry);
   return signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
@@ -201,6 +203,8 @@ function signAuthToken(payload, expiresInMs = 7 * 24 * 60 * 60 * 1000) {
     email: payload.email,
     role: payload.role,
     fullName: payload.fullName,
+    ...(payload.sid ? { sid: payload.sid } : {}),
+    sv: Number(payload.sv || 0),
     iat: payload.iat || Date.now(),
     exp: payload.exp !== undefined ? payload.exp : (Date.now() + expiresInMs)
   };
@@ -240,52 +244,8 @@ function verifyAuthToken(token) {
 }
 
 // =============================================================================
-// Cryptographic Password & PIN Hashing (scrypt with Salt & Timing-Safe Verification)
+// Cryptographic Password & PIN Hashing (shared with user administration)
 // =============================================================================
-function hashSecret(secret) {
-  if (!secret) return '';
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(String(secret), salt, 64).toString('hex');
-  return `scrypt:${salt}:${hash}`;
-}
-
-function verifySecret(providedSecret, storedCredential) {
-  if (!providedSecret || !storedCredential) {
-    return { match: false, needsRehash: false };
-  }
-  const providedStr = String(providedSecret);
-  const storedStr = String(storedCredential);
-
-  if (storedStr.startsWith('scrypt:')) {
-    const parts = storedStr.split(':');
-    if (parts.length !== 3) return { match: false, needsRehash: false };
-    const salt = parts[1];
-    const expectedHash = parts[2];
-    try {
-      const computedHash = crypto.scryptSync(providedStr, salt, 64).toString('hex');
-      const expectedBuf = Buffer.from(expectedHash, 'hex');
-      const computedBuf = Buffer.from(computedHash, 'hex');
-      if (expectedBuf.length !== computedBuf.length) {
-        return { match: false, needsRehash: false };
-      }
-      const match = crypto.timingSafeEqual(computedBuf, expectedBuf);
-      return { match, needsRehash: false };
-    } catch (e) {
-      return { match: false, needsRehash: false };
-    }
-  }
-
-  // Legacy plaintext support for seamless transparent migration
-  try {
-    const pBuf = Buffer.from(providedStr);
-    const sBuf = Buffer.from(storedStr);
-    if (pBuf.length === sBuf.length && crypto.timingSafeEqual(pBuf, sBuf)) {
-      return { match: true, needsRehash: true };
-    }
-  } catch (e) {}
-
-  return { match: false, needsRehash: false };
-}
 
 // Dummy salt & hash for constant-time comparisons when account doesn't exist or is deactivated
 const DUMMY_TIMING_HASH = hashSecret('dummy_timing_protection_secret_2026');
@@ -938,13 +898,26 @@ async function authenticateRequest(req, parsedUrl) {
   // Verify identity and roles against the actual database schema
   const prisma = getPrisma();
   let dbUser = null;
+  let sessionVersion = 0;
+  let lockedUntil = null;
   if (prisma && getDbStatus()) {
     try {
-      dbUser = await prisma.user.findUnique({
-        where: { id: payload.userId }
-      });
+      // Raw select so the additive session columns are read even before a
+      // generated Prisma client that knows about them is deployed.
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id, "fullName", email, role, branch, company, active,
+                marketing_access AS "marketingAccess", session_version, locked_until
+           FROM public.users WHERE id = $1 LIMIT 1`,
+        payload.userId
+      );
+      dbUser = rows?.[0] || null;
+      sessionVersion = Number(dbUser?.session_version || 0);
+      lockedUntil = dbUser?.locked_until || null;
     } catch (e) {
       console.warn('Database error while validating user identity:', e.message);
+      try {
+        dbUser = await prisma.user.findUnique({ where: { id: payload.userId } });
+      } catch {}
     }
   }
 
@@ -959,6 +932,30 @@ async function authenticateRequest(req, parsedUrl) {
 
   if (dbUser.active === false) {
     return { user: null, error: 'Account has been deactivated. Access denied.', status: 401 };
+  }
+
+  if (lockedUntil && new Date(lockedUntil).getTime() > Date.now()) {
+    return { user: null, error: 'Account is temporarily locked. An administrator must unlock it.', status: 401 };
+  }
+
+  // Revoking sessions increments session_version; tokens issued before the bump
+  // (or issued with no version, treated as 0) stop working immediately.
+  if (Number(payload.sv ?? 0) !== sessionVersion) {
+    return { user: null, error: 'This session was revoked. Please sign in again.', status: 401 };
+  }
+
+  // Per-device revocation. Older tokens have no sid and remain bound to the
+  // account-wide session_version check above.
+  if (payload.sid) {
+    try {
+      const sessions = await prisma.$queryRawUnsafe(
+        `SELECT id, revoked_at FROM public.user_sessions WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        String(payload.sid), payload.userId
+      );
+      if (!sessions?.length || sessions[0].revoked_at) {
+        return { user: null, error: 'This session was revoked. Please sign in again.', status: 401 };
+      }
+    } catch {}
   }
 
   // Enforce least privilege: role is ALWAYS derived strictly from the verified database record,
@@ -986,6 +983,9 @@ function isPublicRoute(req, pathname) {
   if (req.method === 'POST' && pathname === '/api/auth/login') return true;
   // 2b. One-time, explicitly authorized initial administrator bootstrap
   if (req.method === 'POST' && pathname === '/api/auth/setup') return true;
+  // 2c. Public invitation preview and acceptance (the token is the credential).
+  if (req.method === 'POST' && pathname === '/api/auth/accept-invitation') return true;
+  if (req.method === 'GET' && pathname === '/api/auth/invitation') return true;
   // 3. Meta WhatsApp Cloud API Webhook (authenticated via hub.verify_token / Meta signatures)
   if (
     pathname === '/api/webhook' || 
@@ -1334,6 +1334,24 @@ const server = http.createServer(async (req, res) => {
           return await sendAuthFailure();
         }
 
+        // Account lock and session version are read defensively so login still
+        // works while the additive schema bootstrap is finishing.
+        let sessionVersion = 0;
+        let lockedUntil = null;
+        if (isDbUser && prisma && getDbStatus()) {
+          try {
+            const state = await prisma.$queryRawUnsafe(
+              `SELECT session_version, locked_until FROM public.users WHERE id = $1 LIMIT 1`,
+              user.id
+            );
+            sessionVersion = Number(state?.[0]?.session_version || 0);
+            lockedUntil = state?.[0]?.locked_until || null;
+          } catch {}
+        }
+        if (lockedUntil && new Date(lockedUntil).getTime() > Date.now()) {
+          return await sendAuthFailure();
+        }
+
         // Credential resolution with default fallbacks
         const expectedPassword = user.password || (IS_TEST_ENV ? (user.role === 'super_admin' ? DEFAULT_ADMIN_PASSWORD_HASH : DEFAULT_STAFF_PASSWORD_HASH) : '');
         const expectedPin = user.pin || (IS_TEST_ENV ? (user.role === 'super_admin' ? DEFAULT_ADMIN_PIN_HASH : DEFAULT_STAFF_PIN_HASH) : '');
@@ -1411,13 +1429,40 @@ const server = http.createServer(async (req, res) => {
 
         // Reset rate limit counters on successful authentication
         await recordSharedLoginSuccess(ip, identifier);
-        await auditSecurityEvent({ correlationId, actorId: user.id, action: 'auth.login', resource: user.id, outcome: 'success', metadata: { ip, method: matchedField } });
+
+        // Record a server-side session so revocation can be real and per-device.
+        let sessionId = null;
+        if (isDbUser && prisma && getDbStatus()) {
+          try {
+            sessionId = crypto.randomUUID();
+            const userAgent = String(req.headers['user-agent'] || '').slice(0, 500);
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO public.user_sessions (id, user_id, token_version, ip, user_agent)
+               VALUES ($1, $2, $3, $4, $5)`,
+              sessionId, user.id, sessionVersion, String(ip || '').slice(0, 100), userAgent
+            );
+            await prisma.$executeRawUnsafe(
+              `UPDATE public.users SET last_login_at = NOW(), locked_until = NULL WHERE id = $1`,
+              user.id
+            );
+          } catch (sessionError) {
+            sessionId = null;
+            console.warn('[Auth] Session record could not be stored:', sessionError.message);
+          }
+        }
+
+        await auditSecurityEvent({
+          correlationId, actorId: user.id, action: 'auth.login', resource: user.id, outcome: 'success',
+          metadata: { ip, method: matchedField, sessionId, userAgent: String(req.headers['user-agent'] || '').slice(0, 160) },
+        });
 
         const token = signAuthToken({
           userId: user.id,
           email: user.email,
           role: user.role,
-          fullName: user.fullName
+          fullName: user.fullName,
+          sid: sessionId,
+          sv: sessionVersion,
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1439,7 +1484,124 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (await handleStudentRoutes(req, res, pathname)) return;
+  // 0d. Public invitation acceptance (one-time token, stored hashed).
+  if (
+    (req.method === 'POST' && pathname === '/api/auth/accept-invitation') ||
+    (req.method === 'GET' && pathname === '/api/auth/invitation')
+  ) {
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Invitation service is unavailable.' }));
+      return;
+    }
+    const hashInviteToken = value => crypto.createHash('sha256').update(String(value)).digest('hex');
+
+    if (req.method === 'GET') {
+      const token = String(parsedUrl.query.token || '');
+      if (!token) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'An invitation token is required.' }));
+        return;
+      }
+      try {
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT email, full_name, role, expires_at, accepted_at, revoked_at
+             FROM public.user_invitations WHERE token_hash = $1 LIMIT 1`,
+          hashInviteToken(token)
+        );
+        const invite = rows?.[0];
+        if (!invite || invite.accepted_at || invite.revoked_at || new Date(invite.expires_at) < new Date()) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'This invitation is invalid or has expired.' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          invitation: { email: invite.email, fullName: invite.full_name, role: invite.role, expiresAt: invite.expires_at },
+        }));
+      } catch {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invitation could not be loaded.' }));
+      }
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const token = String(payload.token || '').trim();
+        const password = String(payload.password || '');
+        const pin = String(payload.pin || '').trim();
+        if (!token || password.length < 12 || (pin && pin.length < 4)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Provide the invitation token and a password of at least 12 characters.' }));
+          return;
+        }
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT * FROM public.user_invitations WHERE token_hash = $1 LIMIT 1`,
+          hashInviteToken(token)
+        );
+        const invite = rows?.[0];
+        if (!invite || invite.accepted_at || invite.revoked_at || new Date(invite.expires_at) < new Date()) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'This invitation is invalid or has expired.' }));
+          return;
+        }
+        const existing = await prisma.user.findUnique({ where: { email: invite.email } }).catch(() => null);
+        if (existing) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'An account already exists for this email. Sign in instead.' }));
+          return;
+        }
+        const created = await prisma.user.create({
+          data: {
+            fullName: invite.full_name,
+            email: invite.email,
+            role: invite.role,
+            company: invite.company,
+            branch: invite.branch || 'Colombo',
+            password: hashSecret(password),
+            ...(pin ? { pin: hashSecret(pin) } : {}),
+            active: true,
+          },
+        });
+        if (invite.department_id) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE public.users SET department_id = $1 WHERE id = $2`,
+            invite.department_id, created.id
+          ).catch(() => {});
+        }
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.user_invitations SET accepted_at = NOW() WHERE id = $1`,
+          invite.id
+        );
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.user_invitations SET revoked_at = NOW()
+            WHERE LOWER(email) = LOWER($1) AND id <> $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+          invite.email, invite.id
+        );
+        await auditSecurityEvent({
+          correlationId, actorId: created.id, action: 'user.invitation.accept',
+          resource: `user:${created.id}`, outcome: 'success', metadata: { invitationId: invite.id },
+        });
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          user: { id: created.id, email: created.email, fullName: created.fullName, role: created.role },
+        }));
+      } catch (err) {
+        console.error('[Invitation] Acceptance failed:', err.message);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'The invitation could not be accepted.' }));
+      }
+    });
+    return;
+  }
+
 
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
@@ -1480,6 +1642,8 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (await handleExamOperations(req, res, pathname, authUser)) return;
+  if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleUserManagementRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;
@@ -5959,34 +6123,40 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // Track in memory so deleted coordinator is never returned on subsequent queries
+      if (coordId === authUser.id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'You cannot deactivate your own account.' }));
+        return;
+      }
+
+      // Track in memory so a removed coordinator is never returned on subsequent queries
       DELETED_USER_IDS.add(coordId);
 
       const prisma = getPrisma();
-      if (prisma && getDbStatus()) {
-        // 1. Unassign all leads assigned to this coordinator
-        await prisma.lead.updateMany({
-          where: { assignedTo: coordId },
-          data: { assignedTo: null, stage: 'new' }
-        }).catch(e => console.warn('Could not unassign leads in DB:', e.message));
-
-        // 2. Delete WhatsAppSession for this coordinator
-        await prisma.whatsAppSession.deleteMany({
-          where: { coordinatorId: coordId }
-        }).catch(() => {});
-
-        // 3. Delete user record with graceful soft-delete fallback if foreign key constraints exist
-        try {
-          await prisma.user.deleteMany({
-            where: { id: coordId }
-          });
-        } catch (delErr) {
-          console.warn('[Staff Delete] Hard delete blocked by relations, marking inactive:', delErr.message);
-          await prisma.user.updateMany({
-            where: { id: coordId },
-            data: { active: false }
-          }).catch(() => {});
-        }
+      if (prisma && getDbStatus() && !IS_TEST_ENV) {
+        // Never hard-delete an identity that owns business records. Deactivate,
+        // bump the session version and mark every device session revoked.
+        await prisma.user.updateMany({
+          where: { id: coordId },
+          data: { active: false }
+        }).catch(e => console.warn('Could not deactivate staff account:', e.message));
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.users SET session_version = session_version + 1 WHERE id = $1`,
+          coordId
+        ).catch(() => {});
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.user_sessions SET revoked_at = NOW(), revoked_by = $2, revoke_reason = 'Staff account deactivated'
+            WHERE user_id = $1 AND revoked_at IS NULL`,
+          coordId, authUser.id
+        ).catch(() => {});
+        await auditSecurityEvent({
+          correlationId, actorId: authUser.id, action: 'user.deactivate',
+          resource: `user:${coordId}`, outcome: 'success', metadata: { source: 'legacy-coordinators' },
+        });
+      } else if (prisma && getDbStatus()) {
+        // Test fixtures: no linked records to preserve.
+        await prisma.$executeRawUnsafe('DELETE FROM public.user_sessions WHERE user_id = $1', coordId).catch(() => {});
+        await prisma.user.deleteMany({ where: { id: coordId } }).catch(() => {});
       }
 
       // 4. Broadcast SSE deletion event to all connected clients

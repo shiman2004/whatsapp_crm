@@ -40,7 +40,7 @@ const checkIsAdminAllowed = (): boolean => {
 export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'ahc' | 'leads_officer' | 'super_admin' | 'student';
 
 export const LoginScreen: React.FC = () => {
-  const { users, login } = useCrm() as any;
+  const { users, login, refreshStaffUsers } = useCrm() as any;
   const initialAdminAllowed = checkIsAdminAllowed();
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(initialAdminAllowed);
   
@@ -52,15 +52,22 @@ export const LoginScreen: React.FC = () => {
   const [logoClickCount, setLogoClickCount] = useState<number>(0);
   const [authMode, setAuthMode] = useState<'pin' | 'password'>('pin');
 
+  // Ensure latest authoritative staff members are loaded from Supabase/Postgres
+  useEffect(() => {
+    if (typeof refreshStaffUsers === 'function') {
+      refreshStaffUsers().catch(() => {});
+    }
+  }, [refreshStaffUsers]);
+
   // Filtered staff groups — also exclude deleted users persisted in localStorage
   const _deletedIds: string[] = (() => {
     try { return JSON.parse(localStorage.getItem('rw_crm_deleted_users') || '[]'); } catch { return []; }
   })();
   const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false;
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
-  const rwcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
-  const crasCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'CRAS');
-  const ahcUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'AHC' || (u.role === 'coordinator' && u.company === 'AHC')));
+  const rwcUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'RWC' || (!u.company && u.role === 'coordinator')));
+  const crasUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'CRAS' || (!u.company && u.role === 'coordinator')));
+  const ahcUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'AHC' || (!u.company && u.role === 'coordinator')));
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
 
   const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
@@ -153,11 +160,11 @@ export const LoginScreen: React.FC = () => {
       setIdentifierInput(firstAdmin ? firstAdmin.email : 'mnmshiman@gmail.com');
       setPasswordInput('admin');
     } else if (portalView === 'rwc') {
-      const firstRwc = rwcCoordinators[0];
+      const firstRwc = rwcUsers[0];
       setIdentifierInput(firstRwc ? firstRwc.email : 'faiha@royalwellness.lk');
       setPasswordInput('staff');
     } else if (portalView === 'cras') {
-      const firstCras = crasCoordinators[0];
+      const firstCras = crasUsers[0];
       setIdentifierInput(firstCras ? firstCras.email : 'zeenath@royalwellness.lk');
       setPasswordInput('staff');
     } else if (portalView === 'ahc') {
@@ -169,7 +176,7 @@ export const LoginScreen: React.FC = () => {
       setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('staff');
     }
-  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, ahcUsers.length, leadsOfficers.length]);
+  }, [portalView, superAdmins.length, rwcUsers.length, crasUsers.length, ahcUsers.length, leadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
@@ -566,7 +573,7 @@ export const LoginScreen: React.FC = () => {
                     </option>
                   ))}
                 </select>
-              ) : portalView === 'rwc' && rwcCoordinators.length > 0 ? (
+              ) : portalView === 'rwc' && rwcUsers.length > 0 ? (
                 <select
                   value={identifierInput}
                   onChange={(e) => {
@@ -576,13 +583,13 @@ export const LoginScreen: React.FC = () => {
                   }}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-emerald-500 transition-colors cursor-pointer"
                 >
-                  {rwcCoordinators.map((c: any) => (
+                  {rwcUsers.map((c: any) => (
                     <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                      {c.fullName} — Patient Coordinator ({c.branch || 'Colombo'})
+                      {c.fullName} — {c.role === 'coordinator' ? 'Patient Coordinator' : (c.roleTitle || c.role?.replace(/_/g, ' ') || 'Staff')} ({c.branch || 'Colombo'})
                     </option>
                   ))}
                 </select>
-              ) : portalView === 'cras' && crasCoordinators.length > 0 ? (
+              ) : portalView === 'cras' && crasUsers.length > 0 ? (
                 <select
                   value={identifierInput}
                   onChange={(e) => {
@@ -592,9 +599,9 @@ export const LoginScreen: React.FC = () => {
                   }}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-rose-600 transition-colors cursor-pointer"
                 >
-                  {crasCoordinators.map((c: any) => (
+                  {crasUsers.map((c: any) => (
                     <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                      {c.fullName} — Education Counsellor ({c.branch || 'Colombo'})
+                      {c.fullName} — {c.role === 'coordinator' ? 'Education Counsellor' : (c.roleTitle || c.role?.replace(/_/g, ' ') || 'Staff')} ({c.branch || 'Colombo'})
                     </option>
                   ))}
                 </select>

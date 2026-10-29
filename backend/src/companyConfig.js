@@ -50,11 +50,13 @@ export const COMPANIES = {
 export function resolveCompany(phoneId, displayPhoneNumber) {
   const pId = String(phoneId || '').trim();
   const dPhone = String(displayPhoneNumber || '').replace(/[^0-9]/g, '');
+  const ahcPhoneId = (process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim();
+  const crasPhoneId = (process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim();
 
-  if (pId === '1408148915714830' || dPhone.includes('971543723912') || dPhone.includes('543723912') || dPhone.includes('3723912')) {
+  if (pId === ahcPhoneId || pId === '1408148915714830' || dPhone.includes('971543723912') || dPhone.includes('543723912') || dPhone.includes('3723912')) {
     return COMPANIES.AHC;
   }
-  if (pId === '1378201582041705' || dPhone.includes('6373353')) {
+  if (pId === crasPhoneId || pId === '1378201582041705' || dPhone.includes('6373353')) {
     return COMPANIES.CRAS;
   }
   return COMPANIES.RWC;
@@ -79,6 +81,8 @@ export function resolveLeadCompany(lead) {
     waSession === 'AHC' ||
     trtComp === 'AHC' ||
     coordComp === 'AHC' ||
+    String(lead.companyPhoneNumber || '').includes('971543723912') ||
+    lead.companyPhoneNumberId === '1408148915714830' ||
     String(lead.customer?.whatsappNumber || '').includes('971543723912') ||
     String(lead.customer?.whatsappNumber || '').includes('3723912')
   ) {

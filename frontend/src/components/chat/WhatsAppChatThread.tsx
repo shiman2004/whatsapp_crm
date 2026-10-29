@@ -159,12 +159,16 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
   // Memoize lead messages so re-renders (e.g. 1-second 24h window tick) do not recreate array reference
   const leadMessages = useMemo(() => {
-    const matched = messages.filter(m => 
-      m.leadId === lead.id || 
-      (lead.customerId && m.customerId === lead.customerId) ||
-      (lead.customer?.whatsappNumber && ((m as any).to === lead.customer.whatsappNumber || (m as any).from === lead.customer.whatsappNumber)) ||
-      (lead.customer?.whatsappId && (m as any).whatsappId === lead.customer.whatsappId)
-    );
+    const matched = messages.filter(m => {
+      if (m.leadId) {
+        return m.leadId === lead.id;
+      }
+      return (
+        (lead.customerId && m.customerId === lead.customerId) ||
+        (lead.customer?.whatsappNumber && ((m as any).to === lead.customer.whatsappNumber || (m as any).from === lead.customer.whatsappNumber)) ||
+        (lead.customer?.whatsappId && (m as any).whatsappId === lead.customer.whatsappId)
+      );
+    });
     let raw: Message[] = [];
     if (matched.length > 0) {
       raw = matched;

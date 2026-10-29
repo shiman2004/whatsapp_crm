@@ -1640,11 +1640,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             const currentLeads = leadsRef.current || [];
             const currentCusts = customersRef.current || [];
 
+            const eventComp = (company as CompanyCode) || 
+              (companyPhoneNumberId === '1408148915714830' || companyPhoneNumber?.includes('971543723912') ? 'AHC' : 
+              (companyPhoneNumberId === '1378201582041705' || companyPhoneNumber?.includes('94706373353') ? 'CRAS' : undefined));
+
             let matchedLead = currentLeads.find(l => {
+              if (resolvedLeadId && l.id === resolvedLeadId) return true;
+              const lComp = getLeadCompany(l).code;
+              if (eventComp && lComp && lComp !== eventComp) return false;
               const lCustDigits = getCleanWhatsAppDigits(l.customer?.whatsappNumber);
               const lIdDigits = getCleanWhatsAppDigits(l.customer?.whatsappId);
               return (
-                (resolvedLeadId && l.id === resolvedLeadId) ||
                 (resolvedCustomerId && l.customerId === resolvedCustomerId) ||
                 (cleanDigits && lCustDigits && (cleanDigits === lCustDigits || cleanDigits.includes(lCustDigits) || lCustDigits.includes(cleanDigits))) ||
                 (rawWaId && l.customer?.whatsappId && (l.customer.whatsappId === rawWaId || lIdDigits === rawWaId)) ||
@@ -1711,11 +1717,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
             // 2. Update/Create Lead
             setLeads(prevLeads => {
-              const exists = prevLeads.some(l => l.id === resolvedLeadId || (l.customerId && l.customerId === resolvedCustomerId));
+              const exists = prevLeads.some(l => {
+                if (l.id === resolvedLeadId) return true;
+                const lComp = getLeadCompany(l).code;
+                if (eventComp && lComp && lComp !== eventComp) return false;
+                return Boolean(l.customerId && l.customerId === resolvedCustomerId);
+              });
               const isCurrentlyActive = selectedLeadIdRef.current === resolvedLeadId;
 
               if (!exists) {
-                const leadCompCode = (company as CompanyCode) || 'RWC';
+                const leadCompCode = eventComp || 'RWC';
                 const compConfig = COMPANIES[leadCompCode] || COMPANIES.RWC;
                 const newLead: Lead = {
                   id: resolvedLeadId,
@@ -1752,7 +1763,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return [newLead, ...prevLeads];
               } else {
                 return prevLeads.map(l => {
-                  if (l.id === resolvedLeadId || (l.customerId && l.customerId === resolvedCustomerId)) {
+                  const isTarget = l.id === resolvedLeadId || (!resolvedLeadId && l.customerId && l.customerId === resolvedCustomerId && (!eventComp || getLeadCompany(l).code === eventComp));
+                  if (isTarget) {
                     const shouldUpdatePhone = canonicalPhone && (!l.customer?.whatsappNumber || isHardwareLid(l.customer?.whatsappNumber));
                     const updatedCustomer = l.customer ? {
                       ...l.customer,
@@ -1763,7 +1775,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       avatarUrl: avatarUrl || l.customer.avatarUrl
                     } : undefined;
 
-                    const currentCompCode = (company as CompanyCode) || l.company || (l.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC');
+                    const currentCompCode = eventComp || l.company || (l.source?.toUpperCase() === 'AHC' ? 'AHC' : l.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC');
                     const compConfig = COMPANIES[currentCompCode] || COMPANIES.RWC;
 
                     return { 
@@ -2821,8 +2833,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           senderRole: auditSenderRole,
           messageSource: auditSource,
           sentAt: nowUtc,
-          company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
-          phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701')
+          company: getLeadCompany(lead).code,
+          phoneNumberId: lead.companyPhoneNumberId || getLeadCompany(lead).phoneId
         })
       }).then(async (res) => {
         if (!res.ok) {
@@ -3095,8 +3107,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           senderRole: auditSenderRole,
           messageSource: auditSource,
           sentAt: nowUtc,
-          company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
-          phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
+          company: getLeadCompany(lead).code,
+          phoneNumberId: lead.companyPhoneNumberId || getLeadCompany(lead).phoneId,
           retryMessageId: retryMessageId || undefined
         })
       });
@@ -3164,8 +3176,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           media: msg.media || undefined,
           leadId: lead.id,
           customerId: lead.customerId,
-          company: lead.company || (lead.source?.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC'),
-          phoneNumberId: lead.companyPhoneNumberId || (lead.company === 'CRAS' ? '1378201582041705' : '1358157244046701'),
+          company: getLeadCompany(lead).code,
+          phoneNumberId: lead.companyPhoneNumberId || getLeadCompany(lead).phoneId,
           retryMessageId: failedMessageId
         })
       });

@@ -64,6 +64,8 @@ export const getLeadCompany = (lead?: Partial<Lead> | { company?: string; source
     (lead as any).whatsappSessionId === 'AHC' ||
     (lead as any).treatment?.company === 'AHC' ||
     (lead as any).assignedCoordinator?.company === 'AHC' ||
+    (lead as any).companyPhoneNumberId === '1408148915714830' ||
+    String((lead as any).companyPhoneNumber || '').includes('971543723912') ||
     String((lead as any).customer?.whatsappNumber || '').includes('971543723912') ||
     String((lead as any).customer?.whatsappNumber || '').includes('3723912')
   ) {
@@ -76,7 +78,9 @@ export const getLeadCompany = (lead?: Partial<Lead> | { company?: string; source
     (lead as any).whatsappSessionId === 'CRAS' ||
     (lead as any).categoryId === 'cat-cras-courses' ||
     (lead as any).treatment?.company === 'CRAS' ||
-    (lead as any).assignedCoordinator?.company === 'CRAS'
+    (lead as any).assignedCoordinator?.company === 'CRAS' ||
+    (lead as any).companyPhoneNumberId === '1378201582041705' ||
+    String((lead as any).companyPhoneNumber || '').includes('6373353')
   ) {
     return COMPANIES.CRAS;
   }

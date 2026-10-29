@@ -205,6 +205,8 @@ interface CrmContextType {
   addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => Promise<void>;
   updateCoordinator: (id: string, data: { fullName: string; branch: string; pin?: string; password?: string }) => Promise<void>;
   deleteCoordinator: (id: string) => void;
+  syncStaffUser: (userItem: any) => void;
+  refreshStaffUsers: () => Promise<void>;
 
   // Super Admin Management & Dynamic Configuration
   stages: LeadStageConfig[];
@@ -506,7 +508,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
     const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
     const cachedUser = getStored<User | null>('rw_crm_user', null);
-    if (cachedUser && cachedUser.role === 'coordinator') {
+    if (cachedUser && (cachedUser.role === 'coordinator' || cachedUser.role === 'clinical_nurse')) {
       const myLeads = cachedLeads.filter(l => l.assignedTo === cachedUser.id);
       return myLeads.length > 0 ? myLeads[0].id : null;
     }
@@ -949,7 +951,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               ...existingLocal,
               ...u,
               branch: u.branch || existingLocal?.branch || 'Colombo',
-              company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || existingLocal?.company || 'RWC'),
+              company: u.company || existingLocal?.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
               roleTitle: getStaffRoleTitle(u),
               password: u.password || existingLocal?.password || (isSuper ? 'admin' : 'staff'),
               pin: u.pin || existingLocal?.pin || (isSuper ? '1234' : '2026'),
@@ -1186,9 +1188,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   };
 
-  // Strict isolation: if a coordinator has an unassigned lead or someone else's lead selected, reset it
+  // Strict isolation: if a coordinator or clinical nurse has an unassigned lead or someone else's lead selected, reset it
   useEffect(() => {
-    if (isCoordinator && selectedLeadId) {
+    const isRestrictedRole = isCoordinator || currentUser?.role === 'clinical_nurse';
+    if (isRestrictedRole && selectedLeadId) {
       const target = leads.find(l => l.id === selectedLeadId);
       if (!target || target.assignedTo !== currentUser.id) {
         const myLeads = leads.filter(l => l.assignedTo === currentUser.id);
@@ -1600,7 +1603,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   const safeUserItem: User = {
                     ...incomingUser,
                     branch: incomingUser.branch || 'Colombo',
-                    company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(incomingUser.role) ? undefined : (incomingUser.company || 'RWC'),
+                    company: incomingUser.company || (['leads_officer'].includes(incomingUser.role) ? undefined : 'RWC'),
                     roleTitle,
                     password: incomingUser.password || (isSuper ? 'admin' : 'staff'),
                     pin: incomingUser.pin || (isSuper ? '1234' : '2026'),
@@ -3823,9 +3826,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(err => console.warn('Could not sync customer update to backend:', err));
   };
 
-  const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
-    const role: UserRole = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
-    const cleanCompany: CompanyCode | undefined = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? undefined : (data.company || 'RWC');
+  const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode | 'ALL'; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
+    const role: UserRole = ['leads_officer', 'coordinator', 'sales_coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
+    const cleanCompany: CompanyCode | undefined = data.company === 'ALL' ? undefined : (data.company as CompanyCode | undefined);
     const newCoordId = (role === 'leads_officer' ? 'officer-' : role.startsWith('exam_') ? 'exam-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
     const cleanPin = String(data.pin || '2026').trim().slice(0, 10);
@@ -4046,6 +4049,77 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     logAudit('UPDATE_USER', 'User', id, { fullName: oldUser?.fullName, branch: oldUser?.branch }, { fullName: cleanName, branch: cleanBranch, pin: cleanPin ? '***' : undefined });
     notify('Staff Updated', `${cleanName} (${cleanBranch}) updated in Supabase successfully`, 'success');
   };
+
+  const syncStaffUser = useCallback((userItem: any) => {
+    if (!userItem || !userItem.id) return;
+    const roleTitle = getStaffRoleTitle(userItem);
+    const safeUser: User = {
+      ...userItem,
+      roleTitle,
+      branch: userItem.branch || 'Colombo',
+      company: userItem.company || (['leads_officer'].includes(userItem.role) ? undefined : 'RWC'),
+      password: userItem.password || 'staff',
+      pin: userItem.pin || '2026',
+      active: userItem.active ?? true,
+      activeLeadsCount: userItem.activeLeadsCount || 0,
+      createdAt: userItem.createdAt || new Date().toISOString(),
+    };
+    setUsers(prev => {
+      const idx = prev.findIndex(u => u.id === safeUser.id);
+      let next: User[];
+      if (idx !== -1) {
+        next = [...prev];
+        next[idx] = { ...prev[idx], ...safeUser };
+      } else {
+        next = [...prev, safeUser];
+      }
+      try {
+        localStorage.setItem('rw_crm_users', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  }, []);
+
+  const refreshStaffUsers = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/coordinators`);
+      if (res.ok) {
+        const dbCoords: any[] = await res.json().catch(() => []);
+        if (Array.isArray(dbCoords)) {
+          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
+          const userMap = new Map<string, User>();
+          INITIAL_USERS.forEach(u => {
+            if (!deletedUserIds.includes(u.id)) userMap.set(u.id, u);
+          });
+          const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
+          storedLocalUsers.forEach(u => {
+            if (!deletedUserIds.includes(u.id) && u.active !== false) userMap.set(u.id, u);
+          });
+          dbCoords.forEach(u => {
+            if (deletedUserIds.includes(u.id) || u.active === false) return;
+            const isSuper = u.role === 'super_admin' || u.id === 'user-admin-1';
+            const existingLocal = userMap.get(u.id);
+            userMap.set(u.id, {
+              ...existingLocal,
+              ...u,
+              branch: u.branch || existingLocal?.branch || 'Colombo',
+              company: u.company || existingLocal?.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
+              roleTitle: getStaffRoleTitle(u),
+              password: u.password || existingLocal?.password || (isSuper ? 'admin' : 'staff'),
+              pin: u.pin || existingLocal?.pin || (isSuper ? '1234' : '2026'),
+              active: u.active ?? true,
+              activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
+            });
+          });
+          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
+          setUsers(updatedUsers);
+          try {
+            localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
+          } catch {}
+        }
+      }
+    } catch {}
+  }, []);
 
   // Re-read readBroadcastIds whenever currentUser changes
   useEffect(() => {
@@ -4599,11 +4673,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!selectedLeadId) return undefined;
     const target = hydratedLeads.find(l => l.id === selectedLeadId);
     if (!target) return undefined;
-    if (!isSuperAdmin && !isLeadsOfficer && target.assignedTo !== currentUser.id) {
+    if (!isLeadAccessibleForUser(target, currentUser)) {
       return undefined;
     }
     return target;
-  }, [hydratedLeads, selectedLeadId, isSuperAdmin, isLeadsOfficer, currentUser.id]);
+  }, [hydratedLeads, selectedLeadId, currentUser]);
 
   const value: CrmContextType = {
     isAuthenticated,
@@ -4699,6 +4773,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     addCoordinator,
     updateCoordinator,
     deleteCoordinator,
+    syncStaffUser,
+    refreshStaffUsers,
     broadcasts,
     unreadBroadcastsCount,
     markAllBroadcastsAsRead,

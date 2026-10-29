@@ -1,4 +1,12 @@
-import { legacyExamAccess, ExamError } from './examPolicy.js';
+import {
+  legacyExamAccess,
+  canAccessAcademic,
+  hasExamCapability,
+  checkAcademicTransition,
+  validateAcademicUpload,
+  canManageExam,
+  ExamError
+} from './examPolicy.js';
 /**
  * Exam Department Module REST Route Handlers
  * Alpha Health Group CRM
@@ -26,13 +34,13 @@ import {
 
 import { JWT_SECRET } from './runtimeConfig.js';
 
-function signMediaFile(fileName) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+function signMediaFile(fileName, expires) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}:${expires}`).digest('base64url');
 }
 
 function createPrivateMediaUrl(fileName) {
-  const signature = signMediaFile(fileName);
-  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
+  const expires = Date.now() + (15 * 60 * 1000);
+  return `/uploads/${encodeURIComponent(fileName)}?exp=${expires}&sig=${signMediaFile(fileName, expires)}`;
 }
 
 function ensureSignedMediaUrl(fileUrl) {
@@ -60,6 +68,7 @@ let MEMORY_REQUESTS = [];
 let MEMORY_MATERIALS = [];
 let MEMORY_MOCK_TESTS = [];
 let MEMORY_PROVISIONS = [];
+let MEMORY_ACADEMIC_AUDIT = [];
 
 let MEMORY_MCQ_QUESTIONS = [
   {
@@ -139,12 +148,7 @@ let MEMORY_MCQ_ATTEMPTS = [];
  * Send JSON response helper
  */
 function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-  });
+  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
 
@@ -154,7 +158,10 @@ function sendJson(res, statusCode, data) {
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    req.on('data', chunk => {
+      body += chunk;
+      if (Buffer.byteLength(body) > 2 * 1024 * 1024) req.destroy(new Error('Request body too large'));
+    });
     req.on('end', () => {
       if (!body) return resolve({});
       try {
@@ -204,7 +211,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     return true;
   }
 
-  if (legacyExamAccess(authUser) !== 200) {
+  if (!canAccessAcademic(authUser)) {
     sendJson(res, 403, { success: false, error: 'Shared academic records require administrator access. Sales handoffs use Exam Operations.' });
     return true;
   }
@@ -218,6 +225,207 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
   const prisma = getPrisma();
 
   try {
+
+    // -------------------------------------------------------------------------
+    // 0. ACADEMIC LIFECYCLE & WORKFLOW ENGINE
+    // -------------------------------------------------------------------------
+    if (pathname === '/api/exam/academic/transition' && req.method === 'POST') {
+      try {
+        const body = await parseJsonBody(req);
+        const { entityType, entityId, action, comments } = body;
+        if (!entityType || !entityId || !action) {
+          sendJson(res, 400, { success: false, error: 'entityType, entityId, and action are required.' });
+          return true;
+        }
+
+        // Fetch current entity
+        let currentItem = null;
+        let currentStatus = 'Draft';
+
+        if (entityType === 'course') {
+          currentItem = MEMORY_COURSES.find(c => c.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_courses WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, createdBy: r[0].created_by };
+          }
+        } else if (entityType === 'material') {
+          currentItem = MEMORY_STUDY_MATERIALS_PLATFORM.find(m => m.id === entityId) || MEMORY_MATERIALS.find(m => m.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_study_materials WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, uploadedBy: r[0].uploaded_by || r[0].created_by };
+          }
+        } else if (entityType === 'question') {
+          currentItem = MEMORY_QUESTIONS.find(q => q.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mcq_questions WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, createdBy: r[0].created_by };
+          }
+        } else if (entityType === 'mock_test') {
+          currentItem = MEMORY_MOCK_TESTS_PLATFORM.find(m => m.id === entityId) || MEMORY_MOCK_TESTS.find(m => m.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mock_tests WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, createdBy: r[0].created_by };
+          }
+        }
+
+        if (!currentItem) {
+          sendJson(res, 404, { success: false, error: `${entityType} with id ${entityId} not found.` });
+          return true;
+        }
+
+        currentStatus = currentItem.status || 'Draft';
+        const newStatus = checkAcademicTransition(currentStatus, action, authUser, { resource: currentItem, comments });
+
+        // Update in DB if available
+        if (prisma) {
+          try {
+            if (entityType === 'course') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_courses
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            } else if (entityType === 'material') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_study_materials
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            } else if (entityType === 'question') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_mcq_questions
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            } else if (entityType === 'mock_test') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_mock_tests
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            }
+
+            // Write audit record
+            const auditId = 'acad-aud-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.exam_academic_audit (
+                id, entity_type, entity_id, action, from_status, to_status,
+                actor_id, actor_name, actor_role, comments, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW());
+            `, auditId, entityType, entityId, action, currentStatus, newStatus,
+               authUser.id, authUser.fullName || authUser.id, authUser.role, comments || null);
+          } catch (e) {
+            console.warn('⚠️ [ExamRoutes] Academic transition DB update:', e.message);
+          }
+        }
+
+        // Memory store sync
+        currentItem.status = newStatus;
+        currentItem.reviewerId = authUser.id;
+        currentItem.reviewComments = comments || null;
+        if (newStatus === 'Published') currentItem.publishedAt = new Date().toISOString();
+
+        MEMORY_ACADEMIC_AUDIT.unshift({
+          id: 'acad-aud-' + Date.now(),
+          entityType,
+          entityId,
+          action,
+          fromStatus: currentStatus,
+          toStatus: newStatus,
+          actorId: authUser.id,
+          actorName: authUser.fullName || authUser.id,
+          actorRole: authUser.role,
+          comments: comments || null,
+          createdAt: new Date().toISOString()
+        });
+
+        sendJson(res, 200, {
+          success: true,
+          data: {
+            entityType,
+            entityId,
+            previousStatus: currentStatus,
+            status: newStatus,
+            action,
+            updatedAt: new Date().toISOString()
+          },
+          message: `Status updated to ${newStatus}`
+        });
+        return true;
+      } catch (err) {
+        const status = err.status || 500;
+        sendJson(res, status, { success: false, error: err.message, code: err.code || 'TRANSITION_ERROR' });
+        return true;
+      }
+    }
+
+    if (pathname === '/api/exam/academic/my-drafts' && req.method === 'GET') {
+      const userId = authUser.id;
+      const isMgr = canManageExam(authUser);
+
+      const filterOwn = (item, idField) => {
+        if (isMgr) return true;
+        const owner = item[idField] || item.createdBy || item.created_by || item.uploadedBy || item.uploaded_by;
+        return owner && String(owner) === String(userId);
+      };
+
+      const filterDraftStatus = (item) => {
+        const s = String(item.status || 'Draft').toUpperCase();
+        return s === 'DRAFT' || s === 'PENDING_REVIEW' || s === 'CHANGES_REQUESTED';
+      };
+
+      const myCourses = MEMORY_COURSES.filter(c => filterOwn(c, 'createdBy') && filterDraftStatus(c));
+      const myMaterials = MEMORY_STUDY_MATERIALS_PLATFORM.filter(m => filterOwn(m, 'uploadedBy') && filterDraftStatus(m));
+      const myQuestions = MEMORY_QUESTIONS.filter(q => filterOwn(q, 'createdBy') && filterDraftStatus(q));
+      const myMockTests = MEMORY_MOCK_TESTS_PLATFORM.filter(m => filterOwn(m, 'createdBy') && filterDraftStatus(m));
+
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          courses: myCourses,
+          materials: myMaterials,
+          questions: myQuestions,
+          mockTests: myMockTests,
+          total: myCourses.length + myMaterials.length + myQuestions.length + myMockTests.length
+        }
+      });
+      return true;
+    }
+
+    if (pathname === '/api/exam/academic/approval-queue' && req.method === 'GET') {
+      if (!canManageExam(authUser)) {
+        sendJson(res, 403, { success: false, error: 'Forbidden: Review queue is restricted to Exam Department Managers.' });
+        return true;
+      }
+
+      const isPending = (item) => String(item.status || '').toUpperCase() === 'PENDING_REVIEW';
+
+      const pendingCourses = MEMORY_COURSES.filter(isPending);
+      const pendingMaterials = MEMORY_STUDY_MATERIALS_PLATFORM.filter(isPending);
+      const pendingQuestions = MEMORY_QUESTIONS.filter(isPending);
+      const pendingMockTests = MEMORY_MOCK_TESTS_PLATFORM.filter(isPending);
+
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          courses: pendingCourses,
+          materials: pendingMaterials,
+          questions: pendingQuestions,
+          mockTests: pendingMockTests,
+          total: pendingCourses.length + pendingMaterials.length + pendingQuestions.length + pendingMockTests.length
+        }
+      });
+      return true;
+    }
+
     // -------------------------------------------------------------------------
     // 1. DASHBOARD STATS: GET /api/exam/dashboard-stats
     // -------------------------------------------------------------------------
@@ -902,6 +1110,13 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       const fileSize = body.fileSize || 0;
       const fileType = body.fileType || 'application/pdf';
 
+      try {
+        validateAcademicUpload({ fileName: customFileName, fileSize, externalUrl: body.externalUrl });
+      } catch (valErr) {
+        sendJson(res, valErr.status || 400, { success: false, error: valErr.message, code: valErr.code });
+        return true;
+      }
+
       if (!dataUrl && !body.externalUrl) {
         sendJson(res, 400, { success: false, error: 'No file data or URL provided' });
         return true;
@@ -1003,6 +1218,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.mock_test.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create mock tests.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.title) {
           sendJson(res, 400, { success: false, error: 'Mock test title is required' });
@@ -1024,7 +1243,9 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           questionPaperUrl: body.questionPaperUrl || '',
           answerKeyUrl: body.answerKeyUrl || '',
           explanationUrl: body.explanationUrl || '',
-          isActive: true,
+          isActive: canManageExam(authUser),
+          status: canManageExam(authUser) ? (body.status || 'Published') : 'Draft',
+          createdBy: authUser?.id,
           createdAt: new Date().toISOString()
         };
 
@@ -1617,6 +1838,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.course.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create course drafts.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.courseName || !body.examAuthority || !body.profession) {
           sendJson(res, 400, { success: false, error: 'Course name, exam authority, and profession are required' });
@@ -1723,6 +1948,31 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         }
       }
 
+
+      if (req.method === 'PUT') {
+        const courseId = rest;
+        const existingCourse = MEMORY_COURSES.find(c => c.id === courseId);
+        if (existingCourse) {
+          const isPublished = existingCourse.status === 'Active' || existingCourse.status === 'Published';
+          if (isPublished && !canManageExam(authUser)) {
+            sendJson(res, 403, { success: false, error: 'Forbidden: Published courses can only be modified by Exam Department Managers.' });
+            return true;
+          }
+          if (!canManageExam(authUser) && existingCourse.createdBy && existingCourse.createdBy !== authUser.id) {
+            sendJson(res, 403, { success: false, error: 'Forbidden: You cannot edit another user\'s course draft.' });
+            return true;
+          }
+          const body = await parseJsonBody(req);
+          if (body.courseName) existingCourse.courseName = body.courseName.trim();
+          if (body.description) existingCourse.description = body.description.trim();
+          if (body.profession) existingCourse.profession = body.profession.trim();
+          if (body.examAuthority) existingCourse.examAuthority = body.examAuthority.trim();
+          if (canManageExam(authUser) && body.status) existingCourse.status = body.status;
+          sendJson(res, 200, { success: true, data: existingCourse, message: 'Course updated' });
+          return true;
+        }
+      }
+
       // Course detail & actions: /api/exam/courses/:id
       const courseId = rest;
       if (req.method === 'GET') {
@@ -1779,6 +2029,16 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'DELETE') {
+        const existingCourse = MEMORY_COURSES.find(c => c.id === courseId);
+        const isPublished = !existingCourse || existingCourse.status === 'Active' || existingCourse.status === 'Published';
+        if (isPublished && !hasExamCapability(authUser, 'exam.content.delete')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Only Exam Department Managers can delete published courses.' });
+          return true;
+        }
+        if (!isPublished && existingCourse.createdBy && existingCourse.createdBy !== authUser.id && !canManageExam(authUser)) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: You cannot delete another user\'s draft.' });
+          return true;
+        }
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_courses WHERE id = $1;`, courseId);
@@ -1869,6 +2129,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.question.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create questions.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.questionText || !body.optionA || !body.optionB || !body.optionC || !body.optionD || !body.optionE || !body.correctAnswer) {
           sendJson(res, 400, { success: false, error: 'Question text, all 5 options, and correct answer are required' });
@@ -1900,7 +2164,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           detailedExplanation: body.detailedExplanation?.trim() || body.explanation?.trim() || '',
           difficulty: body.difficulty || 'Medium',
           questionType: body.questionType || 'Both',
-          status: body.status || 'Active',
+          status: canManageExam(authUser) ? (body.status || 'Active') : 'Draft',
+          createdBy: authUser?.id,
           createdAt: new Date().toISOString()
         };
 
@@ -2526,6 +2791,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.material.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create study materials.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.title) {
           sendJson(res, 400, { success: false, error: 'Title is required' });
@@ -2544,8 +2813,9 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           externalUrl: body.externalUrl?.trim() || '',
           thumbnail: body.thumbnail?.trim() || '',
           allowDownload: body.allowDownload !== false,
-          status: 'Active',
-          uploadedBy: authUser?.fullName || 'Clinical Instructor',
+          status: canManageExam(authUser) ? (body.status || 'Active') : 'Draft',
+          uploadedBy: authUser?.fullName || authUser?.id || 'Staff',
+          createdBy: authUser?.id,
           uploadedAt: new Date().toISOString()
         };
 

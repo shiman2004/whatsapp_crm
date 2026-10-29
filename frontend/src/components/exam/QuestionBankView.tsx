@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useCrm } from '../../context/CrmContext';
 import { displayCourseName } from './courseDisplayName';
 import {
   HelpCircle,
@@ -32,6 +33,8 @@ interface QuestionBankViewProps {
 }
 
 export const QuestionBankView: React.FC<QuestionBankViewProps> = ({ initialCourseId }) => {
+  const { currentUser } = useCrm();
+  const isAcademicAdmin = ['super_admin', 'exam_department_manager'].includes(currentUser?.role || '');
   const [questions, setQuestions] = useState<ExamPlatformQuestion[]>([]);
   const [courses, setCourses] = useState<ExamCourse[]>([]);
   const [subjects, setSubjects] = useState<ExamSubject[]>([]);
@@ -520,14 +523,16 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({ initialCours
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(q.id)}
-                          title="Delete Question"
-                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        {(isAcademicAdmin || (q.status === 'Draft')) && (
+                          <button
+                            type="button"
+                            onClick={() => handleDelete(q.id)}
+                            title="Delete Question"
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800 transition-colors cursor-pointer"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

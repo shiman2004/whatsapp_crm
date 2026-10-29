@@ -977,5 +977,60 @@ export const examService = {
     if (!res.ok) throw new Error('Failed to load progress analytics');
     const json = await res.json();
     return json.data;
+  },
+
+  // =========================================================================
+  // 18. ACADEMIC RBAC DRAFTS & APPROVAL WORKFLOW
+  // =========================================================================
+  async transitionAcademicContent(
+    entityType: 'course' | 'material' | 'question' | 'mock_test',
+    entityId: string,
+    action: 'submit_for_review' | 'request_changes' | 'publish' | 'retract_to_draft',
+    comments?: string
+  ): Promise<any> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/academic/transition`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      body: JSON.stringify({ entityType, entityId, action, comments }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to update content status' }));
+      throw new Error(err.error || 'Failed to update content status');
+    }
+    return (await res.json()).data;
+  },
+
+  async getMyDrafts(): Promise<{
+    courses: ExamCourse[];
+    materials: ExamStudyMaterialPlatform[];
+    questions: ExamPlatformQuestion[];
+    mockTests: ExamMockTestPlatform[];
+    total: number;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/academic/my-drafts`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to load drafts' }));
+      throw new Error(err.error || 'Failed to load drafts');
+    }
+    return (await res.json()).data;
+  },
+
+  async getApprovalQueue(): Promise<{
+    courses: ExamCourse[];
+    materials: ExamStudyMaterialPlatform[];
+    questions: ExamPlatformQuestion[];
+    mockTests: ExamMockTestPlatform[];
+    total: number;
+  }> {
+    const res = await fetch(`${API_BASE_URL}/api/exam/academic/approval-queue`, {
+      headers: getAuthHeaders(),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: 'Failed to load approval queue' }));
+      throw new Error(err.error || 'Failed to load approval queue');
+    }
+    return (await res.json()).data;
   }
 };

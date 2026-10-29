@@ -1,4 +1,5 @@
 import { CourseServices } from './CourseServices';
+import { useCrm } from '../../context/CrmContext';
 import React, { useState, useEffect } from 'react';
 import {
   GraduationCap,
@@ -63,6 +64,8 @@ interface CoursesManagerViewProps {
 export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
   onNavigateToSection,
 }) => {
+  const { currentUser } = useCrm();
+  const canCreateCourse = ['super_admin', 'exam_department_manager', 'exam_coordinator'].includes(currentUser?.role || '');
   const [courses, setCourses] = useState<ExamCourse[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
@@ -229,14 +232,16 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 font-black text-xs transition-all shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Create New Course</span>
-            </button>
+            {canCreateCourse && (
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 font-black text-xs transition-all shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Create New Course Draft</span>
+              </button>
+            )}
           </div>
 
           {/* Search & Filters */}

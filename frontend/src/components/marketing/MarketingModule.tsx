@@ -84,7 +84,7 @@ export const MarketingModule: React.FC = () => {
 
   // Pagination & Filtering for Contact Database
   const [contactPage, setContactPage] = React.useState(1);
-  const [contactPageSize] = React.useState(50);
+  const [contactPageSize, setContactPageSize] = React.useState(50);
   const [search, setSearch] = React.useState('');
   const [consentFilter, setConsentFilter] = React.useState('all');
   const [lifecycleFilter, setLifecycleFilter] = React.useState('all');
@@ -348,6 +348,10 @@ export const MarketingModule: React.FC = () => {
                 pageSize={contactPageSize}
                 onPageChange={newPage => {
                   setContactPage(newPage);
+                }}
+                onPageSizeChange={newSize => {
+                  setContactPageSize(newSize);
+                  setContactPage(1);
                 }}
                 search={search}
                 onSearchChange={val => {

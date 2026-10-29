@@ -9,7 +9,7 @@ import { getPrisma, getDbStatus } from './db.js';
 import { PermissionError, ROLES, roleLabel } from './securityPolicy.js';
 import { auditSecurityEvent } from './securityAudit.js';
 import { listAuditEvents } from './securityStore.js';
-import { hashSecret } from './secretHash.js';
+import { hashSecret, encryptReversible, decryptReversible } from './secretHash.js';
 import { COMPANIES, resolveLeadCompany } from './companyConfig.js';
 
 const json = (res, status, value) => {
@@ -388,8 +388,8 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
         data: {
           fullName, email, role, company, branch,
           phone: text(input.phone, 50) || null,
-          password: hashSecret(password),
-          ...(pin ? { pin: hashSecret(pin) } : {}),
+          password: encryptReversible(password),
+          ...(pin ? { pin: encryptReversible(pin) } : {}),
           active: input.active !== false,
           marketingAccess: input.marketingAccess === true,
         },
@@ -850,7 +850,8 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
       if (!action && req.method === 'GET') {
         const target = await getUserRow(prisma, id);
         if (!target) throw new PermissionError(404, 'UNKNOWN_USER', 'User not found.');
-        const [sessions, activity, teams, invitation, assignments] = await Promise.all([
+        const isSuperAdmin = user?.role === 'super_admin';
+        const [sessions, activity, teams, invitation, assignments, credsRow] = await Promise.all([
           prisma.$queryRawUnsafe(`
             SELECT id, ip, user_agent AS "userAgent", created_at AS "createdAt",
                    last_seen_at AS "lastSeenAt", revoked_at AS "revokedAt", revoke_reason AS "revokeReason"
@@ -867,7 +868,23 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
             SELECT 'lead' AS type, COUNT(*)::int AS count FROM public.leads WHERE "assignedTo" = $1
             UNION ALL
             SELECT 'marketing_contact', COUNT(*)::int FROM public.marketing_contacts WHERE current_owner_id = $1`, id),
+          isSuperAdmin ? prisma.user.findUnique({ where: { id }, select: { pin: true, password: true } }) : null,
         ]);
+
+        let credentials = null;
+        if (isSuperAdmin && credsRow) {
+          const rawPin = credsRow.pin;
+          const rawPass = credsRow.password;
+          credentials = {
+            pin: rawPin?.startsWith('enc:v1:') ? decryptReversible(rawPin) : (!rawPin?.startsWith('scrypt:') ? (rawPin || null) : null),
+            pinConfigured: Boolean(rawPin),
+            pinIsHashed: Boolean(rawPin?.startsWith('scrypt:')),
+            password: rawPass?.startsWith('enc:v1:') ? decryptReversible(rawPass) : (!rawPass?.startsWith('scrypt:') ? (rawPass || null) : null),
+            passwordConfigured: Boolean(rawPass),
+            passwordIsHashed: Boolean(rawPass?.startsWith('scrypt:')),
+          };
+        }
+
         ok(res, {
           user: target,
           teams: teams || [],
@@ -879,6 +896,7 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
           })),
           activity: activity.items,
           assignments: assignments || [],
+          credentials,
         });
         return true;
       }
@@ -998,8 +1016,8 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
         if (password && password.length < 12) throw new PermissionError(400, 'WEAK_PASSWORD', 'Password must be at least 12 characters.');
         if (pin && (pin.length < 4 || pin.length > 10)) throw new PermissionError(400, 'INVALID_PIN', 'PIN must be 4-10 characters.');
         const data = {};
-        if (password) data.password = hashSecret(password);
-        if (pin) data.pin = hashSecret(pin);
+        if (password) data.password = encryptReversible(password);
+        if (pin) data.pin = encryptReversible(pin);
         await prisma.user.update({ where: { id }, data });
         await revokeUserSessions(prisma, id, user.id, 'Credentials reset by administrator');
         await audit(user, correlationId, 'user.credentials.reset', `user:${id}`, 'success', { password: Boolean(password), pin: Boolean(pin) });

@@ -19,7 +19,7 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
-import { hashSecret, verifySecret } from './secretHash.js';
+import { hashSecret, verifySecret, encryptReversible, decryptReversible } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -1001,7 +1001,8 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/categories' || 
     pathname === '/api/treatments' || 
     pathname === '/api/courses' || 
-    pathname === '/api/stages'
+    pathname === '/api/stages' ||
+    pathname === '/api/coordinators'
   )) return true;
 
   return false;
@@ -4122,8 +4123,8 @@ const server = http.createServer(async (req, res) => {
           whereClause.leadId = String(queryLeadId);
         }
 
-        // Coordinators can only query messages from their assigned leads
-        if (authUser.role === 'coordinator') {
+        // Coordinators and Clinical Nurses can only query messages from their assigned leads
+        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
           whereClause.lead = {
             assignedTo: authUser.id
           };
@@ -4217,8 +4218,8 @@ const server = http.createServer(async (req, res) => {
         const whereClause = {};
         const isSuperAdmin = authUser?.role === 'super_admin';
         
-        // Coordinators can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
-        if (authUser.role === 'coordinator') {
+        // Coordinators and Clinical Nurses can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
+        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
           whereClause.assignedTo = authUser.id;
         }
 
@@ -4307,12 +4308,17 @@ const server = http.createServer(async (req, res) => {
         let finalLeads = enrichedLeads;
 
         if (!isSuperOrOfficer) {
-          const userCompany = (authUser?.company || 'RWC').toUpperCase();
-          finalLeads = finalLeads.filter(l => {
-            // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
-            if (l.assignedTo && l.assignedTo === authUser.id) return true;
-            return (l.company || 'RWC').toUpperCase() === userCompany;
-          });
+          const isStrictAssignedOnly = authUser?.role === 'coordinator' || authUser?.role === 'clinical_nurse';
+          if (isStrictAssignedOnly) {
+            finalLeads = finalLeads.filter(l => l.assignedTo && l.assignedTo === authUser.id);
+          } else {
+            const userCompany = (authUser?.company || 'RWC').toUpperCase();
+            finalLeads = finalLeads.filter(l => {
+              // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
+              if (l.assignedTo && l.assignedTo === authUser.id) return true;
+              return (l.company || 'RWC').toUpperCase() === userCompany;
+            });
+          }
         } else {
           const queryCompany = parsedUrl.query.company;
           if (queryCompany && ['RWC', 'CRAS', 'AHC'].includes(String(queryCompany).toUpperCase())) {
@@ -5855,7 +5861,7 @@ const server = http.createServer(async (req, res) => {
           ...safeUser,
           pinConfigured: Boolean(pin),
           branch: safeUser.branch || 'Colombo',
-          company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(safeUser.role) ? null : (safeUser.company || 'RWC'),
+          company: safeUser.company !== undefined ? safeUser.company : (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
           createdAt: '2026-01-01T08:00:00Z',
           activeLeadsCount: 0,
         };
@@ -5874,11 +5880,14 @@ const server = http.createServer(async (req, res) => {
               .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
               .map(u => {
                 const { password, pin, ...safeUser } = u;
+                const revealedPin = isSuperAdmin ? (pin?.startsWith('enc:v1:') ? decryptReversible(pin) : (!pin?.startsWith('scrypt:') ? pin : null)) : undefined;
+                const revealedPassword = isSuperAdmin ? (password?.startsWith('enc:v1:') ? decryptReversible(password) : (!password?.startsWith('scrypt:') ? password : null)) : undefined;
                 return {
                   ...safeUser,
+                  ...(isSuperAdmin ? { pin: revealedPin, password: revealedPassword } : {}),
                   pinConfigured: Boolean(pin),
                   branch: safeUser.branch || 'Colombo',
-                  company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(safeUser.role) ? null : (safeUser.company || 'RWC'),
+                  company: safeUser.company || (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
                 };
               });
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5907,16 +5916,18 @@ const server = http.createServer(async (req, res) => {
           const fullName = (payload.fullName || payload.name || '').trim();
           let baseEmail = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
           const cleanPin = String(payload.pin || '').trim().slice(0, 10);
-          const cleanPassword = String(payload.password || '');
+          const cleanPassword = String(payload.password || 'staff').trim() || 'staff';
           const phone = payload.phone || null;
-          const allowedStaffRoles = ['leads_officer', 'coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'];
+          const allowedStaffRoles = ['leads_officer', 'coordinator', 'sales_coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'];
           const role = allowedStaffRoles.includes(payload.role) ? payload.role : 'coordinator';
           const branch = (payload.branch || 'Colombo').trim();
-          const company = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? null : (payload.company || 'RWC').trim();
+          const company = payload.company === 'ALL' || (!payload.company && role === 'leads_officer')
+            ? null
+            : (payload.company || (role === 'leads_officer' ? null : 'RWC'))?.trim();
 
-          if (!fullName || cleanPassword.length < 12 || (cleanPin && cleanPin.length < 4)) {
+          if (!fullName || cleanPassword.length < 4 || (cleanPin && cleanPin.length < 4)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Full name and a password of at least 12 characters are required.' }));
+            res.end(JSON.stringify({ success: false, error: 'Full name, a valid PIN, and password of at least 4 characters are required.' }));
             return;
           }
 
@@ -5938,12 +5949,12 @@ const server = http.createServer(async (req, res) => {
                   id: desiredId,
                   fullName,
                   email: safeEmail,
-                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: hashSecret(cleanPassword),
+                  password: encryptReversible(cleanPassword),
                   active: true
                 }
               });
@@ -5962,12 +5973,12 @@ const server = http.createServer(async (req, res) => {
                 data: {
                   fullName,
                   email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
-                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: hashSecret(cleanPassword),
+                  password: encryptReversible(cleanPassword),
                   active: true
                 }
               });

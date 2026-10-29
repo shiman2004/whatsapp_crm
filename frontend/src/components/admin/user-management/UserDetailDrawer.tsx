@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Activity, KeyRound, LogOut, RefreshCw, ShieldCheck, ShieldOff, UserCheck, UserX } from 'lucide-react';
+import { Activity, KeyRound, LogOut, RefreshCw, ShieldCheck, ShieldOff, UserCheck, UserX, Eye, EyeOff, Copy, Check, Sparkles } from 'lucide-react';
 import { ConfirmDialog, FormDrawer, InlineFeedback } from '../../ui';
 import { userManagementApi, ROLE_OPTIONS, COMPANY_OPTIONS, type UserDetail, type UserInput } from './api';
 import { ErrorNote, Field, GhostButton, PrimaryButton, RoleBadge, CompanyBadge, BranchBadge, UserStatusBadge, formatWhen, inputClass, timeAgo } from './bits';
 import type { Department } from './api';
+
+const generateRandomPin = () => Math.floor(1000 + Math.random() * 9000).toString();
 
 export const UserDetailDrawer: React.FC<{
   userId: string | null;
@@ -19,6 +21,11 @@ export const UserDetailDrawer: React.FC<{
   const [form, setForm] = useState<UserInput>({});
   const [password, setPassword] = useState('');
   const [pin, setPin] = useState('');
+  const [showDrawerPin, setShowDrawerPin] = useState(false);
+  const [showDrawerPassword, setShowDrawerPassword] = useState(false);
+  const [showResetPin, setShowResetPin] = useState(false);
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [copiedField, setCopiedField] = useState<'pin' | 'password' | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<null | { title: string; description: string; destructive?: boolean; run: () => Promise<void> }>(null);
 
@@ -258,6 +265,111 @@ export const UserDetailDrawer: React.FC<{
             )}
           </section>
 
+          {/* Super Admin Only: User Credentials Details Area */}
+          {detail.credentials && (
+            <section className="rounded-2xl border border-amber-300/60 bg-gradient-to-br from-amber-50/80 to-amber-100/40 p-4 dark:border-amber-500/30 dark:from-amber-950/30 dark:to-[#171f24] space-y-3 shadow-sm">
+              <div className="flex items-center justify-between">
+                <h3 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-900 dark:text-amber-300">
+                  <ShieldCheck className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  Account Credentials <span className="text-[10px] lowercase font-normal opacity-75">(Super Admin View)</span>
+                </h3>
+              </div>
+              <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                Visible exclusively to Super Administrators. You can view, copy, or reset login credentials.
+              </p>
+
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+                {/* PIN Code Box */}
+                <div className="rounded-xl border border-amber-200/80 bg-white p-3 dark:border-slate-800 dark:bg-[#111b21] space-y-1.5 shadow-xs">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold flex items-center gap-1">
+                      <KeyRound className="h-3 w-3 text-amber-500" /> PIN Code
+                    </span>
+                    {detail.credentials.pin && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowDrawerPin(!showDrawerPin)}
+                          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded cursor-pointer"
+                          title={showDrawerPin ? 'Hide PIN' : 'Reveal PIN'}
+                        >
+                          {showDrawerPin ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(detail.credentials!.pin!);
+                            setCopiedField('pin');
+                            setTimeout(() => setCopiedField(null), 2000);
+                          }}
+                          className="p-1 text-slate-400 hover:text-emerald-600 rounded cursor-pointer"
+                          title="Copy PIN"
+                        >
+                          {copiedField === 'pin' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-base font-mono font-bold text-slate-900 dark:text-slate-100 tracking-wider">
+                    {detail.credentials.pin ? (
+                      showDrawerPin ? detail.credentials.pin : '••••'
+                    ) : detail.credentials.pinIsHashed ? (
+                      <span className="text-xs font-sans font-medium text-amber-700 dark:text-amber-400">
+                        Configured (Hashed — Reset below to reveal)
+                      </span>
+                    ) : (
+                      <span className="text-xs font-sans font-normal text-slate-400">Not configured</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Web Password Box */}
+                <div className="rounded-xl border border-teal-200/80 bg-white p-3 dark:border-slate-800 dark:bg-[#111b21] space-y-1.5 shadow-xs">
+                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                    <span className="font-semibold flex items-center gap-1">
+                      <KeyRound className="h-3 w-3 text-teal-500" /> Web Password
+                    </span>
+                    {detail.credentials.password && (
+                      <div className="flex items-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setShowDrawerPassword(!showDrawerPassword)}
+                          className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 rounded cursor-pointer"
+                          title={showDrawerPassword ? 'Hide password' : 'Reveal password'}
+                        >
+                          {showDrawerPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(detail.credentials!.password!);
+                            setCopiedField('password');
+                            setTimeout(() => setCopiedField(null), 2000);
+                          }}
+                          className="p-1 text-slate-400 hover:text-emerald-600 rounded cursor-pointer"
+                          title="Copy Password"
+                        >
+                          {copiedField === 'password' ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  <div className="text-base font-mono font-bold text-slate-900 dark:text-slate-100 truncate">
+                    {detail.credentials.password ? (
+                      showDrawerPassword ? detail.credentials.password : '••••••••'
+                    ) : detail.credentials.passwordIsHashed ? (
+                      <span className="text-xs font-sans font-medium text-teal-700 dark:text-teal-400">
+                        Configured (Hashed — Reset below to reveal)
+                      </span>
+                    ) : (
+                      <span className="text-xs font-sans font-normal text-slate-400">Not configured</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </section>
+          )}
+
           <section>
             <h3 className="text-xs font-bold uppercase tracking-wide text-slate-500 dark:text-slate-400">Reset credentials</h3>
             <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">A credential reset revokes every existing session for this account.</p>
@@ -270,30 +382,63 @@ export const UserDetailDrawer: React.FC<{
                   await userManagementApi.resetCredentials(user.id, { ...(password ? { password } : {}), ...(pin ? { pin } : {}) });
                   setPassword('');
                   setPin('');
+                  await load();
                   onNotify('Credentials reset', `New credentials saved for ${user.fullName}. Existing sessions were revoked.`, 'success');
                 });
               }}
             >
               <Field label="New password" hint="At least 12 characters. Leave blank to keep.">
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className={inputClass}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  minLength={12}
-                />
+                <div className="relative flex items-center">
+                  <input
+                    type={showResetPassword ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className={`${inputClass} pr-9`}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    minLength={12}
+                    placeholder="Enter new password"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowResetPassword(!showResetPassword)}
+                    className="absolute right-2 p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded cursor-pointer"
+                    title={showResetPassword ? 'Hide password' : 'Show password'}
+                  >
+                    {showResetPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                  </button>
+                </div>
               </Field>
-              <Field label="New PIN" hint="4–10 characters. Leave blank to keep.">
-                <input
-                  type="password"
-                  autoComplete="new-password"
-                  className={inputClass}
-                  value={pin}
-                  onChange={(e) => setPin(e.target.value)}
-                  minLength={4}
-                  maxLength={10}
-                />
+              <Field label="New PIN" hint="4–10 characters. Click auto to generate.">
+                <div className="relative flex items-center">
+                  <input
+                    type={showResetPin ? 'text' : 'password'}
+                    autoComplete="new-password"
+                    className={`${inputClass} pr-16 font-mono tracking-wider`}
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    minLength={4}
+                    maxLength={10}
+                    placeholder="e.g. 5821"
+                  />
+                  <div className="absolute right-2 flex items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => setPin(generateRandomPin())}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors cursor-pointer flex items-center gap-0.5"
+                      title="Auto-generate 4-digit PIN"
+                    >
+                      <Sparkles className="h-3 w-3" /> Auto
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setShowResetPin(!showResetPin)}
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded cursor-pointer"
+                      title={showResetPin ? 'Hide PIN' : 'Show PIN'}
+                    >
+                      {showResetPin ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
               </Field>
               <div className="sm:col-span-2">
                 <GhostButton type="submit" disabled={busy === 'credentials' || (!password && !pin)}>

@@ -35,6 +35,11 @@ export function isLeadAccessibleForUser(lead: Lead, user: User | null | undefine
     return true;
   }
 
+  // Clinical Nurse: strictly only assigned conversations
+  if (role === 'clinical_nurse' || roleTitle.includes('clinical nurse') || roleTitle.includes('nurse')) {
+    return false;
+  }
+
   if (userCompany && leadCompany && userCompany !== leadCompany) {
     return false;
   }

@@ -12,6 +12,8 @@ import {
   ArrowUpDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   ChevronDown,
   User,
   Phone,
@@ -48,6 +50,7 @@ interface MarketingContactsProps {
   page: number;
   pageSize: number;
   onPageChange: (newPage: number) => void;
+  onPageSizeChange: (newSize: number) => void;
   search: string;
   onSearchChange: (search: string) => void;
   consentFilter: string;
@@ -82,6 +85,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   page,
   pageSize,
   onPageChange,
+  onPageSizeChange,
   search,
   onSearchChange,
   consentFilter,
@@ -467,6 +471,15 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
 
   const totalPages = Math.ceil(totalContacts / pageSize) || 1;
 
+  // The API caps pageSize at 200, so "All" can only ever mean those 200 rows.
+  const MAX_PAGE_SIZE = 200;
+  const rangeStart = totalContacts === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = rangeStart === 0 ? 0 : rangeStart + displayContacts.length - 1;
+  const atFirstPage = page <= 1 || loading;
+  const atLastPage = page >= totalPages || loading;
+  const pagerButton =
+    'inline-flex h-8 items-center justify-center gap-1 rounded-lg border border-slate-800 bg-slate-900/80 px-2 text-slate-400 transition-colors hover:border-teal-700 hover:text-teal-300 disabled:cursor-not-allowed disabled:border-slate-800 disabled:bg-slate-950/60 disabled:text-slate-600 disabled:hover:border-slate-800 disabled:hover:text-slate-600';
+
   return (
     <div className="p-4 sm:p-6 space-y-4">
       {/* Success / Error Notification Banner */}
@@ -757,8 +770,9 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
       )}
 
       {/* Main Contacts Table - Required 13 Column Order (+ Checkbox) */}
-      <div className="overflow-x-auto rounded-xl border border-slate-800 bg-[#0D1526]/70 min-h-[420px]">
-        <table className="w-full text-left text-xs whitespace-nowrap">
+      <div className="overflow-hidden rounded-2xl border border-slate-700/60 bg-[#0D1526]/70">
+        <div className="overflow-x-auto min-h-[420px]">
+          <table className="w-full text-left text-xs whitespace-nowrap">
           <thead className="bg-slate-950/80 text-slate-400 font-semibold border-b border-slate-800">
             <tr>
               <th className="px-3 py-3 w-8">
@@ -1188,34 +1202,86 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
             )}
           </tbody>
         </table>
-      </div>
-
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
-        <span>
-          Showing {displayContacts.length} of {totalContacts} contacts
-        </span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={page <= 1 || loading}
-            onClick={() => onPageChange(page - 1)}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages || loading}
-            onClick={() => onPageChange(page + 1)}
-            className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
         </div>
+
+        {/* Table footer: record range, rows per page, pagination */}
+        <footer className="flex flex-col gap-3 border-t border-slate-700/60 bg-[#0A1120]/80 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+            <p className="text-[11px] text-slate-400" role="status" aria-live="polite">
+              Showing <span className="font-semibold text-slate-200">{rangeStart}–{rangeEnd}</span> of{' '}
+              <span className="font-semibold text-slate-200">{totalContacts.toLocaleString()}</span> contacts
+            </p>
+            <label className="inline-flex items-center gap-2 text-[11px] text-slate-400">
+              Rows per page
+              <select
+                aria-label="Rows per page"
+                value={pageSize}
+                disabled={loading}
+                onChange={event => onPageSizeChange(Number(event.target.value))}
+                className="h-7 rounded-lg border border-slate-800 bg-slate-900/80 px-2 text-[11px] font-semibold text-slate-200 outline-none transition-colors hover:border-teal-700 focus:border-teal-500 disabled:cursor-not-allowed disabled:text-slate-600"
+              >
+                {[10, 25, 50, 100].map(size => (
+                  <option key={size} value={size}>{size}</option>
+                ))}
+                <option value={MAX_PAGE_SIZE}>{totalContacts <= MAX_PAGE_SIZE ? 'All' : `${MAX_PAGE_SIZE} (max)`}</option>
+              </select>
+            </label>
+          </div>
+
+          <nav aria-label="Contact list pagination" className="flex items-center justify-center gap-1">
+            <button
+              type="button"
+              onClick={() => onPageChange(1)}
+              disabled={atFirstPage}
+              aria-label="First page"
+              title="First page"
+              className={pagerButton}
+            >
+              <ChevronsLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onPageChange(page - 1)}
+              disabled={atFirstPage}
+              aria-label="Previous page"
+              title="Previous page"
+              className={pagerButton}
+            >
+              <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <span
+              aria-current="page"
+              aria-label={`Page ${page}`}
+              className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg bg-teal-500 px-2 text-[11px] font-bold text-white shadow-[0_0_12px_rgba(20,184,166,0.45)]"
+            >
+              {page}
+            </span>
+            <button
+              type="button"
+              onClick={() => onPageChange(page + 1)}
+              disabled={atLastPage}
+              aria-label="Next page"
+              title="Next page"
+              className={pagerButton}
+            >
+              <ChevronRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              type="button"
+              onClick={() => onPageChange(totalPages)}
+              disabled={atLastPage}
+              aria-label="Last page"
+              title="Last page"
+              className={pagerButton}
+            >
+              <ChevronsRight className="h-4 w-4" aria-hidden="true" />
+            </button>
+          </nav>
+
+          <p className="text-[11px] text-slate-400 sm:min-w-[92px] sm:text-right">
+            Page {page} of {totalPages}
+          </p>
+        </footer>
       </div>
 
       {/* Reassignment Confirmation Modal */}

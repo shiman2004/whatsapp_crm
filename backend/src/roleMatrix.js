@@ -8,6 +8,17 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'attempt_exam',
     'view_exam_results',
     'manage_clinical_module',
+    'exam.academic.view',
+    'exam.course.create_draft',
+    'exam.material.create_draft',
+    'exam.question.create_draft',
+    'exam.mock_test.create_draft',
+    'exam.draft.edit_own',
+    'exam.draft.submit',
+    'exam.content.review',
+    'exam.content.publish',
+    'exam.content.delete',
+    'exam.permissions.manage',
   ],
   sales_coordinator: [
     'submit_handover',
@@ -20,6 +31,17 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'manage_exam_services',
     'view_all_handover',
     'view_exam_results',
+    'exam.academic.view',
+    'exam.course.create_draft',
+    'exam.material.create_draft',
+    'exam.question.create_draft',
+    'exam.mock_test.create_draft',
+    'exam.draft.edit_own',
+    'exam.draft.submit',
+    'exam.content.review',
+    'exam.content.publish',
+    'exam.content.delete',
+    'exam.permissions.manage',
   ],
   exam_coordinator: [
     'onboard_student',
@@ -28,6 +50,13 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'view_assigned_handover',
     'attempt_exam',
     'view_exam_results',
+    'exam.academic.view',
+    'exam.course.create_draft',
+    'exam.material.create_draft',
+    'exam.question.create_draft',
+    'exam.mock_test.create_draft',
+    'exam.draft.edit_own',
+    'exam.draft.submit',
   ],
   exam_providing_officer: [
     'onboard_student',
@@ -36,6 +65,12 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'view_assigned_handover',
     'attempt_exam',
     'view_exam_results',
+    'exam.academic.view',
+    'exam.material.create_draft',
+    'exam.question.create_draft',
+    'exam.mock_test.create_draft',
+    'exam.draft.edit_own',
+    'exam.draft.submit',
   ],
   clinical_nurse: [
     'create_patient_assessment',
@@ -81,3 +116,8 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'view_exam_results',
   ],
 });
+
+export function hasCapability(role, capability) {
+  const caps = ROLE_CAPABILITIES[role] || [];
+  return caps.includes(capability);
+}

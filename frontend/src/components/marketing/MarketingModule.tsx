@@ -84,7 +84,7 @@ export const MarketingModule: React.FC = () => {
 
   // Pagination & Filtering for Contact Database
   const [contactPage, setContactPage] = React.useState(1);
-  const [contactPageSize] = React.useState(50);
+  const [contactPageSize, setContactPageSize] = React.useState(50);
   const [search, setSearch] = React.useState('');
   const [consentFilter, setConsentFilter] = React.useState('all');
   const [lifecycleFilter, setLifecycleFilter] = React.useState('all');
@@ -231,7 +231,7 @@ export const MarketingModule: React.FC = () => {
   const currentTab = pages.find(item => item.id === page) || pages[0];
 
   return (
-    <section className="h-full min-h-0 flex flex-col gap-4 text-slate-100 p-3 sm:p-5 overflow-y-auto">
+    <section className="h-full min-h-0 flex flex-col gap-4 text-[#111B21] dark:text-[#E9EDEF] p-3 sm:p-5 overflow-y-auto">
       {/* 1. Header & Breadcrumbs */}
       <MarketingHeader pageLabel={currentTab.label} onNavigate={navigateToPage} />
 
@@ -245,12 +245,12 @@ export const MarketingModule: React.FC = () => {
       {/* 3. Module Workspace with Sub-Navigation */}
       <div className="flex-1 min-h-0 grid grid-cols-1 gap-4 items-start">
         {/* Main Content Pane */}
-        <main className={page === 'dashboard' ? 'min-w-0 flex flex-col' : 'min-w-0 rounded-xl border border-slate-800 bg-[#0D1526]/60 overflow-hidden shadow-lg flex flex-col'}>
+        <main className={page === 'dashboard' ? 'min-w-0 flex flex-col' : 'min-w-0 rounded-xl border border-[#E0E5E7] bg-white dark:border-[#222D34] dark:bg-[#202C33] overflow-hidden shadow-sm flex flex-col'}>
           {page !== 'dashboard' && (
-            <div className="px-5 py-3.5 border-b border-slate-800 flex items-center justify-between gap-3 bg-slate-950/60 shrink-0">
+            <div className="px-5 py-3.5 border-b border-[#E0E5E7] dark:border-[#222D34] flex items-center justify-between gap-3 bg-[#F0F2F5] dark:bg-[#2A3942] shrink-0">
               <div>
-                <h2 className="font-extrabold text-white text-sm">{currentTab.label}</h2>
-                <p className="text-[11px] text-slate-400 mt-0.5">{currentTab.description}</p>
+                <h2 className="font-extrabold text-[#111B21] dark:text-[#E9EDEF] text-sm">{currentTab.label}</h2>
+                <p className="text-[11px] text-[#667781] dark:text-[#8696A0] mt-0.5">{currentTab.description}</p>
               </div>
               <button
                 type="button"
@@ -348,6 +348,10 @@ export const MarketingModule: React.FC = () => {
                 pageSize={contactPageSize}
                 onPageChange={newPage => {
                   setContactPage(newPage);
+                }}
+                onPageSizeChange={newSize => {
+                  setContactPageSize(newSize);
+                  setContactPage(1);
                 }}
                 search={search}
                 onSearchChange={val => {

@@ -41,7 +41,10 @@ function sendJson(res, statusCode, data) {
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    req.on('data', chunk => {
+      body += chunk;
+      if (Buffer.byteLength(body) > 2 * 1024 * 1024) req.destroy(new Error('Request body too large'));
+    });
     req.on('end', () => {
       if (!body) return resolve({});
       try {

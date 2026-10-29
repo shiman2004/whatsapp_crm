@@ -55,7 +55,7 @@ export const MessageInfoModal: React.FC<MessageInfoModalProps> = ({
         </div>
 
         {/* Message Preview Bubble */}
-        <div className="p-4 bg-[#0b141a]/90 border-b border-slate-800">
+        <div className="p-4 bg-whatsapp-canvas/90 border-b border-slate-800">
           <div className={`p-3 rounded-xl text-xs leading-relaxed max-w-sm ${
             isOutbound ? 'bg-[#005c4b] text-slate-100 ml-auto' : 'bg-[#202c33] text-slate-100 mr-auto'
           }`}>

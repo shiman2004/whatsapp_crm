@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useCrm } from '../../context/CrmContext';
 import { displayCourseName } from './courseDisplayName';
 import {
   FileText,
@@ -30,6 +31,8 @@ interface StudyMaterialsViewProps {
 }
 
 export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({ initialCourseId }) => {
+  const { currentUser } = useCrm();
+  const isAcademicAdmin = ['super_admin', 'exam_department_manager'].includes(currentUser?.role || '');
   const [materials, setMaterials] = useState<ExamStudyMaterialPlatform[]>([]);
   const [courses, setCourses] = useState<ExamCourse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -226,14 +229,16 @@ export const StudyMaterialsView: React.FC<StudyMaterialsViewProps> = ({ initialC
                     <span>{mat.materialType} • 12 Pages</span>
                   </span>
 
-                  <button
-                    type="button"
-                    onClick={() => handleDelete(mat.id)}
-                    title="Delete Material"
-                    className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+                  {(isAcademicAdmin || (mat.uploadedBy === currentUser?.id)) && (
+                    <button
+                      type="button"
+                      onClick={() => handleDelete(mat.id)}
+                      title="Delete Material"
+                      className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  )}
                 </div>
 
                 <span className="text-[11px] font-semibold text-slate-400 block">{mat.topic}</span>

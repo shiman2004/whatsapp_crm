@@ -50,7 +50,7 @@ import { NotificationSettings, DesktopNotificationItem } from '../types/notifica
 import { playWhatsAppChime } from '../utils/soundUtils';
 import { registerNotificationServiceWorker, showDesktopNativeNotification } from '../utils/nativeNotificationUtils';
 import { isLeadAccessibleForUser } from '../utils/permissionUtils';
-import { NavTab } from '../components/layout/Sidebar';
+import { NavTab } from '../config/navigation';
 
 interface NotificationToast {
   id: string;
@@ -125,6 +125,7 @@ interface CrmContextType {
   isSuperAdmin: boolean;
   isLeadsOfficer: boolean;
   isCoordinator: boolean;
+  getAuthToken: () => string;
   canAssignLeads: boolean;
   canReassignLead: (lead?: Lead) => boolean;
   canModifyAssignment: (lead?: Lead) => boolean;
@@ -145,6 +146,8 @@ interface CrmContextType {
   stageHistories: LeadStageHistory[];
   auditLogs: AuditLog[];
   notifications: NotificationToast[];
+  /** Raise a toast; the same in-app channel used across the workspace. */
+  notify: (title: string, message: string, type?: 'info' | 'success' | 'warning') => void;
 
   // Selected Lead in view
   selectedLeadId: string | null;
@@ -298,8 +301,9 @@ interface CrmContextType {
   setActiveNavTab: (tab: NavTab) => void;
 
   // Theme Support
-  theme: 'light' | 'dark';
-  setTheme: (theme: 'light' | 'dark') => void;
+  theme: 'light' | 'dark' | 'system';
+  resolvedTheme: 'light' | 'dark';
+  setTheme: (theme: 'light' | 'dark' | 'system') => void;
   toggleTheme: () => void;
 }
 
@@ -442,30 +446,48 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [activeNavTab, setActiveNavTab] = useState<NavTab>('dashboard');
   const [chatListFilter, setChatListFilter] = useState<string>('all');
 
-  // Light / Dark Theme state (default to light theme as requested, persist in localStorage)
-  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+  // Theme state: 'light' | 'dark' | 'system'
+  const [theme, setTheme] = useState<'light' | 'dark' | 'system'>(() => {
     const stored = localStorage.getItem('rw_crm_theme');
-    if (stored === 'light' || stored === 'dark') return stored;
-    return 'light';
+    if (stored === 'light' || stored === 'dark' || stored === 'system') return stored;
+    return 'system';
   });
 
+  const [systemPrefersDark, setSystemPrefersDark] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const media = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = (e: MediaQueryListEvent) => setSystemPrefersDark(e.matches);
+    media.addEventListener('change', handler);
+    return () => media.removeEventListener('change', handler);
+  }, []);
+
+  const resolvedTheme: 'light' | 'dark' = theme === 'system' ? (systemPrefersDark ? 'dark' : 'light') : theme;
+
   const toggleTheme = useCallback(() => {
-    setTheme(prev => (prev === 'dark' ? 'light' : 'dark'));
+    setTheme(prev => {
+      if (prev === 'light') return 'dark';
+      if (prev === 'dark') return 'system';
+      return 'light';
+    });
   }, []);
 
   useEffect(() => {
     localStorage.setItem('rw_crm_theme', theme);
     const root = document.documentElement;
-    if (theme === 'dark') {
+    root.setAttribute('data-theme', resolvedTheme);
+    if (resolvedTheme === 'dark') {
       root.classList.add('dark');
       root.classList.remove('light');
-      root.setAttribute('data-theme', 'dark');
     } else {
       root.classList.remove('dark');
       root.classList.add('light');
-      root.setAttribute('data-theme', 'light');
     }
-  }, [theme]);
+  }, [theme, resolvedTheme]);
 
   // Track per-user conversation read timestamps
   const [userReadTimestamps, setUserReadTimestamps] = useState<Record<string, number>>(() => {
@@ -4594,6 +4616,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isSuperAdmin,
     isLeadsOfficer,
     isCoordinator,
+    getAuthToken,
     canAssignLeads,
     canReassignLead,
     canModifyAssignment,
@@ -4609,6 +4632,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stageHistories,
     auditLogs,
     notifications,
+    notify,
     selectedLeadId,
     setSelectedLeadId,
     selectedLead: resolvedSelectedLead,
@@ -4713,6 +4737,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     activeNavTab,
     setActiveNavTab,
     theme,
+    resolvedTheme,
     setTheme,
     toggleTheme,
   };

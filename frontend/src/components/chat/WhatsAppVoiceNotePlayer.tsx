@@ -162,7 +162,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
                     key={idx}
                     className={`w-[3px] rounded-full transition-colors ${
                       isPassed 
-                        ? 'bg-[#53bdeb]' // Active blue/cyan WhatsApp played color
+                        ? 'bg-[#34B7F1]' // Active blue/cyan WhatsApp played color
                         : isOutbound ? 'bg-[#8696a0]/50' : 'bg-[#8696a0]/40'
                     }`}
                     style={{ height: `${height}px` }}
@@ -172,7 +172,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
 
               {/* Scrubber Knob */}
               <div 
-                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#53bdeb] shadow-md pointer-events-none transition-all"
+                className="absolute top-1/2 -translate-y-1/2 w-2.5 h-2.5 rounded-full bg-[#34B7F1] shadow-md pointer-events-none transition-all"
                 style={{ left: `calc(${Math.min(98, Math.max(2, progressPercent))}% - 5px)` }}
               />
             </div>
@@ -213,7 +213,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
                 message.status === 'failed' ? (
                   <span title={`Failed to send: ${message.errorMessage || 'WhatsApp API dispatch failed'}`}><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
                 ) : (message.status === 'read' && Boolean(message.readAt || (message as any).read_at)) ? (
-                  <span title={`Read by customer at ${new Date(message.readAt || (message as any).read_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                  <span title={`Read by customer at ${new Date(message.readAt || (message as any).read_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`}><CheckCheck className="w-3.5 h-3.5 text-[#34B7F1]" /></span>
                 ) : (message.status === 'delivered' || message.status === 'read') ? (
                   <span title={message.deliveredAt ? `Delivered to customer at ${new Date(message.deliveredAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}` : "Delivered to customer"}><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                 ) : message.status === 'sent' ? (

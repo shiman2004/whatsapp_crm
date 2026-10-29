@@ -1,13 +1,13 @@
-/* Public Contact Marketing Module Design Tokens */
+/* Public Contact Marketing Module Design Tokens — WhatsApp Theme */
 
 .marketing-module {
-  background-color: #070c17;
-  color: #f1f5f9;
+  background-color: var(--app-bg);
+  color: var(--text-primary);
 }
 
 .marketing-card {
-  background-color: #0d1526;
-  border-color: #1e293b;
+  background-color: var(--surface);
+  border-color: var(--border);
 }
 
 .marketing-status {
@@ -22,20 +22,20 @@
 }
 
 .marketing-scroll::-webkit-scrollbar-track {
-  background: rgba(15, 23, 42, 0.6);
+  background: transparent;
 }
 
 .marketing-scroll::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 3px;
+  background: rgba(134, 150, 160, 0.25);
+  border-radius: 9999px;
 }
 
 .marketing-scroll::-webkit-scrollbar-thumb:hover {
-  background: #14b8a6;
+  background: rgba(37, 211, 102, 0.45);
 }
 
 .marketing-status-select option {
-  background: #0f172a;
-  color: #f8fafc;
-  font-weight: 700;
+  background: var(--surface);
+  color: var(--text-primary);
+  font-weight: 600;
 }

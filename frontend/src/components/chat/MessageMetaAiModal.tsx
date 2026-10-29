@@ -102,7 +102,7 @@ export const MessageMetaAiModal: React.FC<MessageMetaAiModalProps> = ({
         </div>
 
         {/* Selected Message Context */}
-        <div className="p-4 bg-[#0b141a] border-b border-slate-800 text-xs">
+        <div className="p-4 bg-whatsapp-canvas border-b border-slate-800 text-xs">
           <p className="text-slate-400 text-[11px] mb-1 font-semibold uppercase tracking-wider">Patient Message:</p>
           <div className="p-2.5 bg-[#202c33] rounded-xl border border-slate-700/50 text-slate-200">
             "{message.content}"

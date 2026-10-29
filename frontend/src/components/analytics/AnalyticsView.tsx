@@ -48,7 +48,8 @@ type BranchFilter = 'all' | 'Colombo' | 'Maruthamunai';
 const CHART_COLORS = ['#10b981', '#f59e0b', '#6366f1', '#ec4899', '#06b6d4', '#8b5cf6', '#14b8a6'];
 
 export const AnalyticsView: React.FC = () => {
-  const { leads, users, categories, treatments, followups } = useCrm();
+  const { leads, users, categories, treatments, followups, resolvedTheme } = useCrm();
+  const isDark = resolvedTheme === 'dark';
 
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [selectedEntity, setSelectedEntity] = useState<EntityFilter>('all');
@@ -610,9 +611,9 @@ export const AnalyticsView: React.FC = () => {
           <div className="h-60 w-full pt-2">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={hourlyTrafficData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#cbd5e1" className="stroke-slate-200 dark:stroke-slate-800" />
-                <XAxis dataKey="hour" stroke="#64748b" fontSize={11} tickLine={false} />
-                <YAxis stroke="#64748b" fontSize={11} tickLine={false} allowDecimals={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#222D34' : '#E0E5E7'} />
+                <XAxis dataKey="hour" stroke={isDark ? '#8696A0' : '#667781'} fontSize={11} tickLine={false} />
+                <YAxis stroke={isDark ? '#8696A0' : '#667781'} fontSize={11} tickLine={false} allowDecimals={false} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: '#ffffff',
@@ -622,8 +623,8 @@ export const AnalyticsView: React.FC = () => {
                     color: '#0f172a'
                   }}
                 />
-                <Bar dataKey="inbound" fill="#10b981" radius={[4, 4, 0, 0]} name="Inbound Messages" />
-                <Bar dataKey="outbound" fill="#06b6d4" radius={[4, 4, 0, 0]} name="Outbound Replies" />
+                <Bar dataKey="inbound" fill="#25D366" radius={[4, 4, 0, 0]} name="Inbound Messages" />
+                <Bar dataKey="outbound" fill="#128C7E" radius={[4, 4, 0, 0]} name="Outbound Replies" />
               </BarChart>
             </ResponsiveContainer>
           </div>

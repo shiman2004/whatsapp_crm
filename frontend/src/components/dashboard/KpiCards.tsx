@@ -1,14 +1,4 @@
 import React from 'react';
-import { 
-  Users, 
-  MessageSquare, 
-  TrendingUp, 
-  Clock, 
-  CheckCircle2, 
-  AlertTriangle,
-  Zap,
-  PhoneCall
-} from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { Lead } from '../../types';
 
@@ -17,12 +7,13 @@ interface KpiCardsProps {
 }
 
 export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
-  const { leads: ctxLeads, followups, messages } = useCrm();
+  const { leads: ctxLeads, followups } = useCrm();
   const leads = propLeads || ctxLeads;
   const leadIds = new Set(leads.map(l => l.id));
 
   const totalLeads = leads.length;
-  const newLeads = leads.filter(l => l.stage === 'new').length;
+  const startOfToday = new Date(); startOfToday.setHours(0, 0, 0, 0);
+  const newLeads = leads.filter(l => new Date(l.createdAt) >= startOfToday).length;
   const convertedLeads = leads.filter(l => l.stage === 'converted').length;
   const conversionRate = totalLeads > 0 ? ((convertedLeads / totalLeads) * 100).toFixed(1) : '0.0';
   const pendingFollowups = followups.filter(f => f.status === 'pending' && leadIds.has(f.leadId)).length;
@@ -31,41 +22,37 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
     {
       label: 'New Leads Today',
       value: newLeads,
-      subtext: 'Sub-second capture rate',
-      icon: Users,
+      subtext: 'Created since midnight',
       color: 'from-teal-500 to-emerald-600',
       textColor: 'text-teal-400',
-      badge: '+100% Inbound SLA',
+      badge: 'Live lead data',
       badgeColor: 'bg-teal-500/10 text-teal-300 border-teal-500/30'
     },
     {
       label: 'Active WhatsApp Threads',
-      value: leads.filter(l => l.stage !== 'converted' && l.stage !== 'lost').length,
-      subtext: 'Across EN / SI / TA languages',
-      icon: MessageSquare,
+      value: leads.filter(l => l.lastCustomerMessageAt && Date.now() - new Date(l.lastCustomerMessageAt).getTime() <= 24 * 60 * 60 * 1000).length,
+      subtext: 'Customer activity in last 24 hours',
       color: 'from-sky-500 to-blue-600',
       textColor: 'text-sky-400',
-      badge: '24h Window Compliant',
+      badge: '24h activity window',
       badgeColor: 'bg-sky-500/10 text-sky-300 border-sky-500/30'
     },
     {
       label: 'Overall Conversion Rate',
       value: `${conversionRate}%`,
       subtext: `${convertedLeads} consultations confirmed`,
-      icon: TrendingUp,
       color: 'from-amber-500 to-gold-600',
       textColor: 'text-gold-400',
-      badge: '+4.8% vs last month',
+      badge: 'Converted / all leads',
       badgeColor: 'bg-amber-500/10 text-amber-300 border-amber-500/30'
     },
     {
       label: 'Pending Follow-Ups',
       value: pendingFollowups,
-      subtext: 'Auto-scheduled (BullMQ)',
-      icon: Zap,
+      subtext: 'Open follow-up tasks',
       color: 'from-purple-500 to-indigo-600',
       textColor: 'text-purple-400',
-      badge: 'Auto-Stop Active',
+      badge: 'Needs attention',
       badgeColor: 'bg-purple-500/10 text-purple-300 border-purple-500/30'
     }
   ];
@@ -73,27 +60,21 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
       {kpis.map((kpi, idx) => {
-        const Icon = kpi.icon;
         return (
           <div
             key={idx}
-            className="p-4 rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 backdrop-blur-md shadow-sm dark:shadow-lg flex flex-col justify-between space-y-3 relative overflow-hidden group hover:border-slate-300 dark:hover:border-slate-700 transition-all"
+            className="border-b border-slate-200 bg-white px-4 py-4 last:border-b-0 dark:border-slate-800 dark:bg-slate-900/80"
           >
-            <div className="flex items-start justify-between">
+            <div>
               <div>
                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400">{kpi.label}</span>
                 <h3 className="text-2xl font-black text-slate-900 dark:text-white tracking-tight mt-1 font-sans">{kpi.value}</h3>
               </div>
-              <div className={`w-10 h-10 rounded-xl bg-gradient-to-br ${kpi.color} flex items-center justify-center text-white shadow-md`}>
-                <Icon className="w-5 h-5" />
-              </div>
             </div>
 
-            <div className="flex items-center justify-between text-xs pt-2 border-t border-slate-100 dark:border-slate-800/80">
+            <div className="mt-3 text-xs">
               <span className="text-[11px] text-slate-500 dark:text-slate-400">{kpi.subtext}</span>
-              <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${kpi.badgeColor}`}>
-                {kpi.badge}
-              </span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400">{kpi.badge}</span>
             </div>
           </div>
         );

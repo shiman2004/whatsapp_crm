@@ -170,7 +170,7 @@ export const DashboardOverview: React.FC = () => {
             </span>
             <div>
               <p className="text-xs font-bold text-slate-800 dark:text-slate-200">English Inquiries</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{enCount} Active conversations</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{enCount} leads</p>
             </div>
           </div>
           <span className="text-base font-bold font-mono text-blue-600 dark:text-blue-400">
@@ -185,7 +185,7 @@ export const DashboardOverview: React.FC = () => {
             </span>
             <div>
               <p className="text-xs font-bold text-slate-800 dark:text-slate-200">සිංහල (Sinhala)</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{siCount} Active conversations</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{siCount} leads</p>
             </div>
           </div>
           <span className="text-base font-bold font-mono text-amber-600 dark:text-amber-400">
@@ -200,7 +200,7 @@ export const DashboardOverview: React.FC = () => {
             </span>
             <div>
               <p className="text-xs font-bold text-slate-800 dark:text-slate-200">தமிழ் (Tamil)</p>
-              <p className="text-[10px] text-slate-500 dark:text-slate-400">{taCount} Active conversations</p>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400">{taCount} leads</p>
             </div>
           </div>
           <span className="text-base font-bold font-mono text-rose-600 dark:text-rose-400">

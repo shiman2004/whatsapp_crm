@@ -32,8 +32,8 @@ export const LeadFunnelChart: React.FC<LeadFunnelChartProps> = ({ leads: propLea
     <div className="bg-white dark:bg-slate-900/80 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 backdrop-blur-md shadow-sm dark:shadow-lg space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">WhatsApp Lead Lifecycle Funnel</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Progression from initial WhatsApp greeting to booked procedure</p>
+          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Lead Stage Distribution</h3>
+          <p className="text-xs text-slate-500 dark:text-slate-400">Current lead count in each workflow stage</p>
         </div>
         <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10 px-2.5 py-1 rounded-full border border-teal-200 dark:border-teal-500/20">
           {stages.length} Stages Monitored

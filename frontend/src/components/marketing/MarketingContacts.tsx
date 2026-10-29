@@ -47,6 +47,7 @@ interface MarketingContactsProps {
   totalContacts: number;
   page: number;
   pageSize: number;
+  onPageSizeChange: (newSize: number) => void;
   onPageChange: (newPage: number) => void;
   search: string;
   onSearchChange: (search: string) => void;
@@ -81,6 +82,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
   totalContacts,
   page,
   pageSize,
+  onPageSizeChange,
   onPageChange,
   search,
   onSearchChange,
@@ -1190,12 +1192,20 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
         </table>
       </div>
 
-      {/* Pagination Controls */}
-      <div className="flex items-center justify-between text-xs text-slate-400 px-1 pt-1">
-        <span>
-          Showing {displayContacts.length} of {totalContacts} contacts
-        </span>
-        <div className="flex items-center gap-2">
+      {/* Contact database footer */}
+      <footer className="flex flex-col gap-3 rounded-xl border border-slate-800 bg-[#080e1d] px-4 py-3 text-xs text-slate-400 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          <span>Showing <strong className="text-slate-200">{totalContacts ? ((page - 1) * pageSize) + 1 : 0} - {Math.min(page * pageSize, totalContacts)}</strong> of <strong className="text-slate-200">{totalContacts}</strong> contacts</span>
+          <span className="h-1 w-1 rounded-full bg-slate-600" />
+          <label className="flex items-center gap-2">Rows per page:
+            <select value={pageSize} onChange={event => onPageSizeChange(Number(event.target.value))} className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white outline-none focus:border-teal-400">
+              {[25, 50, 100, 200].map(size => <option key={size} value={size}>{size === 200 ? 'All available' : size}</option>)}
+            </select>
+          </label>
+        </div>
+        <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <div className="flex items-center gap-1">
+          <button type="button" aria-label="First page" disabled={page <= 1 || loading} onClick={() => onPageChange(1)} className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 disabled:opacity-40">&laquo;</button>
           <button
             type="button"
             disabled={page <= 1 || loading}
@@ -1204,9 +1214,7 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          <span>
-            Page {page} of {totalPages}
-          </span>
+          <button type="button" aria-label={`Page ${page}`} className="min-w-8 rounded-lg bg-teal-500 px-2 py-1.5 font-semibold text-slate-950">{page}</button>
           <button
             type="button"
             disabled={page >= totalPages || loading}
@@ -1215,8 +1223,11 @@ export const MarketingContacts: React.FC<MarketingContactsProps> = ({
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+          <button type="button" aria-label="Last page" disabled={page >= totalPages || loading} onClick={() => onPageChange(totalPages)} className="p-1.5 rounded-lg border border-slate-800 bg-slate-900 hover:bg-slate-800 disabled:opacity-40">&raquo;</button>
+          </div>
+          <span className="whitespace-nowrap">Page {page} of {totalPages}</span>
         </div>
-      </div>
+      </footer>
 
       {/* Reassignment Confirmation Modal */}
       {reassignModal && (

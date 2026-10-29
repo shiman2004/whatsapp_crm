@@ -60,7 +60,7 @@ export const LoginScreen: React.FC = () => {
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
   const rwcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
   const crasCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'CRAS');
-  const ahcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'AHC');
+  const ahcUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'AHC' || (u.role === 'coordinator' && u.company === 'AHC')));
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
 
   const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
@@ -161,15 +161,15 @@ export const LoginScreen: React.FC = () => {
       setIdentifierInput(firstCras ? firstCras.email : 'zeenath@royalwellness.lk');
       setPasswordInput('staff');
     } else if (portalView === 'ahc') {
-      const firstAhc = ahcCoordinators[0];
-      setIdentifierInput(firstAhc ? firstAhc.email : '');
+      const firstAhc = ahcUsers[0];
+      setIdentifierInput(firstAhc ? firstAhc.email : 'staff@royalwellness.lk');
       setPasswordInput('staff');
     } else if (portalView === 'leads_officer') {
       const firstOfficer = leadsOfficers[0];
       setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('staff');
     }
-  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, ahcCoordinators.length, leadsOfficers.length]);
+  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, ahcUsers.length, leadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
@@ -598,7 +598,7 @@ export const LoginScreen: React.FC = () => {
                     </option>
                   ))}
                 </select>
-              ) : portalView === 'ahc' && ahcCoordinators.length > 0 ? (
+              ) : portalView === 'ahc' ? (
                 <select
                   value={identifierInput}
                   onChange={(e) => {
@@ -608,11 +608,17 @@ export const LoginScreen: React.FC = () => {
                   }}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#066e77] transition-colors cursor-pointer"
                 >
-                  {ahcCoordinators.map((c: any) => (
-                    <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                      {c.fullName} — Consultancy Advisor ({c.branch || 'Dubai / Colombo'})
+                  {ahcUsers.length > 0 ? (
+                    ahcUsers.map((c: any) => (
+                      <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
+                        {c.fullName} — {c.role === 'coordinator' ? 'Consultancy Advisor' : (c.roleTitle || c.role?.replace(/_/g, ' ') || 'Staff')} ({c.branch || 'Colombo'})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="staff@royalwellness.lk" className="bg-[#111b21] text-white">
+                      Consultancy Advisor (staff@royalwellness.lk)
                     </option>
-                  ))}
+                  )}
                 </select>
               ) : portalView === 'leads_officer' && leadsOfficers.length > 0 ? (
                 <select

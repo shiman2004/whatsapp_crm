@@ -19,7 +19,7 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
-import { hashSecret, verifySecret } from './secretHash.js';
+import { hashSecret, verifySecret, encryptReversible, decryptReversible } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -5874,8 +5874,11 @@ const server = http.createServer(async (req, res) => {
               .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
               .map(u => {
                 const { password, pin, ...safeUser } = u;
+                const revealedPin = isSuperAdmin ? (pin?.startsWith('enc:v1:') ? decryptReversible(pin) : (!pin?.startsWith('scrypt:') ? pin : null)) : undefined;
+                const revealedPassword = isSuperAdmin ? (password?.startsWith('enc:v1:') ? decryptReversible(password) : (!password?.startsWith('scrypt:') ? password : null)) : undefined;
                 return {
                   ...safeUser,
+                  ...(isSuperAdmin ? { pin: revealedPin, password: revealedPassword } : {}),
                   pinConfigured: Boolean(pin),
                   branch: safeUser.branch || 'Colombo',
                   company: safeUser.company !== undefined ? safeUser.company : (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
@@ -5940,12 +5943,12 @@ const server = http.createServer(async (req, res) => {
                   id: desiredId,
                   fullName,
                   email: safeEmail,
-                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: hashSecret(cleanPassword),
+                  password: encryptReversible(cleanPassword),
                   active: true
                 }
               });
@@ -5964,12 +5967,12 @@ const server = http.createServer(async (req, res) => {
                 data: {
                   fullName,
                   email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
-                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: hashSecret(cleanPassword),
+                  password: encryptReversible(cleanPassword),
                   active: true
                 }
               });

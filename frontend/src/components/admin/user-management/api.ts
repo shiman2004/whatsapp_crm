@@ -221,6 +221,14 @@ export interface UserDetail {
   sessions: LoginSession[];
   activity: SecurityEvent[];
   assignments: { type: string; count: number }[];
+  credentials?: {
+    pin: string | null;
+    pinConfigured: boolean;
+    pinIsHashed: boolean;
+    password: string | null;
+    passwordConfigured: boolean;
+    passwordIsHashed: boolean;
+  } | null;
 }
 
 export interface UserInput {

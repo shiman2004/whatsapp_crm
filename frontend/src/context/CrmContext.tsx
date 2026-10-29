@@ -3823,9 +3823,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }).catch(err => console.warn('Could not sync customer update to backend:', err));
   };
 
-  const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
-    const role: UserRole = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
-    const cleanCompany: CompanyCode | undefined = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? undefined : (data.company || 'RWC');
+  const addCoordinator = async (data: { fullName: string; branch?: string; company?: CompanyCode | 'ALL'; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => {
+    const role: UserRole = ['leads_officer', 'coordinator', 'sales_coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'].includes(data.role || '') ? data.role as UserRole : 'coordinator';
+    const cleanCompany: CompanyCode | undefined = data.company === 'ALL' ? undefined : (data.company as CompanyCode | undefined);
     const newCoordId = (role === 'leads_officer' ? 'officer-' : role.startsWith('exam_') ? 'exam-' : 'coord-') + Date.now();
     const cleanBranch = data.branch || 'Colombo';
     const cleanPin = String(data.pin || '2026').trim().slice(0, 10);

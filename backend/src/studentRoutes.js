@@ -27,7 +27,7 @@ export async function handleStudentRoutes(req, res, pathname) {
     const service = new StudentAccess(new ExamStore(getPrisma()), JWT_SECRET);
     let result;
     if (req.method !== 'GET') {
-      const allowed = process.env.STUDENT_PORTAL_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5174';
+      const allowed = process.env.STUDENT_PORTAL_ORIGIN || process.env.FRONTEND_URL || 'http://localhost:5173';
       requireValue(req.headers.origin === new URL(allowed).origin, 'ORIGIN_DENIED', 'Request origin is not permitted.', 403);
     }
     if (pathname === '/api/student/activate' && req.method === 'POST') {

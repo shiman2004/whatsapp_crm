@@ -125,6 +125,7 @@ interface CrmContextType {
   isSuperAdmin: boolean;
   isLeadsOfficer: boolean;
   isCoordinator: boolean;
+  getAuthToken: () => string;
   canAssignLeads: boolean;
   canReassignLead: (lead?: Lead) => boolean;
   canModifyAssignment: (lead?: Lead) => boolean;
@@ -4594,6 +4595,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     isSuperAdmin,
     isLeadsOfficer,
     isCoordinator,
+    getAuthToken,
     canAssignLeads,
     canReassignLead,
     canModifyAssignment,

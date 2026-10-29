@@ -17,6 +17,7 @@ import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, del
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
+import { handleSecurityRoutes } from './securityRoutes.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -79,6 +80,7 @@ const REQUEST_BODY_LIMITS = {
   webhook: 2 * 1024 * 1024,
   login: 32 * 1024
 };
+const MEDIA_URL_TTL_MS = 15 * 60 * 1000;
 const SSE_TICKET_TTL_MS = 15 * 60 * 1000;
 const sseTickets = new Map();
 
@@ -157,24 +159,22 @@ function timingSafeStringEqual(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-// Media URLs are persisted in message rows, so the signature must stay valid for as
-// long as the row exists. Signing a per-file constant (rather than a timestamp) keeps
-// stored URLs working while still rejecting forged or tampered filenames. Access is
-// additionally gated by the authenticated sender-assignment check in the route handler.
-function signMediaFile(fileName) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+// Media URLs are short-lived bearer links for browser media elements; authenticated
+// callers can still access files after a link expires.
+function signMediaFile(fileName, expires) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}:${expires}`).digest('base64url');
 }
 
-function createPrivateMediaUrl(fileName, ttlMs = 0) {
-  void ttlMs;
-  const signature = signMediaFile(fileName);
-  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
+function createPrivateMediaUrl(fileName, ttlMs = MEDIA_URL_TTL_MS) {
+  const expires = Date.now() + ttlMs;
+  const signature = signMediaFile(fileName, expires);
+  return `/uploads/${encodeURIComponent(fileName)}?exp=${expires}&sig=${signature}`;
 }
 
 function verifyPrivateMediaUrl(fileName, expires, signature) {
-  void expires;
-  if (!fileName || typeof signature !== 'string' || !signature) return false;
-  const expected = signMediaFile(fileName);
+  const expiry = Number(expires);
+  if (!fileName || !Number.isSafeInteger(expiry) || expiry < Date.now() || typeof signature !== 'string' || !signature) return false;
+  const expected = signMediaFile(fileName, expiry);
   return signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
@@ -1480,6 +1480,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   if (await handleExamOperations(req, res, pathname, authUser)) return;
+  if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;

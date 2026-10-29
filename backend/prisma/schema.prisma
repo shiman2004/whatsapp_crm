@@ -1019,3 +1019,17 @@ model StudentExam {
   // JSON blob storing answers per question (questionId -> answer)
   answers     Json?
 }
+
+model SecurityPermissionProfile {
+  subjectType String   @map("subject_type") @db.VarChar(10)
+  subjectId   String   @map("subject_id") @db.VarChar(100)
+  overrides   Json     @default("{}")
+  scope       String?  @db.VarChar(20)
+  revision    Int      @default(1)
+  updatedBy   String?  @map("updated_by") @db.VarChar(100)
+  updatedAt   DateTime @default(now()) @updatedAt @map("updated_at")
+
+  @@id([subjectType, subjectId])
+  @@index([subjectType, updatedAt])
+  @@map("security_permission_profiles")
+}

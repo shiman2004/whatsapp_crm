@@ -118,7 +118,7 @@ export const UserManagementView: React.FC = () => {
           <button
             type="button"
             onClick={refresh}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 dark:border-white/10 dark:bg-[#0f1b26] dark:text-slate-200 dark:hover:bg-white/5"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 dark:border-[#222D34] dark:bg-[#202C33] dark:text-slate-200 dark:hover:bg-[#2A3942]"
           >
             <ShieldCheck className="h-3.5 w-3.5" /> Refresh
           </button>
@@ -126,6 +126,76 @@ export const UserManagementView: React.FC = () => {
       />
 
       {error && <ErrorState message={error} onRetry={refresh} />}
+
+      {/* Super Admin Executive Scope & Credentials Reference Banner */}
+      <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/10 to-purple-500/10 p-4 sm:p-5 shadow-sm">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center font-bold text-lg shadow-sm shrink-0">
+              👑
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Super Admin Credentials & Executive Scope</h3>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30">
+                  ALL Companies · ALL Branches
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1">
+                Executive administrators have unrestricted operational scope across <strong className="text-emerald-700 dark:text-emerald-400">RWC Center</strong>, <strong className="text-rose-700 dark:text-rose-400">CRAS College</strong>, and <strong className="text-teal-700 dark:text-teal-400">Alpha Health Consultancy</strong> across all branches.
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 self-stretch sm:self-auto shrink-0">
+            <button
+              type="button"
+              onClick={() => select('create')}
+              className="h-8.5 px-3 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs transition-all cursor-pointer"
+            >
+              <UserRoundCheck className="w-3.5 h-3.5" />
+              <span>Create Super Admin</span>
+            </button>
+            <a
+              href="#/security/policies"
+              className="h-8.5 px-3 rounded-lg border border-slate-300 dark:border-[#222D34] bg-white dark:bg-[#202C33] text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-[#2A3942] text-xs font-semibold inline-flex items-center gap-1.5 shadow-xs transition-all"
+            >
+              <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
+              <span>Security Policies</span>
+            </a>
+          </div>
+        </div>
+
+        {/* Quick Credentials Summary Chips */}
+        <div className="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
+          <div className="bg-white/80 dark:bg-[#202C33]/80 border border-slate-200 dark:border-[#222D34] p-2.5 rounded-xl shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 dark:text-slate-200">Super Admin (Jahan)</span>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">PIN: 1234</span>
+            </div>
+            <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">admin@royalwellness.lk</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Password: <code className="text-slate-700 dark:text-slate-300">admin</code></p>
+          </div>
+
+          <div className="bg-white/80 dark:bg-[#202C33]/80 border border-slate-200 dark:border-[#222D34] p-2.5 rounded-xl shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 dark:text-slate-200">Shiman</span>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">PIN: 7777</span>
+            </div>
+            <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">mnmshiman@gmail.com</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Password: <code className="text-slate-700 dark:text-slate-300">admin</code></p>
+          </div>
+
+          <div className="bg-white/80 dark:bg-[#202C33]/80 border border-slate-200 dark:border-[#222D34] p-2.5 rounded-xl shadow-xs">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-slate-800 dark:text-slate-200">Afrij</span>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">PIN: 1234</span>
+            </div>
+            <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">afrij@royalwellness.lk</p>
+            <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5">Password: <code className="text-slate-700 dark:text-slate-300">admin</code></p>
+          </div>
+        </div>
+      </div>
+
 
       {loading && !overview ? (
         <LoadingSkeleton rows={4} />
@@ -138,7 +208,7 @@ export const UserManagementView: React.FC = () => {
         </div>
       ) : null}
 
-      <nav aria-label="User management sections" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm dark:border-white/10 dark:bg-[#0f1b26] md:grid-cols-3 xl:grid-cols-6">
+      <nav aria-label="User management sections" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-white p-1.5 shadow-sm dark:border-[#222D34] dark:bg-[#202C33] md:grid-cols-3 xl:grid-cols-6">
         {TABS.map((item) => {
           const Icon = item.icon;
           const active = item.id === tab;

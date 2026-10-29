@@ -64,11 +64,24 @@ export const LoginScreen: React.FC = () => {
     try { return JSON.parse(localStorage.getItem('rw_crm_deleted_users') || '[]'); } catch { return []; }
   })();
   const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false;
+  const EXCLUDED_PORTAL_ROLES = ['super_admin', 'leads_officer', 'marketing_officer', 'marketing_admin'];
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
-  const rwcUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'RWC' || (!u.company && u.role === 'coordinator')));
-  const crasUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'CRAS' || (!u.company && u.role === 'coordinator')));
-  const ahcUsers = users.filter((u: any) => _activeStaff(u) && (u.company === 'AHC' || (!u.company && u.role === 'coordinator')));
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
+  const rwcUsers = users.filter((u: any) => 
+    _activeStaff(u) && 
+    !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
+    (u.company === 'RWC' || (!u.company && (u.role === 'coordinator' || u.role === 'sales_coordinator' || u.role?.startsWith('clinical_'))))
+  );
+  const crasUsers = users.filter((u: any) => 
+    _activeStaff(u) && 
+    !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
+    (u.company === 'CRAS' || (!u.company && u.role === 'coordinator' && u.branch === 'CRAS'))
+  );
+  const ahcUsers = users.filter((u: any) => 
+    _activeStaff(u) && 
+    !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
+    u.company === 'AHC'
+  );
 
   const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
   const [passwordInput, setPasswordInput] = useState<string>('staff');

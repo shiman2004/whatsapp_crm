@@ -1001,7 +1001,8 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/categories' || 
     pathname === '/api/treatments' || 
     pathname === '/api/courses' || 
-    pathname === '/api/stages'
+    pathname === '/api/stages' ||
+    pathname === '/api/coordinators'
   )) return true;
 
   return false;
@@ -5881,7 +5882,7 @@ const server = http.createServer(async (req, res) => {
                   ...(isSuperAdmin ? { pin: revealedPin, password: revealedPassword } : {}),
                   pinConfigured: Boolean(pin),
                   branch: safeUser.branch || 'Colombo',
-                  company: safeUser.company !== undefined ? safeUser.company : (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
+                  company: safeUser.company || (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
                 };
               });
             res.writeHead(200, { 'Content-Type': 'application/json' });

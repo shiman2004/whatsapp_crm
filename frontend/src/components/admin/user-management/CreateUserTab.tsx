@@ -3,6 +3,7 @@ import { UserPlus, RefreshCw, Eye, EyeOff, Copy, Check } from 'lucide-react';
 import { SectionCard } from '../../ui';
 import { userManagementApi, ROLE_OPTIONS, COMPANY_OPTIONS, type Department, type ManagedUser } from './api';
 import { ErrorNote, Field, PrimaryButton, RoleBadge, inputClass } from './bits';
+import { useCrm } from '../../../context/CrmContext';
 
 const ROLE_HOME: Record<string, { company: boolean; branch: string; departmentHint: string }> = {
   super_admin: { company: true, branch: 'Colombo (Head Office)', departmentHint: 'Administration' },
@@ -32,6 +33,7 @@ export const CreateUserTab: React.FC<{
   onCreated: () => void;
   onNotify: (title: string, message: string, tone?: 'success' | 'warning' | 'info') => void;
 }> = ({ departments, managers, onCreated, onNotify }) => {
+  const { syncStaffUser } = useCrm();
   const [form, setForm] = useState(getInitialForm);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +68,7 @@ export const CreateUserTab: React.FC<{
         pin: submittedPin || undefined,
         active: form.active,
       });
+      syncStaffUser({ ...result, pin: submittedPin, password: submittedPassword });
       setCreated(result);
       setCreatedCreds({ pin: submittedPin, password: submittedPassword });
       setForm(getInitialForm());

@@ -1,29 +1,42 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LockKeyhole, RefreshCw, ScrollText, ShieldAlert, ShieldCheck, SlidersHorizontal, Users, Boxes, LayoutDashboard } from 'lucide-react';
+import { LockKeyhole, RefreshCw, ScrollText, ShieldAlert, ShieldCheck, SlidersHorizontal, Users, Boxes, LayoutDashboard, MonitorSmartphone } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { setSecurityTokenReader } from './security/api';
 import { AuditLogsTab } from './security/AuditLogsTab';
 import { ModuleAccessTab } from './security/ModuleAccessTab';
 import { OverviewTab } from './security/OverviewTab';
 import { RolePermissionsTab } from './security/RolePermissionsTab';
+import { SessionsTab } from './security/SessionsTab';
 import { UserPermissionsTab } from './security/UserPermissionsTab';
 import { cx } from './security/bits';
 
-type SecurityTab = 'overview' | 'roles' | 'users' | 'modules' | 'audit';
+type SecurityTab = 'overview' | 'roles' | 'matrix' | 'policies' | 'sessions' | 'events';
 
 const TABS: { id: SecurityTab; label: string; hint: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'overview', label: 'Overview', hint: 'Posture & activity', icon: LayoutDashboard },
-  { id: 'roles', label: 'Role Permissions', hint: 'Registry defaults', icon: ShieldCheck },
-  { id: 'users', label: 'User Permissions', hint: 'Personal overrides', icon: Users },
-  { id: 'modules', label: 'Module Access', hint: 'Coverage matrix', icon: Boxes },
-  { id: 'audit', label: 'Audit Logs', hint: 'Who changed what', icon: ScrollText },
+  { id: 'overview', label: 'Security Overview', hint: 'Posture & activity', icon: LayoutDashboard },
+  { id: 'roles', label: 'Roles & Permissions', hint: 'Registry defaults', icon: ShieldCheck },
+  { id: 'matrix', label: 'Permission Matrix', hint: 'Coverage by module', icon: Boxes },
+  { id: 'policies', label: 'Access Policies', hint: 'Per-user overrides', icon: Users },
+  { id: 'sessions', label: 'Login & Session Activity', hint: 'Devices and revocations', icon: MonitorSmartphone },
+  { id: 'events', label: 'Security Events', hint: 'Append-only trail', icon: ScrollText },
 ];
 
 const isTab = (value: string): value is SecurityTab => TABS.some(tab => tab.id === value);
 
+// Deep links: new paths are #/security/<tab>. The older #/security-access/<legacy>
+// spellings keep working and map onto the same screens.
+const LEGACY: Record<string, SecurityTab> = {
+  users: 'policies',
+  modules: 'matrix',
+  audit: 'events',
+};
+
 const readTabFromHash = (): SecurityTab => {
-  const match = window.location.hash.match(/^#\/security-access\/([a-z]+)/);
-  return match && isTab(match[1]) ? match[1] : 'overview';
+  const match = window.location.hash.match(/^#\/(?:security|security-access)(?:\/([a-z-]+))?/);
+  const raw = match?.[1];
+  if (!raw) return 'overview';
+  if (isTab(raw)) return raw;
+  return LEGACY[raw] || 'overview';
 };
 
 export const SecurityAccessView: React.FC = () => {
@@ -40,13 +53,22 @@ export const SecurityAccessView: React.FC = () => {
 
   useEffect(() => {
     const syncFromHash = () => setTab(readTabFromHash());
+    const onIntent = (event: Event) => {
+      const value = (event as CustomEvent<string>).detail;
+      if (value && isTab(value)) selectTab(value);
+    };
     window.addEventListener('hashchange', syncFromHash);
-    return () => window.removeEventListener('hashchange', syncFromHash);
+    window.addEventListener('security-tab-change', onIntent);
+    return () => {
+      window.removeEventListener('hashchange', syncFromHash);
+      window.removeEventListener('security-tab-change', onIntent);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const selectTab = (next: SecurityTab) => {
     setTab(next);
-    const hash = `#/security-access/${next}`;
+    const hash = `#/security/${next}`;
     if (window.location.hash !== hash) window.history.replaceState(null, '', hash);
   };
 
@@ -74,7 +96,7 @@ export const SecurityAccessView: React.FC = () => {
           <div>
             <h1 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-serif">Security &amp; Access</h1>
             <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
-              Role defaults, personal overrides, module coverage and the audit trail — exactly as the API enforces them.
+              Role defaults, personal overrides, module coverage, live sessions and the audit trail — exactly as the API enforces them.
             </p>
           </div>
         </div>
@@ -92,7 +114,7 @@ export const SecurityAccessView: React.FC = () => {
         </div>
       </header>
 
-      <nav aria-label="Security sections" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1.5 dark:border-slate-800 dark:bg-slate-900/60 md:grid-cols-5">
+      <nav aria-label="Security sections" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1.5 dark:border-slate-800 dark:bg-slate-900/60 md:grid-cols-3 xl:grid-cols-6">
         {TABS.map(item => {
           const Icon = item.icon;
           const active = item.id === tab;
@@ -103,7 +125,7 @@ export const SecurityAccessView: React.FC = () => {
               onClick={() => selectTab(item.id)}
               aria-current={active ? 'page' : undefined}
               className={cx(
-                'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left motion-safe:transition-colors',
+                'flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left motion-safe:transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
                 active
                   ? 'border-indigo-500/40 bg-indigo-500/10 text-indigo-700 dark:text-indigo-200'
                   : 'border-transparent text-slate-600 hover:bg-white dark:text-slate-400 dark:hover:bg-slate-800/60',
@@ -120,11 +142,14 @@ export const SecurityAccessView: React.FC = () => {
       </nav>
 
       <div key={`${tab}-${refreshKey}`}>
-        {tab === 'overview' && <OverviewTab onNavigate={selectTab} />}
+        {tab === 'overview' && (
+          <OverviewTab onNavigate={(target) => selectTab(target === 'modules' ? 'matrix' : target === 'users' ? 'policies' : target === 'audit' ? 'events' : 'roles')} />
+        )}
         {tab === 'roles' && <RolePermissionsTab />}
-        {tab === 'users' && <UserPermissionsTab />}
-        {tab === 'modules' && <ModuleAccessTab />}
-        {tab === 'audit' && <AuditLogsTab />}
+        {tab === 'policies' && <UserPermissionsTab />}
+        {tab === 'matrix' && <ModuleAccessTab />}
+        {tab === 'sessions' && <SessionsTab />}
+        {tab === 'events' && <AuditLogsTab />}
       </div>
     </div>
   );

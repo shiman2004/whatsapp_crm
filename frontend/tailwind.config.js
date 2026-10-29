@@ -8,6 +8,23 @@ export default {
   theme: {
     extend: {
       colors: {
+        app: 'var(--app-bg)',
+        sidebar: 'var(--sidebar-bg)',
+        header: 'var(--header-bg)',
+        surface: {
+          DEFAULT: 'var(--surface)',
+          elevated: 'var(--surface-elevated)',
+        },
+        'theme-border': 'var(--border)',
+        'theme-text': {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+        },
+        'theme-brand': {
+          primary: 'var(--brand-primary)',
+          strong: 'var(--brand-strong)',
+          accent: 'var(--brand-accent)',
+        },
         royal: {
           50: '#f0fdf9',
           100: '#ccfbef',
@@ -34,22 +51,44 @@ export default {
           900: '#563517',
         },
         whatsapp: {
-          light: '#dcf8c6',
-          dark: '#056162',
+          light: '#DCF8C6',
+          dark: '#005C4B',
           DEFAULT: '#25D366',
           teal: '#128C7E',
           deep: '#075E54',
-          bg: '#EFEAE2',
+          bg: '#ECE5DD',
           bubbleIn: '#FFFFFF',
-          bubbleOut: '#E7FFDB',
-        }
+          bubbleOut: '#DCF8C6',
+          canvas: '#111B21',
+          panel: '#202C33',
+          composer: '#2A3942',
+          border: '#222D34',
+          text: '#E9EDEF',
+          muted: '#8696A0',
+          link: '#53BDEB',
+          check: '#34B7F1',
+        },
+        /* Legacy enterprise aliases mapped to WhatsApp Dark Palette */
+        navy: {
+          50: '#f2f7f9',
+          100: '#e3edf2',
+          200: '#c2d8e2',
+          300: '#92b8c7',
+          400: '#5b90a5',
+          500: '#3d7389',
+          600: '#2f5c70',
+          700: '#202C33',
+          800: '#202C33',
+          900: '#111B21',
+          950: '#111B21',
+        },
       },
       fontFamily: {
         sans: ['Plus Jakarta Sans', 'Inter', 'system-ui', 'sans-serif'],
         serif: ['Playfair Display', 'Georgia', 'serif'],
       },
       boxShadow: {
-        'glow': '0 0 25px -5px rgba(20, 184, 166, 0.25)',
+        'glow': '0 0 25px -5px rgba(37, 211, 102, 0.25)',
         'gold-glow': '0 0 25px -5px rgba(212, 164, 56, 0.3)',
       },
       animation: {

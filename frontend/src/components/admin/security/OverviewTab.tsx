@@ -18,11 +18,13 @@ export const OverviewTab: React.FC<{ onNavigate: (tab: 'roles' | 'users' | 'modu
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
     try {
-      setData(await securityApi.overview());
+      const result = await securityApi.overview();
+      setData(result);
+      setError(null);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : 'Unable to load the security overview.');
+      const msg = cause instanceof Error ? cause.message : 'Unable to load the security overview.';
+      setError(msg === '[object Object]' ? 'Unable to load the security overview.' : msg);
     } finally {
       setLoading(false);
     }
@@ -48,7 +50,7 @@ export const OverviewTab: React.FC<{ onNavigate: (tab: 'roles' | 'users' | 'modu
 
   return (
     <div className="space-y-4">
-      {error && <ErrorState message={error} onRetry={load} />}
+      {error && !data && <ErrorState message={error} onRetry={load} />}
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {CARD_STYLES.map(card => {

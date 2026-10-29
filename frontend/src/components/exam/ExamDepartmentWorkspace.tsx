@@ -204,10 +204,10 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
     { id: 'reports', label: 'Reports', icon: BarChart3 },
   ];
 
-  if (!canAccessAcademic) return <div className="min-w-0 rounded-2xl bg-slate-950 p-4 sm:p-6"><ExamOperationsView /></div>;
+  if (!canAccessAcademic) return <div className="min-w-0 rounded-2xl bg-white dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] p-4 sm:p-6"><ExamOperationsView /></div>;
 
   return (
-    <div className="space-y-6 flex-1 min-w-0 overflow-x-hidden overflow-y-auto rounded-2xl bg-slate-950 p-4 sm:p-6 pb-10">
+    <div className="space-y-6 flex-1 min-w-0 overflow-x-hidden overflow-y-auto rounded-2xl bg-white dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] p-4 sm:p-6 pb-10">
       {loadError && (
         <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <p>{loadError}</p>
@@ -219,14 +219,14 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
       {/* Top Header */}
       <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center text-teal-400 shrink-0 shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-[#F0F2F5] dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] flex items-center justify-center text-[#128C7E] dark:text-[#25D366] shrink-0 shadow-sm">
             <GraduationCap className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight">
               Exam Department
             </h1>
-            <p className="text-xs text-slate-400 font-medium mt-0.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
               Healthcare Licensing Exam Preparation Platform • DHA, DOH, MOH, Prometric
             </p>
           </div>
@@ -246,7 +246,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
       </div>
 
       {/* 12-Section Sub-Navigation Bar (Spec 2) */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-slate-800 text-xs">
+      <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-[#E0E5E7] dark:border-[#222D34] text-xs">
         {navTabs.map((tab) => {
           const Icon = tab.icon;
           const isActive =
@@ -266,7 +266,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
                   : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
               }`}
             >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-teal-400' : 'text-slate-500'}`} />
+              <Icon className={`w-4 h-4 ${isActive ? 'text-[#128C7E] dark:text-[#25D366]' : 'text-[#667781] dark:text-[#8696A0]'}`} />
               <span>{tab.label}</span>
             </button>
           );

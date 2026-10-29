@@ -91,16 +91,26 @@ export const EmptyState: React.FC<{ title: string; description?: string; action?
   </div>
 );
 
-export const ErrorState: React.FC<{ message: string; onRetry?: () => void }> = ({ message, onRetry }) => (
-  <div role="alert" className="flex flex-col items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-700 dark:text-rose-200 sm:flex-row sm:items-center sm:justify-between">
-    <span className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{message}</span>
-    {onRetry && (
-      <button type="button" onClick={onRetry} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-rose-500/40 px-2.5 py-1.5 text-xs font-semibold hover:bg-rose-500/10">
-        <RefreshCw className="h-3.5 w-3.5" />Retry
-      </button>
-    )}
-  </div>
-);
+export const ErrorState: React.FC<{ message: string | unknown; onRetry?: () => void }> = ({ message, onRetry }) => {
+  const text =
+    typeof message === 'string'
+      ? message === '[object Object]'
+        ? 'A security request failed. Click Retry to reload.'
+        : message
+      : typeof (message as any)?.message === 'string'
+      ? (message as any).message
+      : 'A security request failed. Click Retry to reload.';
+  return (
+    <div role="alert" className="flex flex-col items-start gap-3 rounded-xl border border-rose-500/30 bg-rose-500/10 p-4 text-sm text-rose-700 dark:text-rose-200 sm:flex-row sm:items-center sm:justify-between">
+      <span className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />{text}</span>
+      {onRetry && (
+        <button type="button" onClick={onRetry} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-rose-500/40 px-2.5 py-1.5 text-xs font-semibold hover:bg-rose-500/10 cursor-pointer">
+          <RefreshCw className="h-3.5 w-3.5" />Retry
+        </button>
+      )}
+    </div>
+  );
+};
 
 export const Notice: React.FC<{ tone?: Tone; children: React.ReactNode }> = ({ tone = 'indigo', children }) => (
   <div className={cx('rounded-xl border p-3 text-xs leading-relaxed', TONES[tone])}>{children}</div>

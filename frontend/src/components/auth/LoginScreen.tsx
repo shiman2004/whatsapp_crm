@@ -334,7 +334,7 @@ export const LoginScreen: React.FC = () => {
   const currentMeta = getPortalMeta();
 
   return (
-    <div className="min-h-screen w-full bg-[#0b141a] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
+    <div className="min-h-screen w-full bg-[var(--app-bg)] text-[var(--text-primary)] flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
       {/* Background Ambience */}
       <div 
         className="absolute top-0 left-0 right-0 h-44 pointer-events-none opacity-90 transition-colors duration-500"
@@ -350,10 +350,10 @@ export const LoginScreen: React.FC = () => {
             : '#00a884'
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0b141a]/80 to-[#0b141a] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--app-bg)]/80 to-[var(--app-bg)] pointer-events-none" />
 
       {/* Main Login Card */}
-      <div className="w-full max-w-md bg-[#111b21] border border-slate-800 rounded-2xl p-7 shadow-2xl relative z-10 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+      <div className="w-full max-w-md bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-7 shadow-2xl relative z-10 space-y-5 animate-in fade-in zoom-in-95 duration-200">
         
         {/* ========================================================================= */}
         {/* VIEW 1: PORTAL SELECTION (Option 2 Workplace Grid)                       */}
@@ -370,15 +370,15 @@ export const LoginScreen: React.FC = () => {
                 <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white tracking-wide">
+                <h1 className="text-xl font-bold text-[#111B21] dark:text-[#E9EDEF] tracking-wide">
                   Alpha Health Group
                 </h1>
-                <p className="text-xs text-[#8696a0]">
+                <p className="text-xs text-[#667781] dark:text-[#8696A0]">
                   Centralized WhatsApp Healthcare & Clinical Gateway
                 </p>
               </div>
               <div className="pt-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300 bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700/60 inline-block shadow-inner">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#111B21] dark:text-[#E9EDEF] bg-[#F0F2F5] dark:bg-[#2A3942] px-3 py-1 rounded-full border border-[#E0E5E7] dark:border-[#222D34] inline-block shadow-inner">
                   Select Workplace Portal
                 </span>
               </div>
@@ -391,14 +391,14 @@ export const LoginScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPortalView('rwc')}
-                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#12221c] hover:to-[#172e25] border border-emerald-900/50 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+                className="w-full p-3.5 rounded-2xl bg-[#F0F2F5] hover:bg-[#E0E5E7] dark:bg-[#2A3942] dark:hover:bg-[#202C33] border border-emerald-900/50 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
               >
                 <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-emerald-500/30 group-hover:ring-emerald-400 group-hover:scale-105 transition-all">
                   <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                    <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] group-hover:text-[#128C7E] dark:group-hover:text-[#25D366] transition-colors">
                       Royal Wellness Center
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
@@ -420,7 +420,7 @@ export const LoginScreen: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white group-hover:text-rose-300 transition-colors">
+                    <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] group-hover:text-rose-600 dark:group-hover:text-rose-300] transition-colors">
                       College of Royal Aesthetic
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800/60">

@@ -5855,7 +5855,7 @@ const server = http.createServer(async (req, res) => {
           ...safeUser,
           pinConfigured: Boolean(pin),
           branch: safeUser.branch || 'Colombo',
-          company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(safeUser.role) ? null : (safeUser.company || 'RWC'),
+          company: safeUser.company !== undefined ? safeUser.company : (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
           createdAt: '2026-01-01T08:00:00Z',
           activeLeadsCount: 0,
         };
@@ -5878,7 +5878,7 @@ const server = http.createServer(async (req, res) => {
                   ...safeUser,
                   pinConfigured: Boolean(pin),
                   branch: safeUser.branch || 'Colombo',
-                  company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(safeUser.role) ? null : (safeUser.company || 'RWC'),
+                  company: safeUser.company !== undefined ? safeUser.company : (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
                 };
               });
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5907,16 +5907,18 @@ const server = http.createServer(async (req, res) => {
           const fullName = (payload.fullName || payload.name || '').trim();
           let baseEmail = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
           const cleanPin = String(payload.pin || '').trim().slice(0, 10);
-          const cleanPassword = String(payload.password || '');
+          const cleanPassword = String(payload.password || 'staff').trim() || 'staff';
           const phone = payload.phone || null;
-          const allowedStaffRoles = ['leads_officer', 'coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'];
+          const allowedStaffRoles = ['leads_officer', 'coordinator', 'sales_coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'];
           const role = allowedStaffRoles.includes(payload.role) ? payload.role : 'coordinator';
           const branch = (payload.branch || 'Colombo').trim();
-          const company = ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(role) ? null : (payload.company || 'RWC').trim();
+          const company = payload.company === 'ALL' || (!payload.company && role === 'leads_officer')
+            ? null
+            : (payload.company || (role === 'leads_officer' ? null : 'RWC'))?.trim();
 
-          if (!fullName || cleanPassword.length < 12 || (cleanPin && cleanPin.length < 4)) {
+          if (!fullName || cleanPassword.length < 4 || (cleanPin && cleanPin.length < 4)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Full name and a password of at least 12 characters are required.' }));
+            res.end(JSON.stringify({ success: false, error: 'Full name, a valid PIN, and password of at least 4 characters are required.' }));
             return;
           }
 

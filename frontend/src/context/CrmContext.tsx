@@ -508,7 +508,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedLeadId, setSelectedLeadId] = useState<string | null>(() => {
     const cachedLeads = getStored<Lead[]>('rw_crm_leads', []);
     const cachedUser = getStored<User | null>('rw_crm_user', null);
-    if (cachedUser && cachedUser.role === 'coordinator') {
+    if (cachedUser && (cachedUser.role === 'coordinator' || cachedUser.role === 'clinical_nurse')) {
       const myLeads = cachedLeads.filter(l => l.assignedTo === cachedUser.id);
       return myLeads.length > 0 ? myLeads[0].id : null;
     }
@@ -1188,9 +1188,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return false;
   };
 
-  // Strict isolation: if a coordinator has an unassigned lead or someone else's lead selected, reset it
+  // Strict isolation: if a coordinator or clinical nurse has an unassigned lead or someone else's lead selected, reset it
   useEffect(() => {
-    if (isCoordinator && selectedLeadId) {
+    const isRestrictedRole = isCoordinator || currentUser?.role === 'clinical_nurse';
+    if (isRestrictedRole && selectedLeadId) {
       const target = leads.find(l => l.id === selectedLeadId);
       if (!target || target.assignedTo !== currentUser.id) {
         const myLeads = leads.filter(l => l.assignedTo === currentUser.id);
@@ -4672,11 +4673,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (!selectedLeadId) return undefined;
     const target = hydratedLeads.find(l => l.id === selectedLeadId);
     if (!target) return undefined;
-    if (!isSuperAdmin && !isLeadsOfficer && target.assignedTo !== currentUser.id) {
+    if (!isLeadAccessibleForUser(target, currentUser)) {
       return undefined;
     }
     return target;
-  }, [hydratedLeads, selectedLeadId, isSuperAdmin, isLeadsOfficer, currentUser.id]);
+  }, [hydratedLeads, selectedLeadId, currentUser]);
 
   const value: CrmContextType = {
     isAuthenticated,

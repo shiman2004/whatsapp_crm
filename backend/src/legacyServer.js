@@ -4123,8 +4123,8 @@ const server = http.createServer(async (req, res) => {
           whereClause.leadId = String(queryLeadId);
         }
 
-        // Coordinators can only query messages from their assigned leads
-        if (authUser.role === 'coordinator') {
+        // Coordinators and Clinical Nurses can only query messages from their assigned leads
+        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
           whereClause.lead = {
             assignedTo: authUser.id
           };
@@ -4218,8 +4218,8 @@ const server = http.createServer(async (req, res) => {
         const whereClause = {};
         const isSuperAdmin = authUser?.role === 'super_admin';
         
-        // Coordinators can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
-        if (authUser.role === 'coordinator') {
+        // Coordinators and Clinical Nurses can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
+        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
           whereClause.assignedTo = authUser.id;
         }
 
@@ -4308,12 +4308,17 @@ const server = http.createServer(async (req, res) => {
         let finalLeads = enrichedLeads;
 
         if (!isSuperOrOfficer) {
-          const userCompany = (authUser?.company || 'RWC').toUpperCase();
-          finalLeads = finalLeads.filter(l => {
-            // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
-            if (l.assignedTo && l.assignedTo === authUser.id) return true;
-            return (l.company || 'RWC').toUpperCase() === userCompany;
-          });
+          const isStrictAssignedOnly = authUser?.role === 'coordinator' || authUser?.role === 'clinical_nurse';
+          if (isStrictAssignedOnly) {
+            finalLeads = finalLeads.filter(l => l.assignedTo && l.assignedTo === authUser.id);
+          } else {
+            const userCompany = (authUser?.company || 'RWC').toUpperCase();
+            finalLeads = finalLeads.filter(l => {
+              // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
+              if (l.assignedTo && l.assignedTo === authUser.id) return true;
+              return (l.company || 'RWC').toUpperCase() === userCompany;
+            });
+          }
         } else {
           const queryCompany = parsedUrl.query.company;
           if (queryCompany && ['RWC', 'CRAS', 'AHC'].includes(String(queryCompany).toUpperCase())) {

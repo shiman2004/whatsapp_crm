@@ -46,6 +46,19 @@ export const CreateUserTab: React.FC<{
   const set = (key: string, value: any) =>
     setForm((current) => ({ ...current, [key]: value }));
 
+  const isSuperAdmin = form.role === 'super_admin';
+
+  const applySuperAdminPreset = () => {
+    setForm(current => ({
+      ...current,
+      role: 'super_admin',
+      company: 'ALL',
+      branch: 'All Branches (Global)',
+      marketingAccess: true,
+      active: true,
+    }));
+  };
+
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -83,7 +96,7 @@ export const CreateUserTab: React.FC<{
 
   if (created) {
     return (
-      <SectionCard title="Account created" description="The new account is active and visible in the directory.">
+      <SectionCard title="Account created successfully" description="The new staff account is active and visible in the directory.">
         <div className="flex flex-col gap-3">
           <div className="rounded-xl border border-teal-500/30 bg-teal-500/5 p-4 space-y-3">
             <div className="flex items-start justify-between">
@@ -153,8 +166,10 @@ export const CreateUserTab: React.FC<{
               Share these credentials with the user through your secure channel. Super Admin can also view or reset credentials anytime in the User Directory.
             </p>
           </div>
-          <div>
-            <PrimaryButton onClick={() => setCreated(null)}><UserPlus className="h-3.5 w-3.5" /> Create another user</PrimaryButton>
+          <div className="pt-2">
+            <PrimaryButton onClick={() => setCreated(null)}>
+              <UserPlus className="h-3.5 w-3.5" /> Create another staff account
+            </PrimaryButton>
           </div>
         </div>
       </SectionCard>
@@ -299,7 +314,254 @@ export const CreateUserTab: React.FC<{
             <UserPlus className="h-3.5 w-3.5" /> {busy ? 'Creating…' : 'Create user'}
           </PrimaryButton>
         </div>
-      </form>
-    </SectionCard>
+        <button
+          type="button"
+          onClick={applySuperAdminPreset}
+          className="px-3 py-1.5 rounded-lg border border-purple-500/40 bg-purple-600 text-white hover:bg-purple-700 text-xs font-semibold shadow-xs transition-all active:scale-95 cursor-pointer shrink-0"
+        >
+          👑 Apply Super Admin Preset
+        </button>
+      </div>
+
+      <SectionCard
+        title="Create staff account"
+        description="Provision an immediately usable account with server-enforced role, company, and branch scopes."
+      >
+        <form className="grid grid-cols-1 gap-4 sm:grid-cols-2" onSubmit={submit}>
+          {error && <div className="sm:col-span-2"><ErrorNote message={error} /></div>}
+
+          {/* Full Name */}
+          <Field label="Full name" required>
+            <input
+              className={inputClass}
+              value={form.fullName}
+              onChange={(e) => set('fullName', e.target.value)}
+              placeholder="e.g. Dr. John Doe, Sarah Coordinator"
+              required
+              maxLength={255}
+              autoComplete="off"
+            />
+          </Field>
+
+          {/* Email */}
+          <Field label="Corporate email" required hint="Must be unique; used to sign in to the CRM.">
+            <input
+              type="email"
+              className={inputClass}
+              value={form.email}
+              onChange={(e) => set('email', e.target.value)}
+              placeholder="staff@royalwellness.lk"
+              required
+              autoComplete="off"
+            />
+          </Field>
+
+          {/* Phone */}
+          <Field label="Phone number">
+            <input
+              className={inputClass}
+              value={form.phone}
+              onChange={(e) => set('phone', e.target.value)}
+              placeholder="+94 7X XXX XXXX"
+              maxLength={50}
+              autoComplete="off"
+            />
+          </Field>
+
+          {/* Employee ID */}
+          <Field label="Employee ID" hint="Optional unique staff identifier.">
+            <input
+              className={inputClass}
+              value={form.employeeId}
+              onChange={(e) => set('employeeId', e.target.value)}
+              placeholder="EMP-1001"
+              maxLength={50}
+            />
+          </Field>
+
+          {/* Role */}
+          <Field label="System role" required>
+            <select
+              className={inputClass}
+              value={form.role}
+              onChange={(e) => {
+                const role = e.target.value;
+                const nextHome = ROLE_HOME[role] || ROLE_HOME.coordinator;
+                setForm((current) => ({
+                  ...current,
+                  role,
+                  company: nextHome.defaultCompany || current.company,
+                  branch: nextHome.branch,
+                  departmentId: '',
+                  marketingAccess: role.startsWith('marketing') || role === 'super_admin' ? true : current.marketingAccess,
+                }));
+              }}
+            >
+              {ROLE_OPTIONS.map((role) => (
+                <option key={role} value={role}>
+                  {role === 'super_admin' ? '👑 Super Admin (Executive All Scope)' : role.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-[10px] text-slate-400 dark:text-slate-500">
+              Suggested department: {home.departmentHint}
+            </span>
+          </Field>
+
+          {/* Company Scope (supports ALL) */}
+          <Field
+            label="Company scope"
+            hint={isSuperAdmin ? 'Executive access to all three corporate entities.' : 'Required company assignment.'}
+          >
+            <select
+              className={inputClass}
+              value={form.company}
+              onChange={(e) => set('company', e.target.value)}
+            >
+              <option value="ALL">✨ ALL (All Companies — Alpha Health Group)</option>
+              <option value="RWC">🌿 RWC (Royal Wellness Center)</option>
+              <option value="CRAS">🎓 CRAS (College of Royal Aesthetic Studies)</option>
+              <option value="AHC">✦ AHC (Alpha Health Consultancy)</option>
+            </select>
+          </Field>
+
+          {/* Branch Scope */}
+          <Field label="Branch assignment" required>
+            <div className="space-y-1.5">
+              <input
+                className={inputClass}
+                value={form.branch}
+                onChange={(e) => set('branch', e.target.value)}
+                placeholder="e.g. All Branches (Global), Colombo (Head Office)"
+                maxLength={100}
+                required
+              />
+              <div className="flex flex-wrap gap-1 text-[10px]">
+                <button
+                  type="button"
+                  onClick={() => set('branch', 'All Branches (Global)')}
+                  className="px-2 py-0.5 rounded border border-slate-200 dark:border-[#222D34] hover:bg-slate-100 dark:hover:bg-[#2A3942] text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  🌐 All Branches (Global)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => set('branch', 'Colombo (Head Office)')}
+                  className="px-2 py-0.5 rounded border border-slate-200 dark:border-[#222D34] hover:bg-slate-100 dark:hover:bg-[#2A3942] text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  Colombo (Head Office)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => set('branch', 'Kandy Branch')}
+                  className="px-2 py-0.5 rounded border border-slate-200 dark:border-[#222D34] hover:bg-slate-100 dark:hover:bg-[#2A3942] text-slate-600 dark:text-slate-300 cursor-pointer"
+                >
+                  Kandy Branch
+                </button>
+              </div>
+            </div>
+          </Field>
+
+          {/* Department */}
+          <Field label="Department">
+            <select
+              className={inputClass}
+              value={form.departmentId}
+              onChange={(e) => set('departmentId', e.target.value)}
+            >
+              <option value="">Unassigned</option>
+              {departments.filter((department) => department.active).map((department) => (
+                <option key={department.id} value={department.id}>
+                  {department.name}{department.company ? ` · ${department.company}` : ''}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Reporting Manager */}
+          <Field label="Reporting manager">
+            <select
+              className={inputClass}
+              value={form.managerId}
+              onChange={(e) => set('managerId', e.target.value)}
+            >
+              <option value="">None (Independent / Executive)</option>
+              {managers.map((manager) => (
+                <option key={manager.id} value={manager.id}>
+                  {manager.fullName} · {manager.role.replace(/_/g, ' ')}
+                </option>
+              ))}
+            </select>
+          </Field>
+
+          {/* Initial Password */}
+          <Field label="Initial password" required hint="Minimum 12 characters. Stored as salted scrypt hash.">
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                className={inputClass}
+                value={form.password}
+                onChange={(e) => set('password', e.target.value)}
+                placeholder="Enter secure initial password"
+                minLength={12}
+                required
+                autoComplete="new-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(p => !p)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+                aria-label="Toggle password visibility"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </Field>
+
+          {/* PIN */}
+          <Field label="Quick sign-in PIN" hint="Optional 4–10 digits for fast login keypad.">
+            <input
+              type="password"
+              className={inputClass}
+              value={form.pin}
+              onChange={(e) => set('pin', e.target.value)}
+              placeholder="e.g. 1234"
+              minLength={4}
+              maxLength={10}
+              autoComplete="new-password"
+            />
+          </Field>
+
+          {/* Checkbox Options */}
+          <div className="sm:col-span-2 pt-2 flex flex-wrap gap-6 border-t border-slate-100 dark:border-[#222D34]">
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                checked={form.marketingAccess}
+                onChange={(e) => set('marketingAccess', e.target.checked)}
+              />
+              <span>Public contact marketing access</span>
+            </label>
+
+            <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300 cursor-pointer">
+              <input
+                type="checkbox"
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+                checked={form.active}
+                onChange={(e) => set('active', e.target.checked)}
+              />
+              <span>Activate account immediately</span>
+            </label>
+          </div>
+
+          <div className="sm:col-span-2 pt-2">
+            <PrimaryButton type="submit" disabled={busy} className="w-full sm:w-auto h-10 px-6 text-sm">
+              <UserPlus className="h-4 w-4" /> {busy ? 'Creating Account…' : 'Create Staff Account'}
+            </PrimaryButton>
+          </div>
+        </form>
+      </SectionCard>
+    </div>
   );
 };

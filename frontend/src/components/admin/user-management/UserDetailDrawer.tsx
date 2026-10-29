@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Activity, KeyRound, LogOut, RefreshCw, ShieldCheck, ShieldOff, UserCheck, UserX, Eye, EyeOff, Copy, Check, Sparkles } from 'lucide-react';
 import { ConfirmDialog, FormDrawer, InlineFeedback } from '../../ui';
 import { userManagementApi, ROLE_OPTIONS, COMPANY_OPTIONS, type UserDetail, type UserInput } from './api';
-import { ErrorNote, Field, GhostButton, PrimaryButton, RoleBadge, UserStatusBadge, formatWhen, inputClass, timeAgo } from './bits';
+import { ErrorNote, Field, GhostButton, PrimaryButton, RoleBadge, CompanyBadge, BranchBadge, UserStatusBadge, formatWhen, inputClass, timeAgo } from './bits';
 import type { Department } from './api';
 
 const generateRandomPin = () => Math.floor(1000 + Math.random() * 9000).toString();
@@ -170,7 +170,8 @@ export const UserDetailDrawer: React.FC<{
             <UserStatusBadge status={user.status} />
             <RoleBadge role={user.role} label={user.roleLabel} />
             {user.marketingAccess && <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-600 dark:text-amber-300">Marketing access</span>}
-            <span className="text-[11px] text-slate-500 dark:text-slate-400">{user.company || '—'} · {user.branch || 'No branch'}</span>
+            <CompanyBadge company={user.company} />
+            <BranchBadge branch={user.branch} />
           </div>
 
           <dl className="grid grid-cols-2 gap-3 text-xs">
@@ -218,7 +219,10 @@ export const UserDetailDrawer: React.FC<{
                 </Field>
                 <Field label="Company">
                   <select className={inputClass} value={form.company} onChange={(e) => setForm({ ...form, company: e.target.value })}>
-                    {COMPANY_OPTIONS.map((company) => <option key={company} value={company}>{company}</option>)}
+                    <option value="ALL">✨ ALL (All Companies — Alpha Health Group)</option>
+                    <option value="RWC">🌿 RWC (Royal Wellness Center)</option>
+                    <option value="CRAS">🎓 CRAS (College of Royal Aesthetic Studies)</option>
+                    <option value="AHC">✦ AHC (Alpha Health Consultancy)</option>
                   </select>
                 </Field>
                 <Field label="Branch">

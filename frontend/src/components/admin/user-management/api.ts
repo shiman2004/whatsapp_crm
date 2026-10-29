@@ -321,7 +321,7 @@ export const ROLE_OPTIONS = [
   'marketing_officer', 'marketing_admin', 'clinical_nurse', 'clinical_doctor', 'report_analyst',
 ] as const;
 
-export const COMPANY_OPTIONS = ['RWC', 'CRAS', 'AHC'] as const;
+export const COMPANY_OPTIONS = ['ALL', 'RWC', 'CRAS', 'AHC'] as const;
 
 export const STATUS_TONE: Record<string, 'teal' | 'rose' | 'amber' | 'indigo' | 'slate'> = {
   active: 'teal',

@@ -4,6 +4,7 @@ import { CourseManagementTab } from './CourseManagementTab';
 import { TreatmentManagementTab } from './TreatmentManagementTab';
 import { StageManagementTab } from './StageManagementTab';
 import { AdminAccountsTab } from './AdminAccountsTab';
+import { ExamSettingsView } from '../../exam/ExamSettingsView';
 import {
   Sliders,
   GraduationCap,
@@ -15,11 +16,22 @@ import {
   Lock
 } from 'lucide-react';
 
-type SettingsTab = 'courses' | 'treatments' | 'stages' | 'admins';
+type SettingsTab = 'courses' | 'treatments' | 'stages' | 'admins' | 'exam-settings';
 
 export const SuperAdminSettingsView: React.FC = () => {
   const { currentUser, isSuperAdmin } = useCrm();
   const [activeTab, setActiveTab] = useState<SettingsTab>('courses');
+
+  React.useEffect(() => {
+    const handleSettingsTab = (event: Event) => {
+      const sub = (event as CustomEvent<SettingsTab>).detail;
+      if (sub && ['courses', 'treatments', 'stages', 'admins', 'exam-settings'].includes(sub)) {
+        setActiveTab(sub);
+      }
+    };
+    window.addEventListener('settings-subtab-change', handleSettingsTab);
+    return () => window.removeEventListener('settings-subtab-change', handleSettingsTab);
+  }, []);
 
   // Strict RBAC Access Protection
   if (!isSuperAdmin || currentUser?.role !== 'super_admin') {
@@ -87,6 +99,16 @@ export const SuperAdminSettingsView: React.FC = () => {
       tag: 'SECURITY',
       tagColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
     },
+    {
+      id: 'exam-settings' as SettingsTab,
+      label: 'Exam Department',
+      subtitle: 'Pass Thresholds & Governance',
+      icon: GraduationCap,
+      color: 'text-teal-400',
+      activeBg: 'bg-teal-500/15 border-teal-500/30 text-teal-300',
+      tag: 'EXAM',
+      tagColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
+    },
   ];
 
   return (
@@ -116,7 +138,7 @@ export const SuperAdminSettingsView: React.FC = () => {
       </div>
 
       {/* Modern Segmented Navigation Tabs */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2.5 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800/80">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -162,6 +184,7 @@ export const SuperAdminSettingsView: React.FC = () => {
         {activeTab === 'treatments' && <TreatmentManagementTab />}
         {activeTab === 'stages' && <StageManagementTab />}
         {activeTab === 'admins' && <AdminAccountsTab />}
+        {activeTab === 'exam-settings' && <div className="mt-2"><ExamSettingsView /></div>}
       </div>
     </div>
   );

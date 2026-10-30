@@ -33,6 +33,9 @@ import {
   Sparkles,
   GraduationCap,
   Clock,
+  Layers,
+  TrendingUp,
+  Award,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -96,6 +99,7 @@ export const EXAM_STAFF_ROLES: UserRole[] = [
   'exam_department_manager',
   'exam_coordinator',
   'exam_providing_officer',
+  'finance_officer',
 ];
 
 export const CLINICAL_ROLES: UserRole[] = [
@@ -124,7 +128,13 @@ const examChildren: NavChild[] = [
   { id: 'my-drafts', label: 'My Drafts', icon: Edit3, path: '/exam-department/my-drafts', intentEvent: 'exam-subtab-change', intentValue: 'my-drafts' },
   { id: 'approval-queue', label: 'Approval Queue', icon: CheckSquare, path: '/exam-department/approval-queue', intentEvent: 'exam-subtab-change', intentValue: 'approval-queue' },
   { id: 'mcq-practice', label: 'MCQ Practice', icon: Target, path: '/exam-department/mcq-practice', intentEvent: 'exam-subtab-change', intentValue: 'mcq-practice' },
+  { id: 'categories', label: 'Categories', icon: Layers, path: '/exam-department/categories', intentEvent: 'exam-subtab-change', intentValue: 'categories' },
+  { id: 'settings', label: 'Exam Settings', icon: Sliders, path: '/exam-department/settings', intentEvent: 'exam-subtab-change', intentValue: 'settings' },
   { id: 'requests', label: 'Material Requests', icon: Inbox, path: '/exam-department/requests', intentEvent: 'exam-subtab-change', intentValue: 'requests' },
+  { id: 'guidelines', label: 'Exam Guidelines', icon: ShieldCheck, path: '/exam-department/guidelines', intentEvent: 'exam-subtab-change', intentValue: 'guidelines' },
+  { id: 'progress', label: 'Student Progress', icon: TrendingUp, path: '/exam-department/progress', intentEvent: 'exam-subtab-change', intentValue: 'progress' },
+  { id: 'results', label: 'Exam Results', icon: Award, path: '/exam-department/results', intentEvent: 'exam-subtab-change', intentValue: 'results' },
+  { id: 'reports', label: 'Reports', icon: BarChart3, path: '/exam-department/reports', intentEvent: 'exam-subtab-change', intentValue: 'reports' },
 ];
 
 const settingsChildren: NavChild[] = [

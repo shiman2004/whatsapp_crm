@@ -72,11 +72,27 @@ export async function handleExamOperations(req, res, pathname, user) {
       const id=pathname.split('/')[4];
       const result=await new StudentAccess(service.store,JWT_SECRET).invite(user,id,process.env.STUDENT_PORTAL_ORIGIN||process.env.FRONTEND_URL||'http://localhost:5173');
       examJson(res,200,{success:true,data:result});
+    } else if (/^\/api\/exam-ops\/students\/([a-zA-Z0-9_-]{1,100})\/status$/.test(pathname) && (req.method === 'PATCH' || req.method === 'POST')) {
+      requireValue(canManageExam(user), 'FORBIDDEN', 'Administrator access required.', 403);
+      const id = pathname.split('/')[4];
+      const body = await readExamJson(req);
+      requireValue(body.status, 'STATUS_REQUIRED', 'Status is required.');
+      const access = new StudentAccess(service.store, JWT_SECRET);
+      const result = await access.setStatus(user, id, body.status, body.reason);
+      examJson(res, 200, { success: true, data: result });
+    } else if (pathname === '/api/exam-ops/notifications' && req.method === 'GET') {
+      examJson(res, 200, { success: true, data: await service.listNotifications(user) });
     } else if (pathname === '/api/exam-ops/handoffs' && req.method === 'GET') {
       examJson(res, 200, { success: true, data: await service.listHandoffs(user) });
     } else if (pathname === '/api/exam-ops/handoffs' && req.method === 'POST') {
       examJson(res, 201, { success: true, data: await service.submitHandoff(user, await readExamJson(req)) });
-    } else if (/^\/api\/exam-ops\/handoffs\/[a-f0-9-]+\/[a-z-]+$/.test(pathname) && req.method === 'POST') {
+    } else if (/^\/api\/exam-ops\/handoffs\/[a-zA-Z0-9_-]+$/.test(pathname) && req.method === 'GET') {
+      const id = pathname.split('/')[4];
+      examJson(res, 200, { success: true, data: await service.getHandoff(user, id) });
+    } else if (/^\/api\/exam-ops\/handoffs\/[a-zA-Z0-9_-]+\/notes$/.test(pathname) && req.method === 'POST') {
+      const id = pathname.split('/')[4];
+      examJson(res, 200, { success: true, data: await service.updateHandoff(user, id, 'add-note', await readExamJson(req)) });
+    } else if (/^\/api\/exam-ops\/handoffs\/[a-zA-Z0-9_-]+\/[a-z-]+$/.test(pathname) && req.method === 'POST') {
       const [, , , , id, action] = pathname.split('/');
       examJson(res, 200, { success: true, data: await service.updateHandoff(user, id, action, await readExamJson(req)) });
     } else if (pathname === '/api/exam-ops/requirements' && req.method === 'GET') {
@@ -84,8 +100,9 @@ export async function handleExamOperations(req, res, pathname, user) {
     } else if (pathname === '/api/exam-ops/requirements' && req.method === 'POST') {
       const record = await service.submit(user, await readExamJson(req));
       examJson(res, record.duplicate ? 200 : 201, { success: true, data: record });
-    } else if (/^\/api\/exam-ops\/requirements\/[a-f0-9]{64}\/[a-z-]+$/.test(pathname) && req.method === 'POST') {
-      const [, , , , id, action] = pathname.split('/');
+    } else if (/^\/api\/exam-ops\/requirements\/([a-zA-Z0-9_-]{1,120})\/([a-z-]+)$/.test(pathname) && req.method === 'POST') {
+      const match = pathname.match(/^\/api\/exam-ops\/requirements\/([a-zA-Z0-9_-]{1,120})\/([a-z-]+)$/);
+      const [, id, action] = match;
       examJson(res, 200, { success: true, data: await service.update(user, id, action, await readExamJson(req)) });
     } else if (pathname === '/api/exam-ops/health' && req.method === 'GET') {
       examJson(res, 200, { success: true, data: await service.health(user) });

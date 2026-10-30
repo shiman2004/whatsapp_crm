@@ -172,7 +172,19 @@ const RootApp: React.FC = () => {
 };
 
 export default function App() {
-  if (window.location.pathname === '/student') {
+  const [hash, setHash] = React.useState(() => window.location.hash);
+  React.useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
+  }, []);
+
+  const isStudent =
+    window.location.pathname.startsWith('/student') ||
+    hash.startsWith('#/student') ||
+    hash === '#student';
+
+  if (isStudent) {
     return (
       <Suspense fallback={<InlineLoader label="Loading student portal…" />}>
         <StudentPortal />

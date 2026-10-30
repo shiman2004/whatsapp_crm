@@ -319,6 +319,7 @@ export const ROLE_OPTIONS = [
   'super_admin', 'leads_officer', 'coordinator', 'sales_coordinator',
   'exam_department_manager', 'exam_coordinator', 'exam_providing_officer',
   'marketing_officer', 'marketing_admin', 'clinical_nurse', 'clinical_doctor', 'report_analyst',
+  'finance_officer',
 ] as const;
 
 export const COMPANY_OPTIONS = ['ALL', 'RWC', 'CRAS', 'AHC'] as const;

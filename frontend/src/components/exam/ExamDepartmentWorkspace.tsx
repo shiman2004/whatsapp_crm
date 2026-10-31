@@ -4,6 +4,20 @@ import React, { useState, useEffect, useCallback } from 'react';
 import {
   GraduationCap,
   Plus,
+  Inbox,
+  LayoutDashboard,
+  BookOpen,
+  Target,
+  FileCheck2,
+  Database,
+  FileText,
+  ShieldCheck,
+  Edit3,
+  CheckSquare,
+  TrendingUp,
+  BarChart3,
+  Award,
+  Sliders,
 } from 'lucide-react';
 import {
   examService,
@@ -37,6 +51,31 @@ import { RequestDetailModal } from './RequestDetailModal';
 import { ExamCategoriesModal } from './ExamCategoriesModal';
 import { MyDraftsView } from './MyDraftsView';
 import { ApprovalQueueView } from './ApprovalQueueView';
+
+interface ExamNavTab {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  adminOnly?: boolean;
+}
+
+const EXAM_WORKSPACE_TABS: ExamNavTab[] = [
+  { id: 'operations', label: '1. Operations', icon: Inbox },
+  { id: 'dashboard', label: '2. Dashboard', icon: LayoutDashboard },
+  { id: 'courses', label: '3. Course Catalog', icon: BookOpen },
+  { id: 'mcq-practice', label: '4. MCQ Practice', icon: Target },
+  { id: 'mock-tests', label: '5. Mock Tests', icon: FileCheck2 },
+  { id: 'question-bank', label: '6. Question Bank', icon: Database },
+  { id: 'study-materials', label: '7. Study Materials', icon: FileText },
+  { id: 'guidelines', label: '8. Guidelines', icon: ShieldCheck },
+  { id: 'my-drafts', label: '9. My Drafts', icon: Edit3 },
+  { id: 'approval-queue', label: '10. Approval Queue', icon: CheckSquare, adminOnly: true },
+  { id: 'progress', label: '11. Student Progress', icon: TrendingUp },
+  { id: 'reports', label: '12. Reports', icon: BarChart3 },
+  { id: 'results', label: 'Results', icon: Award },
+  { id: 'requests', label: 'Requests', icon: Inbox },
+  { id: 'settings', label: 'Settings', icon: Sliders },
+];
 
 interface ExamDepartmentWorkspaceProps {
   initialSubTab?: string;
@@ -78,6 +117,8 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     onSubTabChange?.(tab);
+    window.location.hash = `/exam-department/${tab}`;
+    if (tab === 'categories') setIsCategoriesModalOpen(true);
   };
 
   // Live Data Stores
@@ -217,6 +258,29 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
           </button>
         </div>
       </div>
+
+      {/* 12-Module Sub-Navigation Pill Bar */}
+      <nav aria-label="Exam department sub-modules" className="flex items-center gap-1.5 overflow-x-auto pb-2 scrollbar-thin border-b border-[#E0E5E7] dark:border-[#222D34]">
+        {EXAM_WORKSPACE_TABS.filter(tab => !tab.adminOnly || isAcademicAdmin).map((tab) => {
+          const Icon = tab.icon;
+          const isActive = activeTab === tab.id || (tab.id === 'mcq-practice' && activeTab === 'mcq') || (tab.id === 'study-materials' && activeTab === 'materials');
+          return (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabChange(tab.id)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-[#128C7E]/10 text-[#128C7E] dark:bg-[#25D366]/15 dark:text-[#25D366] ring-1 ring-[#128C7E]/30 dark:ring-[#25D366]/40 shadow-xs'
+                  : 'text-[#667781] dark:text-[#8696A0] hover:text-[#111B21] dark:hover:text-[#E9EDEF] hover:bg-[#F0F2F5] dark:hover:bg-[#202C33]'
+              }`}
+            >
+              <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-[#128C7E] dark:text-[#25D366]' : 'text-[#667781] dark:text-[#8696A0]'}`} />
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
+      </nav>
 
       {/* ----------------------------------------------------------------- */}
       {/* 12-SECTION ROUTER                                                 */}

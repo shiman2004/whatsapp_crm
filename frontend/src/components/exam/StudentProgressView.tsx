@@ -54,11 +54,11 @@ export const StudentProgressView: React.FC<StudentProgressViewProps> = ({
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight flex items-center gap-2">
             <TrendingUp className="w-5 h-5 text-teal-400" />
             <span>Candidate Learning Progress & Mastery</span>
           </h2>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
             Real-time tracking of clinical attempts, first-try accuracy, and weak subject recommendations.
           </p>
         </div>
@@ -130,7 +130,7 @@ export const StudentProgressView: React.FC<StudentProgressViewProps> = ({
                   <BarChart2 className="w-5 h-5 text-teal-400" />
                   <span>Clinical Subject Mastery & Weak Area Breakdown</span>
                 </h3>
-                <p className="text-xs text-slate-400 mt-0.5">
+                <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">
                   Automated performance categorization based on exam preparedness standards.
                 </p>
               </div>

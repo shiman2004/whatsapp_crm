@@ -735,11 +735,11 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
         <div className="space-y-6">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+              <h2 className="text-lg sm:text-xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight flex items-center gap-2">
                 <FileCheck2 className="w-5 h-5 text-teal-400" />
                 <span>Simulation Mock Examinations</span>
               </h2>
-              <p className="text-xs text-slate-400 font-medium mt-0.5">
+              <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
                 Real exam conditions with timed countdown, single attempt, and official passing benchmarks.
               </p>
             </div>

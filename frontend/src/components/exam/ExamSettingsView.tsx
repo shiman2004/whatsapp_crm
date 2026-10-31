@@ -31,11 +31,11 @@ export const ExamSettingsView: React.FC = () => {
     <div className="space-y-6 max-w-4xl">
       {/* Header */}
       <div>
-        <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+        <h2 className="text-lg sm:text-xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight flex items-center gap-2">
           <Settings className="w-5 h-5 text-teal-400" />
           <span>Exam Department System Settings & Governance</span>
         </h2>
-        <p className="text-xs text-slate-400 font-medium mt-0.5">
+        <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
           Configure passing thresholds, question bank conventions, and role-based operational permissions.
         </p>
       </div>

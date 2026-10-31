@@ -69,6 +69,7 @@ export interface NavChild {
   path: string;
   intentEvent?: string;
   intentValue?: string;
+  adminOnly?: boolean;
 }
 
 export interface NavItem {
@@ -128,7 +129,7 @@ const examChildren: NavChild[] = [
   { id: 'study-materials', label: '7. Study Materials', icon: FileText, path: '/exam-department/study-materials', intentEvent: 'exam-subtab-change', intentValue: 'study-materials' },
   { id: 'guidelines', label: '8. Exam Guidelines', icon: ShieldCheck, path: '/exam-department/guidelines', intentEvent: 'exam-subtab-change', intentValue: 'guidelines' },
   { id: 'my-drafts', label: '9. My Drafts & Submissions', icon: Edit3, path: '/exam-department/my-drafts', intentEvent: 'exam-subtab-change', intentValue: 'my-drafts' },
-  { id: 'approval-queue', label: '10. Manager Approval Queue', icon: CheckSquare, path: '/exam-department/approval-queue', intentEvent: 'exam-subtab-change', intentValue: 'approval-queue' },
+  { id: 'approval-queue', label: '10. Manager Approval Queue', icon: CheckSquare, path: '/exam-department/approval-queue', intentEvent: 'exam-subtab-change', intentValue: 'approval-queue', adminOnly: true },
   { id: 'progress', label: '11. Student Progress', icon: TrendingUp, path: '/exam-department/progress', intentEvent: 'exam-subtab-change', intentValue: 'progress' },
   { id: 'reports', label: '12. Exam Reports & Analytics', icon: BarChart3, path: '/exam-department/reports', intentEvent: 'exam-subtab-change', intentValue: 'reports' },
   { id: 'results', label: 'Exam Results', icon: Award, path: '/exam-department/results', intentEvent: 'exam-subtab-change', intentValue: 'results' },

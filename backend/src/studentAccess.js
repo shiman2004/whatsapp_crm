@@ -337,7 +337,13 @@ export class StudentAccess {
           status: student.status,
           registeredDevices: student.registeredDevices || []
         },
-        accesses,
+        accesses: accesses.map(a => ({
+          ...a,
+          packageTitle: a.packageTitle || a.packageId || a.examination || 'Complete Preparation Package',
+          packageVersion: a.packageVersion || 'Complete Prep 2026',
+          courseId: a.courseId || (a.packageId === 'DHA Registered Nurse' || a.examination === 'DHA Registered Nurse' ? 'course-dha-rn-2026' : (a.courseId || 'course-dha-rn-2026')),
+          services: Array.isArray(a.services) && a.services.length ? a.services : (Array.isArray(a.allowedServices) && a.allowedServices.length ? a.allowedServices : ['practice-questions', 'practice-mcqs', 'mock-tests', 'subject-tests', 'study-materials'])
+        })),
         assets
       };
     });

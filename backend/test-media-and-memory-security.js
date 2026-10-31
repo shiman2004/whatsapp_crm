@@ -110,12 +110,12 @@ check('3.2 Auth token verification uses the same helper and rejects bad signatur
 
 console.log('\n📦 SECTION 4: SSE tickets');
 
-check('4.1 A ticket can be consumed exactly once', () => {
+check('4.1 A ticket supports reconnects until it expires', () => {
   const ticket = issueSseTicket({ id: 'user-admin-1', role: 'super_admin', fullName: 'A', branch: 'B', company: 'RWC' });
   const user = consumeSseTicket(ticket);
   assert.strictEqual(user?.id, 'user-admin-1');
   assert.strictEqual(user?.role, 'super_admin');
-  assert.strictEqual(consumeSseTicket(ticket), null, 'tickets must be single-use');
+  assert.strictEqual(consumeSseTicket(ticket)?.id, 'user-admin-1', 'tickets must remain valid for EventSource reconnects during their TTL');
 });
 
 check('4.2 Tickets store only the fields needed to open the stream', () => {
@@ -129,14 +129,14 @@ check('4.2 Tickets store only the fields needed to open the stream', () => {
 check('4.3 Expired and unknown tickets are rejected', () => {
   assert.strictEqual(consumeSseTicket('does-not-exist'), null);
   const stale = issueSseTicket({ id: 'u2', role: 'coordinator' });
-  sseTickets.set(stale, { user: { id: 'u2', role: 'coordinator' }, issuedAt: Date.now() - (61 * 1000) });
+  sseTickets.set(stale, { user: { id: 'u2', role: 'coordinator' }, issuedAt: Date.now() - (16 * 60 * 1000) });
   assert.strictEqual(consumeSseTicket(stale), null, 'expired tickets must not open a stream');
 });
 
 check('4.4 sweepExpiredSseTickets removes only stale entries', () => {
   sseTickets.clear();
   const fresh = issueSseTicket({ id: 'fresh', role: 'coordinator' });
-  sseTickets.set('stale', { user: { id: 'stale', role: 'coordinator' }, issuedAt: Date.now() - (5 * 60 * 1000) });
+  sseTickets.set('stale', { user: { id: 'stale', role: 'coordinator' }, issuedAt: Date.now() - (16 * 60 * 1000) });
   sweepExpiredSseTickets();
   assert.strictEqual(sseTickets.has('stale'), false);
   assert.strictEqual(sseTickets.has(fresh), true);

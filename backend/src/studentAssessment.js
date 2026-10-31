@@ -24,7 +24,7 @@ export async function handleStudentAssessmentRoutes(req, res, pathname, browser,
       requireValue(courseId && /^[A-Za-z0-9_-]{1,120}$/.test(courseId) && allowedModes.has(mode), 'ASSESSMENT_NOT_AVAILABLE', 'Select an available assessment.');
       const result = await store.transaction(async tx => {
         const student = await access.authenticate(tx, session, browser, true);
-        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && item.courseId === courseId && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || []).some(s => allowedServices.has(String(s))));
+        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && (item.courseId === courseId || (!item.courseId && courseId === 'course-dha-rn-2026')) && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || item.allowedServices || []).some(s => allowedServices.has(String(s))));
         requireValue(entitlements.length > 0, 'NO_ACCESS', 'This practice course is not included in your active access.', 403);
         const typeFilter = mode === 'mock' ? "('Mock Test','Both')" : "('Practice','Both')";
         const rows = await tx.query("SELECT id,question_code,title,question_text,subject,topic,difficulty,option_a,option_b,option_c,option_d,option_e FROM public.exam_mcq_questions WHERE is_active=TRUE AND COALESCE(status,'Active')='Active' AND (question_type IN " + typeFilter + " OR question_type IS NULL) AND (course_id=$1 OR course_id IS NULL) ORDER BY display_order ASC, created_at ASC LIMIT 100", courseId);
@@ -38,7 +38,7 @@ export async function handleStudentAssessmentRoutes(req, res, pathname, browser,
       requireValue(Array.isArray(body.answers) && body.answers.length <= 100, 'INVALID_ANSWERS', 'Answers are invalid.');
       const result = await store.transaction(async tx => {
         const student = await access.authenticate(tx, session, browser, true);
-        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && item.courseId === body.courseId && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || []).some(s => allowedServices.has(String(s))));
+        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && (item.courseId === body.courseId || (!item.courseId && body.courseId === 'course-dha-rn-2026')) && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || item.allowedServices || []).some(s => allowedServices.has(String(s))));
         requireValue(entitlements.length > 0, 'NO_ACCESS', 'This practice course is not included in your active access.', 403);
         const previous = (await tx.list('assessment-attempt', student.id)).filter(a => a.courseId === body.courseId && a.mode === body.mode);
         const allowance = Math.max(...entitlements.map(e => Number(e.attemptAllowance || 0)));

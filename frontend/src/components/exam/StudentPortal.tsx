@@ -262,16 +262,17 @@ export function StudentPortal() {
     }
   }
 
-  async function loadPractice(courseId: string) {
+  async function loadPractice(courseId: string, mode: 'practice' | 'mock' = 'practice') {
     setError('');
+    setPracticeMode(mode);
     setPracticeCourse(courseId);
     try {
-      const data = await request('/assessments?courseId=' + encodeURIComponent(courseId) + '&mode=practice');
+      const data = await request('/assessments?courseId=' + encodeURIComponent(courseId) + '&mode=' + encodeURIComponent(mode));
       setQuestions(data.questions || []);
-      if (!(data.questions || []).length) setNotice('No reviewed practice questions are published for this course yet.');
+      if (!(data.questions || []).length) setNotice(mode === 'mock' ? 'No timed mock exam questions are published for this course yet.' : 'No reviewed practice questions are published for this course yet.');
     } catch (e) {
       setQuestions([]);
-      setError(e instanceof Error ? e.message : 'Practice questions are unavailable.');
+      setError(e instanceof Error ? e.message : 'Assessment questions are unavailable.');
     }
   }
 
@@ -549,42 +550,51 @@ export function StudentPortal() {
                 <BookOpen className="h-5 w-5 text-[#128C7E] dark:text-[#25D366]" /> My Purchased Courses & Entitlements
               </h2>
               <div className="grid sm:grid-cols-2 gap-4">
-                {portal.accesses.map((a: any) => (
-                  <article key={a.id} className="rounded-2xl border border-[#E0E5E7] bg-white dark:border-[#222D34] dark:bg-[#202C33] p-5 shadow-sm space-y-2">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-bold text-base">{a.packageId} · {a.packageVersion}</h3>
-                      <span className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-semibold">Active</span>
-                    </div>
-                    <p className="text-xs text-[#667781] dark:text-[#8696A0] flex items-center gap-1">
-                      <Clock className="h-3.5 w-3.5" /> Access valid until {new Date(a.endsAt).toLocaleDateString()}
-                    </p>
-                    <p className="text-xs">Mock test allowance: <strong>{a.attemptAllowance || 'Included in bundle'}</strong></p>
-                    {a.courseId && (
-                      <div className="mt-4 flex flex-wrap gap-2 pt-2 border-t border-[#E0E5E7] dark:border-[#222D34]">
-                        <button
-                          className="rounded-xl bg-[#128C7E] dark:bg-[#25D366] dark:text-[#111B21] text-white px-3.5 py-2 text-xs font-semibold hover:opacity-90 transition-opacity"
-                          onClick={() => {
-                            setPracticeMode('practice');
-                            void loadPractice(a.courseId);
-                          }}
-                        >
-                          Interactive MCQ Practice
-                        </button>
-                        {(a.services || []).some((s: unknown) => String(s) === 'mock-tests' || String(s) === 'mock_test') && (
+                {portal.accesses.map((a: any) => {
+                  const displayTitle = a.packageTitle || a.packageId || a.examination || 'Complete Preparation Package';
+                  const displayVersion = a.packageVersion || '';
+                  const targetCourseId = a.courseId || (a.packageId === 'DHA Registered Nurse' || a.examination === 'DHA Registered Nurse' ? 'course-dha-rn-2026' : (a.courseId || 'course-dha-rn-2026'));
+                  const hasMockTest = (a.services || a.allowedServices || []).some((s: unknown) => String(s) === 'mock-tests' || String(s) === 'mock_test');
+
+                  return (
+                    <article key={a.id} className="rounded-2xl border border-[#E0E5E7] bg-white dark:border-[#222D34] dark:bg-[#202C33] p-5 shadow-sm space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-bold text-base text-[#111B21] dark:text-white">
+                          {displayTitle} {displayVersion ? `· ${displayVersion}` : ''}
+                        </h3>
+                        <span className="text-xs bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 px-2.5 py-0.5 rounded-full font-semibold">Active</span>
+                      </div>
+                      <p className="text-xs text-[#667781] dark:text-[#8696A0] flex items-center gap-1">
+                        <Clock className="h-3.5 w-3.5" /> Access valid until {new Date(a.endsAt).toLocaleDateString()}
+                      </p>
+                      <p className="text-xs text-[#3B4A54] dark:text-[#AEBAC1]">
+                        Mock test allowance: <strong className="text-[#111B21] dark:text-white">{a.attemptAllowance || 'Included in bundle'}</strong>
+                      </p>
+                      {targetCourseId && (
+                        <div className="mt-4 flex flex-wrap gap-2 pt-3 border-t border-[#E0E5E7] dark:border-[#222D34]">
                           <button
-                            className="rounded-xl border border-[#128C7E] px-3.5 py-2 text-xs font-semibold text-[#128C7E] dark:text-[#25D366] dark:border-[#25D366] hover:bg-[#128C7E]/10 transition-colors"
+                            className="rounded-xl bg-[#128C7E] dark:bg-[#25D366] dark:text-[#111B21] text-white px-3.5 py-2 text-xs font-semibold hover:opacity-90 transition-opacity cursor-pointer"
                             onClick={() => {
-                              setPracticeMode('mock');
-                              void loadPractice(a.courseId);
+                              void loadPractice(targetCourseId, 'practice');
                             }}
                           >
-                            Timed Mock Exam
+                            Interactive MCQ Practice
                           </button>
-                        )}
-                      </div>
-                    )}
-                  </article>
-                ))}
+                          {hasMockTest && (
+                            <button
+                              className="rounded-xl border border-[#128C7E] px-3.5 py-2 text-xs font-semibold text-[#128C7E] dark:text-[#25D366] dark:border-[#25D366] hover:bg-[#128C7E]/10 transition-colors cursor-pointer"
+                              onClick={() => {
+                                void loadPractice(targetCourseId, 'mock');
+                              }}
+                            >
+                              Timed Mock Exam
+                            </button>
+                          )}
+                        </div>
+                      )}
+                    </article>
+                  );
+                })}
               </div>
               {!portal.accesses.length && (
                 <div className="rounded-2xl border border-dashed border-[#E0E5E7] bg-white p-6 dark:border-[#222D34] dark:bg-[#202C33] text-center text-[#667781] dark:text-[#8696A0]">

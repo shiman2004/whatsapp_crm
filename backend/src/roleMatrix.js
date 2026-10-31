@@ -8,6 +8,7 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'attempt_exam',
     'view_exam_results',
     'manage_clinical_module',
+    'verify_payment',
     'exam.academic.view',
     'exam.course.create_draft',
     'exam.material.create_draft',
@@ -106,6 +107,8 @@ export const ROLE_CAPABILITIES = Object.freeze({
     'verify_payment',
     'adjust_payment',
     'view_financial_reports',
+    'track_payment_status',
+    'exam.operations.view',
   ],
   student: [
     'access_own_courses',

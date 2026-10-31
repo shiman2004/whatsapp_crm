@@ -90,6 +90,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
 
   const path = useHashPath();
   const route = resolveRoute(path);
+  const examModule = route?.item.id === 'exam-department' ? route.item : null;
 
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(() => {
     try {
@@ -152,11 +153,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
 
   const visibleSections = React.useMemo(
     () =>
-      NAV_SECTIONS.map((section) => ({
+      (examModule
+        ? [{ id: 'exam-department', title: 'Exam Department', items: [examModule] }]
+        : NAV_SECTIONS).map((section) => ({
         ...section,
         items: section.items.filter((item) => isNavItemVisible(item, currentUser)),
       })).filter((section) => section.items.length > 0),
-    [currentUser],
+    [currentUser, examModule],
   );
 
   const filteredSections: NavSection[] = React.useMemo(() => {

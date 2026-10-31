@@ -31,7 +31,9 @@ export const RoleBadge: React.FC<{ role: string; label?: string }> = ({ role, la
             ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300'
             : role.startsWith('marketing')
               ? 'border-amber-500/30 bg-amber-500/10 text-amber-700 dark:text-amber-300'
-              : 'border-slate-200 bg-slate-100 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300',
+              : role === 'finance_officer'
+                ? 'border-cyan-500/30 bg-cyan-500/10 text-cyan-700 dark:text-cyan-300'
+                : 'border-slate-200 bg-slate-100 text-slate-700 dark:border-white/10 dark:bg-white/5 dark:text-slate-300',
     )}>
       {isSuper && <span className="mr-1 text-[9px]">👑</span>}
       {label || role.replace(/_/g, ' ')}

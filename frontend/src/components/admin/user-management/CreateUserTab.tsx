@@ -12,6 +12,7 @@ const ROLE_HOME: Record<string, { company: boolean; defaultCompany: string; bran
   exam_department_manager: { company: false, defaultCompany: 'CRAS', branch: 'Colombo', departmentHint: 'Exam Department' },
   exam_coordinator: { company: false, defaultCompany: 'CRAS', branch: 'Colombo', departmentHint: 'Exam Department' },
   exam_providing_officer: { company: false, defaultCompany: 'CRAS', branch: 'Colombo', departmentHint: 'Exam Department' },
+  finance_officer: { company: true, defaultCompany: 'ALL', branch: 'Colombo (Head Office)', departmentHint: 'Finance' },
   marketing_officer: { company: true, defaultCompany: 'ALL', branch: 'Colombo', departmentHint: 'Public Contact Marketing' },
   marketing_admin: { company: true, defaultCompany: 'ALL', branch: 'Colombo', departmentHint: 'Public Contact Marketing' },
   clinical_nurse: { company: false, defaultCompany: 'RWC', branch: 'Colombo', departmentHint: 'Clinical' },

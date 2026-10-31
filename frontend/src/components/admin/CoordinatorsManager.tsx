@@ -11,8 +11,6 @@ import {
   ShieldCheck, 
   Sparkles, 
   MapPin, 
-  Eye, 
-  EyeOff,
   User as UserIcon,
   Briefcase,
   Lock,
@@ -27,18 +25,94 @@ const BRANCH_OPTIONS = [
   'Colombo'
 ];
 
-type StaffRoleChoice = 'leads_officer' | 'coordinator_cras' | 'coordinator_rwc';
-type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras';
+type StaffRoleChoice = 
+  | 'coordinator_rwc' 
+  | 'coordinator_cras' 
+  | 'coordinator_ahc' 
+  | 'leads_officer' 
+  | 'exam_department_manager' 
+  | 'exam_providing_officer' 
+  | 'clinical_nurse' 
+  | 'clinical_doctor' 
+  | 'report_analyst' 
+  | 'marketing_officer_rwc' 
+  | 'marketing_officer_cras' 
+  | 'marketing_officer_ahc' 
+  | 'marketing_admin_rwc' 
+  | 'marketing_admin_cras' 
+  | 'marketing_admin_ahc';
+
+type StaffFilter = 'all' | 'leads_officer' | 'coordinator_rwc' | 'coordinator_cras' | 'coordinator_ahc' | 'exam' | 'clinical' | 'marketing';
+
+export const ROLE_DEFINITIONS: Record<StaffRoleChoice, { label: string; systemRole: UserRole }> = {
+  coordinator_rwc: { label: 'Patient Coordinator RWC', systemRole: 'coordinator' },
+  coordinator_cras: { label: 'Education Counsellor CRAS', systemRole: 'coordinator' },
+  coordinator_ahc: { label: 'Consultancy Advisor AHC', systemRole: 'coordinator' },
+  leads_officer: { label: 'Leads Officer (Common)', systemRole: 'leads_officer' },
+  exam_department_manager: { label: 'Head of Exam Department', systemRole: 'exam_department_manager' },
+  exam_providing_officer: { label: 'Exam Providing Officer', systemRole: 'exam_providing_officer' },
+  clinical_nurse: { label: 'Clinical Nurse', systemRole: 'clinical_nurse' },
+  clinical_doctor: { label: 'Clinical Doctor', systemRole: 'clinical_doctor' },
+  report_analyst: { label: 'Report Analyst', systemRole: 'report_analyst' },
+  marketing_officer_rwc: { label: 'Marketing Officer — RWC', systemRole: 'marketing_officer' },
+  marketing_officer_cras: { label: 'Marketing Officer — CRAS', systemRole: 'marketing_officer' },
+  marketing_officer_ahc: { label: 'Marketing Officer — AHC', systemRole: 'marketing_officer' },
+  marketing_admin_rwc: { label: 'Marketing Administrator — RWC', systemRole: 'marketing_admin' },
+  marketing_admin_cras: { label: 'Marketing Administrator — CRAS', systemRole: 'marketing_admin' },
+  marketing_admin_ahc: { label: 'Marketing Administrator — AHC', systemRole: 'marketing_admin' },
+};
+
+export const ROLES_BY_COMPANY: Record<CompanyCode | 'ALL', StaffRoleChoice[]> = {
+  RWC: [
+    'coordinator_rwc',
+    'clinical_nurse',
+    'clinical_doctor',
+    'report_analyst',
+    'marketing_officer_rwc',
+    'marketing_admin_rwc',
+    'leads_officer'
+  ],
+  CRAS: [
+    'coordinator_cras',
+    'exam_department_manager',
+    'exam_providing_officer',
+    'marketing_officer_cras',
+    'marketing_admin_cras',
+    'leads_officer'
+  ],
+  AHC: [
+    'coordinator_ahc',
+    'marketing_officer_ahc',
+    'marketing_admin_ahc',
+    'leads_officer'
+  ],
+  ALL: [
+    'leads_officer',
+    'coordinator_rwc',
+    'coordinator_cras',
+    'coordinator_ahc',
+    'exam_department_manager',
+    'exam_providing_officer',
+    'clinical_nurse',
+    'clinical_doctor',
+    'report_analyst',
+    'marketing_officer_rwc',
+    'marketing_officer_cras',
+    'marketing_officer_ahc',
+    'marketing_admin_rwc',
+    'marketing_admin_cras',
+    'marketing_admin_ahc'
+  ]
+};
 
 const generateRandomPin = () => {
   return Math.floor(1000 + Math.random() * 9000).toString();
 };
 
 export const CoordinatorsManager: React.FC = () => {
-  const { users, leads, addCoordinator, updateCoordinator, deleteCoordinator } = useCrm();
+  const { currentUser, users, leads, addCoordinator, updateCoordinator, deleteCoordinator } = useCrm();
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeFilter, setActiveFilter] = useState<StaffFilter>('all');
-  const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
 
   // Edit Staff State (Name, Branch, PIN & Password)
   const [editingStaff, setEditingStaff] = useState<User | null>(null);
@@ -50,31 +124,55 @@ export const CoordinatorsManager: React.FC = () => {
 
   // Form State
   const [selectedRoleChoice, setSelectedRoleChoice] = useState<StaffRoleChoice>('coordinator_rwc');
-  const [company, setCompany] = useState<CompanyCode>('RWC');
+  const [company, setCompany] = useState<CompanyCode | 'ALL'>('RWC');
   const [fullName, setFullName] = useState('');
   const [branch, setBranch] = useState('Colombo');
   const [pin, setPin] = useState(generateRandomPin());
   const [password, setPassword] = useState('staff');
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
 
-  const staffMembers = users.filter(u => u.role === 'coordinator' || u.role === 'leads_officer');
+  const staffMembers = users.filter(u => ['coordinator', 'leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin', 'sales_coordinator'].includes(u.role));
   const leadsOfficers = users.filter(u => u.role === 'leads_officer');
   const rwcCoordinators = users.filter(u => u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
   const crasCoordinators = users.filter(u => u.role === 'coordinator' && u.company === 'CRAS');
+  const ahcCoordinators = users.filter(u => u.role === 'coordinator' && u.company === 'AHC');
+  const examStaff = users.filter(u => ['exam_department_manager', 'exam_coordinator', 'exam_providing_officer'].includes(u.role));
+  const clinicalStaff = users.filter(u => ['clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role));
+  const marketingStaff = users.filter(u => ['marketing_officer', 'marketing_admin'].includes(u.role));
 
   const filteredStaff = staffMembers.filter(u => {
     if (activeFilter === 'leads_officer') return u.role === 'leads_officer';
     if (activeFilter === 'coordinator_rwc') return u.role === 'coordinator' && (u.company === 'RWC' || !u.company);
     if (activeFilter === 'coordinator_cras') return u.role === 'coordinator' && u.company === 'CRAS';
+    if (activeFilter === 'coordinator_ahc') return u.role === 'coordinator' && u.company === 'AHC';
+    if (activeFilter === 'exam') return ['exam_department_manager', 'exam_coordinator', 'exam_providing_officer'].includes(u.role);
+    if (activeFilter === 'clinical') return ['clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role);
+    if (activeFilter === 'marketing') return ['marketing_officer', 'marketing_admin'].includes(u.role);
     return true;
   });
 
+  const canViewPins = currentUser?.role === 'super_admin';
+  const isStoredPinHash = (value?: string) => Boolean(value && (/^scrypt:/i.test(value) || /^\$2[aby]?\$/i.test(value)));
+
   const handleRoleChange = (choice: StaffRoleChoice) => {
     setSelectedRoleChoice(choice);
-    if (choice === 'coordinator_rwc') {
+    // Align company if role strongly implies a specific company
+    if (choice.endsWith('_rwc') && company !== 'RWC') {
       setCompany('RWC');
-    } else if (choice === 'coordinator_cras') {
+    } else if (choice.endsWith('_cras') && company !== 'CRAS') {
       setCompany('CRAS');
+    } else if (choice.endsWith('_ahc') && company !== 'AHC') {
+      setCompany('AHC');
+    }
+  };
+
+  const handleCompanyChange = (val: string) => {
+    const newCompany = val as CompanyCode | 'ALL';
+    setCompany(newCompany);
+    // Automatically keep the role aligned with the allowed roles for this company
+    const allowed = ROLES_BY_COMPANY[newCompany] || ROLES_BY_COMPANY.ALL;
+    if (!allowed.includes(selectedRoleChoice)) {
+      setSelectedRoleChoice(allowed[0]);
     }
   };
 
@@ -96,7 +194,9 @@ export const CoordinatorsManager: React.FC = () => {
     setEditingStaff(staff);
     setEditFullName(staff.fullName || '');
     setEditBranch(staff.branch || 'Colombo');
-    setEditPin(staff.pin || generateRandomPin());
+    // Never copy a persisted PIN hash into an editable field. A new PIN is only
+    // sent when the Super Admin explicitly enters one.
+    setEditPin('');
     setEditPassword(staff.password || '');
   };
 
@@ -125,17 +225,31 @@ export const CoordinatorsManager: React.FC = () => {
     if (!fullName.trim() || isSubmittingAdd) return;
 
     let systemRole: UserRole = 'coordinator';
-    let assignedCompany: CompanyCode | undefined = undefined;
+    let assignedCompany: CompanyCode | undefined = 
+      company === 'ALL' ? undefined : (company as CompanyCode);
 
-    if (selectedRoleChoice === 'leads_officer') {
-      systemRole = 'leads_officer';
-      assignedCompany = undefined; // Common role for all leads across both companies
-    } else if (selectedRoleChoice === 'coordinator_cras') {
+    if (selectedRoleChoice.startsWith('coordinator_')) {
       systemRole = 'coordinator';
-      assignedCompany = 'CRAS';
+      if (selectedRoleChoice === 'coordinator_rwc') assignedCompany = 'RWC';
+      if (selectedRoleChoice === 'coordinator_cras') assignedCompany = 'CRAS';
+      if (selectedRoleChoice === 'coordinator_ahc') assignedCompany = 'AHC';
+    } else if (selectedRoleChoice.startsWith('marketing_officer')) {
+      systemRole = 'marketing_officer';
+      if (selectedRoleChoice === 'marketing_officer_rwc') assignedCompany = 'RWC';
+      if (selectedRoleChoice === 'marketing_officer_cras') assignedCompany = 'CRAS';
+      if (selectedRoleChoice === 'marketing_officer_ahc') assignedCompany = 'AHC';
+    } else if (selectedRoleChoice.startsWith('marketing_admin')) {
+      systemRole = 'marketing_admin';
+      if (selectedRoleChoice === 'marketing_admin_rwc') assignedCompany = 'RWC';
+      if (selectedRoleChoice === 'marketing_admin_cras') assignedCompany = 'CRAS';
+      if (selectedRoleChoice === 'marketing_admin_ahc') assignedCompany = 'AHC';
     } else {
-      systemRole = 'coordinator';
-      assignedCompany = 'RWC';
+      systemRole = selectedRoleChoice as UserRole;
+      if (systemRole === 'clinical_nurse' || systemRole === 'clinical_doctor' || systemRole === 'report_analyst') {
+        assignedCompany = company === 'ALL' ? undefined : (company as CompanyCode || 'RWC');
+      } else if (systemRole === 'exam_department_manager' || systemRole === 'exam_providing_officer') {
+        assignedCompany = company === 'ALL' ? undefined : (company as CompanyCode || 'CRAS');
+      }
     }
 
     setIsSubmittingAdd(true);
@@ -169,7 +283,7 @@ export const CoordinatorsManager: React.FC = () => {
         <div>
           <h2 className="text-xl font-bold text-slate-900 dark:text-slate-100 font-serif">Staff & Team Management</h2>
           <p className="text-xs text-slate-500 dark:text-slate-400">
-            Manage Leads Officers, Patient Coordinators (RWC), and Education Counsellors (CRAS), assign branch locations, and generate access PINs.
+            Manage AHC/CRAS coordinators, exam staff, clinical staff, and marketing roles, assign branch locations, and generate access PINs.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -221,7 +335,7 @@ export const CoordinatorsManager: React.FC = () => {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#008000]" />
-            <span>Patient Coordinators (RWC) ({rwcCoordinators.length})</span>
+            <span>Patient Coordinators RWC ({rwcCoordinators.length})</span>
           </button>
 
           <button
@@ -234,7 +348,59 @@ export const CoordinatorsManager: React.FC = () => {
             }`}
           >
             <span className="w-2 h-2 rounded-full bg-[#800000]" />
-            <span>Education Counsellors (CRAS) ({crasCoordinators.length})</span>
+            <span>Education Counsellors CRAS ({crasCoordinators.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('coordinator_ahc')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'coordinator_ahc'
+                ? 'bg-teal-50 dark:bg-[#066e77]/20 text-[#066e77] dark:text-teal-300 border border-teal-200 dark:border-[#066e77]/40 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <span className="w-2 h-2 rounded-full bg-[#066e77]" />
+            <span>Consultancy Advisors AHC ({ahcCoordinators.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('clinical')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'clinical'
+                ? 'bg-cyan-50 dark:bg-cyan-500/20 text-cyan-700 dark:text-cyan-300 border border-cyan-200 dark:border-cyan-500/40 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Sparkles className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
+            <span>Clinical Staff ({clinicalStaff.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('exam')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'exam'
+                ? 'bg-amber-50 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-500/40 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <ShieldCheck className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+            <span>Exam Staff ({examStaff.length})</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveFilter('marketing')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer ${
+              activeFilter === 'marketing'
+                ? 'bg-purple-50 dark:bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-500/40 shadow-sm'
+                : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5 text-purple-600 dark:text-purple-400" />
+            <span>Marketing ({marketingStaff.length})</span>
           </button>
         </div>
       </div>
@@ -246,7 +412,7 @@ export const CoordinatorsManager: React.FC = () => {
           </div>
           <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">No Staff Members Found</h3>
           <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
-            Click the button below to register Leads Officers and Coordinators for RWC or CRAS with auto-generated PINs.
+            Click the button below to register Leads Officers, Coordinators, Exam, Clinical, or Marketing team members with auto-generated PINs.
           </p>
           <div className="flex items-center justify-center gap-2 pt-2">
             <button
@@ -263,14 +429,28 @@ export const CoordinatorsManager: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredStaff.map((staff) => {
             const isOfficer = staff.role === 'leads_officer';
+            const isExamStaff = ['exam_department_manager', 'exam_coordinator', 'exam_providing_officer'].includes(staff.role);
+            const isClinicalStaff = ['clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(staff.role);
+            const isMarketingStaff = ['marketing_officer', 'marketing_admin'].includes(staff.role);
             const isCras = staff.company === 'CRAS';
+            const isAhc = staff.company === 'AHC';
             const activeLeads = leads.filter(l => l.assignedTo === staff.id && l.stage !== 'converted' && l.stage !== 'lost');
             const convertedLeads = leads.filter(l => l.assignedTo === staff.id && l.stage === 'converted');
+            const rawPin = typeof staff.pin === 'string' ? staff.pin.trim() : '';
+            const canRevealStoredPin = canViewPins && Boolean(rawPin) && !isStoredPinHash(rawPin);
 
-            const roleDisplay = isOfficer 
-              ? 'Leads Officer' 
-              : isCras 
-              ? 'Education Counsellor' 
+            const roleDisplay = 
+                staff.role === 'exam_department_manager' ? 'Head of Exam Department'
+              : staff.role === 'exam_coordinator' || staff.role === 'exam_providing_officer' ? 'Exam Providing Officer'
+              : staff.role === 'clinical_nurse' ? 'Clinical Nurse'
+              : staff.role === 'clinical_doctor' ? 'Clinical Doctor'
+              : staff.role === 'report_analyst' ? 'Report Analyst'
+              : staff.role === 'marketing_admin' ? 'Marketing Administrator'
+              : staff.role === 'marketing_officer' ? 'Marketing Officer'
+              : staff.role === 'leads_officer' ? 'Leads Officer' 
+              : staff.role === 'sales_coordinator' ? 'Sales Coordinator'
+              : staff.company === 'AHC' ? 'Consultancy Advisor'
+              : staff.company === 'CRAS' ? 'Education Counsellor' 
               : 'Patient Coordinator';
 
             return (
@@ -285,8 +465,16 @@ export const CoordinatorsManager: React.FC = () => {
                       <div className={`w-11 h-11 rounded-xl font-bold text-base flex items-center justify-center border ${
                         isOfficer
                           ? 'bg-indigo-50 dark:bg-indigo-700/30 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/30'
+                          : isClinicalStaff
+                          ? 'bg-cyan-50 dark:bg-cyan-900/40 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-700/40'
+                          : isExamStaff
+                          ? 'bg-amber-50 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-700/40'
+                          : isMarketingStaff
+                          ? 'bg-purple-50 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-700/40'
                           : isCras
                           ? 'bg-rose-50 dark:bg-rose-900/40 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-700/40'
+                          : isAhc
+                          ? 'bg-teal-50 dark:bg-[#066e77]/30 text-[#066e77] dark:text-teal-300 border-teal-200 dark:border-[#066e77]/50'
                           : 'bg-emerald-50 dark:bg-emerald-700/30 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30'
                       }`}>
                         {staff.fullName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
@@ -294,7 +482,7 @@ export const CoordinatorsManager: React.FC = () => {
                       <div>
                         <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
                           <span>{staff.fullName}</span>
-                          {!isOfficer && <CompanyTagBadge company={staff.company || 'RWC'} size="xs" />}
+                          {!isOfficer && staff.company && <CompanyTagBadge company={staff.company} size="xs" />}
                         </h4>
                         <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
                           <MapPin className="w-3 h-3 text-slate-400 dark:text-slate-500" />
@@ -331,14 +519,22 @@ export const CoordinatorsManager: React.FC = () => {
                       <span className={`font-bold px-2 py-0.5 rounded-md text-[11px] flex items-center gap-1 border ${
                         isOfficer
                           ? 'bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border-indigo-200 dark:border-indigo-500/40'
+                          : isClinicalStaff
+                          ? 'bg-cyan-50 dark:bg-cyan-950/60 text-cyan-700 dark:text-cyan-300 border-cyan-200 dark:border-cyan-500/40'
+                          : isExamStaff
+                          ? 'bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-500/40'
+                          : isMarketingStaff
+                          ? 'bg-purple-50 dark:bg-purple-950/60 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-500/40'
                           : isCras
                           ? 'bg-rose-50 dark:bg-[#800000]/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-[#800000]/60'
+                          : isAhc
+                          ? 'bg-teal-50 dark:bg-[#066e77]/30 text-[#066e77] dark:text-teal-300 border-teal-200 dark:border-[#066e77]/60'
                           : 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/40'
                       }`}>
                         {isOfficer ? (
                           <ShieldCheck className="w-3 h-3 text-indigo-600 dark:text-indigo-400" />
                         ) : (
-                          <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
+                          <Building2 className={`w-3 h-3 ${isCras ? 'text-rose-600 dark:text-rose-400' : isAhc ? 'text-[#066e77] dark:text-teal-400' : 'text-emerald-600 dark:text-emerald-400'}`} />
                         )}
                         {roleDisplay}
                       </span>
@@ -347,7 +543,7 @@ export const CoordinatorsManager: React.FC = () => {
                     <div className="flex items-center justify-between">
                       <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Company:</span>
                       <span className="font-semibold text-slate-800 dark:text-slate-200 flex items-center gap-1.5 text-xs">
-                        {isOfficer ? (
+                        {isOfficer || !staff.company ? (
                           <span className="text-indigo-700 dark:text-indigo-300 text-[11px] font-semibold flex items-center gap-1">
                             <ShieldCheck className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" /> Common (All Leads)
                           </span>
@@ -369,16 +565,8 @@ export const CoordinatorsManager: React.FC = () => {
                       <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
                         <KeyRound className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Quick PIN:
                       </span>
-                      <div className="flex items-center gap-1.5 font-mono font-bold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 px-2 py-0.5 rounded-md tracking-wider">
-                        <span>{revealedPins[staff.id] !== false ? (staff.pin || '••••') : '••••'}</span>
-                        <button
-                          type="button"
-                          onClick={() => setRevealedPins(prev => ({ ...prev, [staff.id]: prev[staff.id] === false ? true : false }))}
-                          className="text-amber-600 hover:text-amber-800 dark:text-amber-400/80 dark:hover:text-amber-200 transition-colors ml-0.5 cursor-pointer"
-                          title={revealedPins[staff.id] === false ? "Show PIN" : "Hide PIN"}
-                        >
-                          {revealedPins[staff.id] === false ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
-                        </button>
+                      <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 px-2 py-0.5 rounded-md">
+                        <span>{canRevealStoredPin ? rawPin : (staff.pinConfigured ?? Boolean(rawPin)) ? 'Configured (reset required)' : 'Not configured'}</span>
                       </div>
                     </div>
                   </div>
@@ -452,8 +640,33 @@ export const CoordinatorsManager: React.FC = () => {
                 />
               </div>
 
-              {/* Two Column Grid: Role & Company */}
+              {/* Two Column Grid: Company & Role */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {/* Company Dropdown */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                      <Building2 className="w-3.5 h-3.5 text-slate-400" />
+                      <span>Company</span>
+                      <span className="text-rose-500">*</span>
+                    </label>
+                    {company !== 'ALL' && (
+                      <CompanyTagBadge company={company as CompanyCode} size="xs" showFullName={false} />
+                    )}
+                  </div>
+                  <select
+                    id="add-staff-company-select"
+                    value={company}
+                    onChange={(e) => handleCompanyChange(e.target.value)}
+                    className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
+                  >
+                    <option value="RWC">Royal Wellness Center (RWC)</option>
+                    <option value="CRAS">College of Royal Aesthetic (CRAS)</option>
+                    <option value="AHC">Alpha Health Consultancy (AHC)</option>
+                    <option value="ALL">All Companies (Common / Cross-Department)</option>
+                  </select>
+                </div>
+
                 {/* Role Level */}
                 <div className="space-y-1.5">
                   <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
@@ -462,43 +675,17 @@ export const CoordinatorsManager: React.FC = () => {
                     <span className="text-rose-500">*</span>
                   </label>
                   <select
+                    id="add-staff-role-select"
                     value={selectedRoleChoice}
                     onChange={(e) => handleRoleChange(e.target.value as StaffRoleChoice)}
                     className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2.5 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 cursor-pointer font-medium"
                   >
-                    <option value="coordinator_rwc">
-                      Patient Coordinator (RWC)
-                    </option>
-                    <option value="coordinator_cras">
-                      Education Counsellor (CRAS)
-                    </option>
-                    <option value="leads_officer">
-                      Leads Officer (Common)
-                    </option>
+                    {(ROLES_BY_COMPANY[company] || ROLES_BY_COMPANY.ALL).map((roleKey) => (
+                      <option key={roleKey} value={roleKey}>
+                        {ROLE_DEFINITIONS[roleKey]?.label || roleKey}
+                      </option>
+                    ))}
                   </select>
-                </div>
-
-                {/* Company */}
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-slate-400" />
-                    <span>Company</span>
-                    {selectedRoleChoice !== 'leads_officer' && <span className="text-rose-500">*</span>}
-                  </label>
-                  {selectedRoleChoice === 'leads_officer' ? (
-                    <div className="w-full bg-slate-50 dark:bg-[#202c33]/70 border border-indigo-500/30 rounded-xl px-3.5 py-2 text-xs flex items-center justify-between text-slate-800 dark:text-slate-200">
-                      <span className="text-indigo-700 dark:text-indigo-300 font-bold flex items-center gap-1.5 text-xs">
-                        <ShieldCheck className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                        <span>All Companies (Common)</span>
-                      </span>
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">Receives all leads</span>
-                    </div>
-                  ) : (
-                    <div className="w-full bg-slate-50 dark:bg-[#202c33]/70 border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs flex items-center justify-between text-slate-800 dark:text-slate-200">
-                      <CompanyTagBadge company={company} size="sm" showFullName={true} />
-                      <span className="text-[10px] text-slate-500 dark:text-slate-400 italic">Auto-assigned</span>
-                    </div>
-                  )}
                 </div>
               </div>
 
@@ -649,9 +836,18 @@ export const CoordinatorsManager: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="text-slate-500 dark:text-slate-400 text-[11px]">Role:</span>
                 <span className="font-semibold text-slate-800 dark:text-slate-200">
-                  {editingStaff.role === 'leads_officer' 
+                  {editingStaff.role === 'exam_department_manager'
+                    ? 'Head of Exam Department'
+                    : ['exam_coordinator', 'exam_providing_officer'].includes(editingStaff.role)
+                    ? 'Exam Providing Officer'
+                    : editingStaff.role === 'clinical_nurse' ? 'Clinical Nurse'
+                    : editingStaff.role === 'clinical_doctor' ? 'Clinical Doctor'
+                    : editingStaff.role === 'report_analyst' ? 'Report Analyst'
+                    : editingStaff.role === 'marketing_admin' ? 'Marketing Administrator'
+                    : editingStaff.role === 'marketing_officer' ? 'Marketing Officer'
+                    : editingStaff.role === 'leads_officer'
                     ? 'Leads Officer' 
-                    : (editingStaff.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')}
+                    : (editingStaff.company === 'AHC' ? 'Consultancy Advisor' : editingStaff.company === 'CRAS' ? 'Education Counsellor' : 'Patient Coordinator')}
                 </span>
               </div>
               <div className="flex items-center gap-1.5 text-[11px] text-emerald-600 dark:text-emerald-400">
@@ -718,7 +914,7 @@ export const CoordinatorsManager: React.FC = () => {
                     <label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
                       <KeyRound className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                       <span>Security PIN (4-Digits)</span>
-                      <span className="text-rose-500">*</span>
+                      <span className="text-slate-400 font-normal">(optional reset)</span>
                     </label>
                     <button
                       type="button"
@@ -733,7 +929,6 @@ export const CoordinatorsManager: React.FC = () => {
                   <input
                     type="text"
                     maxLength={4}
-                    required
                     placeholder="e.g. 5839"
                     value={editPin}
                     onChange={(e) => setEditPin(e.target.value.replace(/\D/g, ''))}

@@ -1,4 +1,4 @@
-export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator' | 'marketing_officer' | 'marketing_admin';
+export type UserRole = 'super_admin' | 'leads_officer' | 'coordinator' | 'sales_coordinator' | 'exam_department_manager' | 'exam_coordinator' | 'exam_providing_officer' | 'marketing_officer' | 'marketing_admin' | 'clinical_nurse' | 'clinical_doctor' | 'report_analyst' | 'finance_officer';
 
 export type MarketingCapability =
   | 'dashboard'
@@ -20,6 +20,8 @@ export type LeadStage =
   | 'contacted' 
   | 'potential' 
   | 'under_discussion' 
+  | 'forwarded_to_exam_department'
+  | 'forwarded_to_processing_department'
   | 'not_relevant' 
   | 'not_eligible'
   | 'converted' 
@@ -44,6 +46,10 @@ export interface User {
   language?: LanguageCode;
   avatar?: string;
   active: boolean;
+  /** Explicit marketing module grant; role permissions remain server-enforced. */
+  marketingAccess?: boolean;
+  /** Whether a security PIN exists. The PIN or its hash must never be sent in staff listings. */
+  pinConfigured?: boolean;
   createdAt: string;
   activeLeadsCount?: number;
 }
@@ -59,7 +65,7 @@ export interface Customer {
   avatarUrl?: string;
 }
 
-export type CompanyCode = 'RWC' | 'CRAS';
+export type CompanyCode = 'RWC' | 'CRAS' | 'AHC';
 
 export interface Lead {
   id: string;
@@ -76,7 +82,7 @@ export interface Lead {
   acceptedAt?: string;
   assignmentHistories?: LeadAssignmentHistory[];
   stage: LeadStage;
-  source: string; // 'whatsapp' | 'RWC' | 'CRAS'
+  source: string; // 'whatsapp' | 'RWC' | 'CRAS' | 'AHC'
   company?: CompanyCode;
   companyTag?: string;
   companyColor?: string;

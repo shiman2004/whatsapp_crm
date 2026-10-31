@@ -171,6 +171,31 @@ export const MockTestsView: React.FC<MockTestsViewProps> = ({
       </div>
 
       {/* Grid of Mock Tests */}
+      {filteredTests.length === 0 ? (
+        <div className="rounded-2xl border border-dashed border-slate-700 bg-[#111b21] p-8 sm:p-12 text-center shadow-xl">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-500/30 bg-amber-500/10 text-amber-300">
+            <FileCheck className="h-7 w-7" />
+          </div>
+          <h3 className="mt-4 text-base font-black text-white">
+            {mockTests.length === 0 ? 'No mock examinations created yet' : 'No matching mock examinations'}
+          </h3>
+          <p className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-slate-400">
+            {mockTests.length === 0
+              ? 'Create a draft mock examination after its question paper, reviewed question bank, timing, and answer key are ready.'
+              : 'Try another search term or choose All Exam Categories.'}
+          </p>
+          {mockTests.length === 0 && (
+            <button
+              type="button"
+              onClick={() => setIsModalOpen(true)}
+              className="mt-5 inline-flex items-center gap-2 rounded-xl bg-amber-600 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-amber-600/20 transition hover:bg-amber-500"
+            >
+              <Plus className="h-4 w-4" />
+              Create first mock test
+            </button>
+          )}
+        </div>
+      ) : (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {filteredTests.map((test) => (
           <div
@@ -252,6 +277,7 @@ export const MockTestsView: React.FC<MockTestsViewProps> = ({
           </div>
         ))}
       </div>
+      )}
 
       {/* Modal for creating Mock Test */}
       {isModalOpen && (

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useCrm } from '../../../context/CrmContext';
 import { User } from '../../../types';
 import {
@@ -15,7 +15,8 @@ import {
   KeyRound,
   ShieldAlert,
   UserCheck,
-  Trash2
+  Trash2,
+  Hash
 } from 'lucide-react';
 
 export const AdminAccountsTab: React.FC = () => {
@@ -48,6 +49,16 @@ export const AdminAccountsTab: React.FC = () => {
   const [deletingAdmin, setDeletingAdmin] = useState<User | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
+
+  // Change PIN Modal State
+  const [pinAdmin, setPinAdmin] = useState<User | null>(null);
+  const [newPinDigits, setNewPinDigits] = useState<string[]>([]);
+  const [confirmPinDigits, setConfirmPinDigits] = useState<string[]>([]);
+  const [pinStep, setPinStep] = useState<'enter' | 'confirm'>('enter');
+  const [pressedPinKey, setPressedPinKey] = useState<string | null>(null);
+  const [pinError, setPinError] = useState('');
+  const [isSubmittingPin, setIsSubmittingPin] = useState(false);
+  const [pinSuccess, setPinSuccess] = useState(false);
 
   const activeAdmins = superAdmins.filter((u) => u.active !== false);
   const totalCount = superAdmins.length;
@@ -200,6 +211,87 @@ export const AdminAccountsTab: React.FC = () => {
       setDeleteError(res.error || 'Failed to delete account');
     } else {
       setDeletingAdmin(null);
+    }
+  };
+
+  // Open Change PIN Modal
+  const handleOpenPinModal = (admin: User) => {
+    setPinAdmin(admin);
+    setNewPinDigits([]);
+    setConfirmPinDigits([]);
+    setPinStep('enter');
+    setPinError('');
+    setPinSuccess(false);
+  };
+
+  const handlePinKey = useCallback((digit: string) => {
+    setPinError('');
+    setPressedPinKey(digit);
+    setTimeout(() => setPressedPinKey(null), 150);
+
+    if (pinStep === 'enter') {
+      setNewPinDigits(prev => {
+        if (prev.length >= 4) return prev;
+        const next = [...prev, digit];
+        if (next.length === 4) {
+          // Move to confirm step after short delay
+          setTimeout(() => setPinStep('confirm'), 300);
+        }
+        return next;
+      });
+    } else {
+      setConfirmPinDigits(prev => {
+        if (prev.length >= 4) return prev;
+        const next = [...prev, digit];
+        return next;
+      });
+    }
+  }, [pinStep]);
+
+  const handlePinBackspace = useCallback(() => {
+    setPressedPinKey('backspace');
+    setTimeout(() => setPressedPinKey(null), 150);
+    if (pinStep === 'enter') {
+      setNewPinDigits(prev => prev.slice(0, -1));
+    } else {
+      setConfirmPinDigits(prev => prev.slice(0, -1));
+    }
+  }, [pinStep]);
+
+  const handlePinClear = useCallback(() => {
+    setPressedPinKey('clear');
+    setTimeout(() => setPressedPinKey(null), 150);
+    if (pinStep === 'enter') {
+      setNewPinDigits([]);
+    } else {
+      setConfirmPinDigits([]);
+      setPinStep('enter');
+      setNewPinDigits([]);
+    }
+    setPinError('');
+  }, [pinStep]);
+
+  const handleSubmitPin = async () => {
+    if (!pinAdmin) return;
+    const newPin = newPinDigits.join('');
+    const confirmPin = confirmPinDigits.join('');
+    if (newPin.length < 4) { setPinError('PIN must be 4 digits.'); return; }
+    if (confirmPin.length < 4) { setPinError('Please confirm the PIN.'); return; }
+    if (newPin !== confirmPin) {
+      setPinError('PINs do not match. Please try again.');
+      setConfirmPinDigits([]);
+      setPinStep('enter');
+      setNewPinDigits([]);
+      return;
+    }
+    setIsSubmittingPin(true);
+    const res = await updateSuperAdmin(pinAdmin.id, { pin: newPin });
+    setIsSubmittingPin(false);
+    if (!res.success) {
+      setPinError(res.error || 'Failed to update PIN.');
+    } else {
+      setPinSuccess(true);
+      setTimeout(() => setPinAdmin(null), 1500);
     }
   };
 
@@ -406,6 +498,14 @@ export const AdminAccountsTab: React.FC = () => {
                             <Pencil className="w-3.5 h-3.5" />
                           </button>
 
+                          <button
+                            onClick={() => handleOpenPinModal(admin)}
+                            title="Change Login PIN"
+                            className="p-1.5 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 text-amber-600 dark:text-amber-400 rounded-lg border border-amber-200 dark:border-amber-800/60 transition-colors cursor-pointer"
+                          >
+                            <Hash className="w-3.5 h-3.5" />
+                          </button>
+
                           {isLastActive ? (
                             <div
                               title="Lockout Guard: Cannot deactivate the last active Super Admin account."
@@ -554,7 +654,7 @@ export const AdminAccountsTab: React.FC = () => {
               <div className="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] text-slate-400 flex items-start gap-2">
                 <Lock className="w-3.5 h-3.5 text-purple-400 shrink-0 mt-0.5" />
                 <span>
-                  Super Admins receive full cross-company oversight over both Royal Wellness Center (RWC) and CRAS Academy.
+                  Super Admins receive full cross-company oversight over both Royal Wellness Center RWC and CRAS Academy.
                 </span>
               </div>
 
@@ -706,6 +806,137 @@ export const AdminAccountsTab: React.FC = () => {
                   : 'Confirm Activation'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Change PIN */}
+      {pinAdmin && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-sm shadow-2xl p-6 relative animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setPinAdmin(null)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-white p-1 rounded-lg bg-slate-800 hover:bg-slate-700 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+                <Hash className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-100">Change Login PIN</h3>
+                <p className="text-xs text-slate-400 font-mono">{pinAdmin.fullName}</p>
+              </div>
+            </div>
+
+            {pinError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-950/50 border border-rose-800/60 text-rose-300 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{pinError}</span>
+              </div>
+            )}
+
+            {pinSuccess ? (
+              <div className="py-6 flex flex-col items-center gap-3">
+                <CheckCircle2 className="w-10 h-10 text-emerald-400" />
+                <p className="text-sm font-semibold text-emerald-300">PIN updated successfully!</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* Step indicator */}
+                <div className="flex items-center gap-2 text-xs">
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold transition-colors ${pinStep === 'enter' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'}`}>
+                    {pinStep === 'enter' ? '① Enter new PIN' : '✓ New PIN entered'}
+                  </div>
+                  <div className={`h-px flex-1 ${pinStep === 'confirm' ? 'bg-amber-500/60' : 'bg-slate-700'}`} />
+                  <div className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full font-semibold transition-colors ${pinStep === 'confirm' ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30' : 'bg-slate-800 text-slate-500 border border-slate-700'}`}>
+                    ② Confirm PIN
+                  </div>
+                </div>
+
+                {/* PIN dots */}
+                <div className="text-center space-y-1">
+                  <p className="text-xs text-slate-400">
+                    {pinStep === 'enter' ? 'Enter a new 4-digit PIN' : 'Re-enter the PIN to confirm'}
+                  </p>
+                  <div className="flex justify-center items-center gap-3 py-2">
+                    {[0, 1, 2, 3].map((idx) => {
+                      const digits = pinStep === 'enter' ? newPinDigits : confirmPinDigits;
+                      const filled = digits.length > idx;
+                      return (
+                        <div
+                          key={idx}
+                          className={`w-3.5 h-3.5 rounded-full border-2 transition-all duration-200 ${
+                            filled
+                              ? 'bg-amber-400 border-amber-400 scale-110 shadow-lg shadow-amber-500/30'
+                              : 'bg-slate-800 border-slate-600'
+                          }`}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Keypad */}
+                <div className="grid grid-cols-3 gap-2 max-w-[220px] mx-auto">
+                  {['1','2','3','4','5','6','7','8','9'].map((digit) => (
+                    <button
+                      key={digit}
+                      type="button"
+                      disabled={isSubmittingPin}
+                      onClick={() => handlePinKey(digit)}
+                      className={`h-10 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-sm font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                        pressedPinKey === digit ? 'bg-amber-900/50 border-amber-500 scale-95 ring-2 ring-amber-500/40' : ''
+                      }`}
+                    >
+                      {digit}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={handlePinClear}
+                    className={`h-10 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center cursor-pointer ${
+                      pressedPinKey === 'clear' ? 'bg-slate-800 text-white scale-95 ring-1 ring-slate-500' : ''
+                    }`}
+                  >
+                    Clear
+                  </button>
+                  <button
+                    type="button"
+                    disabled={isSubmittingPin}
+                    onClick={() => handlePinKey('0')}
+                    className={`h-10 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-sm font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                      pressedPinKey === '0' ? 'bg-amber-900/50 border-amber-500 scale-95 ring-2 ring-amber-500/40' : ''
+                    }`}
+                  >
+                    0
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handlePinBackspace}
+                    className={`h-10 rounded-xl bg-slate-800/60 hover:bg-slate-800 text-xs font-semibold text-slate-400 hover:text-slate-200 transition-all flex items-center justify-center cursor-pointer ${
+                      pressedPinKey === 'backspace' ? 'bg-slate-800 text-white scale-95 ring-1 ring-slate-500' : ''
+                    }`}
+                  >
+                    ⌫
+                  </button>
+                </div>
+
+                {/* Save button – shown when confirm step has 4 digits */}
+                {pinStep === 'confirm' && confirmPinDigits.length === 4 && (
+                  <button
+                    type="button"
+                    disabled={isSubmittingPin}
+                    onClick={handleSubmitPin}
+                    className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-lg shadow-amber-950/40 transition-all disabled:opacity-50 cursor-pointer"
+                  >
+                    {isSubmittingPin ? 'Saving…' : 'Set New PIN'}
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

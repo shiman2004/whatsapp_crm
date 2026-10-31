@@ -341,11 +341,11 @@ export const TeamBroadcastView: React.FC = () => {
 
       {/* Broadcast Message Composer (Super Admin & Leads Officer only) */}
       {canBroadcast ? (
-        <div className="bg-[#111b21] rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-slate-800/80 bg-slate-900/40 flex items-center justify-between">
+        <div className="bg-white dark:bg-[#202C33] rounded-2xl border border-[#E0E5E7] dark:border-[#222D34] shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-[#E0E5E7] dark:border-[#222D34] bg-[#F0F2F5] dark:bg-[#2A3942] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-400" />
-              <h2 className="text-sm font-bold text-white">Create New Broadcast Announcement</h2>
+              <h2 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">Create New Broadcast Announcement</h2>
             </div>
             <span className="text-[11px] text-slate-400">
               Posting as: <strong className="text-slate-200">{currentUser?.fullName}</strong> ({currentUser?.role === 'super_admin' ? 'Super Admin' : 'Leads Officer'})
@@ -671,7 +671,7 @@ export const TeamBroadcastView: React.FC = () => {
                 : 'text-slate-400 hover:text-white'
             }`}
           >
-            Royal Wellness (RWC)
+            Royal Wellness RWC
           </button>
           <button
             type="button"
@@ -827,10 +827,10 @@ const BroadcastCard: React.FC<BroadcastCardProps> = ({
   const isManagement = broadcast.senderRole === 'super_admin' || broadcast.senderRole === 'leads_officer';
 
   return (
-    <div className={`rounded-2xl bg-[#111b21] border transition-all shadow-md overflow-hidden ${
+    <div className={`rounded-2xl bg-white dark:bg-[#202C33] border transition-all shadow-sm overflow-hidden ${
       broadcast.isPinned
         ? 'border-amber-500/40 ring-1 ring-amber-500/20 bg-gradient-to-b from-[#142028] to-[#111b21]'
-        : 'border-slate-800 hover:border-slate-700/80'
+        : 'border-[#E0E5E7] dark:border-[#222D34] hover:border-[#128C7E] dark:hover:border-[#25D366]/40'
     }`}>
       {/* Pinned banner if true */}
       {broadcast.isPinned && (

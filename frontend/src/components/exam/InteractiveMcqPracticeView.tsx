@@ -72,6 +72,8 @@ export const InteractiveMcqPracticeView: React.FC<InteractiveMcqPracticeViewProp
   // ---------------------------------------------------------------------------
   const [studentName, setStudentName] = useState<string>(currentUser?.fullName || 'Candidate Student');
   const [currentIndex, setCurrentIndex] = useState<number>(0);
+  const [questionsPerPage, setQuestionsPerPage] = useState<number>(20);
+  const [navigatorPage, setNavigatorPage] = useState<number>(0);
   const [sessionId, setSessionId] = useState<string>(`session-${Date.now()}`);
 
   // Persistent Question-State Map across session: { [questionId]: { completed: boolean, wrongChoices: string[], isCorrect: boolean, serverFeedback?: any } }
@@ -341,11 +343,19 @@ export const InteractiveMcqPracticeView: React.FC<InteractiveMcqPracticeViewProp
 
   // Calculations for progress panel matching user screenshot (e.g. 29 / 90)
   const totalQuestionsCount = questions.length || 90;
+  const pageCount = Math.max(1, Math.ceil(questions.length / questionsPerPage));
+  const navigatorStart = navigatorPage * questionsPerPage;
+  const navigatorQuestions = questions.slice(navigatorStart, navigatorStart + questionsPerPage);
   const completedCorrectCount = Object.keys(questionProgress).filter(
     (id) => questionProgress[id]?.isCorrect
   ).length;
   const progressPercent =
     totalQuestionsCount > 0 ? Math.round((completedCorrectCount / totalQuestionsCount) * 100) : 0;
+
+  useEffect(() => {
+    const nextPage = Math.min(pageCount - 1, Math.floor(currentIndex / questionsPerPage));
+    setNavigatorPage(nextPage);
+  }, [currentIndex, questionsPerPage, pageCount]);
 
   return (
     <div className="space-y-6">
@@ -440,9 +450,30 @@ export const InteractiveMcqPracticeView: React.FC<InteractiveMcqPracticeViewProp
                 </span>
               </div>
 
+              <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-400">
+                <label className="flex items-center gap-2">
+                  <span>Questions per page</span>
+                  <select
+                    value={questionsPerPage}
+                    onChange={(event) => {
+                      setQuestionsPerPage(Number(event.target.value));
+                      setNavigatorPage(0);
+                    }}
+                    className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-[11px] text-white focus:border-teal-500 focus:outline-none"
+                    aria-label="Questions per page"
+                  >
+                    <option value={20}>20 Questions</option>
+                    <option value={50}>50 Questions</option>
+                    <option value={100}>100 Questions</option>
+                  </select>
+                </label>
+                <span>Page {navigatorPage + 1} • {questions.length ? navigatorStart + 1 : 0}–{Math.min(navigatorStart + questionsPerPage, questions.length)} of {questions.length}</span>
+              </div>
+
               {/* Grid of Number Badges: 1 to N */}
               <div className="grid grid-cols-5 sm:grid-cols-5 gap-1.5 max-h-80 overflow-y-auto pr-1">
-                {questions.map((q, idx) => {
+                {navigatorQuestions.map((q, pageIndex) => {
+                  const idx = navigatorStart + pageIndex;
                   const state = questionProgress[q.id];
                   const isCurrent = currentIndex === idx;
                   const isCorrect = state?.isCorrect;
@@ -467,6 +498,26 @@ export const InteractiveMcqPracticeView: React.FC<InteractiveMcqPracticeViewProp
                     </button>
                   );
                 })}
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] font-bold text-slate-400">
+                <button
+                  type="button"
+                  onClick={() => setNavigatorPage((page) => Math.max(0, page - 1))}
+                  disabled={navigatorPage === 0}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1.5 hover:border-teal-500 hover:text-teal-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Previous page
+                </button>
+                <span>{pageCount} page{pageCount === 1 ? '' : 's'}</span>
+                <button
+                  type="button"
+                  onClick={() => setNavigatorPage((page) => Math.min(pageCount - 1, page + 1))}
+                  disabled={navigatorPage >= pageCount - 1}
+                  className="rounded-lg border border-slate-700 px-2.5 py-1.5 hover:border-teal-500 hover:text-teal-300 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  Next page
+                </button>
               </div>
 
               {/* Legend matching screenshot */}

@@ -401,7 +401,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const approvedTemplates = templates.filter(t => t.approved && (t.language === lead.language || t.language === 'en'));
 
   return (
-    <div className="bg-[#f0f2f5] dark:bg-[#202c33] px-2 sm:px-4 py-2 border-t border-[#d1d7db] dark:border-[#222e35] select-none shrink-0 relative">
+    <div className="bg-[#F0F2F5] dark:bg-[#2A3942] px-2 sm:px-4 py-2 border-t border-[#E0E5E7] dark:border-[#222D34] select-none shrink-0 relative">
       {/* Hidden File Inputs */}
       <input 
         ref={fileInputRef}

@@ -104,7 +104,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
 
         {/* Message preview snippet */}
         <div className={`p-3 border-b text-xs ${
-          isLight ? 'bg-[#f8fafc] border-slate-200' : 'bg-[#0b141a] border-slate-800'
+          isLight ? 'bg-[#f8fafc] border-slate-200' : 'bg-whatsapp-canvas border-slate-800'
         }`}>
           <p className={`text-[10.5px] mb-1 font-semibold uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Message to forward:

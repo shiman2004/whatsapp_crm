@@ -17,25 +17,38 @@ interface LeadFunnelChartProps {
 }
 
 export const LeadFunnelChart: React.FC<LeadFunnelChartProps> = ({ leads: propLeads }) => {
-  const { leads: ctxLeads } = useCrm();
+  const { leads: ctxLeads, resolvedTheme } = useCrm();
   const leads = propLeads || ctxLeads;
+  const isDark = resolvedTheme === 'dark';
 
-  const stages: LeadStage[] = ['new', 'assigned', 'contacted', 'potential', 'under_discussion', 'not_relevant', 'not_eligible', 'converted', 'lost'];
+  const stages: LeadStage[] = [
+    'new',
+    'assigned',
+    'contacted',
+    'potential',
+    'under_discussion',
+    'forwarded_to_exam_department',
+    'forwarded_to_processing_department',
+    'not_relevant',
+    'not_eligible',
+    'converted',
+    'lost'
+  ];
 
   const data = stages.map((st) => ({
     stage: STAGE_CONFIG[st]?.label || st,
     count: leads.filter(l => l.stage === st).length,
-    color: st === 'converted' ? '#10b981' : st === 'new' ? '#f59e0b' : st === 'potential' ? '#a855f7' : st === 'not_eligible' ? '#71717a' : '#6366f1'
+    color: st === 'converted' ? '#25D366' : st === 'new' ? '#F59E0B' : st === 'potential' ? '#128C7E' : st === 'forwarded_to_exam_department' ? '#087EA4' : st === 'forwarded_to_processing_department' ? '#F97316' : st === 'not_eligible' ? '#8696A0' : '#34B7F1'
   }));
 
   return (
-    <div className="bg-white dark:bg-slate-900/80 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 backdrop-blur-md shadow-sm dark:shadow-lg space-y-4">
+    <div className="bg-white dark:bg-[#202C33] p-5 rounded-2xl border border-[#E0E5E7] dark:border-[#222D34] shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">WhatsApp Lead Lifecycle Funnel</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Progression from initial WhatsApp greeting to booked procedure</p>
+          <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">WhatsApp Lead Lifecycle Funnel</h3>
+          <p className="text-xs text-[#667781] dark:text-[#8696A0]">Progression from initial WhatsApp greeting to booked procedure</p>
         </div>
-        <span className="text-[11px] font-mono font-bold text-teal-700 dark:text-teal-400 bg-teal-50 dark:bg-teal-500/10 px-2.5 py-1 rounded-full border border-teal-200 dark:border-teal-500/20">
+        <span className="text-[11px] font-mono font-bold text-[#075E54] dark:text-[#25D366] bg-[#DDF5EC] dark:bg-[#005C4B]/60 px-2.5 py-1 rounded-full border border-[#128C7E]/30 dark:border-[#25D366]/30">
           {stages.length} Stages Monitored
         </span>
       </div>
@@ -45,21 +58,25 @@ export const LeadFunnelChart: React.FC<LeadFunnelChartProps> = ({ leads: propLea
           <BarChart data={data} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
             <XAxis 
               dataKey="stage" 
-              stroke="#64748b" 
+              stroke={isDark ? '#8696A0' : '#667781'} 
               fontSize={10} 
               tickLine={false}
               interval={0}
               angle={-20}
               textAnchor="end"
             />
-            <YAxis stroke="#64748b" fontSize={11} tickLine={false} allowDecimals={false} />
+            <YAxis stroke={isDark ? '#8696A0' : '#667781'} fontSize={11} tickLine={false} allowDecimals={false} />
             <Tooltip
               contentStyle={{
-                backgroundColor: '#0f172a',
-                borderColor: '#334155',
+                backgroundColor: isDark ? '#202C33' : '#FFFFFF',
+                borderColor: isDark ? '#222D34' : '#E0E5E7',
                 borderRadius: '8px',
                 fontSize: '12px',
-                color: '#f8fafc'
+                color: isDark ? '#E9EDEF' : '#111B21',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+              }}
+              itemStyle={{
+                color: isDark ? '#E9EDEF' : '#111B21'
               }}
               formatter={(val: any) => [`${val} Leads`, 'Count']}
             />

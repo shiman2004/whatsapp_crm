@@ -36,6 +36,7 @@ backend/auth_info_*/
 # Local Media & Uploads
 public/uploads/
 backend/public/
+backend/data/
 media_*
 *.jpg
 *.png
@@ -45,6 +46,8 @@ media_*
 !frontend/public/cras-logo.png
 !frontend/public/cras-logo.jpg
 !frontend/public/rwc-logo.png
+!frontend/public/ahc-logo.png
+!frontend/public/inquiries-logo.png
 !frontend/src/assets/logo.png
 *.mp4
 *.ogg
@@ -61,3 +64,5 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+graphify-out/
+

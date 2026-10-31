@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { displayCourseName } from './courseDisplayName';
 import {
   ShieldCheck,
   AlertTriangle,
@@ -266,7 +267,7 @@ export const ExamGuidelinesView: React.FC<ExamGuidelinesViewProps> = ({ initialC
                 >
                   {courses.map((c) => (
                     <option key={c.id} value={c.id}>
-                      {c.courseCode} - {c.courseName}
+                      {c.courseCode} - {displayCourseName(c)}
                     </option>
                   ))}
                 </select>

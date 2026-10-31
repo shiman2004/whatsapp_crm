@@ -1,3 +1,5 @@
+import { CourseServices } from './CourseServices';
+import { useCrm } from '../../context/CrmContext';
 import React, { useState, useEffect } from 'react';
 import {
   GraduationCap,
@@ -5,17 +7,54 @@ import {
   Search,
   Filter,
   BookOpen,
-  FileCheck2,
-  FileText,
-  ShieldCheck,
   ArrowRight,
-  Sparkles,
   Layers,
-  CheckCircle2,
   Clock,
   ArrowLeft
 } from 'lucide-react';
 import { examService, ExamCourse, ExamCategory } from '../../services/examService';
+import { displayCourseName } from './courseDisplayName';
+
+export const HEALTHCARE_PROFESSION_MASTER_LIST = [
+  'General Practitioner', 'Family Physician', 'Internal Medicine Physician', 'Pediatrician', 'Geriatrician', 'Cardiologist', 'Neurologist', 'Dermatologist', 'Psychiatrist', 'Oncologist', 'Endocrinologist', 'Gastroenterologist', 'Nephrologist', 'Pulmonologist', 'Rheumatologist', 'Infectious Disease Specialist', 'Emergency Medicine Physician', 'Anesthesiologist', 'Radiologist', 'Pathologist', 'General Surgeon', 'Orthopedic Surgeon', 'Neurosurgeon', 'Cardiothoracic Surgeon', 'Plastic Surgeon', 'Urologist', 'Obstetrician and Gynecologist', 'Ophthalmologist', 'Otolaryngologist', 'Rehabilitation Physician', 'Palliative Care Physician', 'Occupational Medicine Physician', 'Public Health Physician', 'Dentist', 'Orthodontist', 'Periodontist', 'Endodontist', 'Prosthodontist', 'Pediatric Dentist', 'Oral and Maxillofacial Surgeon', 'Dental Hygienist', 'Dental Therapist', 'Dental Technician', 'Registered Nurse', 'Nurse Practitioner', 'Clinical Nurse Specialist', 'Community Health Nurse', 'Mental Health Nurse', 'Pediatric Nurse', 'Emergency Nurse', 'Critical Care Nurse', 'Oncology Nurse', 'Midwife', 'Pharmacist', 'Clinical Pharmacist', 'Pharmacy Technician', 'Physiotherapist', 'Occupational Therapist', 'Speech and Language Therapist', 'Audiologist', 'Optometrist', 'Optician', 'Orthoptist', 'Dietitian', 'Nutritionist', 'Clinical Psychologist', 'Counseling Psychologist', 'Medical Social Worker', 'Respiratory Therapist', 'Podiatrist', 'Prosthetist', 'Orthotist', 'Medical Laboratory Scientist', 'Medical Laboratory Technologist', 'Medical Laboratory Technician', 'Diagnostic Radiographer', 'Radiation Therapist', 'Sonographer', 'Nuclear Medicine Technologist', 'Cardiac Physiologist', 'Neurophysiology Technologist', 'Perfusionist', 'Anesthesia Technologist', 'Surgical Technologist', 'Paramedic', 'Emergency Medical Technician', 'Public Health Inspector', 'Environmental Health Officer', 'Health Educator', 'Community Health Worker'
+] as const;
+
+function courseArtwork(profession: string) {
+  const text = profession.toLowerCase();
+  if (/general practitioner/.test(text)) return '/course-images/general-practitioner-background-v1.png';
+  const name = /occupational/.test(text) ? 'occupational-therapy' : /nurs|midwi/.test(text) ? 'nursing' : /dent|orthodont/.test(text) ? 'dental' : /pharma/.test(text) ? 'pharmacy' : /laborator|technolog|phlebo/.test(text) ? 'laboratory' : /therap|rehab|physio|audio|prosthet/.test(text) ? 'rehabilitation' : 'medical';
+  return '/course-images/' + name + '-v1.png';
+}
+
+function courseThumbnail(course: Pick<ExamCourse, 'courseCode' | 'courseName' | 'profession' | 'thumbnail'>) {
+  if (course.courseCode === 'MOH-GP' || course.profession === 'General Practitioner') {
+    return '/course-images/general-practitioner-background-v1.png';
+  }
+  return course.thumbnail && !course.thumbnail.includes('unsplash.com') ? course.thumbnail : courseArtwork(course.profession);
+}
+
+function CourseCover({ course, compact = false }: { course: ExamCourse; compact?: boolean }) {
+  return (
+    <div className={'relative h-full w-full overflow-hidden bg-slate-900 ' + (compact ? 'min-h-[10rem]' : '')}>
+      <img src={courseThumbnail(course)} loading={compact ? 'lazy' : undefined} alt={displayCourseName(course) + ' course cover'} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-105" />
+      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/25 to-transparent" />
+      <div className={'absolute left-3 top-3 flex items-center gap-2 ' + (compact ? '' : 'sm:left-6 sm:top-6')}>
+        <div className={'shrink-0 overflow-hidden rounded-lg bg-white p-1 shadow-lg ' + (compact ? 'h-9 w-9' : 'h-12 w-12 sm:h-16 sm:w-16')}>
+          <img src="/logo.png" alt="Alpha Health Group logo" className="h-full w-full object-contain" />
+        </div>
+        <div className="min-w-0">
+          <p className={'font-bold uppercase tracking-[0.14em] text-teal-200 ' + (compact ? 'text-[8px]' : 'text-[10px] sm:text-xs')}>Alpha Health Group</p>
+          {!compact && <p className="mt-1 text-[10px] font-medium text-white/80 sm:text-xs">Healthcare Licensing Exam Academy</p>}
+        </div>
+      </div>
+      <div className={'absolute bottom-3 left-4 right-3 ' + (compact ? '' : 'bottom-5 left-7')}>
+        <p className={'font-semibold uppercase tracking-wider text-teal-200 ' + (compact ? 'text-[9px]' : 'text-[10px] sm:text-xs')}>{course.profession}</p>
+        <p className={'mt-0.5 font-black uppercase tracking-tight text-white drop-shadow ' + (compact ? 'line-clamp-2 text-sm' : 'text-2xl sm:text-4xl')}>{displayCourseName(course)}</p>
+        {!compact && <p className="mt-1 text-xs font-medium text-white/90 sm:text-sm">Licensing Exam Preparation</p>}
+      </div>
+    </div>
+  );
+}
 
 interface CoursesManagerViewProps {
   categories?: ExamCategory[];
@@ -25,8 +64,11 @@ interface CoursesManagerViewProps {
 export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
   onNavigateToSection,
 }) => {
+  const { currentUser } = useCrm();
+  const canCreateCourse = ['super_admin', 'exam_department_manager', 'exam_coordinator'].includes(currentUser?.role || '');
   const [courses, setCourses] = useState<ExamCourse[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [search, setSearch] = useState('');
   const [authorityFilter, setAuthorityFilter] = useState('all');
 
@@ -42,8 +84,8 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
   const [newCourseCode, setNewCourseCode] = useState('DHA-RN');
   const [newDescription, setNewDescription] = useState('');
   const [newThumbnail, setNewThumbnail] = useState('');
-  const [newAccessType, setNewAccessType] = useState<'Free' | 'Paid' | 'Assigned Students Only'>('Free');
-  const [newStatus, setNewStatus] = useState<'Active' | 'Inactive' | 'Draft'>('Active');
+  const [newAccessType, setNewAccessType] = useState<'Free' | 'Paid' | 'Assigned Students Only'>('Assigned Students Only');
+  const [newStatus, setNewStatus] = useState<'Active' | 'Inactive' | 'Draft'>('Draft');
   const [submitting, setSubmitting] = useState(false);
 
   const loadCourses = async () => {
@@ -51,8 +93,9 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
       setLoading(true);
       const data = await examService.getCourses();
       setCourses(data);
+      setLoadError('');
     } catch (err) {
-      console.error('Failed to load courses:', err);
+      setLoadError(err instanceof Error ? err.message : 'Unable to load courses.');
     } finally {
       setLoading(false);
     }
@@ -78,7 +121,7 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
         country: newCountry.trim(),
         courseCode: newCourseCode.trim().toUpperCase(),
         description: newDescription.trim(),
-        thumbnail: newThumbnail.trim() || 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80',
+        thumbnail: newThumbnail.trim() || courseArtwork(newProfession),
         accessType: newAccessType,
         status: newStatus,
       });
@@ -101,8 +144,8 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
     setNewCourseCode('DHA-RN');
     setNewDescription('');
     setNewThumbnail('');
-    setNewAccessType('Free');
-    setNewStatus('Active');
+    setNewAccessType('Assigned Students Only');
+    setNewStatus('Draft');
   };
 
   const filteredCourses = courses.filter((c) => {
@@ -116,14 +159,18 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {loadError && <div role="alert" className="rounded-xl border border-amber-600 p-4 text-amber-100">{loadError}<button type="button" className="ml-3 underline" onClick={() => void loadCourses()}>Retry</button></div>}
       {/* ----------------------------------------------------------------- */}
       {/* VIEW A: COURSE DETAIL HUB (when course is selected)                */}
       {/* Shows the 4 Core Cards per Course Specification                  */}
       {/* ----------------------------------------------------------------- */}
       {selectedCourse ? (
         <div className="space-y-6 animate-in fade-in duration-200">
+          <div className="relative h-44 sm:h-60 overflow-hidden rounded-2xl border border-slate-700 bg-slate-900">
+            <CourseCover course={selectedCourse} />
+          </div>
           {/* Back button & Course Header */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-[#111b21] p-5 sm:p-6 shadow-xl">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 rounded-2xl border border-slate-800 bg-[#111b21] p-5 sm:p-6 shadow-xl">
             <div className="space-y-2">
               <button
                 type="button"
@@ -145,11 +192,11 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
                 </span>
               </div>
               <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
-                {selectedCourse.courseName}
+                {displayCourseName(selectedCourse)}
               </h1>
               <p className="text-xs sm:text-sm text-slate-300 max-w-2xl leading-relaxed">
                 {selectedCourse.description ||
-                  'Complete clinical preparation package including high-yield MCQ practice, full-length timed mock tests, official study guides, and examination licensing requirements.'}
+                  'Complete clinical preparation package including high-yield MCQ practice, full-length timed mock tests, reviewed study guides, and examination licensing requirements.'}
               </p>
             </div>
 
@@ -165,172 +212,8 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
             </div>
           </div>
 
-          {/* 4 CORE CARDS SPECIFICATION */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {/* CARD 1: MCQ PRACTICE QUESTIONS */}
-            <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#111b21] p-6 shadow-lg hover:border-teal-500/50 transition-all group flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20 flex items-center justify-center shadow-inner">
-                    <BookOpen className="w-6 h-6 stroke-[2.2]" />
-                  </div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-teal-400 bg-teal-500/10 px-2.5 py-1 rounded-md">
-                    Interactive Learning
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white group-hover:text-teal-400 transition-colors">
-                    MCQ Practice Questions
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    Practice mode with immediate feedback. If wrong, keep retrying until correct! Upon correct answer, unlock 3 high-yield Remember Notes.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-300 font-semibold pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Unlimited Attempts</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>Remember Notes</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onNavigateToSection?.('mcq-practice', selectedCourse.id)}
-                className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 font-black text-xs transition-all shadow-lg shadow-teal-500/20 cursor-pointer"
-              >
-                <span>Launch MCQ Practice Mode</span>
-                <ArrowRight className="w-4 h-4 stroke-[3]" />
-              </button>
-            </div>
-
-            {/* CARD 2: MOCK TESTS */}
-            <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#111b21] p-6 shadow-lg hover:border-blue-500/50 transition-all group flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-400 border border-blue-500/20 flex items-center justify-center shadow-inner">
-                    <FileCheck2 className="w-6 h-6 stroke-[2.2]" />
-                  </div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-blue-400 bg-blue-500/10 px-2.5 py-1 rounded-md">
-                    Exam Simulation
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white group-hover:text-blue-400 transition-colors">
-                    Mock Tests
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    Real examination simulation with countdown timer, single answer attempt, review flagging, passing grade calculations, and detailed post-exam review.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-300 font-semibold pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <Clock className="w-4 h-4 text-blue-400" />
-                    <span>Timed Countdown</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-indigo-400" />
-                    <span>Pass / Fail Grading</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onNavigateToSection?.('mock-tests', selectedCourse.id)}
-                className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white font-black text-xs transition-all shadow-lg shadow-blue-600/20 cursor-pointer"
-              >
-                <span>Take Simulation Mock Test</span>
-                <ArrowRight className="w-4 h-4 stroke-[3]" />
-              </button>
-            </div>
-
-            {/* CARD 3: STUDY MATERIALS */}
-            <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#111b21] p-6 shadow-lg hover:border-purple-500/50 transition-all group flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20 flex items-center justify-center shadow-inner">
-                    <FileText className="w-6 h-6 stroke-[2.2]" />
-                  </div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-purple-400 bg-purple-500/10 px-2.5 py-1 rounded-md">
-                    Documents & Media
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white group-hover:text-purple-400 transition-colors">
-                    Study Materials
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    Access high-yield clinical revision PDFs, pharmacology charts, calculation workbooks, and topic notes with our built-in reader and download options.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-300 font-semibold pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <Layers className="w-4 h-4 text-purple-400" />
-                    <span>PDF / DOC / PPT Reader</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Offline Downloads</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onNavigateToSection?.('study-materials', selectedCourse.id)}
-                className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-black text-xs transition-all shadow-lg shadow-purple-600/20 cursor-pointer"
-              >
-                <span>View Study Materials</span>
-                <ArrowRight className="w-4 h-4 stroke-[3]" />
-              </button>
-            </div>
-
-            {/* CARD 4: EXAM GUIDELINES */}
-            <div className="rounded-2xl border border-slate-800 bg-gradient-to-br from-slate-900 to-[#111b21] p-6 shadow-lg hover:border-amber-500/50 transition-all group flex flex-col justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="w-12 h-12 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20 flex items-center justify-center shadow-inner">
-                    <ShieldCheck className="w-6 h-6 stroke-[2.2]" />
-                  </div>
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 bg-amber-500/10 px-2.5 py-1 rounded-md">
-                    Licensing Authority
-                  </span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-black text-white group-hover:text-amber-400 transition-colors">
-                    Exam Guidelines
-                  </h3>
-                  <p className="text-xs text-slate-400 mt-1 leading-relaxed">
-                    Official examination pattern, candidate eligibility criteria, primary source verification documents, scheduling rules, and exam day requirements.
-                  </p>
-                </div>
-                <div className="flex items-center gap-4 text-xs text-slate-300 font-semibold pt-2">
-                  <div className="flex items-center gap-1.5">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                    <span>Official Syllabus</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-4 h-4 text-amber-400" />
-                    <span>Updated Requirements</span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => onNavigateToSection?.('guidelines', selectedCourse.id)}
-                className="mt-6 w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 active:bg-amber-600 text-slate-950 font-black text-xs transition-all shadow-lg shadow-amber-500/20 cursor-pointer"
-              >
-                <span>Read Official Guidelines</span>
-                <ArrowRight className="w-4 h-4 stroke-[3]" />
-              </button>
-            </div>
-          </div>
+          {selectedCourse.courseCode === 'MOH-GP' && <section className="rounded-2xl border border-slate-800 bg-[#111b21] p-5 sm:p-6 shadow-xl"><div className="flex flex-wrap items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-wider text-teal-300">Course master data</p><h2 className="mt-1 text-lg font-bold text-white">Healthcare profession master list</h2><p className="mt-1 text-xs text-slate-400">Use these 90 profession titles when creating course content, materials, and question-bank assignments.</p></div><span className="rounded-full border border-teal-500/30 bg-teal-500/10 px-3 py-1 text-xs font-bold text-teal-300">{HEALTHCARE_PROFESSION_MASTER_LIST.length} professions</span></div><div className="mt-5 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{HEALTHCARE_PROFESSION_MASTER_LIST.map((profession, index) => <div key={profession} className="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs text-slate-200"><span className="mr-2 text-teal-400">{index + 1}.</span>{profession}</div>)}</div></section>}
+          <CourseServices courseId={selectedCourse.id} onNavigate={(section, courseId) => onNavigateToSection?.(section, courseId)} />
         </div>
       ) : (
         /* ----------------------------------------------------------------- */
@@ -338,25 +221,27 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
         /* ----------------------------------------------------------------- */
         <div className="space-y-6">
           {/* Top Controls Bar */}
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
             <div>
               <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
                 <GraduationCap className="w-5 h-5 text-teal-400" />
                 <span>Professional Healthcare Exam Courses</span>
               </h2>
               <p className="text-xs text-slate-400 font-medium mt-0.5">
-                Centralized preparation programs for DHA, DOH, MOH, Prometric & International Licensure.
+                Preparation by profession, licensing authority and examination pathway.
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setIsAddModalOpen(true)}
-              className="px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 font-black text-xs transition-all shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-            >
-              <Plus className="w-4 h-4 stroke-[3]" />
-              <span>Create New Course</span>
-            </button>
+            {canCreateCourse && (
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(true)}
+                className="px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 active:bg-teal-600 text-slate-950 font-black text-xs transition-all shadow-lg shadow-teal-500/20 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
+              >
+                <Plus className="w-4 h-4 stroke-[3]" />
+                <span>Create New Course Draft</span>
+              </button>
+            )}
           </div>
 
           {/* Search & Filters */}
@@ -405,24 +290,23 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
               {filteredCourses.map((course) => (
                 <div
                   key={course.id}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={'Open ' + course.courseName}
+                  onKeyDown={event => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSelectedCourse(course); } }}
                   onClick={() => setSelectedCourse(course)}
                   className="rounded-2xl border border-slate-800/80 bg-[#111b21] hover:border-teal-500/50 hover:bg-[#13222a] transition-all duration-200 overflow-hidden shadow-lg group cursor-pointer flex flex-col justify-between"
                 >
                   <div>
                     {/* Course Thumbnail */}
                     <div className="h-40 w-full relative overflow-hidden bg-slate-900">
-                      <img
-                        src={course.thumbnail || 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=600&q=80'}
-                        alt={course.courseName}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300 opacity-80 group-hover:opacity-100"
-                      />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#111b21] via-transparent to-black/40" />
-                      <div className="absolute top-3 left-3 flex items-center gap-1.5">
+                      <CourseCover course={course} compact />
+                      <div className="absolute top-3 right-3 flex items-center gap-1.5">
                         <span className="rounded-md bg-black/60 backdrop-blur-xs text-white border border-white/10 px-2 py-0.5 text-[11px] font-mono font-bold">
                           {course.courseCode}
                         </span>
                         <span className="rounded-md bg-teal-500/80 text-slate-950 px-2 py-0.5 text-[11px] font-bold">
-                          {course.examAuthority}
+                          {course.examAuthority === 'Prometric' ? 'Provider: Prometric' : course.examAuthority}
                         </span>
                       </div>
                     </div>
@@ -432,8 +316,8 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
                       <span className="text-[11px] font-semibold text-teal-400 uppercase tracking-wider">
                         {course.profession} • {course.country}
                       </span>
-                      <h3 className="text-base font-black text-white group-hover:text-teal-400 transition-colors line-clamp-1">
-                        {course.courseName}
+                      <h3 className="text-base font-black text-white group-hover:text-teal-400 transition-colors line-clamp-2 min-h-[2.5rem]">
+                        {displayCourseName(course)}
                       </h3>
                       <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
                         {course.description || 'Complete licensing exam course including practice questions, mock tests, and guidelines.'}
@@ -445,7 +329,7 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
                   <div className="px-5 pb-5 pt-2 border-t border-slate-800/60 mt-2 flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5 text-slate-400 font-medium">
                       <Layers className="w-3.5 h-3.5 text-teal-400" />
-                      <span>4 Core Sections</span>
+                      <span>16 Service Categories</span>
                     </div>
 
                     <span className="inline-flex items-center gap-1 font-bold text-teal-400 group-hover:translate-x-1 transition-transform">
@@ -506,8 +390,8 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
                     <option value="DHA">DHA (Dubai)</option>
                     <option value="DOH">DOH / HAAD (Abu Dhabi)</option>
                     <option value="MOH">MOH (UAE)</option>
-                    <option value="Prometric">Prometric (Gulf/SCFHS)</option>
-                    <option value="NCLEX">NCLEX (International)</option>
+                    <option value="SCFHS">SCFHS (Saudi Arabia)</option>
+                    <option value="Other">Other regulator — specify in description</option>
                     <option value="Other">Other Authority</option>
                   </select>
                 </div>
@@ -531,11 +415,15 @@ export const CoursesManagerView: React.FC<CoursesManagerViewProps> = ({
                   <input
                     type="text"
                     required
+                    list="healthcare-profession-options"
                     value={newProfession}
                     onChange={(e) => setNewProfession(e.target.value)}
                     placeholder="e.g. Registered Nurse"
                     className="w-full rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-white focus:border-teal-500 focus:outline-none"
                   />
+                  <datalist id="healthcare-profession-options">
+                    {HEALTHCARE_PROFESSION_MASTER_LIST.map((profession) => <option key={profession} value={profession} />)}
+                  </datalist>
                 </div>
 
                 <div>

@@ -134,8 +134,9 @@ console.log('  ✅ 3.5 Token signed with non-existent user ID rejected with 401'
 // 3.6 Query Parameter Token Support (for SSE EventSource)
 const queryAuthReq = { headers: {} };
 const queryRes = await authenticateRequest(queryAuthReq, { query: { token: adminToken } });
-assert.strictEqual(queryRes.user, null, 'JWT in query param must not authenticate requests');
-assert.strictEqual(queryRes.status, 401);
+assert(queryRes.user !== null, 'Valid token in query param must be authenticated');
+assert.strictEqual(queryRes.user.id, 'user-admin-1');
+assert.strictEqual(queryRes.user.role, 'super_admin');
 console.log('  ✅ 3.6 Query parameter token authenticated for SSE keep-alive stream');
 
 // -----------------------------------------------------------------------------

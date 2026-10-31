@@ -294,7 +294,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           title={auditDisplayText ? `Audit Trail: ${auditDisplayText}` : undefined}
           className={`relative max-w-[85%] md:max-w-[65%] rounded-[7.5px] px-[9px] pt-[6px] pb-[8px] wa-bubble-shadow text-xs leading-relaxed transition-all ${
             isOutbound
-              ? 'bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none'
+              ? 'bg-[#DCF8C6] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none'
               : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none'
           } ${message.pinned ? 'border border-amber-500/50 shadow-amber-500/10' : ''}`}
         >
@@ -305,7 +305,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               height="13" 
               width="8" 
               preserveAspectRatio="xMidYMid meet" 
-              className="absolute top-0 -right-2 text-[#d9fdd3] dark:text-[#005c4b] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+              className="absolute top-0 -right-2 text-[#DCF8C6] dark:text-[#005c4b] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
             >
               <path opacity="0.13" fill="#000000" d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z" />
               <path fill="currentColor" d="M5.188,0H0v11.193l6.467-8.625C7.526,1.156,6.958,0,5.188,0z" />
@@ -539,7 +539,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                     message.status === 'failed' ? (
                       <span title={`Failed to Send${message.errorCode ? ` (Code ${message.errorCode})` : ''}: ${message.errorMessage || 'WhatsApp API dispatch failed'}`}><AlertCircle className="w-3.5 h-3.5 text-rose-400" /></span>
                     ) : (message.status === 'read' && Boolean(message.readAt || (message as any).read_at)) ? (
-                      <span title="Read by customer"><CheckCheck className="w-3.5 h-3.5 text-[#53bdeb]" /></span>
+                      <span title="Read by customer"><CheckCheck className="w-3.5 h-3.5 text-[#34B7F1]" /></span>
                     ) : (message.status === 'delivered' || message.status === 'read') ? (
                       <span title="Delivered to customer"><CheckCheck className="w-3.5 h-3.5 text-[#8696a0]" /></span>
                     ) : message.status === 'sent' ? (

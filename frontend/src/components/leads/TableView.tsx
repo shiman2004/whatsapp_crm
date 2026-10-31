@@ -38,55 +38,12 @@ import {
   getLatestCustomerMessageTime 
 } from '../../utils/window24hUtils';
 
+const compactContactName = (value?: string) => Array.from(value || 'Customer').slice(0, 10).join('');
+
 interface TableViewProps {
   leads: Lead[];
   onSelectLead: (leadId: string) => void;
-  company?: 'RWC' | 'CRAS' | 'ALL';
-}
-
-/**
- * Generates clean 2-letter initials from customer display name
- */
-function getCustomerInitials(name?: string): string {
-  if (!name) return 'WA';
-  const clean = name.replace(/[\u{1F600}-\u{1F6FF}|\u{2600}-\u{26FF}|\u{2700}-\u{27BF}]/gu, '')
-                    .replace(/[^a-zA-Z0-9\s]/g, '')
-                    .trim();
-  const parts = clean.split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
-  if (parts.length === 1 && parts[0].length >= 1) return parts[0].slice(0, 2).toUpperCase();
-  return name.trim().slice(0, 2).toUpperCase() || 'WA';
-}
-
-/**
- * Deterministically assigns a vibrant, premium avatar color based on customer name
- */
-function getAvatarColor(name?: string): string {
-  const colors = [
-    'bg-teal-600 text-white',
-    'bg-sky-600 text-white',
-    'bg-indigo-600 text-white',
-    'bg-purple-600 text-white',
-    'bg-rose-600 text-white',
-    'bg-amber-600 text-white',
-    'bg-emerald-600 text-white',
-    'bg-blue-600 text-white',
-    'bg-cyan-600 text-white'
-  ];
-  let hash = 0;
-  const str = name || 'Customer';
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-  }
-  return colors[Math.abs(hash) % colors.length];
-}
-
-/**
- * Filter out known placeholder stock photos
- */
-function isFakeAvatar(url?: string): boolean {
-  if (!url) return true;
-  return url.includes('photo-1534528741775-53994a69daeb') || url.includes('unsplash.com/photo-');
+  company?: 'RWC' | 'CRAS' | 'AHC' | 'ALL';
 }
 
 export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, company = 'RWC' }) => {
@@ -367,35 +324,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   };
 
   /**
-   * Renders the authentic customer profile avatar (Initials circle or verified custom uploaded image)
-   */
-  const renderCustomerAvatar = (displayName?: string, avatarUrl?: string) => {
-    const hasCustomPhoto = Boolean(avatarUrl && !isFakeAvatar(avatarUrl));
-    const initials = getCustomerInitials(displayName);
-    const colorClass = getAvatarColor(displayName);
-
-    if (hasCustomPhoto) {
-      return (
-        <img
-          src={avatarUrl}
-          alt={displayName || 'Customer'}
-          className="w-9 h-9 rounded-full object-cover border border-slate-700/80 shrink-0 shadow-xs"
-          onError={(e) => { e.currentTarget.style.display = 'none'; }}
-        />
-      );
-    }
-
-    return (
-      <div 
-        className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs shrink-0 border border-white/10 shadow-xs ${colorClass}`}
-        title={displayName || 'Customer'}
-      >
-        {initials}
-      </div>
-    );
-  };
-
-  /**
    * Renders Real 24-Hour WhatsApp Service Window countdown & status badge
    */
   const render24hWindowCell = (lead: Lead) => {
@@ -658,7 +586,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           className="flex items-center gap-2 min-w-0" 
           title={`Appointment assigned by ${creatorName} • Attending: ${appt.doctorName || 'Doctor'}`}
         >
-          <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-400 shrink-0 shadow-xs">
+          <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-600 dark:text-teal-400 shrink-0 shadow-xs">
             {creatorName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex flex-col">
@@ -710,7 +638,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-400 shrink-0 shadow-xs">
           {assignerName.charAt(0).toUpperCase()}
         </div>
-        <span className="font-semibold text-slate-200 text-xs whitespace-nowrap leading-tight">{assignerName}</span>
+        <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs whitespace-nowrap leading-tight">{assignerName}</span>
       </div>
     );
   };
@@ -748,16 +676,20 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   };
 
   return (
-    <div className="bg-slate-900/90 rounded-2xl border border-slate-800 overflow-hidden shadow-xl mt-3 flex flex-col">
+    <div className="bg-white dark:bg-[#202C33] rounded-2xl border border-slate-200 dark:border-[#222D34] overflow-hidden shadow-sm dark:shadow-xl mt-3 flex flex-col text-slate-900 dark:text-slate-100">
       {/* Sub-header Controls Bar with Direct Scroll Navigation */}
-      <div className="px-5 py-3 bg-slate-950/80 border-b border-slate-800 flex items-center justify-between text-xs">
+      <div className="px-5 py-3 bg-slate-50 dark:bg-[#111B21] border-b border-slate-200 dark:border-[#222D34] flex items-center justify-between text-xs">
         <div className="flex items-center gap-2.5">
-          <span className="font-bold text-slate-200 text-sm">
+          <span className="font-bold text-slate-900 dark:text-slate-100 text-sm">
             {leads.length} {leads.length === 1 ? 'Lead' : 'Leads'}
           </span>
           <span className="text-slate-600">•</span>
           <span className="text-xs text-slate-400">
             Pipeline Management Table
+          </span>
+          <span className="text-slate-600">•</span>
+          <span className="text-[11px] font-semibold text-slate-400">
+            Companies: <span className="text-emerald-300">AHC</span> · <span className="text-rose-300">CRAS</span>
           </span>
         </div>
 
@@ -766,7 +698,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           <button
             type="button"
             onClick={scrollToBottom}
-            className="px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+            className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-500/15 dark:hover:bg-teal-500/25 dark:text-teal-300 dark:border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
             title="Scroll directly to the bottom of the table"
           >
             <ArrowDown className="w-3.5 h-3.5" />
@@ -776,7 +708,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             <button
               type="button"
               onClick={scrollToTop}
-              className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
+              className="px-3 py-1.5 rounded-lg bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-200 dark:border-slate-700 text-xs font-semibold inline-flex items-center gap-1.5 transition-all shadow-sm active:scale-95 cursor-pointer"
               title="Scroll back to top of the table"
             >
               <ArrowUp className="w-3.5 h-3.5" />
@@ -790,26 +722,34 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       <div 
         ref={tableContainerRef}
         onScroll={handleScroll}
-        className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
+        className="pipeline-table-scroll overflow-x-auto overflow-y-auto max-h-[calc(100vh-270px)] scrollbar-thin scrollbar-thumb-slate-700 scrollbar-track-slate-900"
       >
         <style>{`
+          /* Make the wide pipeline's horizontal grab bar easy to see and drag. */
+          .pipeline-table-scroll { scrollbar-width: auto; scrollbar-color: rgba(45, 212, 190, 0.95) rgba(15, 23, 42, 0.95); scrollbar-gutter: stable both-edges; }
+          /* Larger hit targets make both scroll directions easier to drag on touchpads and laptops. */
+          .pipeline-table-scroll::-webkit-scrollbar { width: 28px; height: 28px; }
+          .pipeline-table-scroll::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.98); border: 2px solid rgba(45, 212, 190, 0.32); border-radius: 9999px; }
+          .pipeline-table-scroll::-webkit-scrollbar-thumb { background: rgba(45, 212, 190, 0.98); border: 4px solid rgba(15, 23, 42, 0.98); border-radius: 9999px; min-width: 90px; min-height: 64px; }
+          .pipeline-table-scroll::-webkit-scrollbar-thumb:hover { background: rgba(94, 234, 212, 1); }
+          .pipeline-table-scroll::-webkit-scrollbar-corner { background: rgba(15, 23, 42, 0.98); }
           /* One grid definition keeps header and every row aligned while scrolling. */
-          .pipeline-table { display: block; width: max-content; min-width: 2835px; }
+          .pipeline-table { display: block; width: max-content; min-width: 2845px; }
           .pipeline-table thead, .pipeline-table tbody { display: block; }
           .pipeline-table thead tr, .pipeline-table tbody tr {
             display: grid;
-            grid-template-columns: 60px 120px 280px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
-            min-width: 2835px;
+            grid-template-columns: 60px 120px 180px 110px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
+            min-width: 2845px;
           }
           .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
           .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { grid-column: 1; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { grid-column: 2; }
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { grid-column: 3; }
-          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 15; }
+          .pipeline-table th:nth-child(4), .pipeline-table td:nth-child(4) { grid-column: 4; }
           .pipeline-table th:nth-child(5), .pipeline-table td:nth-child(5) { grid-column: 16; }
           .pipeline-table th:nth-child(6), .pipeline-table td:nth-child(6) { grid-column: 17; }
-          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 4; }
+          .pipeline-table th:nth-child(7), .pipeline-table td:nth-child(7) { grid-column: 18; }
           .pipeline-table th:nth-child(8), .pipeline-table td:nth-child(8) { grid-column: 5; }
           .pipeline-table th:nth-child(9), .pipeline-table td:nth-child(9) { grid-column: 6; }
           .pipeline-table th:nth-child(10), .pipeline-table td:nth-child(10) { grid-column: 7; }
@@ -818,9 +758,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(13), .pipeline-table td:nth-child(13) { grid-column: 10; }
           .pipeline-table th:nth-child(14), .pipeline-table td:nth-child(14) { grid-column: 11; }
           .pipeline-table th:nth-child(15), .pipeline-table td:nth-child(15) { grid-column: 12; }
-          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 18; }
-          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 13; }
+          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) { grid-column: 13; }
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) { grid-column: 19; }
           .pipeline-table th:nth-child(18), .pipeline-table td:nth-child(18) { grid-column: 14; }
+          .pipeline-table th:nth-child(19), .pipeline-table td:nth-child(19) { grid-column: 15; }
 
           /* Sticky cells are deliberately limited to No., Serial No., Contact, and Actions. */
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1),
@@ -833,7 +774,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { left: 0; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { left: 60px; }
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { left: 180px; }
-          .pipeline-table th:nth-child(16), .pipeline-table td:nth-child(16) {
+          .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) {
             position: sticky;
             right: 0;
             z-index: 5;
@@ -850,11 +791,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table thead th:nth-child(1),
           .pipeline-table thead th:nth-child(2),
           .pipeline-table thead th:nth-child(3),
-          .pipeline-table thead th:nth-child(16) { z-index: 30; }
+          .pipeline-table thead th:nth-child(17) { z-index: 30; }
         `}</style>
         <table className="pipeline-table text-left text-xs">
-          <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-950/95 shadow-md">
-            <tr className="text-slate-400 border-b border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
+          <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-100/95 dark:bg-[#202C33]/95 shadow-sm border-b border-slate-200 dark:border-slate-800">
+            <tr className="text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
               <th className="py-3.5 px-3 text-center">No.</th>
               <th className="py-3.5 px-3">Serial No.</th>
               <th className="py-3.5 px-4">
@@ -871,6 +812,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{contactSort === 'asc' ? 'â†‘' : contactSort === 'desc' ? 'â†“' : 'â†•'}</span>
                 </button>
               </th>
+              <th className="py-3.5 px-3">Company</th>
               <th className="py-3.5 px-2">Source</th>
               <th className="py-3.5 px-2 text-center">Lang</th>
               <th className="py-3.5 px-2 text-center">Note</th>
@@ -901,10 +843,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
               <th className="py-3.5 px-3">Output</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/60">
+          <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={18} className="py-16 text-center text-slate-500">
+                <td colSpan={19} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -932,31 +874,39 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   >
                     {/* 1. Sequential row number for the current displayed order */}
                     <td className="py-3.5 px-3 text-center min-w-[60px] whitespace-nowrap">
-                      <span className="font-mono font-bold text-slate-300">{String(globalRowNumber).padStart(3, '0')}</span>
+                      <span className="font-mono font-bold text-slate-500 dark:text-slate-400">{String(globalRowNumber).padStart(3, '0')}</span>
                     </td>
 
                     {/* 2. Company-scoped unique lead serial */}
                     <td className="py-3.5 px-3 min-w-[120px] whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2 py-1 rounded-md border text-[10px] font-mono font-bold ${isCrasLead ? 'bg-rose-950/60 text-rose-300 border-rose-500/40' : 'bg-teal-950/60 text-teal-300 border-teal-500/40'}`} title="Unique company lead serial">
+                      <span className={`inline-flex items-center px-2 py-1 rounded-md border text-[10px] font-mono font-bold ${isCrasLead ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/60 dark:text-rose-300 dark:border-rose-500/40' : 'bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/60 dark:text-teal-300 dark:border-teal-500/40'}`} title="Unique company lead serial">
                         {lead.serialNumber || 'Pending'}
                       </span>
                     </td>
 
                     {/* 3. Name */}
                     <td className="py-3.5 px-4" onClick={(event) => { event.stopPropagation(); handlePatientClick(lead.id); }} onDoubleClick={(event) => { event.stopPropagation(); handlePatientDoubleClick(lead.id); }}>
-                      <div className="flex items-center gap-3">
-                        {renderCustomerAvatar(lead.customer?.displayName, lead.customer?.avatarUrl)}
+                      <div className="flex items-center">
                         <div className="min-w-0 flex flex-col">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <p className="font-bold text-slate-100 text-xs truncate">{lead.customer?.displayName}</p>
-                            <CompanyTagBadge lead={lead} size="xs" />
+                            <p
+                              className="font-bold text-slate-900 dark:text-slate-100 text-xs truncate"
+                              title={compactContactName(lead.customer?.displayName)}
+                            >
+                              {compactContactName(lead.customer?.displayName)}
+                            </p>
                           </div>
-                          <p className="text-[11px] text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber || 'No contact'}</p>
+                          <p className="text-[11px] text-slate-500 dark:text-slate-400 font-mono truncate">{lead.customer?.whatsappNumber || 'No contact'}</p>
                         </div>
                       </div>
                     </td>
 
-                    {/* 6. Source Channel (icon-only) */}
+                    {/* 4. Company — kept separate from contact identity */}
+                    <td className="py-3.5 px-3 min-w-[90px] whitespace-nowrap" onClick={(event) => event.stopPropagation()}>
+                      <CompanyTagBadge lead={lead} size="sm" />
+                    </td>
+
+                    {/* 5. Source Channel (icon-only) */}
                     <td className="py-3.5 px-2 min-w-[90px]" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
                         <div 
@@ -976,10 +926,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                             className="absolute inset-0 w-full h-full cursor-pointer appearance-none border-0 bg-transparent text-transparent [color-scheme:dark]"
                             title={`Current Source: ${sourceInfo.label}. Click to change (WhatsApp, Facebook, Instagram, Website).`}
                           >
-                            <option value="whatsapp" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>WhatsApp</option>
-                            <option value="facebook" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>Facebook</option>
-                            <option value="instagram" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>Instagram</option>
-                            <option value="website" style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>Website</option>
+                            <option value="whatsapp" >WhatsApp</option>
+                            <option value="facebook" >Facebook</option>
+                            <option value="instagram" >Instagram</option>
+                            <option value="website" >Website</option>
                           </select>
                         )}
                       </div>
@@ -987,14 +937,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
                     {/* 7. Language */}
                     <td className="py-3.5 px-2 text-center min-w-[65px] max-w-[120px]">
-                      <span className="inline-block max-w-full px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] leading-relaxed bg-slate-800 text-slate-300 border border-slate-700 break-words">
+                      <span className="inline-block max-w-full px-2 py-0.5 rounded font-mono font-bold uppercase text-[10px] leading-relaxed bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 break-words">
                         {lead.language}
                       </span>
                     </td>
 
                     {/* 6. Internal Notes */}
                     <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={() => openNotes(lead)} className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${lead.notesCount ? 'bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500/25' : 'bg-slate-800/70 text-slate-400 border-slate-700 hover:text-teal-300 hover:border-teal-500/40'}`} title={`Open notes${lead.notesCount ? ` (${lead.notesCount})` : ''}`} aria-label={`Open notes for ${lead.customer?.displayName || 'lead'}`}>
+                      <button type="button" onClick={() => openNotes(lead)} className={`relative inline-flex items-center justify-center w-8 h-8 rounded-lg border transition-colors ${lead.notesCount ? 'bg-teal-500/15 text-teal-300 border-teal-500/30 hover:bg-teal-500/25' : 'bg-slate-100 dark:bg-slate-800/70 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-teal-600 dark:hover:text-teal-300 hover:border-teal-400'}`} title={`Open notes${lead.notesCount ? ` (${lead.notesCount})` : ''}`} aria-label={`Open notes for ${lead.customer?.displayName || 'lead'}`}>
                         <StickyNote className="w-4 h-4" />
                         {lead.notesCount ? <span className="absolute -top-1 -right-1 min-w-3.5 h-3.5 px-0.5 rounded-full bg-teal-500 text-[9px] leading-3.5 text-slate-950 font-bold">{lead.notesCount}</span> : null}
                       </button>
@@ -1043,7 +993,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         <select
                           value={lead.assignedTo || ''}
                           onChange={(e) => assignLead(lead.id, e.target.value)}
-                          className="bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-100 outline-none focus:border-teal-500 cursor-pointer w-full min-w-0 shadow-sm"
+                          className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-teal-500 cursor-pointer w-full min-w-0 shadow-sm"
                         >
                           <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCrasLead ? '-- Assign Counsellor --' : '-- Assign Coordinator --')}</option>
                           {[...coordinators]
@@ -1057,7 +1007,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         </select>
                       ) : isLeadsOfficer && lead.assignedTo ? (
                         <div 
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-950/70 border border-slate-800 text-slate-300 font-medium whitespace-nowrap"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 font-medium whitespace-nowrap"
                           title="Assignment locked. Once assigned, only Super Admin can reassign this lead."
                         >
                           <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
@@ -1071,7 +1021,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                           {coordinator ? (
                             <>
                               <UserCheck className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                              <span className="font-medium text-slate-200">{coordinator.fullName}</span>
+                              <span className="font-medium text-slate-800 dark:text-slate-200">{coordinator.fullName}</span>
                             </>
                           ) : (
                             <span className="text-amber-400 flex items-center gap-1 font-medium">
@@ -1088,7 +1038,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     </td>
 
                     {/* 10. Receive */}
-                    <td className="py-3.5 px-3 text-slate-300 font-mono text-xs whitespace-nowrap min-w-[160px]">
+                    <td className="py-3.5 px-3 text-slate-700 dark:text-slate-300 font-mono text-xs whitespace-nowrap min-w-[160px]">
                       {new Date(lead.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}{', '}
                       <span className="text-slate-400">{new Date(lead.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                     </td>
@@ -1122,7 +1072,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     <td className="py-3.5 px-4 text-center min-w-[90px] whitespace-nowrap">
                       <button
                         onClick={() => onSelectLead(lead.id)}
-                        className="px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-400 border border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-500/15 dark:hover:bg-teal-500/25 dark:text-teal-400 dark:border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
                       >
                         <span>Chat</span>
                         <MessageCircle className="w-3.5 h-3.5" />
@@ -1146,7 +1096,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                           title="Change lead output stage"
                         >
                           {activeStages.map((stage) => (
-                            <option key={stage.id} value={stage.key} style={{ backgroundColor: '#020617', color: '#e2e8f0' }}>
+                            <option key={stage.id} value={stage.key} >
                               {stage.label}
                             </option>
                           ))}
@@ -1163,20 +1113,20 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       </div>
 
       {/* Table Pagination Bar (Matching Dark Theme CRM Design) */}
-      <div className="px-5 py-3 bg-slate-950/90 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs select-none">
+      <div className="px-5 py-3 bg-slate-50 dark:bg-[#111B21] border-t border-slate-200 dark:border-[#222D34] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs select-none text-slate-600 dark:text-slate-400">
         {/* Left: Range and Total indicator */}
-        <div className="flex items-center gap-3 text-slate-400">
+        <div className="flex items-center gap-3 text-slate-600 dark:text-slate-400">
           <span>
             Showing{' '}
-            <span className="font-semibold text-slate-200 font-mono">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
               {displayedLeads.length === 0 ? 0 : (currentPage - 1) * pageSize + 1}
             </span>
             {' '}-{' '}
-            <span className="font-semibold text-slate-200 font-mono">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
               {Math.min(currentPage * pageSize, displayedLeads.length)}
             </span>
             {' '}of{' '}
-            <span className="font-semibold text-slate-200 font-mono">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 font-mono">
               {displayedLeads.length}
             </span>
             {' '}leads
@@ -1193,7 +1143,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 setPageSize(Number(e.target.value));
                 setCurrentPage(1);
               }}
-              className="bg-slate-900 border border-slate-700 text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-teal-500 cursor-pointer transition-colors"
+              className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-200 text-xs rounded-lg px-2 py-1 outline-none focus:border-teal-500 cursor-pointer transition-colors"
             >
               <option value={10}>10</option>
               <option value={20}>20</option>
@@ -1211,7 +1161,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             type="button"
             disabled={currentPage === 1}
             onClick={() => setCurrentPage(1)}
-            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
             title="First Page"
           >
             <ChevronsLeft className="w-4 h-4" />
@@ -1222,7 +1172,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             type="button"
             disabled={currentPage === 1}
             onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
             title="Previous Page"
           >
             <ChevronLeft className="w-4 h-4" />
@@ -1239,7 +1189,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 className={`w-8 h-8 rounded-lg text-xs font-bold flex items-center justify-center transition-all cursor-pointer shadow-xs active:scale-95 ${
                   isActive
                     ? 'bg-teal-500 text-white border border-teal-400 shadow-md shadow-teal-500/30'
-                    : 'bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white'
+                    : 'bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-700 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
                 }`}
               >
                 {pageNum}
@@ -1252,7 +1202,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             type="button"
             disabled={currentPage === totalPages}
             onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
             title="Next Page"
           >
             <ChevronRight className="w-4 h-4" />
@@ -1263,7 +1213,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             type="button"
             disabled={currentPage === totalPages}
             onClick={() => setCurrentPage(totalPages)}
-            className="w-8 h-8 rounded-lg bg-slate-900/90 hover:bg-slate-800 border border-slate-700/80 text-slate-400 hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
+            className="w-8 h-8 rounded-lg bg-white dark:bg-slate-900/90 hover:bg-slate-100 dark:hover:bg-slate-800 border border-slate-200 dark:border-slate-700/80 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white flex items-center justify-center transition-all disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer shadow-xs active:scale-95"
             title="Last Page"
           >
             <ChevronsRight className="w-4 h-4" />
@@ -1281,17 +1231,17 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
       {noteLead && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4" onMouseDown={closeNotes}>
-          <div className="w-full max-w-lg rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl overflow-hidden" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
+          <div className="w-full max-w-lg rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xl overflow-hidden text-slate-900 dark:text-slate-100" onMouseDown={(event) => event.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-slate-200 dark:border-slate-800">
               <div className="min-w-0">
-                <p className="text-sm font-bold text-slate-100 truncate">Notes · {noteLead.customer?.displayName || 'Lead'}</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">Notes · {noteLead.customer?.displayName || 'Lead'}</p>
                 <p className="text-[10px] text-slate-500 font-mono">{noteLead.serialNumber || 'Lead record'} · Internal only</p>
               </div>
               <button type="button" onClick={closeNotes} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800" aria-label="Close notes"><X className="w-4 h-4" /></button>
             </div>
             <div className="max-h-[45vh] overflow-y-auto p-4 space-y-2.5">
               {leadNotes.length === 0 ? <p className="py-5 text-center text-xs text-slate-500">No internal notes added yet.</p> : leadNotes.map((note) => (
-                <div key={note.id} className="p-3 rounded-xl border border-slate-800 bg-slate-950/70 space-y-1.5">
+                <div key={note.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-slate-500">
                     <span className="text-teal-300 font-semibold flex items-center gap-1"><User className="w-3 h-3" />{note.authorName}</span>
                     <span className="font-mono flex items-center gap-1"><NoteClock className="w-2.5 h-2.5" />{new Date(note.updatedAt || note.createdAt).toLocaleString()}</span>
@@ -1301,9 +1251,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 </div>
               ))}
             </div>
-            <form onSubmit={saveNote} className="p-4 border-t border-slate-800 space-y-2">
+            <form onSubmit={saveNote} className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
               <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5 text-teal-400" />{editingNoteId ? 'Edit internal note' : 'Add internal note'}</label>
-              <textarea rows={3} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder={isCras ? 'Add academic background, course requirements, or tuition fee quotes...' : 'Add clinical observations, consultant availability, or price quotes...'} className="w-full resize-none rounded-lg border border-slate-700 bg-slate-950 p-2.5 text-xs text-slate-100 placeholder-slate-500 outline-none focus:border-teal-500" autoFocus />
+              <textarea rows={3} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder={isCras ? 'Add academic background, course requirements, or tuition fee quotes...' : 'Add clinical observations, consultant availability, or price quotes...'} className="w-full resize-none rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-teal-500" autoFocus />
               <div className="flex justify-end gap-2">
                 {editingNoteId && <button type="button" onClick={() => { setEditingNoteId(null); setNoteText(''); }} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white">Cancel</button>}
                 <button type="submit" disabled={!noteText.trim()} className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 disabled:bg-slate-800 disabled:text-slate-500 text-white text-xs font-semibold inline-flex items-center gap-1.5">{editingNoteId ? <Save className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}{editingNoteId ? 'Update Note' : 'Save Note'}</button>

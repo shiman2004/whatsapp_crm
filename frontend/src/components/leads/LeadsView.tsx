@@ -11,12 +11,13 @@ interface LeadsViewProps {
   onSelectLead: (leadId: string) => void;
 }
 
-export type PipelineCompany = 'RWC' | 'CRAS' | 'ALL';
+export type PipelineCompany = 'RWC' | 'CRAS' | 'AHC' | 'ALL';
 
 export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   const { leads, isSuperAdmin, isLeadsOfficer, currentUser, categories, treatments } = useCrm();
 
   const canSeeBothCompanies = isSuperAdmin || isLeadsOfficer;
+  const isAhcUser = !canSeeBothCompanies && currentUser.company === 'AHC';
   const isCrasUser = !canSeeBothCompanies && currentUser.company === 'CRAS';
   const isRwcUser = !canSeeBothCompanies && (currentUser.company === 'RWC' || !currentUser.company);
 
@@ -26,10 +27,10 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
       return (currentUser.company as PipelineCompany) || 'RWC';
     }
     const saved = localStorage.getItem('rw_crm_selected_pipeline_company') as PipelineCompany;
-    if (saved && ['RWC', 'CRAS', 'ALL'].includes(saved)) {
+    if (saved && ['RWC', 'CRAS', 'AHC', 'ALL'].includes(saved)) {
       return saved;
     }
-    return 'RWC';
+    return 'ALL';
   });
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -43,6 +44,16 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   // Kanban remains available from the existing view toggle.
   const [viewMode, setViewMode] = useState<'kanban' | 'table'>('table');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
+
+  // Sidebar sub-destinations (All Leads / Pipeline Board) reuse this view.
+  React.useEffect(() => {
+    const onViewIntent = (event: Event) => {
+      const next = (event as CustomEvent<string>).detail;
+      if (next === 'kanban' || next === 'table') setViewMode(next);
+    };
+    window.addEventListener('leads-view-change', onViewIntent);
+    return () => window.removeEventListener('leads-view-change', onViewIntent);
+  }, []);
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
@@ -59,10 +70,11 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   };
 
   // Helper to resolve lead's company cleanly
-  const getLeadCompany = (lead: Lead): 'RWC' | 'CRAS' => {
-    if (lead.company) return lead.company.toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
-    if (lead.source && lead.source.toUpperCase() === 'CRAS') return 'CRAS';
-    if (lead.categoryId === 'cat-cras-courses') return 'CRAS';
+  const getLeadCompany = (lead: Lead): 'RWC' | 'CRAS' | 'AHC' => {
+    const compUpper = String(lead.company || '').toUpperCase();
+    const srcUpper = String(lead.source || '').toUpperCase();
+    if (compUpper === 'AHC' || srcUpper === 'AHC') return 'AHC';
+    if (compUpper === 'CRAS' || srcUpper === 'CRAS' || lead.categoryId === 'cat-cras-courses') return 'CRAS';
     return 'RWC';
   };
 
@@ -78,6 +90,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
   // Calculate live counts per company for tabs
   const rwcCount = accessibleLeads.filter(l => getLeadCompany(l) === 'RWC').length;
   const crasCount = accessibleLeads.filter(l => getLeadCompany(l) === 'CRAS').length;
+  const ahcCount = accessibleLeads.filter(l => getLeadCompany(l) === 'AHC').length;
 
   // Filter leads based on company pipeline, role, & search params
   const filteredLeads = accessibleLeads.filter((lead) => {
@@ -85,7 +98,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
 
     // 1. Company Pipeline Isolation
     if (!canSeeBothCompanies) {
-      const myCompany = currentUser.company === 'CRAS' ? 'CRAS' : 'RWC';
+      const myCompany = currentUser.company || 'RWC';
       if (leadComp !== myCompany) return false;
     } else {
       if (selectedCompany !== 'ALL' && leadComp !== selectedCompany) {
@@ -174,7 +187,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
     const dateStr = new Date().toISOString().slice(0, 10);
     const fileName = isCrasExport 
       ? `cras_students_pipeline_${dateStr}.csv` 
-      : `royal_wellness_leads_pipeline_${dateStr}.csv`;
+      : `ahc_patient_pipeline_${dateStr}.csv`;
     link.setAttribute('download', fileName);
     document.body.appendChild(link);
     link.click();
@@ -192,12 +205,16 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
             <div className={`w-9 h-9 rounded-[10px] flex items-center justify-center border shrink-0 shadow-sm transition-all overflow-hidden p-1 bg-white dark:bg-slate-800 ${
               selectedCompany === 'CRAS' 
                 ? 'border-rose-200 dark:border-rose-500/50 ring-2 ring-rose-500/20' 
+                : selectedCompany === 'AHC'
+                ? 'border-[#066e77]/40 dark:border-[#066e77]/60 ring-2 ring-[#066e77]/20'
                 : selectedCompany === 'RWC'
                 ? 'border-emerald-200 dark:border-emerald-500/50 ring-2 ring-emerald-500/20'
                 : 'border-slate-200 dark:border-slate-700'
             }`}>
               {selectedCompany === 'CRAS' ? (
                 <img src="/cras-logo.png" alt="CRAS College" className="w-full h-full object-contain" />
+              ) : selectedCompany === 'AHC' ? (
+                <img src="/ahc-logo.png" alt="Alpha Health Consultancy" className="w-full h-full object-contain" />
               ) : selectedCompany === 'RWC' ? (
                 <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
               ) : (
@@ -209,33 +226,39 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
                 <h2 className="text-[13px] font-extrabold text-slate-900 dark:text-white tracking-tight">
                   {selectedCompany === 'CRAS' 
                     ? 'CRAS College Admissions Pipeline' 
+                    : selectedCompany === 'AHC'
+                    ? 'Alpha Health Consultancy Client Pipeline'
                     : selectedCompany === 'RWC'
-                    ? 'Royal Wellness Patient Pipeline'
+                    ? 'Royal Wellness Center Patient Pipeline'
                     : 'Unified Multi-Company Pipeline'}
                 </h2>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
                   selectedCompany === 'CRAS'
                     ? 'bg-rose-50 dark:bg-rose-500/15 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-500/30'
+                    : selectedCompany === 'AHC'
+                    ? 'bg-[#066e77]/10 dark:bg-[#066e77]/25 text-[#066e77] dark:text-teal-200 border-[#066e77]/30 dark:border-[#066e77]/50'
                     : selectedCompany === 'RWC'
                     ? 'bg-emerald-50 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-500/30'
                     : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700'
                 }`}>
-                  {filteredLeads.length} {selectedCompany === 'CRAS' ? 'Inquiries' : 'Leads'}
+                  {filteredLeads.length} {selectedCompany === 'CRAS' ? 'Inquiries' : selectedCompany === 'AHC' ? 'Clients' : 'Leads'}
                 </span>
               </div>
               <p className="hidden sm:block text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate">
                 {selectedCompany === 'CRAS' 
                   ? 'College of Royal Aesthetic Studies • Academic Courses & Students • WhatsApp +94 70 637 3353' 
+                  : selectedCompany === 'AHC'
+                  ? 'Alpha Health Consultancy • International Consultancy & Client Relations • WhatsApp +971 54 372 3912'
                   : selectedCompany === 'RWC'
                   ? 'Royal Wellness Center • Clinical Care & Patient Inquiries • WhatsApp +94 70 639 3353'
-                  : 'Consolidated overview across all companies (Super Admin & Leads Officer view)'}
+                  : 'Consolidated overview across all Alpha Health Group companies'}
               </p>
             </div>
           </div>
 
           {/* Company Pipeline Switcher Tabs */}
           <div className="flex items-center bg-slate-100 dark:bg-slate-950/90 p-1 rounded-[10px] border border-slate-200 dark:border-slate-800 gap-1 self-start lg:self-auto shrink-0 shadow-inner">
-            {/* RWC Wellness Pipeline Tab */}
+            {/* RWC Pipeline Tab */}
             <button
               type="button"
               onClick={() => handleCompanyChange('RWC')}
@@ -246,7 +269,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-emerald-500 dark:bg-emerald-400"></span>
-              <span>(RWC) Wellness</span>
+              <span>RWC Center</span>
               <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-emerald-100 dark:bg-emerald-950/80 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/60">
                 {rwcCount}
               </span>
@@ -263,9 +286,26 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               }`}
             >
               <span className="w-2 h-2 rounded-full bg-rose-500 dark:bg-rose-400"></span>
-              <span>(CRAS) College</span>
+              <span>CRAS College</span>
               <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-rose-100 dark:bg-rose-950/80 text-rose-800 dark:text-rose-300 border border-rose-300 dark:border-rose-800/60">
                 {crasCount}
+              </span>
+            </button>
+
+            {/* Alpha Health Consultancy Tab */}
+            <button
+              type="button"
+              onClick={() => handleCompanyChange('AHC')}
+              className={`h-9 px-3 rounded-lg text-[13px] font-bold flex items-center gap-2 transition-all ${
+                selectedCompany === 'AHC'
+                  ? 'bg-[#066e77]/15 dark:bg-[#066e77]/30 border border-[#066e77]/60 text-[#066e77] dark:text-teal-200 shadow-sm dark:shadow-md ring-1 ring-[#066e77]/30'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-200/70 dark:hover:bg-slate-900 border border-transparent'
+              }`}
+            >
+              <span className="w-2 h-2 rounded-full bg-[#066e77] dark:bg-[#066e77]"></span>
+              <span>Alpha Health</span>
+              <span className="text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-teal-50 dark:bg-[#066e77]/40 text-[#066e77] dark:text-teal-200 border border-teal-200 dark:border-teal-700/50">
+                {ahcCount}
               </span>
             </button>
 
@@ -286,18 +326,22 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
           </div>
         </div>
       ) : (
-        /* Coordinator / Counsellor: Strictly Locked Single-Company Pipeline Indicator */
+        /* Coordinator / Counsellor / Advisor: Strictly Locked Single-Company Pipeline Indicator */
         <div className={`min-h-16 px-3 py-2.5 sm:px-4 rounded-[10px] border shadow-sm flex items-center justify-between gap-3 ${
           isCrasUser 
             ? 'bg-rose-50 dark:bg-[#800000]/20 border-rose-200 dark:border-rose-500/40 text-rose-800 dark:text-rose-200' 
+            : isAhcUser
+            ? 'bg-teal-50/70 dark:bg-[#066e77]/20 border-teal-200 dark:border-[#066e77]/40 text-[#066e77] dark:text-teal-200'
             : 'bg-emerald-50 dark:bg-[#008000]/15 border-emerald-200 dark:border-emerald-500/40 text-emerald-800 dark:text-emerald-200'
         }`}>
           <div className="flex items-center gap-2.5">
             <div className={`w-10 h-10 rounded-xl flex items-center justify-center border shrink-0 shadow-sm overflow-hidden p-1 bg-white dark:bg-slate-800 ${
-              isCrasUser ? 'border-rose-300 dark:border-rose-500/50' : 'border-emerald-300 dark:border-emerald-500/50'
+              isCrasUser ? 'border-rose-300 dark:border-rose-500/50' : isAhcUser ? 'border-teal-300 dark:border-[#066e77]/50' : 'border-emerald-300 dark:border-emerald-500/50'
             }`}>
               {isCrasUser ? (
                 <img src="/cras-logo.png" alt="CRAS College" className="w-full h-full object-contain" />
+              ) : isAhcUser ? (
+                <img src="/ahc-logo.png" alt="Alpha Health Consultancy" className="w-full h-full object-contain" />
               ) : (
                 <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
               )}
@@ -306,26 +350,30 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
               <div className="flex items-center gap-2">
                 <h2 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
                   {isCrasUser 
-                    ? 'College of Royal Aesthetic Studies (CRAS) — Admissions Pipeline' 
-                    : 'Royal Wellness Center (RWC) — Patient Care Pipeline'}
+                    ? 'College of Royal Aesthetic Studies CRAS — Admissions Pipeline'
+                    : isAhcUser
+                    ? 'Alpha Health Consultancy AHC — Client Advisory Pipeline'
+                    : 'Royal Wellness Center RWC — Patient Care Pipeline'}
                 </h2>
                 <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${
-                  isCrasUser ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/40' : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40'
+                  isCrasUser ? 'bg-rose-100 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300 border-rose-300 dark:border-rose-500/40' : isAhcUser ? 'bg-teal-100 dark:bg-[#066e77]/30 text-[#066e77] dark:text-teal-200 border-teal-300 dark:border-[#066e77]/50' : 'bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 border-emerald-300 dark:border-emerald-500/40'
                 }`}>
-                  {filteredLeads.length} Assigned {isCrasUser ? 'Inquiries' : 'Leads'}
+                  {filteredLeads.length} Assigned {isCrasUser ? 'Inquiries' : isAhcUser ? 'Clients' : 'Leads'}
                 </span>
               </div>
               <p className="text-[10.5px] text-slate-600 dark:text-slate-300/80">
                 {isCrasUser 
                   ? 'Student academic inquiries and course admissions • Connected line: +94 70 637 3353' 
-                  : 'Clinical patient treatments and consultations • Connected line: +94 70 639 3353'}
+                  : isAhcUser
+                  ? 'Alpha Health consultancy and client advisory • Connected line: +971 54 372 3912'
+                  : 'RWC clinical patient treatments and consultations • Connected line: +94 70 639 3353'}
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white dark:bg-slate-950/70 border border-slate-200 dark:border-slate-800 text-[11px] font-semibold text-slate-600 dark:text-slate-400 shrink-0 shadow-sm">
             <Lock className="w-3 h-3 text-amber-500 dark:text-amber-400" />
-            <span>{isCrasUser ? '(CRAS) Locked Line' : '(RWC) Locked Line'}</span>
+            <span>{isCrasUser ? 'CRAS Locked Line' : isAhcUser ? 'AHC Locked Line' : 'RWC Locked Line'}</span>
           </div>
         </div>
       )}

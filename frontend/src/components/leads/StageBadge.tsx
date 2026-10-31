@@ -58,6 +58,26 @@ export const STAGE_CONFIG: Record<LeadStage, { label: string; shortLabel: string
     pillText: 'text-[#38bdf8]',
     pillBorder: 'border-[#38bdf8]/40'
   },
+  forwarded_to_exam_department: {
+    label: 'Forwarded to Exam Department',
+    shortLabel: 'FORWARDED TO EXAM',
+    bg: 'bg-cyan-500/15',
+    text: 'text-cyan-400',
+    border: 'border-cyan-500/30',
+    pillBg: 'bg-[#0891b2]/20',
+    pillText: 'text-[#22d3ee]',
+    pillBorder: 'border-[#22d3ee]/40'
+  },
+  forwarded_to_processing_department: {
+    label: 'Forwarded to Processing Department',
+    shortLabel: 'FORWARDED TO PROCESSING',
+    bg: 'bg-orange-500/15',
+    text: 'text-orange-400',
+    border: 'border-orange-500/30',
+    pillBg: 'bg-[#ea580c]/20',
+    pillText: 'text-[#fb923c]',
+    pillBorder: 'border-[#fb923c]/40'
+  },
   not_relevant: {
     label: 'Not Relevant Inquiry',
     shortLabel: 'NOT RELEVANT',

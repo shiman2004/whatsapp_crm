@@ -10,15 +10,16 @@ import {
 import { useCrm } from '../../context/CrmContext';
 import { Lead } from '../../types';
 
-const COLORS = ['#14b8a6', '#f59e0b', '#8b5cf6', '#3b82f6', '#ec4899', '#10b981', '#64748b'];
+const COLORS = ['#25D366', '#128C7E', '#087EA4', '#34B7F1', '#F59E0B', '#075E54', '#8696A0'];
 
 interface TreatmentDistributionChartProps {
   leads?: Lead[];
 }
 
 export const TreatmentDistributionChart: React.FC<TreatmentDistributionChartProps> = ({ leads: propLeads }) => {
-  const { leads: ctxLeads, categories } = useCrm();
+  const { leads: ctxLeads, categories, resolvedTheme } = useCrm();
   const leads = propLeads || ctxLeads;
+  const isDark = resolvedTheme === 'dark';
 
   const data = categories.map((cat) => ({
     name: cat.name.split('&')[0].trim(),
@@ -26,18 +27,18 @@ export const TreatmentDistributionChart: React.FC<TreatmentDistributionChartProp
   })).filter(d => d.value > 0);
 
   return (
-    <div className="bg-white dark:bg-slate-900/80 p-5 rounded-2xl border border-slate-200 dark:border-slate-800 backdrop-blur-md shadow-sm dark:shadow-lg space-y-4">
+    <div className="bg-white dark:bg-[#202C33] p-5 rounded-2xl border border-[#E0E5E7] dark:border-[#222D34] shadow-sm space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-100">Enquiries by Treatment Category</h3>
-          <p className="text-xs text-slate-500 dark:text-slate-400">Demand distribution across wellness verticals</p>
+          <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">Enquiries by Treatment Category</h3>
+          <p className="text-xs text-[#667781] dark:text-[#8696A0]">Demand distribution across wellness verticals</p>
         </div>
       </div>
 
       {data.length === 0 ? (
-        <div className="h-64 w-full flex flex-col items-center justify-center text-slate-400 dark:text-slate-500 text-xs border border-dashed border-slate-300 dark:border-slate-800 rounded-xl">
-          <p className="font-semibold text-slate-600 dark:text-slate-400">No Treatment Inquiries Yet</p>
-          <p className="text-[11px] text-slate-400 dark:text-slate-500 mt-0.5">Live incoming WhatsApp chats will populate category analytics</p>
+        <div className="h-64 w-full flex flex-col items-center justify-center text-[#667781] dark:text-[#8696A0] text-xs border border-dashed border-[#E0E5E7] dark:border-[#222D34] rounded-xl">
+          <p className="font-semibold text-[#111B21] dark:text-[#E9EDEF]">No Treatment Inquiries Yet</p>
+          <p className="text-[11px] text-[#667781] dark:text-[#8696A0] mt-0.5">Live incoming WhatsApp chats will populate category analytics</p>
         </div>
       ) : (
         <div className="h-64 w-full flex items-center justify-center">
@@ -58,16 +59,20 @@ export const TreatmentDistributionChart: React.FC<TreatmentDistributionChartProp
               </Pie>
               <Tooltip
                 contentStyle={{
-                  backgroundColor: '#0f172a',
-                  borderColor: '#334155',
+                  backgroundColor: isDark ? '#202C33' : '#FFFFFF',
+                  borderColor: isDark ? '#222D34' : '#E0E5E7',
                   borderRadius: '8px',
                   fontSize: '12px',
-                  color: '#f8fafc'
+                  color: isDark ? '#E9EDEF' : '#111B21',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.15)'
+                }}
+                itemStyle={{
+                  color: isDark ? '#E9EDEF' : '#111B21'
                 }}
                 formatter={(val: any) => [`${val} Inquiries`, 'Count']}
               />
               <Legend 
-                wrapperStyle={{ fontSize: '11px', color: '#94a3b8' }}
+                wrapperStyle={{ fontSize: '11px', color: isDark ? '#8696A0' : '#667781' }}
                 layout="horizontal"
                 verticalAlign="bottom"
                 align="center"

@@ -1,11 +1,14 @@
 /**
- * Multi-Company Configuration: Royal Wellness Center (RWC) & College of Royal Aesthetic of Sri Lanka (CRAS)
+ * Multi-Company Configuration:
+ * - Royal Wellness Center (RWC)
+ * - College of Royal Aesthetic of Sri Lanka (CRAS)
+ * - Alpha Health Consultancy (AHC)
  */
 
 export const COMPANIES = {
   RWC: {
     code: 'RWC',
-    tag: '(RWC)',
+    tag: 'RWC',
     name: 'Royal Wellness Center',
     shortName: 'Royal Wellness',
     colorHex: '#008000', // Green requested by user
@@ -17,7 +20,7 @@ export const COMPANIES = {
   },
   CRAS: {
     code: 'CRAS',
-    tag: '(CRAS)',
+    tag: 'CRAS',
     name: 'College of Royal Aesthetic of Sri Lanka',
     shortName: 'CRAS College',
     colorHex: '#800000', // Maroon requested by user
@@ -26,6 +29,18 @@ export const COMPANIES = {
     phoneNumber: '+94 70 637 3353',
     phone: '+94 70 637 3353',
     displayPhoneDigits: '94706373353',
+  },
+  AHC: {
+    code: 'AHC',
+    tag: 'AHC',
+    name: 'Alpha Health Consultancy',
+    shortName: 'Alpha Health',
+    colorHex: '#066e77', // Deep Teal sampled directly from the official logo
+    color: '#066e77',
+    phoneId: process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830',
+    phoneNumber: '+971 54 372 3912',
+    phone: '+971 54 372 3912',
+    displayPhoneDigits: '971543723912',
   }
 };
 
@@ -35,16 +50,21 @@ export const COMPANIES = {
 export function resolveCompany(phoneId, displayPhoneNumber) {
   const pId = String(phoneId || '').trim();
   const dPhone = String(displayPhoneNumber || '').replace(/[^0-9]/g, '');
+  const ahcPhoneId = (process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim();
+  const crasPhoneId = (process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim();
 
-  if (pId === '1378201582041705' || dPhone.includes('6373353')) {
+  if (pId === ahcPhoneId || pId === '1408148915714830' || dPhone.includes('971543723912') || dPhone.includes('543723912') || dPhone.includes('3723912')) {
+    return COMPANIES.AHC;
+  }
+  if (pId === crasPhoneId || pId === '1378201582041705' || dPhone.includes('6373353')) {
     return COMPANIES.CRAS;
   }
   return COMPANIES.RWC;
 }
 
 /**
- * Resolves company code ('CRAS' or 'RWC') from lead attributes.
- * Prioritizes CRAS signals to avoid defaulting to RWC when legacy defaults exist.
+ * Resolves company code ('AHC', 'CRAS' or 'RWC') from lead attributes.
+ * Prioritizes explicit company signals to avoid defaulting to RWC when legacy defaults exist.
  */
 export function resolveLeadCompany(lead) {
   if (!lead) return 'RWC';
@@ -54,6 +74,20 @@ export function resolveLeadCompany(lead) {
   const catId = String(lead.categoryId || '');
   const trtComp = String(lead.treatment?.company || '').toUpperCase();
   const coordComp = String(lead.assignedCoordinator?.company || '').toUpperCase();
+
+  if (
+    comp === 'AHC' ||
+    src === 'AHC' ||
+    waSession === 'AHC' ||
+    trtComp === 'AHC' ||
+    coordComp === 'AHC' ||
+    String(lead.companyPhoneNumber || '').includes('971543723912') ||
+    lead.companyPhoneNumberId === '1408148915714830' ||
+    String(lead.customer?.whatsappNumber || '').includes('971543723912') ||
+    String(lead.customer?.whatsappNumber || '').includes('3723912')
+  ) {
+    return 'AHC';
+  }
 
   if (
     comp === 'CRAS' ||
@@ -68,4 +102,5 @@ export function resolveLeadCompany(lead) {
   }
   return 'RWC';
 }
+
 

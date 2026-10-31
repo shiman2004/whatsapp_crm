@@ -126,7 +126,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
       {/* 4 Top Summary KPI Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Card 1: New Exam Material Request */}
-        <div 
+        <div
           onClick={() => onTabChange('requests')}
           className="relative bg-[#111b21] hover:bg-[#15232b] border border-cyan-900/30 hover:border-cyan-500/50 rounded-2xl p-4 sm:p-5 flex items-center justify-between transition-all duration-200 cursor-pointer group shadow-lg shadow-black/20"
         >
@@ -148,7 +148,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
         </div>
 
         {/* Card 2: Total Exams Provided */}
-        <div 
+        <div
           onClick={() => onTabChange('provisions')}
           className="relative bg-[#111b21] hover:bg-[#15232b] border border-emerald-900/30 hover:border-emerald-500/50 rounded-2xl p-4 sm:p-5 flex items-center justify-between transition-all duration-200 cursor-pointer group shadow-lg shadow-black/20"
         >
@@ -170,7 +170,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
         </div>
 
         {/* Card 3: Total Study Materials */}
-        <div 
+        <div
           onClick={() => onTabChange('materials')}
           className="relative bg-[#111b21] hover:bg-[#15232b] border border-purple-900/30 hover:border-purple-500/50 rounded-2xl p-4 sm:p-5 flex items-center justify-between transition-all duration-200 cursor-pointer group shadow-lg shadow-black/20"
         >
@@ -192,7 +192,7 @@ export const ExamDashboardView: React.FC<ExamDashboardViewProps> = ({
         </div>
 
         {/* Card 4: Total Mock Tests */}
-        <div 
+        <div
           onClick={() => onTabChange('mock-tests')}
           className="relative bg-[#111b21] hover:bg-[#15232b] border border-amber-900/30 hover:border-amber-500/50 rounded-2xl p-4 sm:p-5 flex items-center justify-between transition-all duration-200 cursor-pointer group shadow-lg shadow-black/20"
         >

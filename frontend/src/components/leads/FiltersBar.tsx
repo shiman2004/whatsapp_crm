@@ -32,7 +32,7 @@ interface FiltersBarProps {
   setViewMode: (mode: 'kanban' | 'table') => void;
   onExportCsv: () => void;
   onAddContact: () => void;
-  company?: 'RWC' | 'CRAS' | 'ALL';
+  company?: 'RWC' | 'CRAS' | 'AHC' | 'ALL';
 }
 
 export const FiltersBar: React.FC<FiltersBarProps> = ({

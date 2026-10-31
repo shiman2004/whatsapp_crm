@@ -37,10 +37,10 @@ const checkIsAdminAllowed = (): boolean => {
   }
 };
 
-export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'leads_officer' | 'super_admin';
+export type PortalView = 'portal_select' | 'rwc' | 'cras' | 'ahc' | 'leads_officer' | 'super_admin' | 'student';
 
 export const LoginScreen: React.FC = () => {
-  const { users, login } = useCrm() as any;
+  const { users, login, refreshStaffUsers } = useCrm() as any;
   const initialAdminAllowed = checkIsAdminAllowed();
   const [isAdminUnlocked, setIsAdminUnlocked] = useState<boolean>(initialAdminAllowed);
   
@@ -52,15 +52,36 @@ export const LoginScreen: React.FC = () => {
   const [logoClickCount, setLogoClickCount] = useState<number>(0);
   const [authMode, setAuthMode] = useState<'pin' | 'password'>('pin');
 
+  // Ensure latest authoritative staff members are loaded from Supabase/Postgres
+  useEffect(() => {
+    if (typeof refreshStaffUsers === 'function') {
+      refreshStaffUsers().catch(() => {});
+    }
+  }, [refreshStaffUsers]);
+
   // Filtered staff groups — also exclude deleted users persisted in localStorage
   const _deletedIds: string[] = (() => {
     try { return JSON.parse(localStorage.getItem('rw_crm_deleted_users') || '[]'); } catch { return []; }
   })();
   const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false;
+  const EXCLUDED_PORTAL_ROLES = ['super_admin', 'leads_officer', 'marketing_officer', 'marketing_admin'];
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
-  const rwcCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && (u.company === 'RWC' || !u.company));
-  const crasCoordinators = users.filter((u: any) => _activeStaff(u) && u.role === 'coordinator' && u.company === 'CRAS');
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
+  const rwcUsers = users.filter((u: any) => 
+    _activeStaff(u) && 
+    !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
+    (u.company === 'RWC' || (!u.company && (u.role === 'coordinator' || u.role === 'sales_coordinator' || u.role?.startsWith('clinical_'))))
+  );
+  const crasUsers = users.filter((u: any) => 
+    _activeStaff(u) && 
+    !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
+    (u.company === 'CRAS' || (!u.company && u.role === 'coordinator' && u.branch === 'CRAS'))
+  );
+  const ahcUsers = users.filter((u: any) => 
+    _activeStaff(u) && 
+    !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
+    u.company === 'AHC'
+  );
 
   const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
   const [passwordInput, setPasswordInput] = useState<string>('staff');
@@ -152,19 +173,23 @@ export const LoginScreen: React.FC = () => {
       setIdentifierInput(firstAdmin ? firstAdmin.email : 'mnmshiman@gmail.com');
       setPasswordInput('admin');
     } else if (portalView === 'rwc') {
-      const firstRwc = rwcCoordinators[0];
+      const firstRwc = rwcUsers[0];
       setIdentifierInput(firstRwc ? firstRwc.email : 'faiha@royalwellness.lk');
       setPasswordInput('staff');
     } else if (portalView === 'cras') {
-      const firstCras = crasCoordinators[0];
+      const firstCras = crasUsers[0];
       setIdentifierInput(firstCras ? firstCras.email : 'zeenath@royalwellness.lk');
+      setPasswordInput('staff');
+    } else if (portalView === 'ahc') {
+      const firstAhc = ahcUsers[0];
+      setIdentifierInput(firstAhc ? firstAhc.email : 'staff@royalwellness.lk');
       setPasswordInput('staff');
     } else if (portalView === 'leads_officer') {
       const firstOfficer = leadsOfficers[0];
       setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('staff');
     }
-  }, [portalView, superAdmins.length, rwcCoordinators.length, crasCoordinators.length, leadsOfficers.length]);
+  }, [portalView, superAdmins.length, rwcUsers.length, crasUsers.length, ahcUsers.length, leadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
@@ -275,17 +300,29 @@ export const LoginScreen: React.FC = () => {
           focusBorderClass: 'focus:border-rose-600',
           activeKeyClass: 'bg-rose-900/50 border-rose-500 ring-rose-500/60'
         };
+      case 'ahc':
+        return {
+          title: 'Alpha Health Consultancy',
+          subtitle: 'Consultancy Advisor Portal',
+          accountLabel: 'Consultancy Advisor Account',
+          logoSrc: '/ahc-logo.png',
+          accentColor: '#066e77',
+          badgeText: 'AHC Consultancy',
+          badgeClass: 'bg-teal-950 text-teal-300 border-teal-800/60',
+          focusBorderClass: 'focus:border-[#066e77]',
+          activeKeyClass: 'bg-[#066e77]/40 border-[#066e77] ring-[#066e77]/60'
+        };
       case 'leads_officer':
         return {
-          title: 'Central Leads Intake',
-          subtitle: 'Leads Officers (Cross-Company: RWC + CRAS)',
-          accountLabel: 'Leads Officer Account',
-          logoSrc: '/logo.png',
-          accentColor: '#6366f1',
-          badgeText: 'Common for Both Brands',
-          badgeClass: 'bg-indigo-950 text-indigo-300 border-indigo-800/60',
-          focusBorderClass: 'focus:border-indigo-500',
-          activeKeyClass: 'bg-indigo-900/50 border-indigo-500 ring-indigo-500/60'
+          title: 'Inquiries Handling Department',
+          subtitle: 'Inquiries & Leads Intake Portal',
+          accountLabel: 'Inquiries Officer Account',
+          logoSrc: '/inquiries-logo.png',
+          accentColor: '#1d8cf8',
+          badgeText: 'Common Gateway',
+          badgeClass: 'bg-blue-950 text-blue-300 border-blue-800/60',
+          focusBorderClass: 'focus:border-blue-500',
+          activeKeyClass: 'bg-blue-900/50 border-blue-500 ring-blue-500/60'
         };
       case 'super_admin':
         return {
@@ -317,7 +354,7 @@ export const LoginScreen: React.FC = () => {
   const currentMeta = getPortalMeta();
 
   return (
-    <div className="min-h-screen w-full bg-[#0b141a] text-slate-100 flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
+    <div className="min-h-screen w-full bg-[var(--app-bg)] text-[var(--text-primary)] flex items-center justify-center p-4 relative overflow-hidden font-sans select-none">
       {/* Background Ambience */}
       <div 
         className="absolute top-0 left-0 right-0 h-44 pointer-events-none opacity-90 transition-colors duration-500"
@@ -326,15 +363,17 @@ export const LoginScreen: React.FC = () => {
             ? '#800000' 
             : portalView === 'rwc' 
             ? '#008000' 
+            : portalView === 'ahc'
+            ? '#066e77'
             : portalView === 'leads_officer'
             ? '#4338ca'
             : '#00a884'
         }}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0b141a]/80 to-[#0b141a] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--app-bg)]/80 to-[var(--app-bg)] pointer-events-none" />
 
       {/* Main Login Card */}
-      <div className="w-full max-w-md bg-[#111b21] border border-slate-800 rounded-2xl p-7 shadow-2xl relative z-10 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+      <div className="w-full max-w-md bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-7 shadow-2xl relative z-10 space-y-5 animate-in fade-in zoom-in-95 duration-200">
         
         {/* ========================================================================= */}
         {/* VIEW 1: PORTAL SELECTION (Option 2 Workplace Grid)                       */}
@@ -351,15 +390,15 @@ export const LoginScreen: React.FC = () => {
                 <img src="/logo.png" alt="Alpha Health Group Logo" className="w-full h-full object-contain" />
               </div>
               <div>
-                <h1 className="text-xl font-bold text-white tracking-wide">
+                <h1 className="text-xl font-bold text-[#111B21] dark:text-[#E9EDEF] tracking-wide">
                   Alpha Health Group
                 </h1>
-                <p className="text-xs text-[#8696a0]">
+                <p className="text-xs text-[#667781] dark:text-[#8696A0]">
                   Centralized WhatsApp Healthcare & Clinical Gateway
                 </p>
               </div>
               <div className="pt-1.5">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-300 bg-slate-800/80 px-3 py-1 rounded-full border border-slate-700/60 inline-block shadow-inner">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-[#111B21] dark:text-[#E9EDEF] bg-[#F0F2F5] dark:bg-[#2A3942] px-3 py-1 rounded-full border border-[#E0E5E7] dark:border-[#222D34] inline-block shadow-inner">
                   Select Workplace Portal
                 </span>
               </div>
@@ -368,35 +407,29 @@ export const LoginScreen: React.FC = () => {
             {/* Portal Cards List */}
             <div className="space-y-3 pt-1">
               
-              {/* 1. Royal Wellness Center (RWC) Card */}
+              {/* 1. Royal Wellness Center RWC Card */}
               <button
                 type="button"
                 onClick={() => setPortalView('rwc')}
-                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#12221c] hover:to-[#172e25] border border-emerald-900/50 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+                className="w-full p-3.5 rounded-2xl bg-[#F0F2F5] hover:bg-[#E0E5E7] dark:bg-[#2A3942] dark:hover:bg-[#202C33] border border-emerald-900/50 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
               >
                 <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-emerald-500/30 group-hover:ring-emerald-400 group-hover:scale-105 transition-all">
                   <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">
+                    <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] group-hover:text-[#128C7E] dark:group-hover:text-[#25D366] transition-colors">
                       Royal Wellness Center
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
                       RWC
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-emerald-400 mt-0.5">
-                    Patient Coordinators
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    Clinical patient care, treatments & consultations
-                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
-              {/* 2. College of Royal Aesthetic (CRAS) Card */}
+              {/* 2. College of Royal Aesthetic CRAS Card */}
               <button
                 type="button"
                 onClick={() => setPortalView('cras')}
@@ -407,49 +440,59 @@ export const LoginScreen: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white group-hover:text-rose-300 transition-colors">
+                    <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] group-hover:text-rose-600 dark:group-hover:text-rose-300] transition-colors">
                       College of Royal Aesthetic
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800/60">
                       CRAS
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-rose-400 mt-0.5">
-                    Education Counsellors
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    Diploma courses, student enrollments & aesthetics
-                  </p>
                 </div>
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-rose-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
-              {/* 3. Central Leads Management Card (Common for every lead officer) */}
+              {/* 3. Alpha Health Consultancy AHC Card */}
+              <button
+                type="button"
+                onClick={() => setPortalView('ahc')}
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#122325] hover:to-[#173033] border border-teal-900/50 hover:border-[#066e77]/70 shadow-lg hover:shadow-teal-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+              >
+                <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-teal-500/30 group-hover:ring-teal-400 group-hover:scale-105 transition-all">
+                  <img src="/ahc-logo.png" alt="Alpha Health Consultancy" className="w-full h-full object-contain" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-white group-hover:text-teal-300 transition-colors">
+                      Alpha Health Consultancy
+                    </span>
+                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-teal-950 text-teal-300 border border-teal-800/60">
+                      AHC
+                    </span>
+                  </div>
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-teal-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+              </button>
+
+              {/* 4. Inquiries Handling Department Card (Common for every lead officer) */}
               <button
                 type="button"
                 onClick={() => setPortalView('leads_officer')}
                 className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#111b21] to-[#151a2b] hover:to-[#1a2137] border border-indigo-900/50 hover:border-indigo-500/70 shadow-lg hover:shadow-indigo-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
               >
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-tr from-indigo-950 to-[#202c33] border border-indigo-500/40 flex items-center justify-center shadow-md shrink-0 group-hover:border-indigo-400 group-hover:scale-105 transition-all text-indigo-400">
-                  <ShieldCheck className="w-7 h-7" />
+                <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-blue-500/30 group-hover:ring-blue-400 group-hover:scale-105 transition-all overflow-hidden">
+                  <img src="/inquiries-logo.png" alt="Inquiries Handling Department" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-white group-hover:text-indigo-300 transition-colors">
-                      Central Leads Intake
+                    <span className="text-sm font-bold text-white group-hover:text-blue-300 transition-colors">
+                      Inquiries Handling Department
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-indigo-950 text-indigo-300 border border-indigo-800/60">
                       Common
                     </span>
                   </div>
-                  <p className="text-xs font-semibold text-indigo-300 mt-0.5">
-                    Leads Officers (Both Companies)
-                  </p>
-                  <p className="text-[11px] text-[#8696a0] mt-0.5 truncate">
-                    Cross-company unified triage & assignment (RWC + CRAS)
-                  </p>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-indigo-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
               {/* 4. Super Admin (Discreetly rendered when unlocked via ?admin=true or shortcut) */}
@@ -543,7 +586,7 @@ export const LoginScreen: React.FC = () => {
                     </option>
                   ))}
                 </select>
-              ) : portalView === 'rwc' && rwcCoordinators.length > 0 ? (
+              ) : portalView === 'rwc' && rwcUsers.length > 0 ? (
                 <select
                   value={identifierInput}
                   onChange={(e) => {
@@ -553,13 +596,13 @@ export const LoginScreen: React.FC = () => {
                   }}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-emerald-500 transition-colors cursor-pointer"
                 >
-                  {rwcCoordinators.map((c: any) => (
+                  {rwcUsers.map((c: any) => (
                     <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                      {c.fullName} — Patient Coordinator ({c.branch || 'Colombo'})
+                      {c.fullName} — {c.role === 'coordinator' ? 'Patient Coordinator' : (c.roleTitle || c.role?.replace(/_/g, ' ') || 'Staff')} ({c.branch || 'Colombo'})
                     </option>
                   ))}
                 </select>
-              ) : portalView === 'cras' && crasCoordinators.length > 0 ? (
+              ) : portalView === 'cras' && crasUsers.length > 0 ? (
                 <select
                   value={identifierInput}
                   onChange={(e) => {
@@ -569,11 +612,33 @@ export const LoginScreen: React.FC = () => {
                   }}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-rose-600 transition-colors cursor-pointer"
                 >
-                  {crasCoordinators.map((c: any) => (
+                  {crasUsers.map((c: any) => (
                     <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
-                      {c.fullName} — Education Counsellor ({c.branch || 'Colombo'})
+                      {c.fullName} — {c.role === 'coordinator' ? 'Education Counsellor' : (c.roleTitle || c.role?.replace(/_/g, ' ') || 'Staff')} ({c.branch || 'Colombo'})
                     </option>
                   ))}
+                </select>
+              ) : portalView === 'ahc' ? (
+                <select
+                  value={identifierInput}
+                  onChange={(e) => {
+                    setIdentifierInput(e.target.value);
+                    setPinDigits([]);
+                    setErrorMsg(null);
+                  }}
+                  className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-[#066e77] transition-colors cursor-pointer"
+                >
+                  {ahcUsers.length > 0 ? (
+                    ahcUsers.map((c: any) => (
+                      <option key={c.id} value={c.email} className="bg-[#111b21] text-white">
+                        {c.fullName} — {c.role === 'coordinator' ? 'Consultancy Advisor' : (c.roleTitle || c.role?.replace(/_/g, ' ') || 'Staff')} ({c.branch || 'Colombo'})
+                      </option>
+                    ))
+                  ) : (
+                    <option value="staff@royalwellness.lk" className="bg-[#111b21] text-white">
+                      Consultancy Advisor (staff@royalwellness.lk)
+                    </option>
+                  )}
                 </select>
               ) : portalView === 'leads_officer' && leadsOfficers.length > 0 ? (
                 <select
@@ -587,7 +652,7 @@ export const LoginScreen: React.FC = () => {
                 >
                   {leadsOfficers.map((o: any) => (
                     <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
-                      {o.fullName} — Leads Officer (Common / Both Brands)
+                      {o.fullName} — Inquiries & Leads Officer (Common Gateway)
                     </option>
                   ))}
                 </select>

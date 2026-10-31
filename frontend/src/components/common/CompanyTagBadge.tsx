@@ -17,16 +17,28 @@ export const CompanyTagBadge: React.FC<CompanyTagBadgeProps> = ({
   showFullName = false,
   className = ''
 }) => {
-  const comp: CompanyConfig = (company === 'CRAS' || lead?.company === 'CRAS' || lead?.source === 'CRAS')
-    ? COMPANIES.CRAS
-    : getLeadCompany(lead);
+  let comp: CompanyConfig;
+  if (company && COMPANIES[company as CompanyCode]) {
+    comp = COMPANIES[company as CompanyCode];
+  } else if (company === 'AHC' || lead?.company === 'AHC' || lead?.source === 'AHC') {
+    comp = COMPANIES.AHC;
+  } else if (company === 'CRAS' || lead?.company === 'CRAS' || lead?.source === 'CRAS') {
+    comp = COMPANIES.CRAS;
+  } else {
+    comp = getLeadCompany(lead);
+  }
 
-  const isCras = comp.code === 'CRAS';
-
-  // User requested exact hex codes:
-  // Royal Wellness Center (RWC): Green #008000
+  // Brand colors requested by user:
+  // Alpha Health Consultancy (AHC): Deep Teal #066e77 (from official logo)
   // College of Royal Aesthetic of Sri Lanka (CRAS): Maroon #800000
-  const badgeStyle: React.CSSProperties = isCras
+  // Royal Wellness Center (RWC): Green #008000
+  const badgeStyle: React.CSSProperties = comp.code === 'AHC'
+    ? {
+        backgroundColor: '#066e77',
+        color: '#ffffff',
+        borderColor: '#045158'
+      }
+    : comp.code === 'CRAS'
     ? {
         backgroundColor: '#800000',
         color: '#ffffff',
@@ -50,11 +62,12 @@ export const CompanyTagBadge: React.FC<CompanyTagBadgeProps> = ({
       } ${className}`}
       title={comp.name}
     >
-      <span>{comp.tag}</span>
-      {showFullName && (
+      {showFullName ? (
         <span className="font-semibold normal-case text-[10px] opacity-90 hidden sm:inline">
-          {comp.shortName}
+          {comp.shortName || comp.name}
         </span>
+      ) : (
+        <span>{comp.tag}</span>
       )}
     </span>
   );

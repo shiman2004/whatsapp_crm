@@ -19,8 +19,8 @@ function safeAuditValue(value) {
   }
 }
 
-export async function auditSecurityEvent({ correlationId, actorId, action, resource, outcome, metadata = {} }) {
-  const event = {
+export function buildSecurityEvent({ correlationId, actorId, action, resource, outcome, metadata = {} }) {
+  return {
     id: crypto.randomUUID(),
     correlationId: String(correlationId || ''),
     actorId: actorId ? String(actorId) : null,
@@ -30,11 +30,13 @@ export async function auditSecurityEvent({ correlationId, actorId, action, resou
     metadata: safeAuditValue(metadata),
     createdAt: new Date()
   };
-  console.log(JSON.stringify({ type: 'security_audit', ...event }));
-  const prisma = getPrisma();
-  if (!prisma || !getDbStatus()) return false;
+}
+
+/** Writes one audit row through a Prisma client or transaction client. */
+export async function persistSecurityEvent(client, event) {
+  if (!client) return false;
   try {
-    await prisma.$executeRawUnsafe(`
+    await client.$executeRawUnsafe(`
       INSERT INTO public.security_audit_events
         (id, correlation_id, actor_id, action, resource, outcome, metadata, created_at)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -43,6 +45,32 @@ export async function auditSecurityEvent({ correlationId, actorId, action, resou
   } catch (error) {
     console.error('[Security] Audit persistence failed:', error.message);
     return false;
+  }
+}
+
+export async function auditSecurityEvent(payload) {
+  const event = buildSecurityEvent(payload);
+  console.log(JSON.stringify({ type: 'security_audit', ...event }));
+  const prisma = getPrisma();
+  if (!prisma || !getDbStatus()) return false;
+  return persistSecurityEvent(prisma, event);
+}
+
+/** Same audit trail, but joins the caller's transaction so the write is atomic with the change. */
+export async function auditSecurityEventInTransaction(tx, payload) {
+  const event = buildSecurityEvent(payload);
+  console.log(JSON.stringify({ type: 'security_audit', ...event }));
+  return persistSecurityEvent(tx, event);
+}
+
+export function parseAuditMetadata(value) {
+  if (!value) return {};
+  if (typeof value === 'object') return value;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
   }
 }
 

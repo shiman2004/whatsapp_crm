@@ -209,10 +209,10 @@ export const UploadMaterialModal: React.FC<UploadMaterialModalProps> = ({
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
               className={`border-2 border-dashed rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all ${
-                dragOver 
-                  ? 'border-emerald-500 bg-emerald-500/10' 
-                  : selectedFile 
-                  ? 'border-emerald-500/60 bg-[#202c33]/40' 
+                dragOver
+                  ? 'border-emerald-500 bg-emerald-500/10'
+                  : selectedFile
+                  ? 'border-emerald-500/60 bg-[#202c33]/40'
                   : 'border-slate-700 hover:border-slate-500 bg-[#202c33]/20'
               }`}
             >
@@ -337,7 +337,7 @@ export const UploadMaterialModal: React.FC<UploadMaterialModalProps> = ({
                 <span>{progress}%</span>
               </div>
               <div className="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
-                <div 
+                <div
                   className="h-full bg-emerald-500 transition-all duration-300 rounded-full"
                   style={{ width: `${progress}%` }}
                 />

@@ -14,7 +14,9 @@ import {
   Eye,
   ShieldCheck,
   Check,
-  Sparkles
+  Sparkles,
+  Plus,
+  X
 } from 'lucide-react';
 import {
   examService,
@@ -26,15 +28,25 @@ interface MockTestRunnerViewProps {
   initialCourseId?: string;
   currentUser?: { id?: string; fullName?: string };
   onNavigateToPractice?: () => void;
+  onNavigateToQuestionBank?: () => void;
 }
 
 export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
   initialCourseId = 'course-dha-rn',
   currentUser,
   onNavigateToPractice,
+  onNavigateToQuestionBank,
 }) => {
   const [mockTests, setMockTests] = useState<ExamMockTestPlatform[]>([]);
+  const [mockQuestionCount, setMockQuestionCount] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [newMockTitle, setNewMockTitle] = useState('DHA Registered Nurse Mock Examination 01');
+  const [newMockQuestions, setNewMockQuestions] = useState(2);
+  const [newMockDuration, setNewMockDuration] = useState(30);
+  const [newPerQuestionSeconds, setNewPerQuestionSeconds] = useState(0);
+  const [newPassingScore, setNewPassingScore] = useState(65);
+  const [creatingMock, setCreatingMock] = useState(false);
 
   // Active Test State
   const [activeTest, setActiveTest] = useState<ExamMockTestPlatform | null>(null);
@@ -42,6 +54,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [flaggedQuestions, setFlaggedQuestions] = useState<Record<string, boolean>>({});
   const [secondsRemaining, setSecondsRemaining] = useState<number>(120 * 60);
+  const [questionSecondsRemaining, setQuestionSecondsRemaining] = useState<number>(0);
   const [timeTakenSeconds, setTimeTakenSeconds] = useState<number>(0);
   const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -56,13 +69,55 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
   const loadMockTests = async () => {
     try {
       setLoading(true);
-      const res = await fetch('/api/exam/mock-tests');
-      const json = await res.json();
-      if (json.data) setMockTests(json.data);
+      const [mockResult, questionResult] = await Promise.all([
+        examService.getMockTests(),
+        examService.getQuestionBank({ courseId: initialCourseId, questionType: 'Mock Test' }).catch(() => []),
+      ]);
+      setMockTests(mockResult.map((test) => ({
+        id: test.id,
+        courseId: initialCourseId,
+        mockTestName: test.title,
+        subjectScope: test.targetProfession || 'Registered Nurse',
+        durationMinutes: test.durationMinutes,
+        perQuestionSeconds: test.perQuestionSeconds,
+        totalQuestions: test.totalQuestions,
+        passPercentage: test.passingScore,
+        randomQuestionOrder: true,
+        randomAnswerOrder: false,
+        allowBackNavigation: true,
+        showResults: 'Immediately',
+        status: test.isActive === false ? 'Draft' : 'Published',
+      })));
+      setMockQuestionCount(questionResult.length);
     } catch (err) {
       console.error('Failed to load mock tests:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreatePublishedMock = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!newMockTitle.trim()) return;
+    try {
+      setCreatingMock(true);
+      await examService.createMockTest({
+        title: newMockTitle.trim(),
+        categoryId: 'cat-dha',
+        categoryName: 'DHA',
+        targetProfession: 'Registered Nurse',
+        totalQuestions: newMockQuestions,
+        durationMinutes: newMockDuration,
+        perQuestionSeconds: newPerQuestionSeconds > 0 ? newPerQuestionSeconds : undefined,
+        passingScore: newPassingScore,
+        difficulty: 'Medium',
+      });
+      setIsCreateModalOpen(false);
+      await loadMockTests();
+    } catch (error: any) {
+      alert(error.message || 'Unable to publish mock test');
+    } finally {
+      setCreatingMock(false);
     }
   };
 
@@ -73,6 +128,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
   // Countdown Timer
   useEffect(() => {
     if (activeTest && !testResult) {
+      const perQuestionSeconds = Number(activeTest.perQuestionSeconds) || 0;
       timerRef.current = setInterval(() => {
         setSecondsRemaining((prev) => {
           if (prev <= 1) {
@@ -83,6 +139,21 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
           return prev - 1;
         });
         setTimeTakenSeconds((prev) => prev + 1);
+        if (perQuestionSeconds > 0) {
+          setQuestionSecondsRemaining((prev) => {
+            if (prev <= 1) {
+              const questionCount = activeTest.questions?.length || 0;
+              if (currentQIndex + 1 < questionCount) {
+                setCurrentQIndex((index) => index + 1);
+                return perQuestionSeconds;
+              }
+              clearInterval(timerRef.current);
+              handleAutoSubmit();
+              return 0;
+            }
+            return prev - 1;
+          });
+        }
       }, 1000);
     } else {
       if (timerRef.current) clearInterval(timerRef.current);
@@ -91,7 +162,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [activeTest, testResult]);
+  }, [activeTest, testResult, currentQIndex]);
 
   const handleStartTest = async (testId: string) => {
     try {
@@ -102,6 +173,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
       setSelectedAnswers({});
       setFlaggedQuestions({});
       setSecondsRemaining((data.durationMinutes || 120) * 60);
+      setQuestionSecondsRemaining(Number(data.perQuestionSeconds) || 0);
       setTimeTakenSeconds(0);
       setTestResult(null);
       setIsReviewMode(false);
@@ -132,6 +204,11 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
       ...prev,
       [qId]: !prev[qId],
     }));
+  };
+
+  const jumpToMockQuestion = (index: number) => {
+    setCurrentQIndex(index);
+    if (activeTest?.perQuestionSeconds) setQuestionSecondsRemaining(activeTest.perQuestionSeconds);
   };
 
   const handleFinalSubmit = async () => {
@@ -409,6 +486,17 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
                 <span>{formatTime(secondsRemaining)}</span>
               </div>
 
+              {activeTest.perQuestionSeconds && (
+                <div className={`flex items-center gap-2 rounded-xl border px-3 py-1.5 font-mono text-xs font-bold ${
+                  questionSecondsRemaining <= 10
+                    ? 'border-rose-500/60 bg-rose-500/20 text-rose-300 animate-pulse'
+                    : 'border-teal-500/40 bg-teal-950/30 text-teal-300'
+                }`}>
+                  <span>Question time</span>
+                  <span>{formatTime(questionSecondsRemaining)}</span>
+                </div>
+              )}
+
               <button
                 type="button"
                 onClick={() => setIsSubmitModalOpen(true)}
@@ -449,7 +537,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
                     <button
                       key={q.id}
                       type="button"
-                      onClick={() => setCurrentQIndex(idx)}
+                      onClick={() => jumpToMockQuestion(idx)}
                       className={`h-8 rounded-lg font-mono text-xs font-bold flex items-center justify-center transition-all cursor-pointer relative ${
                         isCurrent
                           ? 'ring-2 ring-teal-400 border-white text-white bg-slate-800'
@@ -556,7 +644,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
                   <button
                     type="button"
                     disabled={currentQIndex === 0}
-                    onClick={() => setCurrentQIndex((prev) => prev - 1)}
+                    onClick={() => jumpToMockQuestion(currentQIndex - 1)}
                     className="px-4 py-2 rounded-xl border border-slate-700 text-slate-300 hover:bg-slate-800 disabled:opacity-30 disabled:cursor-not-allowed font-bold text-xs flex items-center gap-1.5 cursor-pointer"
                   >
                     <ArrowLeft className="w-4 h-4" />
@@ -566,7 +654,7 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
                   {currentQIndex + 1 < questionsList.length ? (
                     <button
                       type="button"
-                      onClick={() => setCurrentQIndex((prev) => prev + 1)}
+                      onClick={() => jumpToMockQuestion(currentQIndex + 1)}
                       className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs flex items-center gap-1.5 cursor-pointer shadow-md"
                     >
                       <span>Next Question</span>
@@ -656,16 +744,67 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={onNavigateToPractice}
-              className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer"
-            >
-              <span>Switch to Practice Mode</span>
-              <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
-            </button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setIsCreateModalOpen(true)}
+                className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs transition-all flex items-center gap-2 cursor-pointer shadow-md shadow-teal-500/20"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Publish Mock Test</span>
+              </button>
+              <button
+                type="button"
+                onClick={onNavigateToPractice}
+                className="px-4 py-2 rounded-xl border border-slate-700 bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition-all flex items-center gap-2 cursor-pointer"
+              >
+                <span>Switch to Practice Mode</span>
+                <ArrowRight className="w-3.5 h-3.5 text-teal-400" />
+              </button>
+            </div>
           </div>
 
+          {mockTests.length === 0 ? (
+            <div className="rounded-2xl border border-dashed border-slate-700 bg-[#111b21] p-8 sm:p-12 text-center shadow-xl">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-teal-500/30 bg-teal-500/10 text-teal-300">
+                <FileCheck2 className="h-7 w-7" />
+              </div>
+              <h3 className="mt-4 text-base font-black text-white">No timed mock examination has been published</h3>
+              <p className="mx-auto mt-2 max-w-xl text-xs leading-relaxed text-slate-400">
+                Build and review a question paper before publishing a timed exam. The nurse question bank currently has {mockQuestionCount} Mock Test question{mockQuestionCount === 1 ? '' : 's'} ready for review.
+              </p>
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="inline-flex items-center gap-2 rounded-xl bg-teal-500 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-400"
+                >
+                  <Plus className="h-4 w-4" />
+                  Publish Mock Test
+                </button>
+                {onNavigateToQuestionBank && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToQuestionBank}
+                    className="inline-flex items-center gap-2 rounded-xl bg-teal-500 px-4 py-2.5 text-xs font-black text-slate-950 shadow-lg shadow-teal-500/20 transition hover:bg-teal-400"
+                  >
+                    Review Question Bank
+                    <ArrowRight className="h-4 w-4" />
+                  </button>
+                )}
+                {onNavigateToPractice && (
+                  <button
+                    type="button"
+                    onClick={onNavigateToPractice}
+                    className="inline-flex items-center gap-2 rounded-xl border border-slate-700 bg-slate-800 px-4 py-2.5 text-xs font-bold text-white transition hover:bg-slate-700"
+                  >
+                    Switch to Practice Mode
+                    <ArrowRight className="h-4 w-4 text-teal-400" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {mockTests.map((test) => (
               <div
@@ -708,6 +847,52 @@ export const MockTestRunnerView: React.FC<MockTestRunnerViewProps> = ({
                 </button>
               </div>
             ))}
+          </div>
+          )}
+        </div>
+      )}
+
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg space-y-5 rounded-2xl border border-slate-700 bg-[#111b21] p-6 shadow-2xl">
+            <div className="flex items-start justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h3 className="text-base font-black text-white">Publish Nurse Mock Test</h3>
+                <p className="mt-1 text-xs text-slate-400">Set the exam duration and optional time allowed for each question.</p>
+              </div>
+              <button type="button" onClick={() => setIsCreateModalOpen(false)} className="text-slate-400 hover:text-white" aria-label="Close publish mock test dialog">
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <form onSubmit={handleCreatePublishedMock} className="space-y-4">
+              <label className="block text-xs font-semibold text-slate-300">
+                Mock test title
+                <input value={newMockTitle} onChange={(event) => setNewMockTitle(event.target.value)} required className="mt-1 w-full rounded-xl border border-slate-700 bg-[#202c33] px-3 py-2 text-sm text-white" />
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-xs font-semibold text-slate-300">
+                  Questions
+                  <input type="number" min={1} value={newMockQuestions} onChange={(event) => setNewMockQuestions(Math.max(1, Number(event.target.value)))} className="mt-1 w-full rounded-xl border border-slate-700 bg-[#202c33] px-3 py-2 text-sm text-white" />
+                </label>
+                <label className="block text-xs font-semibold text-slate-300">
+                  Total duration (minutes)
+                  <input type="number" min={1} value={newMockDuration} onChange={(event) => setNewMockDuration(Math.max(1, Number(event.target.value)))} className="mt-1 w-full rounded-xl border border-slate-700 bg-[#202c33] px-3 py-2 text-sm text-white" />
+                </label>
+              </div>
+              <label className="block text-xs font-semibold text-slate-300">
+                Time per question (seconds, optional)
+                <input type="number" min={0} value={newPerQuestionSeconds} onChange={(event) => setNewPerQuestionSeconds(Math.max(0, Number(event.target.value)))} className="mt-1 w-full rounded-xl border border-slate-700 bg-[#202c33] px-3 py-2 text-sm text-white" />
+                <span className="mt-1 block text-[11px] font-normal text-slate-500">Use 0 to use only the total exam countdown.</span>
+              </label>
+              <label className="block text-xs font-semibold text-slate-300">
+                Passing score (%)
+                <input type="number" min={1} max={100} value={newPassingScore} onChange={(event) => setNewPassingScore(Math.min(100, Math.max(1, Number(event.target.value))))} className="mt-1 w-full rounded-xl border border-slate-700 bg-[#202c33] px-3 py-2 text-sm text-white" />
+              </label>
+              <div className="flex justify-end gap-2 border-t border-slate-800 pt-4">
+                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800">Cancel</button>
+                <button type="submit" disabled={creatingMock} className="rounded-xl bg-teal-500 px-4 py-2 text-xs font-black text-slate-950 hover:bg-teal-400 disabled:opacity-50">{creatingMock ? 'Publishing…' : 'Publish Mock Test'}</button>
+              </div>
+            </form>
           </div>
         </div>
       )}

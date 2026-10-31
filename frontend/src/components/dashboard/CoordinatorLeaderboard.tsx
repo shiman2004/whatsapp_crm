@@ -105,6 +105,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
     return users.filter(u => {
       if (u.role !== 'coordinator') return false;
       if (selectedCompany === 'CRAS') return u.company === 'CRAS';
+      if (selectedCompany === 'AHC') return u.company === 'AHC';
       if (selectedCompany === 'RWC') return u.company === 'RWC' || !u.company;
       return true;
     });
@@ -136,7 +137,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
         : 0;
 
       // Primary Company assignment
-      const companyCode: CompanyCode = coord.company === 'CRAS' ? 'CRAS' : 'RWC';
+      const companyCode: CompanyCode = coord.company === 'AHC' ? 'AHC' : (coord.company === 'CRAS' ? 'CRAS' : 'RWC');
 
       return {
         coordinator: coord,
@@ -184,6 +185,8 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
       { key: 'contacted', label: 'Contacted', color: '#10b981' },
       { key: 'potential', label: 'Potential', color: '#a855f7' },
       { key: 'under_discussion', label: 'Under Discussion', color: '#0ea5e9' },
+      { key: 'forwarded_to_exam_department', label: 'Forwarded to Exam Department', color: '#06b6d4' },
+      { key: 'forwarded_to_processing_department', label: 'Forwarded to Processing Department', color: '#f97316' },
       { key: 'not_relevant', label: 'Not Relevant', color: '#64748b' },
       { key: 'not_eligible', label: 'Not Eligible', color: '#71717a' },
       { key: 'converted', label: 'Converted', color: '#14b8a6' },
@@ -226,7 +229,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
         };
       });
 
-      const companyCode: CompanyCode = coord.company === 'CRAS' ? 'CRAS' : 'RWC';
+      const companyCode: CompanyCode = coord.company === 'AHC' ? 'AHC' : (coord.company === 'CRAS' ? 'CRAS' : 'RWC');
 
       return {
         coordinator: coord,
@@ -278,7 +281,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
               )}
             </h3>
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
-              Workload distribution across Patient Coordinators (RWC) & Education Counsellors (CRAS)
+              Workload distribution across Patient Coordinators RWC & Education Counsellors CRAS
             </p>
           </div>
         </div>
@@ -351,6 +354,18 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
             >
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
               CRAS
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedCompany('AHC')}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all flex items-center gap-1 cursor-pointer ${
+                selectedCompany === 'AHC'
+                  ? 'bg-[#066e77] text-white shadow-xs'
+                  : 'text-teal-700 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-teal-950/30'
+              }`}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-400"></span>
+              AHC
             </button>
           </div>
         </div>
@@ -474,6 +489,10 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                         {item.companyCode === 'CRAS' ? (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60">
                             CRAS
+                          </span>
+                        ) : item.companyCode === 'AHC' ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 dark:bg-[#066e77]/20 text-[#066e77] dark:text-teal-300 border border-teal-200 dark:border-[#066e77]/40">
+                            AHC
                           </span>
                         ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/60">
@@ -658,9 +677,13 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-amber-50 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 border border-amber-300/60 dark:border-amber-700/60">
                             CRAS College
                           </span>
+                        ) : item.companyCode === 'AHC' ? (
+                          <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-50 dark:bg-[#066e77]/20 text-[#066e77] dark:text-teal-300 border border-teal-200 dark:border-[#066e77]/40">
+                            Alpha Health AHC
+                          </span>
                         ) : (
                           <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300/60 dark:border-emerald-700/60">
-                            Royal Wellness (RWC)
+                            Royal Wellness RWC
                           </span>
                         )}
                       </td>

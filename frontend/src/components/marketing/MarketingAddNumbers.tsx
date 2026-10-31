@@ -15,6 +15,7 @@ import {
   ArrowRight,
   ShieldCheck,
   Sparkles,
+  Users,
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -150,12 +151,73 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
   const [error, setError] = React.useState('');
   const [notice, setNotice] = React.useState('');
   const [batchReceipt, setBatchReceipt] = React.useState<{
+    id?: string;
     batchNumber: string;
     totalSubmitted: number;
     savedCount: number;
     duplicateCount: number;
     invalidCount: number;
   } | null>(null);
+
+  // Post-Upload Equal Staff Assignment Step
+  const [assignableStaff, setAssignableStaff] = React.useState<Array<{ id: string; fullName: string; role: string; email?: string }>>([]);
+  const [selectedStaffIds, setSelectedStaffIds] = React.useState<string[]>([]);
+  const [assignmentOption, setAssignmentOption] = React.useState<'unassigned' | 'equal'>('unassigned');
+  const [assigningBatch, setAssigningBatch] = React.useState(false);
+  const [assignmentSuccess, setAssignmentSuccess] = React.useState<string | null>(null);
+
+  const fetchStaff = React.useCallback(async () => {
+    try {
+      const res = await onRequestApi('/api/marketing/assignable');
+      if (res?.data?.staff) {
+        const active = res.data.staff.filter((s: any) => s.marketingAccess !== false);
+        setAssignableStaff(active);
+        setSelectedStaffIds(active.map((s: any) => s.id));
+      }
+    } catch {
+      // ignore
+    }
+  }, [onRequestApi]);
+
+  const previewDistribution = React.useMemo(() => {
+    if (!batchReceipt || selectedStaffIds.length === 0) return [];
+    const count = batchReceipt.savedCount;
+    const n = selectedStaffIds.length;
+    const base = Math.floor(count / n);
+    const remainder = count % n;
+    return selectedStaffIds.map((id, index) => {
+      const staffMember = assignableStaff.find(s => s.id === id);
+      const allocated = index < remainder ? base + 1 : base;
+      return {
+        id,
+        name: staffMember?.fullName || id,
+        role: staffMember?.role || 'Staff',
+        allocated,
+      };
+    });
+  }, [batchReceipt, selectedStaffIds, assignableStaff]);
+
+  const handleConfirmDistribution = async () => {
+    if (!batchReceipt?.id || selectedStaffIds.length === 0) return;
+    setAssigningBatch(true);
+    setError('');
+    try {
+      const res = await onRequestApi('/api/marketing/assignments', {
+        method: 'POST',
+        body: JSON.stringify({
+          batchId: batchReceipt.id,
+          officerIds: selectedStaffIds,
+          mode: 'round_robin',
+        }),
+      });
+      setAssignmentSuccess(`Successfully distributed ${res?.data?.assigned || batchReceipt.savedCount} contacts equally across ${selectedStaffIds.length} staff members.`);
+      onContactCreated();
+    } catch (err: any) {
+      setError(err.message || 'Failed to distribute batch contacts.');
+    } finally {
+      setAssigningBatch(false);
+    }
+  };
 
   // Bulk Paste Real-Time Statistics
   const parsedPasteStats = React.useMemo(() => {
@@ -243,6 +305,9 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
         setBatchReceipt(response.data);
         setNotice(`Bulk ingestion finished: ${response.data.savedCount} new contacts saved to pool.`);
         setPasteText('');
+        void fetchStaff();
+        setAssignmentOption('unassigned');
+        setAssignmentSuccess(null);
         onContactCreated();
       }
     } catch (caught: any) {
@@ -304,6 +369,9 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
         setCsvFile(null);
         setCsvTextContent('');
         setCsvPreviewRows([]);
+        void fetchStaff();
+        setAssignmentOption('unassigned');
+        setAssignmentSuccess(null);
         onContactCreated();
       }
     } catch (caught: any) {
@@ -429,6 +497,159 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
               <p className="text-lg font-black text-rose-300">{batchReceipt.invalidCount}</p>
             </div>
           </div>
+
+          {/* Post-Upload Equal Staff Assignment Step */}
+          {batchReceipt.savedCount > 0 && (
+            <div className="mt-4 pt-4 border-t border-teal-800/60 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h5 className="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-teal-400" />
+                    Post-Upload Staff Allocation Step
+                  </h5>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    Choose whether to keep these {batchReceipt.savedCount} contacts unassigned or allocate them equally among staff.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setAssignmentOption('unassigned')}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      assignmentOption === 'unassigned'
+                        ? 'bg-slate-800 text-teal-300 border border-teal-500/40'
+                        : 'text-slate-400 hover:text-white'
+                    }`}
+                  >
+                    Keep Unassigned
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAssignmentOption('equal');
+                      if (assignableStaff.length === 0) void fetchStaff();
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                      assignmentOption === 'equal'
+                        ? 'bg-teal-400 text-slate-950 font-bold'
+                        : 'text-slate-400 hover:text-white border border-slate-700 bg-slate-900'
+                    }`}
+                  >
+                    Equal Distribution
+                  </button>
+                </div>
+              </div>
+
+              {assignmentSuccess && (
+                <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-500/40 text-emerald-300 text-xs flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                  <span>{assignmentSuccess}</span>
+                </div>
+              )}
+
+              {assignmentOption === 'equal' && !assignmentSuccess && (
+                <div className="p-3.5 rounded-xl bg-slate-900/90 border border-slate-800 space-y-3 text-xs">
+                  <div className="flex items-center justify-between text-slate-300">
+                    <span className="font-semibold text-white">Select Eligible Staff Members ({selectedStaffIds.length} selected)</span>
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStaffIds(assignableStaff.map(s => s.id))}
+                        className="text-teal-400 hover:underline"
+                      >
+                        Select All
+                      </button>
+                      <span className="text-slate-600">|</span>
+                      <button
+                        type="button"
+                        onClick={() => setSelectedStaffIds([])}
+                        className="text-slate-400 hover:underline"
+                      >
+                        Clear
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2">
+                    {assignableStaff.map(staff => {
+                      const isChecked = selectedStaffIds.includes(staff.id);
+                      return (
+                        <label
+                          key={staff.id}
+                          className={`flex items-center gap-2.5 p-2 rounded-lg border cursor-pointer transition-all ${
+                            isChecked
+                              ? 'bg-teal-950/30 border-teal-500/50 text-white'
+                              : 'bg-slate-950/60 border-slate-800 text-slate-400 hover:border-slate-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {
+                              setSelectedStaffIds(prev =>
+                                prev.includes(staff.id) ? prev.filter(id => id !== staff.id) : [...prev, staff.id]
+                              );
+                            }}
+                            className="rounded border-slate-700 bg-slate-900 text-teal-400 focus:ring-0"
+                          />
+                          <div className="min-w-0">
+                            <p className="text-xs font-semibold truncate text-slate-200">{staff.fullName}</p>
+                            <p className="text-[10px] text-slate-400 truncate">{staff.role}</p>
+                          </div>
+                        </label>
+                      );
+                    })}
+                  </div>
+
+                  {/* Proposed Fair Distribution Preview */}
+                  {previewDistribution.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-slate-800 space-y-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="font-bold text-teal-300 uppercase tracking-wider">
+                          Proposed Equal Distribution Preview (&Delta; &le; 1)
+                        </span>
+                        <span className="text-slate-400">
+                          {batchReceipt.savedCount} contacts across {selectedStaffIds.length} staff
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {previewDistribution.map(item => (
+                          <div key={item.id} className="p-2 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between">
+                            <span className="text-slate-300 truncate text-[11px] font-medium">{item.name}</span>
+                            <span className="font-mono font-bold text-teal-300 px-2 py-0.5 rounded bg-teal-950/80 text-[11px]">
+                              {item.allocated}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          type="button"
+                          disabled={assigningBatch || selectedStaffIds.length === 0}
+                          onClick={handleConfirmDistribution}
+                          className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-teal-400 hover:bg-teal-300 text-slate-950 font-bold text-xs shadow-md transition-all disabled:opacity-50"
+                        >
+                          {assigningBatch ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              <span>Allocating Contacts...</span>
+                            </>
+                          ) : (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <span>Confirm Equal Allocation</span>
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -441,8 +662,8 @@ export const MarketingAddNumbers: React.FC<MarketingAddNumbersProps> = ({
             onChange={e => setCompany(e.target.value as any)}
             className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-white outline-none focus:border-teal-400 cursor-pointer"
           >
-            <option value="RWC">Royal Wellness Clinic (RWC)</option>
-            <option value="CRAS">Alpha CRAS Education (CRAS)</option>
+            <option value="RWC">Royal Wellness Clinic RWC</option>
+            <option value="CRAS">Alpha CRAS Education CRAS</option>
           </select>
         </div>
 

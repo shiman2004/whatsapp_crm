@@ -37,8 +37,9 @@ export const getPrisma = () => {
 
   if (!prismaInstance) {
     try {
+      const adapter = new PrismaPg({ connectionString: databaseUrl });
       prismaInstance = new PrismaClient({
-        adapter: new PrismaPg({ connectionString: databaseUrl }),
+        adapter,
         // Test isolation promotes the throwaway test URL into both variables.
         log: process.env.NODE_ENV === 'development' ? ['error', 'warn'] : ['error'],
       });
@@ -87,7 +88,8 @@ export const checkDbConnection = async () => {
 export const getDbStatus = () => isDbConnected;
 
 export const allocateCompanyLeadSerial = async (prisma, company) => {
-  const companyCode = String(company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+  const norm = String(company || 'RWC').toUpperCase();
+  const companyCode = norm === 'CRAS' ? 'CRAS' : norm === 'AHC' ? 'AHC' : 'RWC';
   const result = await prisma.$queryRawUnsafe(`SELECT public.next_company_lead_serial($1) AS "serialNumber"`, companyCode);
   const serial = result?.[0]?.serialNumber;
   // A timestamp fallback would bypass the company sequence and collide with the unique

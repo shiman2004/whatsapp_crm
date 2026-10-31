@@ -190,10 +190,10 @@ export const AppointmentSchedulerView: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-slate-950 text-slate-100 select-none">
+    <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#F5F7F8] dark:bg-[#111B21] text-[#111B21] dark:text-[#E9EDEF] select-none">
       
       {/* 1. Header Toolbar matching design */}
-      <header className="px-4 py-3 border-b border-slate-800 bg-slate-950/80 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 shrink-0">
+      <header className="px-4 py-3 border-b border-[#E0E5E7] bg-white/95 dark:border-[#222D34] dark:bg-[#202C33]/95 backdrop-blur-md flex flex-wrap items-center justify-between gap-3 shrink-0">
         
         {/* Title & Branch Selector */}
         <div className="flex items-center gap-3">
@@ -202,12 +202,12 @@ export const AppointmentSchedulerView: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-base sm:text-lg font-black text-white tracking-wide font-sans">Book Appointment</h1>
+              <h1 className="text-base sm:text-lg font-black text-[#111B21] dark:text-[#E9EDEF] tracking-wide font-sans">Book Appointment</h1>
               <span className="hidden sm:inline-block px-2 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-500/30">
                 Live Scheduler
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 hidden sm:block">Clinical Suite & Room Management Calendar</p>
+            <p className="text-[11px] text-[#667781] dark:text-[#8696A0] hidden sm:block">Clinical Suite & Room Management Calendar</p>
           </div>
 
           {/* Branch Dropdown */}
@@ -342,7 +342,7 @@ export const AppointmentSchedulerView: React.FC = () => {
       </div>
 
       {/* 2. Main Calendar Grid Area */}
-      <div className="flex-1 overflow-auto relative bg-[#0b1319]">
+      <div className="flex-1 overflow-auto relative bg-[#F5F7F8] dark:bg-[#111B21]">
         {error ? (
           <div className="p-8 flex flex-col items-center justify-center text-center">
             <AlertCircle className="w-10 h-10 text-rose-500 mb-2" />

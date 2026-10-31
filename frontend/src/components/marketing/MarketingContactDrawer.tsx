@@ -5,6 +5,7 @@ import {
   MarketingConsentEvent,
   ConsentStatus,
   ConversionEligibility,
+  MarketingAssignmentHistory,
 } from './types';
 import { LifecycleBadge, ConsentBadge } from './MarketingBadges';
 import { MarketingConversionModal } from './MarketingConversionModal';
@@ -50,6 +51,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
   const [contact, setContact] = React.useState<MarketingContact | null>(null);
   const [activities, setActivities] = React.useState<MarketingActivity[]>([]);
   const [consentEvents, setConsentEvents] = React.useState<MarketingConsentEvent[]>([]);
+  const [assignmentHistory, setAssignmentHistory] = React.useState<MarketingAssignmentHistory[]>([]);
   const [conversionEligibility, setConversionEligibility] = React.useState<ConversionEligibility | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState('');
@@ -126,6 +128,7 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
         setContact(response.data.contact);
         setActivities(response.data.activities || []);
         setConsentEvents(response.data.consent || []);
+        setAssignmentHistory(response.data.assignments || []);
         setConversionEligibility(response.data.conversionEligibility || null);
       }
     } catch (caught) {
@@ -709,6 +712,20 @@ export const MarketingContactDrawer: React.FC<MarketingContactDrawerProps> = ({
                       </div>
                     </div>
                   )}
+
+                  <div className="space-y-2 pt-2 border-t border-slate-800">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <History className="w-3 h-3 text-slate-500" /> Assignment History ({assignmentHistory.length})
+                    </span>
+                    {assignmentHistory.length === 0 ? (
+                      <p className="text-[11px] text-slate-500">No assignment history recorded.</p>
+                    ) : assignmentHistory.slice().reverse().map(event => (
+                      <div key={event.id} className="rounded-lg border border-slate-800/80 bg-slate-950/40 p-2 text-[11px] text-slate-300">
+                        <div className="flex justify-between gap-2"><span>{event.eventType === 'reassigned' ? 'Reassigned' : 'Initial assignment'}</span><span className="text-slate-500">{new Date(event.createdAt).toLocaleString()}</span></div>
+                        <p className="text-slate-400">{event.reason || '—'}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
                 {/* Section 7: CRM Lead Conversion Protection Gate */}

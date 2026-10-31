@@ -246,6 +246,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const archivedCount = accessibleLeads.filter(l => archivedLeadIds.has(l.id)).length;
   const rwcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'RWC').length;
   const crasCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'CRAS').length;
+  const ahcCount = accessibleLeads.filter(l => !archivedLeadIds.has(l.id) && getLeadCompany(l).code === 'AHC').length;
 
   // Filter leads based on role & search & category/stage/archive filters
   const filteredLeads = accessibleLeads.filter((lead) => {
@@ -262,6 +263,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     // Company filter pills
     if (activeFilter === 'rwc' && getLeadCompany(lead).code !== 'RWC') return false;
     if (activeFilter === 'cras' && getLeadCompany(lead).code !== 'CRAS') return false;
+    if (activeFilter === 'ahc' && getLeadCompany(lead).code !== 'AHC') return false;
 
     // Filter pills
     if (activeFilter === 'unread') {
@@ -403,10 +405,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const activeContextMenuLead = leads.find(l => l.id === contextMenuLeadId);
 
   return (
-    <div className={`w-full md:w-80 lg:w-[380px] bg-white dark:bg-[#111b21] border-r border-[#e9edef] dark:border-[#222e35] flex flex-col h-full select-none shrink-0 ${className}`}>
+    <div className={`w-full md:w-80 lg:w-[380px] bg-white dark:bg-[#111b21] border-r border-[#E0E5E7] dark:border-[#222D34] flex flex-col h-full select-none shrink-0 ${className}`}>
       
       {/* 1. Header (Exact WhatsApp Web Title Bar) */}
-      <div className="h-14 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#e9edef] dark:border-transparent flex items-center justify-between shrink-0">
+      <div className="h-14 px-4 bg-[#f0f2f5] dark:bg-[#202c33] border-b border-[#E0E5E7] dark:border-transparent flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2.5 min-w-0">
           {/* Mobile Blinking Bell (Only on small screens where LeftRail is hidden) */}
           <div className="md:hidden shrink-0">
@@ -445,7 +447,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             onClick={() => handleFilterSelect('all')}
             className={`px-3 py-1 rounded-full text-xs font-semibold transition-all shrink-0 ${
               activeFilter === 'all'
-                ? 'bg-[#d9fdd3] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] font-bold'
+                ? 'bg-[#DCF8C6] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] font-bold'
                 : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
           >
@@ -468,7 +470,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             </button>
           )}
 
-          {/* Company Filter Badges: (RWC) in Green & (CRAS) in Maroon */}
+          {/* Company Filter Badges: RWC in Green & CRAS in Maroon */}
           <button
             onClick={() => handleFilterSelect('rwc')}
             className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
@@ -479,7 +481,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             title="Filter Royal Wellness Center messages"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#008000]" />
-            <span>(RWC)</span>
+            <span>RWC</span>
             {rwcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#008000]/15 dark:bg-[#008000]/20 text-[#15803d] dark:text-[#22c55e]">{rwcCount}</span>}
           </button>
 
@@ -493,8 +495,22 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             title="Filter College of Royal Aesthetic messages"
           >
             <span className="w-1.5 h-1.5 rounded-full bg-[#800000]" />
-            <span>(CRAS)</span>
+            <span>CRAS</span>
             {crasCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#800000]/15 dark:bg-[#800000]/25 text-[#9f1239] dark:text-[#f87171]">{crasCount}</span>}
+          </button>
+
+          <button
+            onClick={() => handleFilterSelect('ahc')}
+            className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1 border ${
+              activeFilter === 'ahc'
+                ? 'bg-teal-100 text-[#066e77] border-[#066e77] dark:bg-[#066e77]/30 dark:text-teal-300 dark:border-[#066e77] font-bold'
+                : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+            }`}
+            title="Filter Alpha Health Consultancy messages"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#066e77]" />
+            <span>AHC</span>
+            {ahcCount > 0 && <span className="text-[10px] font-mono px-1 rounded bg-[#066e77]/15 dark:bg-[#066e77]/25 text-[#066e77] dark:text-teal-300">{ahcCount}</span>}
           </button>
 
           {newCount > 0 && (
@@ -613,7 +629,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             onClick={() => setActiveFilter('unread')}
             className={`px-2.5 py-1 rounded-full text-xs font-medium transition-all shrink-0 flex items-center gap-1.5 ${
               activeFilter === 'unread'
-                ? 'bg-[#d9fdd3] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] font-semibold'
+                ? 'bg-[#DCF8C6] text-[#008069] dark:bg-[#00a884]/20 dark:text-[#00a884] font-semibold'
                 : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
             }`}
           >
@@ -640,8 +656,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
       {/* 3. Archived Row Banner */}
       <div 
         onClick={() => setActiveFilter(prev => prev === 'archived' ? 'all' : 'archived')}
-        className={`px-4 py-2 cursor-pointer flex items-center justify-between border-b border-[#e9edef] dark:border-[#222e35]/60 transition-colors shrink-0 ${
-          activeFilter === 'archived' ? 'bg-[#d9fdd3] dark:bg-[#00a884]/15 border-[#00a884]/40' : 'hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
+        className={`px-4 py-2 cursor-pointer flex items-center justify-between border-b border-[#E0E5E7] dark:border-[#222D34]/60 transition-colors shrink-0 ${
+          activeFilter === 'archived' ? 'bg-[#DCF8C6] dark:bg-[#00a884]/15 border-[#00a884]/40' : 'hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
         }`}
       >
         <div className="flex items-center gap-3 text-[#54656f] dark:text-[#8696a0]">
@@ -709,7 +725,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   markChatAsRead(lead.id);
                 }}
                 onContextMenu={(e) => handleContextMenu(e, lead.id)}
-                className={`group px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors relative border-b border-[#e9edef] dark:border-[#222e35]/30 ${
+                className={`group px-3 py-2.5 flex items-center gap-3 cursor-pointer transition-colors relative border-b border-[#E0E5E7] dark:border-[#222D34]/30 ${
                   isSelected 
                     ? 'bg-[#f0f2f5] dark:bg-[#2a3942]' 
                     : 'bg-white dark:bg-transparent hover:bg-[#f5f6f6] dark:hover:bg-[#202c33]'
@@ -733,7 +749,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         {displayName}
                       </span>
 
-                      {/* Company Tag Badge (RWC) or (CRAS) */}
+                      {/* Company Tag Badge RWC or CRAS */}
                       <CompanyTagBadge lead={lead} size="xs" />
 
                       {/* Locked Chat Indicator */}
@@ -784,7 +800,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                     <div className="flex items-center gap-1 min-w-0 text-[#667781] dark:text-[#8696a0] text-[11px] truncate">
                       {lastMsg?.direction === 'outbound' && (
                         (lastMsg.status === 'read' && Boolean(lastMsg.readAt)) ? (
-                          <CheckCheck className="w-3.5 h-3.5 text-[#53bdeb] shrink-0" />
+                          <CheckCheck className="w-3.5 h-3.5 text-[#34B7F1] shrink-0" />
                         ) : (lastMsg.status === 'delivered' || lastMsg.status === 'read') ? (
                           <CheckCheck className="w-3.5 h-3.5 text-[#8696a0] shrink-0" />
                         ) : lastMsg.status === 'sent' ? (
@@ -984,7 +1000,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
                     }`}
                   >
-                    (RWC)
+                    RWC
                   </button>
                   <button
                     onClick={() => {
@@ -997,7 +1013,20 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                         : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
                     }`}
                   >
-                    (CRAS)
+                    CRAS
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (contextMenuLeadId) updateLeadCompany(contextMenuLeadId, 'AHC');
+                      setContextMenuLeadId(null);
+                    }}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-bold border transition-colors ${
+                      activeContextMenuLead?.company === 'AHC'
+                        ? 'bg-[#066e77] text-white border-[#066e77]'
+                        : 'bg-[#202c33] text-[#8696a0] border-transparent hover:text-white'
+                    }`}
+                  >
+                    AHC
                   </button>
                 </div>
               </div>

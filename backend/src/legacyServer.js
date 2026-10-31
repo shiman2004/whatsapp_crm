@@ -1,3 +1,10 @@
+import { startExamMonitor } from './examMonitor.js';
+import { handleExamOperations } from './examOperationsRoutes.js';
+import { handleStudentDatabaseRoutes } from './studentDatabaseRoutes.js';
+import { handleClinicalRoutes } from './clinicalRoutes.js';
+import { handleStudentRoutes } from './studentRoutes.js';
+import { handleExamRoutes } from './examRoutes.js';
+import { JWT_SECRET } from './runtimeConfig.js';
 import http from 'http';
 import url from 'url';
 import fs from 'fs';
@@ -10,10 +17,13 @@ import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, del
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
-import { handleExamRoutes } from './examRoutes.js';
+import { handleSecurityRoutes } from './securityRoutes.js';
+import { handleUserManagementRoutes } from './userManagementRoutes.js';
+import { hashSecret, verifySecret, encryptReversible, decryptReversible } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
+import { Server as SocketIOServer } from 'socket.io';
 
 dotenv.config();
 if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
@@ -22,7 +32,6 @@ if (fs.existsSync(path.join(process.cwd(), 'backend', '.env'))) {
 
 const PORT = process.env.PORT || 3000;
 const IS_TEST_ENV = process.env.NODE_ENV === 'test' || (process.argv[1] && process.argv[1].includes('test'));
-const JWT_SECRET = process.env.JWT_SECRET || (IS_TEST_ENV ? 'test-only-jwt-secret-do-not-use' : (process.env.NODE_ENV !== 'production' ? 'royal_wellness_crm_jwt_secret_key_2026_super_secure' : ''));
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET must be configured before starting the backend.');
 }
@@ -32,9 +41,11 @@ const DEFAULT_TRUSTED_ORIGINS = [
   'http://localhost:3000',
   'http://localhost:3001',
   'http://localhost:5173',
+  'http://localhost:5174',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:3001',
-  'http://127.0.0.1:5173'
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:5174'
 ];
 
 const TRUSTED_ORIGINS = [
@@ -71,13 +82,18 @@ const REQUEST_BODY_LIMITS = {
   webhook: 2 * 1024 * 1024,
   login: 32 * 1024
 };
-const SSE_TICKET_TTL_MS = 60 * 1000;
+const MEDIA_URL_TTL_MS = 15 * 60 * 1000;
+const SSE_TICKET_TTL_MS = 15 * 60 * 1000;
 const sseTickets = new Map();
 
 // Bounded, self-expiring stores. Both hold per-request state that would otherwise
 // grow without limit on a long-running process.
 const MAX_SSE_TICKETS = 5000;
 const MAX_LOGIN_ATTEMPT_ENTRIES = 10000;
+// Contact creation can fall back to memory while the database is unavailable.
+// Keep a process-local normalized index so that fallback mode still rejects a
+// second manual contact for the same WhatsApp number.
+const inMemoryContactNumbers = new Map();
 
 function sweepExpiredSseTickets() {
   const cutoff = Date.now() - SSE_TICKET_TTL_MS;
@@ -115,8 +131,11 @@ function issueSseTicket(user) {
 
 function consumeSseTicket(ticket) {
   const record = sseTickets.get(ticket);
-  sseTickets.delete(ticket);
-  if (!record || Date.now() - record.issuedAt > SSE_TICKET_TTL_MS) return null;
+  if (!record || Date.now() - record.issuedAt > SSE_TICKET_TTL_MS) {
+    if (record) sseTickets.delete(ticket);
+    return null;
+  }
+  // Allow ticket reuse during its active TTL window so automatic browser EventSource reconnections succeed seamlessly
   return record.user;
 }
 
@@ -142,24 +161,22 @@ function timingSafeStringEqual(a, b) {
   return crypto.timingSafeEqual(aBuf, bBuf);
 }
 
-// Media URLs are persisted in message rows, so the signature must stay valid for as
-// long as the row exists. Signing a per-file constant (rather than a timestamp) keeps
-// stored URLs working while still rejecting forged or tampered filenames. Access is
-// additionally gated by the authenticated sender-assignment check in the route handler.
-function signMediaFile(fileName) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+// Media URLs are short-lived bearer links for browser media elements; authenticated
+// callers can still access files after a link expires.
+function signMediaFile(fileName, expires) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}:${expires}`).digest('base64url');
 }
 
-function createPrivateMediaUrl(fileName, ttlMs = 0) {
-  void ttlMs;
-  const signature = signMediaFile(fileName);
-  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
+function createPrivateMediaUrl(fileName, ttlMs = MEDIA_URL_TTL_MS) {
+  const expires = Date.now() + ttlMs;
+  const signature = signMediaFile(fileName, expires);
+  return `/uploads/${encodeURIComponent(fileName)}?exp=${expires}&sig=${signature}`;
 }
 
 function verifyPrivateMediaUrl(fileName, expires, signature) {
-  void expires;
-  if (!fileName || typeof signature !== 'string' || !signature) return false;
-  const expected = signMediaFile(fileName);
+  const expiry = Number(expires);
+  if (!fileName || !Number.isSafeInteger(expiry) || expiry < Date.now() || typeof signature !== 'string' || !signature) return false;
+  const expected = signMediaFile(fileName, expiry);
   return signature.length === expected.length && crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expected));
 }
 
@@ -186,6 +203,8 @@ function signAuthToken(payload, expiresInMs = 7 * 24 * 60 * 60 * 1000) {
     email: payload.email,
     role: payload.role,
     fullName: payload.fullName,
+    ...(payload.sid ? { sid: payload.sid } : {}),
+    sv: Number(payload.sv || 0),
     iat: payload.iat || Date.now(),
     exp: payload.exp !== undefined ? payload.exp : (Date.now() + expiresInMs)
   };
@@ -225,52 +244,8 @@ function verifyAuthToken(token) {
 }
 
 // =============================================================================
-// Cryptographic Password & PIN Hashing (scrypt with Salt & Timing-Safe Verification)
+// Cryptographic Password & PIN Hashing (shared with user administration)
 // =============================================================================
-function hashSecret(secret) {
-  if (!secret) return '';
-  const salt = crypto.randomBytes(16).toString('hex');
-  const hash = crypto.scryptSync(String(secret), salt, 64).toString('hex');
-  return `scrypt:${salt}:${hash}`;
-}
-
-function verifySecret(providedSecret, storedCredential) {
-  if (!providedSecret || !storedCredential) {
-    return { match: false, needsRehash: false };
-  }
-  const providedStr = String(providedSecret);
-  const storedStr = String(storedCredential);
-
-  if (storedStr.startsWith('scrypt:')) {
-    const parts = storedStr.split(':');
-    if (parts.length !== 3) return { match: false, needsRehash: false };
-    const salt = parts[1];
-    const expectedHash = parts[2];
-    try {
-      const computedHash = crypto.scryptSync(providedStr, salt, 64).toString('hex');
-      const expectedBuf = Buffer.from(expectedHash, 'hex');
-      const computedBuf = Buffer.from(computedHash, 'hex');
-      if (expectedBuf.length !== computedBuf.length) {
-        return { match: false, needsRehash: false };
-      }
-      const match = crypto.timingSafeEqual(computedBuf, expectedBuf);
-      return { match, needsRehash: false };
-    } catch (e) {
-      return { match: false, needsRehash: false };
-    }
-  }
-
-  // Legacy plaintext support for seamless transparent migration
-  try {
-    const pBuf = Buffer.from(providedStr);
-    const sBuf = Buffer.from(storedStr);
-    if (pBuf.length === sBuf.length && crypto.timingSafeEqual(pBuf, sBuf)) {
-      return { match: true, needsRehash: true };
-    }
-  } catch (e) {}
-
-  return { match: false, needsRehash: false };
-}
 
 // Dummy salt & hash for constant-time comparisons when account doesn't exist or is deactivated
 const DUMMY_TIMING_HASH = hashSecret('dummy_timing_protection_secret_2026');
@@ -466,7 +441,9 @@ let metaConfig = {
   phoneNumberId: (process.env.META_PHONE_NUMBER_ID || '1358157244046701').trim(),
   phoneNumberIdRwc: (process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim(),
   phoneNumberIdCras: (process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim(),
+  phoneNumberIdAhc: (process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim(),
   wabaId: (process.env.META_WABA_ID || '2332922997481634').trim(),
+  wabaIdAhc: (process.env.META_WABA_ID_AHC || '1691829932493235').trim(),
   appSecret: (process.env.META_APP_SECRET || '').trim(),
   verifyToken: (process.env.META_VERIFY_TOKEN || 'royal_wellness_token_2026').trim()
 };
@@ -538,9 +515,10 @@ setInterval(() => {
   sseClients.forEach(client => {
     try {
       client.res.write(keepAlive);
+      if (typeof client.res.flush === 'function') client.res.flush();
     } catch (e) {}
   });
-}, 15000).unref();
+}, 10000).unref();
 
 /**
  * Isolated SSE Dispatcher
@@ -568,6 +546,7 @@ function broadcastScopedSSE(targetCoordinatorId, data) {
           clientData = stripped;
         }
         client.res.write(`data: ${JSON.stringify(clientData)}\n\n`);
+        if (typeof client.res.flush === 'function') client.res.flush();
       }
     } catch (e) {}
   });
@@ -804,6 +783,28 @@ const CANONICAL_USERS = [
     active: true
   },
   {
+    id: 'user-rwcc-admin-1',
+    fullName: 'RWCC',
+    email: 'rwcc@royalwellness.lk',
+    branch: 'Colombo (Head Office)',
+    password: hashSecret('1234'),
+    pin: DEFAULT_ADMIN_PIN_HASH,  // PIN: 1234
+    role: 'super_admin',
+    active: true
+  },
+  {
+    id: 'user-student-1',
+    fullName: 'Demo Student',
+    email: 'student@royalwellness.lk',
+    branch: 'Colombo',
+    company: 'CRAS',
+    roleTitle: 'Student',
+    password: hashSecret('student'),
+    pin: hashSecret('1234'),
+    role: 'student',
+    active: true
+  },
+  {
     id: 'user-faiha-1',
     fullName: 'Faiha',
     email: 'faiha@royalwellness.lk',
@@ -897,13 +898,26 @@ async function authenticateRequest(req, parsedUrl) {
   // Verify identity and roles against the actual database schema
   const prisma = getPrisma();
   let dbUser = null;
+  let sessionVersion = 0;
+  let lockedUntil = null;
   if (prisma && getDbStatus()) {
     try {
-      dbUser = await prisma.user.findUnique({
-        where: { id: payload.userId }
-      });
+      // Raw select so the additive session columns are read even before a
+      // generated Prisma client that knows about them is deployed.
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id, "fullName", email, role, branch, company, active,
+                marketing_access AS "marketingAccess", session_version, locked_until
+           FROM public.users WHERE id = $1 LIMIT 1`,
+        payload.userId
+      );
+      dbUser = rows?.[0] || null;
+      sessionVersion = Number(dbUser?.session_version || 0);
+      lockedUntil = dbUser?.locked_until || null;
     } catch (e) {
       console.warn('Database error while validating user identity:', e.message);
+      try {
+        dbUser = await prisma.user.findUnique({ where: { id: payload.userId } });
+      } catch {}
     }
   }
 
@@ -918,6 +932,30 @@ async function authenticateRequest(req, parsedUrl) {
 
   if (dbUser.active === false) {
     return { user: null, error: 'Account has been deactivated. Access denied.', status: 401 };
+  }
+
+  if (lockedUntil && new Date(lockedUntil).getTime() > Date.now()) {
+    return { user: null, error: 'Account is temporarily locked. An administrator must unlock it.', status: 401 };
+  }
+
+  // Revoking sessions increments session_version; tokens issued before the bump
+  // (or issued with no version, treated as 0) stop working immediately.
+  if (Number(payload.sv ?? 0) !== sessionVersion) {
+    return { user: null, error: 'This session was revoked. Please sign in again.', status: 401 };
+  }
+
+  // Per-device revocation. Older tokens have no sid and remain bound to the
+  // account-wide session_version check above.
+  if (payload.sid) {
+    try {
+      const sessions = await prisma.$queryRawUnsafe(
+        `SELECT id, revoked_at FROM public.user_sessions WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        String(payload.sid), payload.userId
+      );
+      if (!sessions?.length || sessions[0].revoked_at) {
+        return { user: null, error: 'This session was revoked. Please sign in again.', status: 401 };
+      }
+    } catch {}
   }
 
   // Enforce least privilege: role is ALWAYS derived strictly from the verified database record,
@@ -945,6 +983,9 @@ function isPublicRoute(req, pathname) {
   if (req.method === 'POST' && pathname === '/api/auth/login') return true;
   // 2b. One-time, explicitly authorized initial administrator bootstrap
   if (req.method === 'POST' && pathname === '/api/auth/setup') return true;
+  // 2c. Public invitation preview and acceptance (the token is the credential).
+  if (req.method === 'POST' && pathname === '/api/auth/accept-invitation') return true;
+  if (req.method === 'GET' && pathname === '/api/auth/invitation') return true;
   // 3. Meta WhatsApp Cloud API Webhook (authenticated via hub.verify_token / Meta signatures)
   if (
     pathname === '/api/webhook' || 
@@ -960,14 +1001,18 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/categories' || 
     pathname === '/api/treatments' || 
     pathname === '/api/courses' || 
-    pathname === '/api/stages'
+    pathname === '/api/stages' ||
+    pathname === '/api/coordinators'
   )) return true;
+  // 6. Student Portal & Controlled Device Security API Routes
+  if (pathname.startsWith('/api/student/')) return true;
 
   return false;
 }
 
 // Start HTTP REST & SSE Gateway Server
 const server = http.createServer(async (req, res) => {
+// Socket.io will be attached after this file is imported
   const correlationId = createCorrelationId(req.headers['x-request-id']);
   res.setHeader('X-Correlation-Id', correlationId);
   // CORS Headers
@@ -1292,6 +1337,24 @@ const server = http.createServer(async (req, res) => {
           return await sendAuthFailure();
         }
 
+        // Account lock and session version are read defensively so login still
+        // works while the additive schema bootstrap is finishing.
+        let sessionVersion = 0;
+        let lockedUntil = null;
+        if (isDbUser && prisma && getDbStatus()) {
+          try {
+            const state = await prisma.$queryRawUnsafe(
+              `SELECT session_version, locked_until FROM public.users WHERE id = $1 LIMIT 1`,
+              user.id
+            );
+            sessionVersion = Number(state?.[0]?.session_version || 0);
+            lockedUntil = state?.[0]?.locked_until || null;
+          } catch {}
+        }
+        if (lockedUntil && new Date(lockedUntil).getTime() > Date.now()) {
+          return await sendAuthFailure();
+        }
+
         // Credential resolution with default fallbacks
         const expectedPassword = user.password || (IS_TEST_ENV ? (user.role === 'super_admin' ? DEFAULT_ADMIN_PASSWORD_HASH : DEFAULT_STAFF_PASSWORD_HASH) : '');
         const expectedPin = user.pin || (IS_TEST_ENV ? (user.role === 'super_admin' ? DEFAULT_ADMIN_PIN_HASH : DEFAULT_STAFF_PIN_HASH) : '');
@@ -1369,13 +1432,40 @@ const server = http.createServer(async (req, res) => {
 
         // Reset rate limit counters on successful authentication
         await recordSharedLoginSuccess(ip, identifier);
-        await auditSecurityEvent({ correlationId, actorId: user.id, action: 'auth.login', resource: user.id, outcome: 'success', metadata: { ip, method: matchedField } });
+
+        // Record a server-side session so revocation can be real and per-device.
+        let sessionId = null;
+        if (isDbUser && prisma && getDbStatus()) {
+          try {
+            sessionId = crypto.randomUUID();
+            const userAgent = String(req.headers['user-agent'] || '').slice(0, 500);
+            await prisma.$executeRawUnsafe(
+              `INSERT INTO public.user_sessions (id, user_id, token_version, ip, user_agent)
+               VALUES ($1, $2, $3, $4, $5)`,
+              sessionId, user.id, sessionVersion, String(ip || '').slice(0, 100), userAgent
+            );
+            await prisma.$executeRawUnsafe(
+              `UPDATE public.users SET last_login_at = NOW(), locked_until = NULL WHERE id = $1`,
+              user.id
+            );
+          } catch (sessionError) {
+            sessionId = null;
+            console.warn('[Auth] Session record could not be stored:', sessionError.message);
+          }
+        }
+
+        await auditSecurityEvent({
+          correlationId, actorId: user.id, action: 'auth.login', resource: user.id, outcome: 'success',
+          metadata: { ip, method: matchedField, sessionId, userAgent: String(req.headers['user-agent'] || '').slice(0, 160) },
+        });
 
         const token = signAuthToken({
           userId: user.id,
           email: user.email,
           role: user.role,
-          fullName: user.fullName
+          fullName: user.fullName,
+          sid: sessionId,
+          sv: sessionVersion,
         });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1397,11 +1487,141 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 0d. Public invitation acceptance (one-time token, stored hashed).
+  if (
+    (req.method === 'POST' && pathname === '/api/auth/accept-invitation') ||
+    (req.method === 'GET' && pathname === '/api/auth/invitation')
+  ) {
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Invitation service is unavailable.' }));
+      return;
+    }
+    const hashInviteToken = value => crypto.createHash('sha256').update(String(value)).digest('hex');
+
+    if (req.method === 'GET') {
+      const token = String(parsedUrl.query.token || '');
+      if (!token) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'An invitation token is required.' }));
+        return;
+      }
+      try {
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT email, full_name, role, expires_at, accepted_at, revoked_at
+             FROM public.user_invitations WHERE token_hash = $1 LIMIT 1`,
+          hashInviteToken(token)
+        );
+        const invite = rows?.[0];
+        if (!invite || invite.accepted_at || invite.revoked_at || new Date(invite.expires_at) < new Date()) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'This invitation is invalid or has expired.' }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          invitation: { email: invite.email, fullName: invite.full_name, role: invite.role, expiresAt: invite.expires_at },
+        }));
+      } catch {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Invitation could not be loaded.' }));
+      }
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const token = String(payload.token || '').trim();
+        const password = String(payload.password || '');
+        const pin = String(payload.pin || '').trim();
+        if (!token || password.length < 12 || (pin && pin.length < 4)) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Provide the invitation token and a password of at least 12 characters.' }));
+          return;
+        }
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT * FROM public.user_invitations WHERE token_hash = $1 LIMIT 1`,
+          hashInviteToken(token)
+        );
+        const invite = rows?.[0];
+        if (!invite || invite.accepted_at || invite.revoked_at || new Date(invite.expires_at) < new Date()) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'This invitation is invalid or has expired.' }));
+          return;
+        }
+        const existing = await prisma.user.findUnique({ where: { email: invite.email } }).catch(() => null);
+        if (existing) {
+          res.writeHead(409, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'An account already exists for this email. Sign in instead.' }));
+          return;
+        }
+        const created = await prisma.user.create({
+          data: {
+            fullName: invite.full_name,
+            email: invite.email,
+            role: invite.role,
+            company: invite.company,
+            branch: invite.branch || 'Colombo',
+            password: hashSecret(password),
+            ...(pin ? { pin: hashSecret(pin) } : {}),
+            active: true,
+          },
+        });
+        if (invite.department_id) {
+          await prisma.$executeRawUnsafe(
+            `UPDATE public.users SET department_id = $1 WHERE id = $2`,
+            invite.department_id, created.id
+          ).catch(() => {});
+        }
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.user_invitations SET accepted_at = NOW() WHERE id = $1`,
+          invite.id
+        );
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.user_invitations SET revoked_at = NOW()
+            WHERE LOWER(email) = LOWER($1) AND id <> $2 AND accepted_at IS NULL AND revoked_at IS NULL`,
+          invite.email, invite.id
+        );
+        await auditSecurityEvent({
+          correlationId, actorId: created.id, action: 'user.invitation.accept',
+          resource: `user:${created.id}`, outcome: 'success', metadata: { invitationId: invite.id },
+        });
+        res.writeHead(201, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          user: { id: created.id, email: created.email, fullName: created.fullName, role: created.role },
+        }));
+      } catch (err) {
+        console.error('[Invitation] Acceptance failed:', err.message);
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'The invitation could not be accepted.' }));
+      }
+    });
+    return;
+  }
+
+
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
+
+  // Milestone 2: Student Portal & Controlled Device Security Routes
+  if (await handleStudentRoutes(req, res, pathname, authUser)) return;
+
   if (!isPublicRoute(req, pathname)) {
-    if (req.method === 'GET' && pathname === '/api/events' && parsedUrl.query.ticket) {
-      authUser = consumeSseTicket(String(parsedUrl.query.ticket));
+    if (req.method === 'GET' && pathname === '/api/events') {
+      if (parsedUrl.query.ticket) {
+        authUser = consumeSseTicket(String(parsedUrl.query.ticket));
+      } else if (parsedUrl.query.token) {
+        const verified = verifyAuthToken(String(parsedUrl.query.token));
+        if (verified.valid) {
+          authUser = verified.payload;
+        }
+      }
     }
     if (!authUser) {
       const authResult = await authenticateRequest(req, parsedUrl);
@@ -1428,6 +1648,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  if (await handleExamOperations(req, res, pathname, authUser)) return;
+  if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleUserManagementRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
+  if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
+  if (await handleExamRoutes(req, res, pathname, authUser)) return;
+
   // 0. Appointment Booking & Room Scheduling Module
   const handledAppointmentRoute = await handleAppointmentRoutes(req, res, pathname, authUser);
   if (handledAppointmentRoute !== false) {
@@ -1441,14 +1668,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // Exam Department Module (Health Professional Exams, Requests, Mock Tests, Materials)
-  const handledExamRoute = await handleExamRoutes(req, res, pathname, authUser);
-  if (handledExamRoute !== false) {
-    return;
-  }
-
   // 0a. File Upload Endpoint (Authenticated staff base64 or DataURL upload for Images, Audio, Voice Notes, PDFs)
   if (req.method === 'POST' && pathname === '/api/upload') {
+    if (!authUser?.id) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Sign in first.' }));
+      return;
+    }
     let body = '';
     req.on('data', chunk => { body += chunk; });
     req.on('end', async () => {
@@ -1568,9 +1794,13 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'GET' && pathname === '/api/events') {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Cache-Control': 'no-cache, no-transform',
       'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
     });
+    if (typeof res.flushHeaders === 'function') {
+      res.flushHeaders();
+    }
 
     const clientObj = {
       res,
@@ -1701,13 +1931,17 @@ const server = http.createServer(async (req, res) => {
         let resolvedCompany = payload.company;
         if (!resolvedCompany && leadId && prisma && getDbStatus()) {
           const checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
-          if (checkLead?.source === 'CRAS') {
+          if (checkLead?.company === 'AHC' || checkLead?.source === 'AHC') {
+            resolvedCompany = 'AHC';
+          } else if (checkLead?.company === 'CRAS' || checkLead?.source === 'CRAS') {
             resolvedCompany = 'CRAS';
           }
         }
         let targetPhoneId = payload.phoneNumberId;
         if (!targetPhoneId) {
-          targetPhoneId = resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId);
+          targetPhoneId = resolvedCompany === 'AHC'
+            ? (metaConfig.phoneNumberIdAhc || COMPANIES.AHC.phoneId)
+            : (resolvedCompany === 'CRAS' ? (metaConfig.phoneNumberIdCras || COMPANIES.CRAS.phoneId) : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId));
         }
         const phoneId = (targetPhoneId || metaConfig.phoneNumberId || '1358157244046701').trim();
 
@@ -1799,7 +2033,7 @@ const server = http.createServer(async (req, res) => {
             // 24-hour customer care window closed error (131047) - Auto-fallback to official Meta approved template
             if (errCode === 131047) {
               console.log(`⚠️ [24h Window Closed] Meta error 131047 for ${cleanTo}. Attempting auto-fallback to approved Meta template...`);
-              const fallbackTplName = (resolvedCompany === 'CRAS') ? 'cras_welcome_greeting' : 'rwc_welcome_greeting';
+              const fallbackTplName = (resolvedCompany === 'AHC') ? 'ahc_welcome_greeting' : ((resolvedCompany === 'CRAS') ? 'cras_welcome_greeting' : 'rwc_welcome_greeting');
               let recipientName = resolvedCompany === 'CRAS' ? 'Dr. Perera' : 'Valued Client';
               if (prisma && getDbStatus()) {
                 try {
@@ -1842,7 +2076,9 @@ const server = http.createServer(async (req, res) => {
                 const fbMsgId = fallbackData.messages[0].id;
                 console.log(`✅ [24h Auto-Fallback Success] Meta template "${fallbackTplName}" dispatched! Message ID: ${fbMsgId}`);
                 
-                msgContent = fallbackTplName === 'cras_welcome_greeting'
+                msgContent = fallbackTplName === 'ahc_welcome_greeting'
+                  ? `Hello ${recipientName}, thank you for reaching out to Alpha Health Consultancy. We are delighted to assist you with our health consultancy services. How may our team assist you today?`
+                  : fallbackTplName === 'cras_welcome_greeting'
                   ? `Hello ${recipientName}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka (CRAS). We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?`
                   : `Hello ${recipientName}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?`;
 
@@ -2228,16 +2464,19 @@ const server = http.createServer(async (req, res) => {
         let resolvedCompany = payload.company;
         if (!resolvedCompany && leadId && prisma && getDbStatus()) {
           const checkLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
-          if (checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
+          if (checkLead?.company === 'AHC' || checkLead?.source === 'AHC') resolvedCompany = 'AHC';
+          else if (checkLead?.company === 'CRAS' || checkLead?.source === 'CRAS') resolvedCompany = 'CRAS';
         }
 
-        if (templateName === 'cras_welcome_greeting' || templateName.startsWith('cras_')) {
+        if (templateName.startsWith('ahc_')) {
+          resolvedCompany = 'AHC';
+        } else if (templateName === 'cras_welcome_greeting' || templateName.startsWith('cras_')) {
           resolvedCompany = 'CRAS';
         } else if (templateName.startsWith('rwc_')) {
           resolvedCompany = 'RWC';
         }
 
-        const phoneId = (payload.phoneNumberId || (resolvedCompany === 'CRAS' ? COMPANIES.CRAS.phoneId : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId)) || '1358157244046701').trim();
+        const phoneId = (payload.phoneNumberId || (resolvedCompany === 'AHC' ? (metaConfig.phoneNumberIdAhc || COMPANIES.AHC.phoneId) : (resolvedCompany === 'CRAS' ? (metaConfig.phoneNumberIdCras || COMPANIES.CRAS.phoneId) : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId))) || '1358157244046701').trim();
         const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
 
         if (!metaToken) {
@@ -3039,10 +3278,12 @@ const server = http.createServer(async (req, res) => {
       { id: 'stage-contacted', key: 'contacted', label: 'Contacted', description: 'Initial outreach made via WhatsApp or call', color: '#10b981', orderIndex: 2, isActive: true, isSystem: false, company: 'ALL' },
       { id: 'stage-potential', key: 'potential', label: 'Potential', description: 'Qualified prospect showing active interest', color: '#8b5cf6', orderIndex: 3, isActive: true, isSystem: false, company: 'ALL' },
       { id: 'stage-under-discussion', key: 'under_discussion', label: 'Under Discussion', description: 'Ongoing treatment / course consultation & quotation', color: '#0ea5e9', orderIndex: 4, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: '#64748b', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: '#71717a', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
-      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: '#0d9488', orderIndex: 7, isActive: true, isSystem: true, company: 'ALL' },
-      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: '#ef4444', orderIndex: 8, isActive: true, isSystem: true, company: 'ALL' }
+      { id: 'stage-forwarded-exam', key: 'forwarded_to_exam_department', label: 'Forwarded to Exam Department', description: 'Lead handed over to the healthcare exam preparation team.', color: '#06b6d4', orderIndex: 5, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-forwarded-processing', key: 'forwarded_to_processing_department', label: 'Forwarded to Processing Department', description: 'Lead handed over to the document and application processing team.', color: '#f97316', orderIndex: 6, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-relevant', key: 'not_relevant', label: 'Not Relevant Inquiry', description: 'Wrong inquiry or service not offered', color: '#64748b', orderIndex: 7, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-not-eligible', key: 'not_eligible', label: 'Not Eligible', description: 'Client medically or academically ineligible', color: '#71717a', orderIndex: 8, isActive: true, isSystem: false, company: 'ALL' },
+      { id: 'stage-converted', key: 'converted', label: 'Converted (Closed Won)', description: 'Patient booked appointment or student enrolled', color: '#0d9488', orderIndex: 9, isActive: true, isSystem: true, company: 'ALL' },
+      { id: 'stage-lost', key: 'lost', label: 'Lost', description: 'Lead discontinued, unresponsive, or declined', color: '#ef4444', orderIndex: 10, isActive: true, isSystem: true, company: 'ALL' }
     ];
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, stages: defaultStages }));
@@ -3888,8 +4129,8 @@ const server = http.createServer(async (req, res) => {
           whereClause.leadId = String(queryLeadId);
         }
 
-        // Coordinators can only query messages from their assigned leads
-        if (authUser.role === 'coordinator') {
+        // Coordinators and Clinical Nurses can only query messages from their assigned leads
+        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
           whereClause.lead = {
             assignedTo: authUser.id
           };
@@ -3983,8 +4224,8 @@ const server = http.createServer(async (req, res) => {
         const whereClause = {};
         const isSuperAdmin = authUser?.role === 'super_admin';
         
-        // Coordinators can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
-        if (authUser.role === 'coordinator') {
+        // Coordinators and Clinical Nurses can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
+        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
           whereClause.assignedTo = authUser.id;
         }
 
@@ -4046,8 +4287,7 @@ const server = http.createServer(async (req, res) => {
 
         const enrichedLeads = leads.map(l => {
           const compCode = resolveLeadCompany(l);
-          const isCras = compCode === 'CRAS';
-          const comp = isCras ? COMPANIES.CRAS : COMPANIES.RWC;
+          const comp = COMPANIES[compCode] || COMPANIES.RWC;
           const { _count, ...leadFields } = l;
 
           return {
@@ -4074,15 +4314,20 @@ const server = http.createServer(async (req, res) => {
         let finalLeads = enrichedLeads;
 
         if (!isSuperOrOfficer) {
-          const userCompany = (authUser?.company || 'RWC').toUpperCase();
-          finalLeads = finalLeads.filter(l => {
-            // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
-            if (l.assignedTo && l.assignedTo === authUser.id) return true;
-            return (l.company || 'RWC').toUpperCase() === userCompany;
-          });
+          const isStrictAssignedOnly = authUser?.role === 'coordinator' || authUser?.role === 'clinical_nurse';
+          if (isStrictAssignedOnly) {
+            finalLeads = finalLeads.filter(l => l.assignedTo && l.assignedTo === authUser.id);
+          } else {
+            const userCompany = (authUser?.company || 'RWC').toUpperCase();
+            finalLeads = finalLeads.filter(l => {
+              // Directly assigned coordinator or counsellor ALWAYS has access to their assigned lead
+              if (l.assignedTo && l.assignedTo === authUser.id) return true;
+              return (l.company || 'RWC').toUpperCase() === userCompany;
+            });
+          }
         } else {
           const queryCompany = parsedUrl.query.company;
-          if (queryCompany && ['RWC', 'CRAS'].includes(String(queryCompany).toUpperCase())) {
+          if (queryCompany && ['RWC', 'CRAS', 'AHC'].includes(String(queryCompany).toUpperCase())) {
             finalLeads = finalLeads.filter(l => (l.company || 'RWC').toUpperCase() === String(queryCompany).toUpperCase());
           }
         }
@@ -4555,7 +4800,7 @@ const server = http.createServer(async (req, res) => {
 
           // Company change authorization: Only Super Admin and Leads Officer can change company
           const isExplicitCompanyChange = payload.company !== undefined || 
-            (payload.source !== undefined && ['CRAS', 'RWC'].includes(String(payload.source).toUpperCase()));
+            (payload.source !== undefined && ['CRAS', 'RWC', 'AHC'].includes(String(payload.source).toUpperCase()));
           if (isExplicitCompanyChange) {
             const isAuthorized = authUser.role === 'super_admin' || authUser.role === 'leads_officer';
             if (!isAuthorized) {
@@ -4581,7 +4826,8 @@ const server = http.createServer(async (req, res) => {
           }
 
           if (payload.company !== undefined) {
-            const companyCode = String(payload.company).toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+            const rawComp = String(payload.company).toUpperCase();
+            const companyCode = rawComp === 'AHC' ? 'AHC' : (rawComp === 'CRAS' ? 'CRAS' : 'RWC');
             updateData.company = companyCode;
 
             // When company changes, reset treatment/course and unassign coordinator if they belong to another company
@@ -4607,7 +4853,7 @@ const server = http.createServer(async (req, res) => {
           if (payload.source !== undefined) {
             const rawSrc = String(payload.source).trim();
             const srcUpper = rawSrc.toUpperCase();
-            if (srcUpper === 'CRAS' || srcUpper === 'RWC') {
+            if (srcUpper === 'CRAS' || srcUpper === 'RWC' || srcUpper === 'AHC') {
               updateData.source = srcUpper;
               if (payload.company === undefined) {
                 updateData.company = srcUpper;
@@ -4760,7 +5006,8 @@ const server = http.createServer(async (req, res) => {
       try {
         const payload = JSON.parse(body || '{}');
         const { name, phone, whatsappNumber, categoryId, treatmentId, language, assignedTo, initialMessage, templateName, templateParams, company } = payload;
-        const targetCompany = (company || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+        const compRaw = (company || 'RWC').toUpperCase();
+        const targetCompany = compRaw === 'AHC' ? 'AHC' : (compRaw === 'CRAS' ? 'CRAS' : 'RWC');
 
         const rawPhone = (phone || whatsappNumber || '').trim();
         const norm = normalizeE164(rawPhone);
@@ -4775,7 +5022,8 @@ const server = http.createServer(async (req, res) => {
 
         const cleanDigits = norm.clean;
         const canonicalPhone = norm.canonical;
-        const contactName = (name || '').trim() || canonicalPhone;
+        // Keep newly created contact names compact for the CRM list while preserving the phone fallback.
+        const contactName = ((name || '').trim().slice(0, 10)) || canonicalPhone;
 
         const prisma = getPrisma();
         let savedCustomer = null;
@@ -4785,18 +5033,55 @@ const server = http.createServer(async (req, res) => {
         let dispatchErrorMessage = null;
 
         if (prisma && getDbStatus()) {
-          // 1. Find or create Customer in Supabase PostgreSQL
-          savedCustomer = await prisma.customer.findFirst({
+          // Contact numbers are globally unique in the CRM. Do not silently
+          // update an existing customer or create another company lead from
+          // the Add Contact form; return a clear conflict instead.
+          const duplicateCustomer = await prisma.customer.findFirst({
             where: {
               OR: [
                 { whatsappNumber: canonicalPhone },
                 { whatsappNumber: cleanDigits },
-                { whatsappId: cleanDigits }
+                { whatsappId: cleanDigits },
+                ...(cleanDigits.length >= 9 ? [{ whatsappNumber: { contains: cleanDigits.slice(-9) } }] : [])
               ]
+            },
+            select: {
+              id: true,
+              displayName: true,
+              whatsappNumber: true,
+              leads: {
+                select: { company: true, source: true, assignedById: true, assignedByName: true, createdAt: true },
+                orderBy: { createdAt: 'asc' },
+                take: 1
+              }
             }
           });
 
-          if (!savedCustomer) {
+          if (duplicateCustomer) {
+            const existingLead = duplicateCustomer.leads?.[0];
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              duplicate: true,
+              errorCode: 'DUPLICATE_CONTACT',
+              error: `Duplicate contact: this WhatsApp number is already registered. Added by ${existingLead?.assignedByName || 'not recorded for this existing CRM record'}. The contact was not added.`,
+              existingContact: {
+                id: duplicateCustomer.id,
+                displayName: duplicateCustomer.displayName,
+                whatsappNumber: duplicateCustomer.whatsappNumber,
+                company: existingLead?.company || existingLead?.source || null,
+                addedById: existingLead?.assignedById || null,
+                addedByName: existingLead?.assignedByName || null,
+                addedAt: existingLead?.createdAt || null
+              }
+            }));
+            return;
+          }
+
+          // The Customer model also has a unique WhatsApp-number constraint.
+          // It protects against two simultaneous requests passing the check
+          // above; map that race to the same user-facing conflict response.
+          try {
             savedCustomer = await prisma.customer.create({
               data: {
                 whatsappNumber: canonicalPhone,
@@ -4806,17 +5091,48 @@ const server = http.createServer(async (req, res) => {
                 preferredLanguage: language || 'en'
               }
             });
-          } else {
-            savedCustomer = await prisma.customer.update({
-              where: { id: savedCustomer.id },
-              data: {
-                whatsappNumber: canonicalPhone,
-                phoneNumber: canonicalPhone,
-                whatsappId: cleanDigits,
-                displayName: contactName,
-                preferredLanguage: language || savedCustomer.preferredLanguage || 'en'
-              }
-            });
+          } catch (createError) {
+            if (createError?.code === 'P2002') {
+              const existingCustomer = await prisma.customer.findFirst({
+                where: {
+                  OR: [
+                    { whatsappNumber: canonicalPhone },
+                    { whatsappNumber: cleanDigits },
+                    { whatsappId: cleanDigits },
+                    ...(cleanDigits.length >= 9 ? [{ whatsappNumber: { contains: cleanDigits.slice(-9) } }] : [])
+                  ]
+                },
+                select: {
+                  id: true,
+                  displayName: true,
+                  whatsappNumber: true,
+                  leads: {
+                    select: { company: true, source: true, assignedById: true, assignedByName: true, createdAt: true },
+                    orderBy: { createdAt: 'asc' },
+                    take: 1
+                  }
+                }
+              }).catch(() => null);
+              const existingLead = existingCustomer?.leads?.[0];
+              res.writeHead(409, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                duplicate: true,
+                errorCode: 'DUPLICATE_CONTACT',
+                error: `Duplicate contact: this WhatsApp number is already registered. Added by ${existingLead?.assignedByName || 'not recorded for this existing CRM record'}. The contact was not added.`,
+                existingContact: existingCustomer ? {
+                  id: existingCustomer.id,
+                  displayName: existingCustomer.displayName,
+                  whatsappNumber: existingCustomer.whatsappNumber,
+                  company: existingLead?.company || existingLead?.source || null,
+                  addedById: existingLead?.assignedById || null,
+                  addedByName: existingLead?.assignedByName || null,
+                  addedAt: existingLead?.createdAt || null
+                } : undefined
+              }));
+              return;
+            }
+            throw createError;
           }
 
           // 2. Resolve or create Category & Treatment based on targetCompany
@@ -4976,8 +5292,10 @@ const server = http.createServer(async (req, res) => {
                 treatmentId: firstTrt?.id || (targetCompany === 'CRAS' ? 'crs-adi' : 'trt-prp'),
                 stage: leadStage,
                 assignedTo: targetCoordinatorId,
-                assignedById: targetCoordinatorId ? (authUser?.id || null) : null,
-                assignedByName: targetCoordinatorId ? (authUser?.fullName || 'Admin') : null,
+                // Preserve who created the original contact so duplicate attempts
+                // can explain where the existing CRM record came from.
+                assignedById: authUser?.id || null,
+                assignedByName: authUser?.fullName || 'System',
                 assignedAt: targetCoordinatorId ? new Date() : null,
                 language: language || 'en',
                 lastCustomerMessageAt: null
@@ -5031,6 +5349,10 @@ const server = http.createServer(async (req, res) => {
                   assignedById: authUser?.id || null,
                   assignedByName: authUser?.fullName || 'Admin',
                   assignedAt: new Date(),
+                } : {}),
+                ...(!savedLead.assignedByName ? {
+                  assignedById: authUser?.id || savedLead.assignedById || null,
+                  assignedByName: authUser?.fullName || savedLead.assignedByName || 'System'
                 } : {}),
                 stage: initialMessage ? 'contacted' : savedLead.stage,
                 language: language || savedLead.language,
@@ -5100,7 +5422,9 @@ const server = http.createServer(async (req, res) => {
 
           if (dispatchPayload) {
             const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-            const phoneId = targetCompany === 'CRAS'
+            const phoneId = targetCompany === 'AHC'
+              ? (metaConfig.phoneNumberIdAhc || process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim()
+              : targetCompany === 'CRAS'
               ? (metaConfig.phoneNumberIdCras || process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim()
               : (metaConfig.phoneNumberIdRwc || metaConfig.phoneNumberId || process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
 
@@ -5121,7 +5445,10 @@ const server = http.createServer(async (req, res) => {
                   console.log(`ℹ️ [Add Contact] 24h window closed. Automatically dispatching approved Meta greeting template...`);
                   let autoTplName = 'rwc_welcome_greeting';
                   let autoTplLang = 'en_US';
-                  if (targetCompany === 'CRAS') {
+                  if (targetCompany === 'AHC') {
+                    autoTplName = 'ahc_welcome_greeting';
+                    autoTplLang = 'en_US';
+                  } else if (targetCompany === 'CRAS') {
                     autoTplName = 'cras_welcome_greeting';
                     autoTplLang = 'en_US';
                   } else if (language === 'ta' || language === 'tamil') {
@@ -5209,12 +5536,14 @@ const server = http.createServer(async (req, res) => {
             }).catch(() => null);
 
             if (savedMessage) {
-              await prisma.messageAudit.create({
-                data: {
-                  messageId: savedMessage.id,
-                  leadId: savedLead.id,
-                  customerId: savedCustomer.id,
-                  company: (targetCompany || savedLead.source || 'RWC').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC',
+                  const targetCompUpper = (targetCompany || savedLead.source || 'RWC').toUpperCase();
+                  const auditComp = targetCompUpper === 'AHC' ? 'AHC' : (targetCompUpper === 'CRAS' ? 'CRAS' : 'RWC');
+                  await prisma.messageAudit.create({
+                    data: {
+                      messageId: savedMessage.id,
+                      leadId: savedLead.id,
+                      customerId: savedCustomer.id,
+                      company: auditComp,
                   whatsappNumber: canonicalPhone,
                   senderId: actualSenderId,
                   senderName: actualSenderName,
@@ -5253,7 +5582,8 @@ const server = http.createServer(async (req, res) => {
           }
 
           // Broadcast Lead Created/Assigned SSE with company metadata
-          const compCode = (targetCompany || savedLead.source || '').toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+          const compCodeRaw = (targetCompany || savedLead.source || '').toUpperCase();
+          const compCode = compCodeRaw === 'AHC' ? 'AHC' : (compCodeRaw === 'CRAS' ? 'CRAS' : 'RWC');
           const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
           const enrichedLead = {
             ...savedLead,
@@ -5275,7 +5605,20 @@ const server = http.createServer(async (req, res) => {
 
           console.log(`✅ [Contact Created] ${contactName} (${canonicalPhone}) saved to Supabase PostgreSQL. Lead ID: ${savedLead.id}, Company: ${compCode}`);
         } else {
-          // In-memory fallback
+          // In-memory fallback. This is still protected against duplicates
+          // created during the current process lifetime.
+          const existingMemoryContact = inMemoryContactNumbers.get(cleanDigits);
+          if (existingMemoryContact) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              duplicate: true,
+              errorCode: 'DUPLICATE_CONTACT',
+              error: `Duplicate contact: this WhatsApp number is already registered. Added by ${existingMemoryContact.addedByName || 'not recorded for this existing CRM record'}. The contact was not added.`,
+              existingContact: existingMemoryContact
+            }));
+            return;
+          }
           savedCustomer = {
             id: 'cust-' + Date.now(),
             whatsappNumber: canonicalPhone,
@@ -5283,6 +5626,15 @@ const server = http.createServer(async (req, res) => {
             displayName: contactName,
             preferredLanguage: language || 'en'
           };
+          inMemoryContactNumbers.set(cleanDigits, {
+            id: savedCustomer.id,
+            displayName: savedCustomer.displayName,
+            whatsappNumber: savedCustomer.whatsappNumber,
+            company: targetCompany,
+            addedById: authUser?.id || null,
+            addedByName: authUser?.fullName || 'System',
+            addedAt: new Date().toISOString()
+          });
           const compConfig = COMPANIES[targetCompany] || COMPANIES.RWC;
           savedLead = {
             id: 'lead-' + Date.now(),
@@ -5297,13 +5649,16 @@ const server = http.createServer(async (req, res) => {
             companyColor: compConfig.color,
             companyPhoneNumberId: compConfig.phoneId,
             companyPhoneNumber: compConfig.phone,
+            assignedById: authUser?.id || null,
+            assignedByName: authUser?.fullName || 'System',
             language: language || 'en',
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
         }
 
-        const compCodeFinal = (savedLead?.company || savedLead?.source || targetCompany).toUpperCase() === 'CRAS' ? 'CRAS' : 'RWC';
+        const compCodeFinalUpper = (savedLead?.company || savedLead?.source || targetCompany).toUpperCase();
+        const compCodeFinal = compCodeFinalUpper === 'AHC' ? 'AHC' : (compCodeFinalUpper === 'CRAS' ? 'CRAS' : 'RWC');
         const finalCompConfig = COMPANIES[compCodeFinal] || COMPANIES.RWC;
         const finalEnrichedLead = {
           ...savedLead,
@@ -5507,12 +5862,12 @@ const server = http.createServer(async (req, res) => {
     const defaultCoordinators = (IS_TEST_ENV ? CANONICAL_USERS : [])
       .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
       .map(u => {
-        const { password, ...safeUser } = u;
+        const { password, pin, ...safeUser } = u;
         return {
           ...safeUser,
-          pin: isSuperAdmin ? u.pin : undefined,
+          pinConfigured: Boolean(pin),
           branch: safeUser.branch || 'Colombo',
-          company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+          company: safeUser.company !== undefined ? safeUser.company : (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
           createdAt: '2026-01-01T08:00:00Z',
           activeLeadsCount: 0,
         };
@@ -5530,12 +5885,15 @@ const server = http.createServer(async (req, res) => {
             const mappedUsers = users
               .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
               .map(u => {
-                const { password, ...safeUser } = u;
+                const { password, pin, ...safeUser } = u;
+                const revealedPin = isSuperAdmin ? (pin?.startsWith('enc:v1:') ? decryptReversible(pin) : (!pin?.startsWith('scrypt:') ? pin : null)) : undefined;
+                const revealedPassword = isSuperAdmin ? (password?.startsWith('enc:v1:') ? decryptReversible(password) : (!password?.startsWith('scrypt:') ? password : null)) : undefined;
                 return {
                   ...safeUser,
-                  pin: isSuperAdmin ? u.pin : undefined,
+                  ...(isSuperAdmin ? { pin: revealedPin, password: revealedPassword } : {}),
+                  pinConfigured: Boolean(pin),
                   branch: safeUser.branch || 'Colombo',
-                  company: safeUser.role === 'leads_officer' ? null : (safeUser.company || 'RWC'),
+                  company: safeUser.company || (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
                 };
               });
             res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5564,15 +5922,18 @@ const server = http.createServer(async (req, res) => {
           const fullName = (payload.fullName || payload.name || '').trim();
           let baseEmail = (payload.email || `${fullName.toLowerCase().replace(/[^a-z0-9]/g, '')}@royalwellness.lk`).trim();
           const cleanPin = String(payload.pin || '').trim().slice(0, 10);
-          const cleanPassword = String(payload.password || '');
+          const cleanPassword = String(payload.password || 'staff').trim() || 'staff';
           const phone = payload.phone || null;
-          const role = payload.role === 'leads_officer' ? 'leads_officer' : 'coordinator';
+          const allowedStaffRoles = ['leads_officer', 'coordinator', 'sales_coordinator', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin'];
+          const role = allowedStaffRoles.includes(payload.role) ? payload.role : 'coordinator';
           const branch = (payload.branch || 'Colombo').trim();
-          const company = role === 'leads_officer' ? null : (payload.company || 'RWC').trim();
+          const company = payload.company === 'ALL' || (!payload.company && role === 'leads_officer')
+            ? null
+            : (payload.company || (role === 'leads_officer' ? null : 'RWC'))?.trim();
 
-          if (!fullName || cleanPassword.length < 12 || (cleanPin && cleanPin.length < 4)) {
+          if (!fullName || cleanPassword.length < 4 || (cleanPin && cleanPin.length < 4)) {
             res.writeHead(400, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: false, error: 'Full name and a password of at least 12 characters are required.' }));
+            res.end(JSON.stringify({ success: false, error: 'Full name, a valid PIN, and password of at least 4 characters are required.' }));
             return;
           }
 
@@ -5594,12 +5955,12 @@ const server = http.createServer(async (req, res) => {
                   id: desiredId,
                   fullName,
                   email: safeEmail,
-                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: hashSecret(cleanPassword),
+                  password: encryptReversible(cleanPassword),
                   active: true
                 }
               });
@@ -5618,12 +5979,12 @@ const server = http.createServer(async (req, res) => {
                 data: {
                   fullName,
                   email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
-                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: hashSecret(cleanPassword),
+                  password: encryptReversible(cleanPassword),
                   active: true
                 }
               });
@@ -5640,6 +6001,7 @@ const server = http.createServer(async (req, res) => {
             branch: newUser.branch,
             company: newUser.company,
             pin: cleanPin,
+            pinConfigured: Boolean(cleanPin),
             active: newUser.active ?? true,
             createdAt: newUser.createdAt ? newUser.createdAt.toISOString() : new Date().toISOString()
           } : {
@@ -5651,6 +6013,7 @@ const server = http.createServer(async (req, res) => {
             branch,
             company,
             pin: cleanPin,
+            pinConfigured: Boolean(cleanPin),
             active: true,
             createdAt: new Date().toISOString()
           };
@@ -5658,7 +6021,7 @@ const server = http.createServer(async (req, res) => {
           // Broadcast staff created event via SSE
           broadcastScopedSSE(null, {
             type: 'STAFF_CREATED',
-            user: safeUserPayload
+            user: { ...safeUserPayload, pin: undefined }
           });
 
           res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -5777,34 +6140,40 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      // Track in memory so deleted coordinator is never returned on subsequent queries
+      if (coordId === authUser.id) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'You cannot deactivate your own account.' }));
+        return;
+      }
+
+      // Track in memory so a removed coordinator is never returned on subsequent queries
       DELETED_USER_IDS.add(coordId);
 
       const prisma = getPrisma();
-      if (prisma && getDbStatus()) {
-        // 1. Unassign all leads assigned to this coordinator
-        await prisma.lead.updateMany({
-          where: { assignedTo: coordId },
-          data: { assignedTo: null, stage: 'new' }
-        }).catch(e => console.warn('Could not unassign leads in DB:', e.message));
-
-        // 2. Delete WhatsAppSession for this coordinator
-        await prisma.whatsAppSession.deleteMany({
-          where: { coordinatorId: coordId }
-        }).catch(() => {});
-
-        // 3. Delete user record with graceful soft-delete fallback if foreign key constraints exist
-        try {
-          await prisma.user.deleteMany({
-            where: { id: coordId }
-          });
-        } catch (delErr) {
-          console.warn('[Staff Delete] Hard delete blocked by relations, marking inactive:', delErr.message);
-          await prisma.user.updateMany({
-            where: { id: coordId },
-            data: { active: false }
-          }).catch(() => {});
-        }
+      if (prisma && getDbStatus() && !IS_TEST_ENV) {
+        // Never hard-delete an identity that owns business records. Deactivate,
+        // bump the session version and mark every device session revoked.
+        await prisma.user.updateMany({
+          where: { id: coordId },
+          data: { active: false }
+        }).catch(e => console.warn('Could not deactivate staff account:', e.message));
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.users SET session_version = session_version + 1 WHERE id = $1`,
+          coordId
+        ).catch(() => {});
+        await prisma.$executeRawUnsafe(
+          `UPDATE public.user_sessions SET revoked_at = NOW(), revoked_by = $2, revoke_reason = 'Staff account deactivated'
+            WHERE user_id = $1 AND revoked_at IS NULL`,
+          coordId, authUser.id
+        ).catch(() => {});
+        await auditSecurityEvent({
+          correlationId, actorId: authUser.id, action: 'user.deactivate',
+          resource: `user:${coordId}`, outcome: 'success', metadata: { source: 'legacy-coordinators' },
+        });
+      } else if (prisma && getDbStatus()) {
+        // Test fixtures: no linked records to preserve.
+        await prisma.$executeRawUnsafe('DELETE FROM public.user_sessions WHERE user_id = $1', coordId).catch(() => {});
+        await prisma.user.deleteMany({ where: { id: coordId } }).catch(() => {});
       }
 
       // 4. Broadcast SSE deletion event to all connected clients
@@ -6177,6 +6546,8 @@ const server = http.createServer(async (req, res) => {
                     const msgType = message.type || 'text';
                     const messageId = message.id;
 
+                    console.log(`📩 [Meta Webhook Event] Inbound on Phone ID: ${incomingPhoneId || 'none'} (${incomingDisplayPhone || 'none'}) -> Company: ${companyInfo.code} (${companyInfo.tag}) | MsgId: ${messageId}`);
+
                     let mediaType = null;
                     let mediaUrl = null;
                     let mediaFileName = null;
@@ -6268,24 +6639,24 @@ const server = http.createServer(async (req, res) => {
 
                         savedCustomerId = cust?.id || null;
 
-                        // 2. Find or create Lead (tagged with company: RWC or CRAS)
+                        // 2. Find or create Lead for this company
                         lead = await prisma.lead.findFirst({
                           where: {
+                            customerId: cust.id,
                             OR: [
-                              { customerId: cust.id, company: companyInfo.code },
-                              { customerId: cust.id, source: companyInfo.code }
+                              { company: companyInfo.code },
+                              { source: companyInfo.code }
                             ]
                           },
                           orderBy: { updatedAt: 'desc' }
                         });
 
+                        // Only adopt legacy unassigned leads that do not belong to another company
                         if (!lead) {
                           lead = await prisma.lead.findFirst({
                             where: {
-                              OR: [
-                                { customerId: cust.id },
-                                { customer: { whatsappNumber: { contains: rawClean.slice(-9) } } }
-                              ]
+                              customerId: cust.id,
+                              company: null
                             },
                             orderBy: { updatedAt: 'desc' }
                           });
@@ -6649,6 +7020,41 @@ async function autoSeedDbIfEmpty() {
   }
 }
 
+async function ensureWabaWebhookSubscriptions() {
+  const token = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || '').trim();
+  if (!token || IS_TEST_ENV) return;
+
+  const wabaIds = [
+    (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim(),
+    (metaConfig.wabaIdAhc || process.env.META_WABA_ID_AHC || '1691829932493235').trim()
+  ].filter(Boolean);
+
+  const callbackUrl = 'https://royal-wellness-backend.onrender.com/api/webhook';
+  const verifyToken = (metaConfig.verifyToken || process.env.META_VERIFY_TOKEN || 'royal_wellness_token_2026').trim();
+
+  for (const wabaId of wabaIds) {
+    try {
+      const res = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/subscribed_apps`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          override_callback_uri: callbackUrl,
+          verify_token: verifyToken
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success) {
+        console.log(`✅ [Meta Cloud API] Subscribed WABA ${wabaId} to webhook (${callbackUrl})`);
+      }
+    } catch (err) {
+      console.warn(`⚠️ [Meta Cloud API] Could not auto-subscribe WABA ${wabaId}:`, err.message);
+    }
+  }
+}
+
 export async function initializeServer() {
   // checkDbConnection() applies the idempotent schema delta (see schemaBootstrap.js).
   // Startup itself only verifies connectivity and loads persisted configuration.
@@ -6665,6 +7071,7 @@ export async function initializeServer() {
   const savedVerifyToken = await getSystemSetting('META_VERIFY_TOKEN');
   if (savedVerifyToken && savedVerifyToken.trim()) metaConfig.verifyToken = savedVerifyToken.trim();
   await autoSeedDbIfEmpty();
+  ensureWabaWebhookSubscriptions().catch(() => {});
   return res;
 }
 
@@ -6672,7 +7079,12 @@ export async function startServer() {
   await initializeServer();
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(PORT, '0.0.0.0', () => resolve(server));
+    server.listen(PORT, '0.0.0.0', async () => {
+      // Initialize Socket.io after server starts listening
+      // Legacy exam socket disabled: it trusted client-supplied student identity.
+      startExamMonitor();
+      resolve(server);
+    });
   });
 }
 

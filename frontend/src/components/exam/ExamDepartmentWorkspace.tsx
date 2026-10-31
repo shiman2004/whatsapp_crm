@@ -1,20 +1,9 @@
+import { useCrm } from '../../context/CrmContext';
+import { ExamOperationsView } from './ExamOperationsView';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   GraduationCap,
   Plus,
-  LayoutDashboard,
-  BookOpen,
-  Target,
-  FileCheck2,
-  FileText,
-  ShieldCheck,
-  Database,
-  TrendingUp,
-  Award,
-  Inbox,
-  BarChart3,
-  Settings,
-  Layers
 } from 'lucide-react';
 import {
   examService,
@@ -46,6 +35,8 @@ import { NewMaterialRequestModal } from './NewMaterialRequestModal';
 import { UploadMaterialModal } from './UploadMaterialModal';
 import { RequestDetailModal } from './RequestDetailModal';
 import { ExamCategoriesModal } from './ExamCategoriesModal';
+import { MyDraftsView } from './MyDraftsView';
+import { ApprovalQueueView } from './ApprovalQueueView';
 
 interface ExamDepartmentWorkspaceProps {
   initialSubTab?: string;
@@ -56,14 +47,33 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
   initialSubTab = 'dashboard',
   onSubTabChange,
 }) => {
+  const { currentUser } = useCrm();
+  const isAcademicAdmin = ['super_admin', 'exam_department_manager'].includes(currentUser?.role || '');
+  const canAccessAcademic = isAcademicAdmin || ['exam_coordinator', 'exam_providing_officer'].includes(currentUser?.role || '');
+  const [selectedCourseId, setSelectedCourseId] = useState('course-dha-rn');
   const [activeTab, setActiveTab] = useState<string>(initialSubTab);
 
   // Sync when initialSubTab changes from sidebar
   useEffect(() => {
     if (initialSubTab) {
       setActiveTab(initialSubTab);
+      if (initialSubTab === 'categories') setIsCategoriesModalOpen(true);
+      else setIsCategoriesModalOpen(false);
     }
   }, [initialSubTab]);
+
+  useEffect(() => {
+    const handleSubTabEvent = (event: Event) => {
+      const sub = (event as CustomEvent<string>).detail;
+      if (sub) {
+        setActiveTab(sub);
+        if (sub === 'categories') setIsCategoriesModalOpen(true);
+        else setIsCategoriesModalOpen(false);
+      }
+    };
+    window.addEventListener('exam-subtab-change', handleSubTabEvent);
+    return () => window.removeEventListener('exam-subtab-change', handleSubTabEvent);
+  }, []);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -90,31 +100,35 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
   // Modals state
   const [isNewRequestOpen, setIsNewRequestOpen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
-  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(initialSubTab === 'categories');
   const [activeDetailRequest, setActiveDetailRequest] = useState<ExamMaterialRequest | null>(null);
 
-  // Load all initial data from database
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  // Preserve successful sections and report failures instead of showing empty success.
   const refreshData = useCallback(async () => {
+    if (!canAccessAcademic) return;
+    setIsRefreshing(true);
     try {
-      const [statsData, catData, reqData, matData, mockData, provData] = await Promise.all([
-        examService.getDashboardStats().catch(() => null),
-        examService.getCategories().catch(() => []),
-        examService.getRequests().catch(() => []),
-        examService.getMaterials().catch(() => []),
-        examService.getMockTests().catch(() => []),
-        examService.getProvisions().catch(() => []),
-      ]);
-
-      if (statsData) setStats(statsData);
-      if (catData && catData.length > 0) setCategories(catData);
-      if (reqData) setRequests(reqData);
-      if (matData) setMaterials(matData);
-      if (mockData) setMockTests(mockData);
-      if (provData) setProvisions(provData);
-    } catch (err) {
-      console.error('Error fetching exam department data:', err);
+      const results = await Promise.allSettled([
+        examService.getDashboardStats(), examService.getCategories(),
+        examService.getRequests(), examService.getMaterials(),
+        examService.getMockTests(), examService.getProvisions(),
+      ] as const);
+      const [statsResult, categoriesResult, requestsResult, materialsResult, mocksResult, provisionsResult] = results;
+      if (statsResult.status === 'fulfilled') setStats(statsResult.value);
+      if (categoriesResult.status === 'fulfilled') setCategories(categoriesResult.value);
+      if (requestsResult.status === 'fulfilled') setRequests(requestsResult.value);
+      if (materialsResult.status === 'fulfilled') setMaterials(materialsResult.value);
+      if (mocksResult.status === 'fulfilled') setMockTests(mocksResult.value);
+      if (provisionsResult.status === 'fulfilled') setProvisions(provisionsResult.value);
+      const labels = ['dashboard', 'categories', 'requests', 'materials', 'mock tests', 'access provisions'];
+      const failed = labels.filter((_, index) => results[index].status === 'rejected');
+      setLoadError(failed.length ? 'Could not refresh ' + failed.join(', ') + '. Displayed values may be incomplete or out of date. Check your connection and retry.' : null);
+    } finally {
+      setIsRefreshing(false);
     }
-  }, []);
+  }, [canAccessAcademic]);
 
   useEffect(() => {
     refreshData();
@@ -163,35 +177,29 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
     handleTabChange('study-materials');
   };
 
-  // 12 Sections Main Menu (Spec 2)
-  const navTabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'courses', label: 'Courses', icon: BookOpen },
-    { id: 'mcq-practice', label: 'MCQ Practice', icon: Target },
-    { id: 'mock-tests', label: 'Mock Tests', icon: FileCheck2 },
-    { id: 'study-materials', label: 'Study Materials', icon: FileText },
-    { id: 'guidelines', label: 'Exam Guidelines', icon: ShieldCheck },
-    { id: 'question-bank', label: 'Question Bank', icon: Database },
-    { id: 'progress', label: 'Student Progress', icon: TrendingUp },
-    { id: 'results', label: 'Exam Results', icon: Award },
-    { id: 'requests', label: 'Material Requests', icon: Inbox },
-    { id: 'reports', label: 'Reports', icon: BarChart3 },
-    { id: 'settings', label: 'Settings', icon: Settings },
-  ];
+  if (!canAccessAcademic) return <div className="min-w-0 rounded-2xl bg-white dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] p-4 sm:p-6"><ExamOperationsView /></div>;
 
   return (
-    <div className="space-y-6 flex-1 overflow-y-auto pr-1 pb-10">
+    <div className="space-y-6 flex-1 min-w-0 overflow-x-hidden overflow-y-auto rounded-2xl bg-white dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] p-4 sm:p-6 pb-10">
+      {loadError && (
+        <div role="alert" className="rounded-xl border border-amber-500/40 bg-amber-500/10 p-4 text-sm text-amber-100 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
+          <p>{loadError}</p>
+          <button type="button" disabled={isRefreshing} onClick={() => void refreshData()} className="shrink-0 rounded-lg border border-amber-400/50 px-3 py-2 font-semibold disabled:opacity-50">
+            {isRefreshing ? 'Retrying…' : 'Retry loading'}
+          </button>
+        </div>
+      )}
       {/* Top Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700/80 flex items-center justify-center text-teal-400 shrink-0 shadow-md">
+          <div className="w-10 h-10 rounded-xl bg-[#F0F2F5] dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] flex items-center justify-center text-[#128C7E] dark:text-[#25D366] shrink-0 shadow-sm">
             <GraduationCap className="w-6 h-6" />
           </div>
           <div>
-            <h1 className="text-xl sm:text-2xl font-black text-white tracking-tight">
+            <h1 className="text-xl sm:text-2xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight">
               Exam Department
             </h1>
-            <p className="text-xs text-slate-400 font-medium mt-0.5">
+            <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
               Healthcare Licensing Exam Preparation Platform • DHA, DOH, MOH, Prometric
             </p>
           </div>
@@ -210,37 +218,21 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
         </div>
       </div>
 
-      {/* 12-Section Sub-Navigation Bar (Spec 2) */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1 border-b border-slate-800 text-xs">
-        {navTabs.map((tab) => {
-          const Icon = tab.icon;
-          const isActive =
-            activeTab === tab.id ||
-            (tab.id === 'courses' && activeTab === 'courses') ||
-            (tab.id === 'mcq-practice' && (activeTab === 'mcq' || activeTab === 'mcq-practice')) ||
-            (tab.id === 'study-materials' && (activeTab === 'materials' || activeTab === 'study-materials'));
-
-          return (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-xl font-bold whitespace-nowrap transition-all cursor-pointer ${
-                isActive
-                  ? 'bg-teal-500/15 text-teal-300 border border-teal-500/30 shadow-xs'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-              }`}
-            >
-              <Icon className={`w-4 h-4 ${isActive ? 'text-teal-400' : 'text-slate-500'}`} />
-              <span>{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
-
       {/* ----------------------------------------------------------------- */}
       {/* 12-SECTION ROUTER                                                 */}
       {/* ----------------------------------------------------------------- */}
+
+      {activeTab === 'operations' && <ExamOperationsView />}
+
+      {/* My Drafts (Personal Drafts & Submissions) */}
+      {activeTab === 'my-drafts' && (
+        <MyDraftsView onNavigateToSection={(section: string) => handleTabChange(section)} />
+      )}
+
+      {/* Approval Queue (Manager & Super Admin) */}
+      {activeTab === 'approval-queue' && isAcademicAdmin && (
+        <ApprovalQueueView />
+      )}
 
       {/* 1. Dashboard */}
       {activeTab === 'dashboard' && (
@@ -262,7 +254,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
       {activeTab === 'courses' && (
         <CoursesManagerView
           categories={categories}
-          onNavigateToSection={(sec) => handleTabChange(sec)}
+          onNavigateToSection={(sec, courseId) => { if (courseId) setSelectedCourseId(courseId); handleTabChange(sec); }}
         />
       )}
 
@@ -270,36 +262,42 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
       {(activeTab === 'mcq-practice' || activeTab === 'mcq') && (
         <InteractiveMcqPracticeView
           categories={categories}
-          initialCourseId="course-dha-rn"
+          key={activeTab + selectedCourseId}
+          initialCourseId={selectedCourseId}
         />
       )}
 
       {/* 4. Mock Tests (Timed Exam Simulation) */}
       {activeTab === 'mock-tests' && (
         <MockTestRunnerView
-          initialCourseId="course-dha-rn"
+          key={activeTab + selectedCourseId}
+          initialCourseId={selectedCourseId}
           onNavigateToPractice={() => handleTabChange('mcq-practice')}
+          onNavigateToQuestionBank={() => handleTabChange('question-bank')}
         />
       )}
 
       {/* 5. Study Materials (PDF viewer & downloads) */}
       {(activeTab === 'study-materials' || activeTab === 'materials') && (
         <StudyMaterialsView
-          initialCourseId="course-dha-rn"
+          key={activeTab + selectedCourseId}
+          initialCourseId={selectedCourseId}
         />
       )}
 
       {/* 6. Exam Guidelines */}
       {activeTab === 'guidelines' && (
         <ExamGuidelinesView
-          initialCourseId="course-dha-rn"
+          key={activeTab + selectedCourseId}
+          initialCourseId={selectedCourseId}
         />
       )}
 
       {/* 7. Question Bank */}
       {activeTab === 'question-bank' && (
         <QuestionBankView
-          initialCourseId="course-dha-rn"
+          key={activeTab + selectedCourseId}
+          initialCourseId={selectedCourseId}
         />
       )}
 
@@ -367,7 +365,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
 
       <ExamCategoriesModal
         isOpen={isCategoriesModalOpen}
-        onClose={() => setIsCategoriesModalOpen(false)}
+        onClose={() => { setIsCategoriesModalOpen(false); if (activeTab === 'categories') handleTabChange('dashboard'); }}
         categories={categories}
         onRefresh={refreshData}
       />

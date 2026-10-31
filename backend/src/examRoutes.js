@@ -1,3 +1,12 @@
+import {
+  legacyExamAccess,
+  canAccessAcademic,
+  hasExamCapability,
+  checkAcademicTransition,
+  validateAcademicUpload,
+  canManageExam,
+  ExamError
+} from './examPolicy.js';
 /**
  * Exam Department Module REST Route Handlers
  * Alpha Health Group CRM
@@ -23,15 +32,15 @@ import {
   MEMORY_GUIDELINES_PLATFORM
 } from './examPlatformService.js';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'royal_wellness_crm_jwt_secret_key_2026_super_secure';
+import { JWT_SECRET } from './runtimeConfig.js';
 
-function signMediaFile(fileName) {
-  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}`).digest('base64url');
+function signMediaFile(fileName, expires) {
+  return crypto.createHmac('sha256', JWT_SECRET).update(`media:${fileName}:${expires}`).digest('base64url');
 }
 
 function createPrivateMediaUrl(fileName) {
-  const signature = signMediaFile(fileName);
-  return `/uploads/${encodeURIComponent(fileName)}?sig=${signature}`;
+  const expires = Date.now() + (15 * 60 * 1000);
+  return `/uploads/${encodeURIComponent(fileName)}?exp=${expires}&sig=${signMediaFile(fileName, expires)}`;
 }
 
 function ensureSignedMediaUrl(fileUrl) {
@@ -59,6 +68,7 @@ let MEMORY_REQUESTS = [];
 let MEMORY_MATERIALS = [];
 let MEMORY_MOCK_TESTS = [];
 let MEMORY_PROVISIONS = [];
+let MEMORY_ACADEMIC_AUDIT = [];
 
 let MEMORY_MCQ_QUESTIONS = [
   {
@@ -138,12 +148,7 @@ let MEMORY_MCQ_ATTEMPTS = [];
  * Send JSON response helper
  */
 function sendJson(res, statusCode, data) {
-  res.writeHead(statusCode, {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
-    'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS'
-  });
+  res.writeHead(statusCode, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
 
@@ -153,7 +158,10 @@ function sendJson(res, statusCode, data) {
 function parseJsonBody(req) {
   return new Promise((resolve, reject) => {
     let body = '';
-    req.on('data', chunk => { body += chunk; });
+    req.on('data', chunk => {
+      body += chunk;
+      if (Buffer.byteLength(body) > 2 * 1024 * 1024) req.destroy(new Error('Request body too large'));
+    });
     req.on('end', () => {
       if (!body) return resolve({});
       try {
@@ -203,11 +211,221 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     return true;
   }
 
+  if (!canAccessAcademic(authUser)) {
+    sendJson(res, 403, { success: false, error: 'Shared academic records require administrator access. Sales handoffs use Exam Operations.' });
+    return true;
+  }
+  if (!getPrisma() && !(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) {
+    sendJson(res, 503, { success: false, error: 'Durable exam storage is unavailable.' });
+    return true;
+  }
+
   const parsedUrl = url.parse(req.url, true);
   const query = parsedUrl.query;
   const prisma = getPrisma();
 
   try {
+
+    // -------------------------------------------------------------------------
+    // 0. ACADEMIC LIFECYCLE & WORKFLOW ENGINE
+    // -------------------------------------------------------------------------
+    if (pathname === '/api/exam/academic/transition' && req.method === 'POST') {
+      try {
+        const body = await parseJsonBody(req);
+        const { entityType, entityId, action, comments } = body;
+        if (!entityType || !entityId || !action) {
+          sendJson(res, 400, { success: false, error: 'entityType, entityId, and action are required.' });
+          return true;
+        }
+
+        // Fetch current entity
+        let currentItem = null;
+        let currentStatus = 'Draft';
+
+        if (entityType === 'course') {
+          currentItem = MEMORY_COURSES.find(c => c.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_courses WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, createdBy: r[0].created_by };
+          }
+        } else if (entityType === 'material') {
+          currentItem = MEMORY_STUDY_MATERIALS_PLATFORM.find(m => m.id === entityId) || MEMORY_MATERIALS.find(m => m.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_study_materials WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, uploadedBy: r[0].uploaded_by || r[0].created_by };
+          }
+        } else if (entityType === 'question') {
+          currentItem = MEMORY_QUESTIONS.find(q => q.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mcq_questions WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, createdBy: r[0].created_by };
+          }
+        } else if (entityType === 'mock_test') {
+          currentItem = MEMORY_MOCK_TESTS_PLATFORM.find(m => m.id === entityId) || MEMORY_MOCK_TESTS.find(m => m.id === entityId);
+          if (prisma) {
+            const r = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mock_tests WHERE id = $1;`, entityId);
+            if (r && r[0]) currentItem = { ...r[0], status: r[0].status, createdBy: r[0].created_by };
+          }
+        }
+
+        if (!currentItem) {
+          sendJson(res, 404, { success: false, error: `${entityType} with id ${entityId} not found.` });
+          return true;
+        }
+
+        currentStatus = currentItem.status || 'Draft';
+        const newStatus = checkAcademicTransition(currentStatus, action, authUser, { resource: currentItem, comments });
+
+        // Update in DB if available
+        if (prisma) {
+          try {
+            if (entityType === 'course') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_courses
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            } else if (entityType === 'material') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_study_materials
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            } else if (entityType === 'question') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_mcq_questions
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            } else if (entityType === 'mock_test') {
+              await prisma.$executeRawUnsafe(`
+                UPDATE public.exam_mock_tests
+                SET status = $1, reviewer_id = $2, review_comments = $3,
+                    published_at = CASE WHEN $1 = 'Published' THEN NOW() ELSE published_at END,
+                    updated_at = NOW()
+                WHERE id = $4;
+              `, newStatus, authUser.id, comments || null, entityId);
+            }
+
+            // Write audit record
+            const auditId = 'acad-aud-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6);
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.exam_academic_audit (
+                id, entity_type, entity_id, action, from_status, to_status,
+                actor_id, actor_name, actor_role, comments, created_at
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW());
+            `, auditId, entityType, entityId, action, currentStatus, newStatus,
+               authUser.id, authUser.fullName || authUser.id, authUser.role, comments || null);
+          } catch (e) {
+            console.warn('⚠️ [ExamRoutes] Academic transition DB update:', e.message);
+          }
+        }
+
+        // Memory store sync
+        currentItem.status = newStatus;
+        currentItem.reviewerId = authUser.id;
+        currentItem.reviewComments = comments || null;
+        if (newStatus === 'Published') currentItem.publishedAt = new Date().toISOString();
+
+        MEMORY_ACADEMIC_AUDIT.unshift({
+          id: 'acad-aud-' + Date.now(),
+          entityType,
+          entityId,
+          action,
+          fromStatus: currentStatus,
+          toStatus: newStatus,
+          actorId: authUser.id,
+          actorName: authUser.fullName || authUser.id,
+          actorRole: authUser.role,
+          comments: comments || null,
+          createdAt: new Date().toISOString()
+        });
+
+        sendJson(res, 200, {
+          success: true,
+          data: {
+            entityType,
+            entityId,
+            previousStatus: currentStatus,
+            status: newStatus,
+            action,
+            updatedAt: new Date().toISOString()
+          },
+          message: `Status updated to ${newStatus}`
+        });
+        return true;
+      } catch (err) {
+        const status = err.status || 500;
+        sendJson(res, status, { success: false, error: err.message, code: err.code || 'TRANSITION_ERROR' });
+        return true;
+      }
+    }
+
+    if (pathname === '/api/exam/academic/my-drafts' && req.method === 'GET') {
+      const userId = authUser.id;
+      const isMgr = canManageExam(authUser);
+
+      const filterOwn = (item, idField) => {
+        if (isMgr) return true;
+        const owner = item[idField] || item.createdBy || item.created_by || item.uploadedBy || item.uploaded_by;
+        return owner && String(owner) === String(userId);
+      };
+
+      const filterDraftStatus = (item) => {
+        const s = String(item.status || 'Draft').toUpperCase();
+        return s === 'DRAFT' || s === 'PENDING_REVIEW' || s === 'CHANGES_REQUESTED';
+      };
+
+      const myCourses = MEMORY_COURSES.filter(c => filterOwn(c, 'createdBy') && filterDraftStatus(c));
+      const myMaterials = MEMORY_STUDY_MATERIALS_PLATFORM.filter(m => filterOwn(m, 'uploadedBy') && filterDraftStatus(m));
+      const myQuestions = MEMORY_QUESTIONS.filter(q => filterOwn(q, 'createdBy') && filterDraftStatus(q));
+      const myMockTests = MEMORY_MOCK_TESTS_PLATFORM.filter(m => filterOwn(m, 'createdBy') && filterDraftStatus(m));
+
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          courses: myCourses,
+          materials: myMaterials,
+          questions: myQuestions,
+          mockTests: myMockTests,
+          total: myCourses.length + myMaterials.length + myQuestions.length + myMockTests.length
+        }
+      });
+      return true;
+    }
+
+    if (pathname === '/api/exam/academic/approval-queue' && req.method === 'GET') {
+      if (!canManageExam(authUser)) {
+        sendJson(res, 403, { success: false, error: 'Forbidden: Review queue is restricted to Exam Department Managers.' });
+        return true;
+      }
+
+      const isPending = (item) => String(item.status || '').toUpperCase() === 'PENDING_REVIEW';
+
+      const pendingCourses = MEMORY_COURSES.filter(isPending);
+      const pendingMaterials = MEMORY_STUDY_MATERIALS_PLATFORM.filter(isPending);
+      const pendingQuestions = MEMORY_QUESTIONS.filter(isPending);
+      const pendingMockTests = MEMORY_MOCK_TESTS_PLATFORM.filter(isPending);
+
+      sendJson(res, 200, {
+        success: true,
+        data: {
+          courses: pendingCourses,
+          materials: pendingMaterials,
+          questions: pendingQuestions,
+          mockTests: pendingMockTests,
+          total: pendingCourses.length + pendingMaterials.length + pendingQuestions.length + pendingMockTests.length
+        }
+      });
+      return true;
+    }
+
     // -------------------------------------------------------------------------
     // 1. DASHBOARD STATS: GET /api/exam/dashboard-stats
     // -------------------------------------------------------------------------
@@ -258,8 +476,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
           // Category material counts
           const catMatRes = await prisma.$queryRawUnsafe(`
-            SELECT category_id, COUNT(*)::int as count 
-            FROM public.exam_materials 
+            SELECT category_id, COUNT(*)::int as count
+            FROM public.exam_materials
             GROUP BY category_id;
           `);
           if (catMatRes && catMatRes.length > 0) {
@@ -272,8 +490,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
           // Fetch recent requests
           const requestsRes = await prisma.$queryRawUnsafe(`
-            SELECT * FROM public.exam_material_requests 
-            ORDER BY request_date DESC 
+            SELECT * FROM public.exam_material_requests
+            ORDER BY request_date DESC
             LIMIT 5;
           `);
           if (requestsRes && requestsRes.length > 0) {
@@ -294,6 +512,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             }));
           }
         } catch (dbErr) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
           console.warn('⚠️ [ExamRoutes] Dashboard stats DB query fallback:', dbErr.message);
         }
       } else {
@@ -332,12 +551,12 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`
-              SELECT c.*, 
+              SELECT c.*,
                      COALESCE((SELECT COUNT(*)::int FROM public.exam_materials m WHERE m.category_id = c.id), 0) as material_count
               FROM public.exam_categories c
               ORDER BY c.display_order ASC;
             `);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               categories = rows.map(r => ({
                 id: r.id,
                 name: r.name,
@@ -351,6 +570,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Categories DB query fallback:', err.message);
           }
         }
@@ -386,6 +606,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description, icon = EXCLUDED.icon, color = EXCLUDED.color, updated_at = NOW();
             `, categoryRecord.id, categoryRecord.name, categoryRecord.code, categoryRecord.description, categoryRecord.icon, categoryRecord.color, categoryRecord.isActive, categoryRecord.displayOrder);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Category insert DB error:', err.message);
           }
         }
@@ -414,6 +635,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               WHERE id = $6;
             `, body.name, body.description, body.icon, body.color, body.isActive, catId);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Category update DB error:', err.message);
           }
         }
@@ -430,6 +652,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_categories WHERE id = $1;`, catId);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Category delete DB error:', err.message);
           }
         }
@@ -475,7 +698,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
             sql += ` ORDER BY request_date DESC;`;
             const rows = await prisma.$queryRawUnsafe(sql, ...params);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               requests = rows.map(r => ({
                 id: r.id,
                 requestNumber: r.request_number,
@@ -498,6 +721,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Requests DB query fallback:', err.message);
           }
         }
@@ -510,7 +734,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           requests = requests.filter(r => r.status.toLowerCase() === statusFilter.toLowerCase());
         }
         if (searchQuery) {
-          requests = requests.filter(r => 
+          requests = requests.filter(r =>
             (r.title && r.title.toLowerCase().includes(searchQuery)) ||
             (r.requestedBy && r.requestedBy.toLowerCase().includes(searchQuery)) ||
             (r.candidateName && r.candidateName.toLowerCase().includes(searchQuery))
@@ -531,7 +755,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         const count = MEMORY_REQUESTS.length + 1;
         const requestNumber = `REQ-${new Date().getFullYear()}-${String(count).padStart(3, '0')}`;
         const newId = `req-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-        
+
         const newRequest = {
           id: newId,
           requestNumber,
@@ -554,17 +778,18 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           try {
             await prisma.$executeRawUnsafe(`
               INSERT INTO public.exam_material_requests (
-                id, request_number, title, category_id, category_name, type, 
-                requested_by, requester_id, candidate_name, candidate_phone, lead_id, 
+                id, request_number, title, category_id, category_name, type,
+                requested_by, requester_id, candidate_name, candidate_phone, lead_id,
                 request_date, status, urgency, notes, created_at, updated_at
               )
               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), $12, $13, $14, NOW(), NOW());
-            `, 
+            `,
             newRequest.id, newRequest.requestNumber, newRequest.title, newRequest.categoryId, newRequest.categoryName,
             newRequest.type, newRequest.requestedBy, newRequest.requesterId, newRequest.candidateName,
             newRequest.candidatePhone, newRequest.leadId, newRequest.status, newRequest.urgency, newRequest.notes
             );
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Request insert DB error:', err.message);
           }
         }
@@ -597,6 +822,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               WHERE id = $3;
             `, newStatus, authUser?.fullName || 'Reviewer', reqId);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Request status update DB error:', err.message);
           }
         }
@@ -617,6 +843,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_material_requests WHERE id = $1;`, reqId);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Request delete DB error:', err.message);
           }
         }
@@ -662,7 +889,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
             sql += ` ORDER BY created_at DESC;`;
             const rows = await prisma.$queryRawUnsafe(sql, ...params);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               materials = rows.map(r => ({
                 id: r.id,
                 title: r.title,
@@ -685,6 +912,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Materials DB query fallback:', err.message);
           }
         }
@@ -697,7 +925,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           materials = materials.filter(m => m.type === typeFilter);
         }
         if (searchQuery) {
-          materials = materials.filter(m => 
+          materials = materials.filter(m =>
             (m.title && m.title.toLowerCase().includes(searchQuery)) ||
             (m.description && m.description.toLowerCase().includes(searchQuery)) ||
             (m.targetProfession && m.targetProfession.toLowerCase().includes(searchQuery))
@@ -754,6 +982,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             materialRecord.externalUrl, materialRecord.targetProfession, materialRecord.uploadedBy, materialRecord.uploaderName
             );
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Material insert DB error:', err.message);
           }
         }
@@ -775,8 +1004,9 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_materials WHERE id = $1 LIMIT 1;`, matId);
-            if (rows && rows.length > 0) material = rows[0];
-          } catch (e) {}
+            if (Array.isArray(rows)) material = rows[0];
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         if (!material) {
           material = MEMORY_MATERIALS.find(m => m.id === matId);
@@ -848,7 +1078,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             await prisma.$executeRawUnsafe(`
               UPDATE public.exam_materials SET download_count = download_count + 1 WHERE id = $1;
             `, matId);
-          } catch (err) {}
+          } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         const item = MEMORY_MATERIALS.find(m => m.id === matId);
         if (item) item.downloadCount = (item.downloadCount || 0) + 1;
@@ -860,7 +1091,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_materials WHERE id = $1;`, matId);
-          } catch (err) {}
+          } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         MEMORY_MATERIALS = MEMORY_MATERIALS.filter(m => m.id !== matId);
         sendJson(res, 200, { success: true, message: 'Material deleted' });
@@ -877,6 +1109,13 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       const customFileName = body.fileName || body.filename || `exam_file_${Date.now()}`;
       const fileSize = body.fileSize || 0;
       const fileType = body.fileType || 'application/pdf';
+
+      try {
+        validateAcademicUpload({ fileName: customFileName, fileSize, externalUrl: body.externalUrl });
+      } catch (valErr) {
+        sendJson(res, valErr.status || 400, { success: false, error: valErr.message, code: valErr.code });
+        return true;
+      }
 
       if (!dataUrl && !body.externalUrl) {
         sendJson(res, 400, { success: false, error: 'No file data or URL provided' });
@@ -910,7 +1149,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
         const ext = customFileName.includes('.') ? customFileName.split('.').pop() : 'pdf';
         const cleanName = `exam_${Date.now()}_${Math.random().toString(36).slice(2, 7)}.${ext}`;
-        
+
         // Save to Supabase Storage / public.media_files
         await saveMediaToSupabase(cleanName, mime, buffer);
 
@@ -950,7 +1189,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mock_tests WHERE is_active = TRUE ORDER BY created_at DESC;`);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               tests = rows.map(r => ({
                 id: r.id,
                 title: r.title,
@@ -961,6 +1200,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 durationMinutes: r.duration_minutes,
                 passingScore: r.passing_score,
                 difficulty: r.difficulty,
+                perQuestionSeconds: r.per_question_seconds,
                 questionPaperUrl: r.question_paper_url,
                 answerKeyUrl: r.answer_key_url,
                 explanationUrl: r.explanation_url,
@@ -969,6 +1209,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Mock tests DB fallback:', err.message);
           }
         }
@@ -977,6 +1218,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.mock_test.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create mock tests.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.title) {
           sendJson(res, 400, { success: false, error: 'Mock test title is required' });
@@ -994,10 +1239,13 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           durationMinutes: body.durationMinutes || 60,
           passingScore: body.passingScore || 70,
           difficulty: body.difficulty || 'Medium',
+          perQuestionSeconds: body.perQuestionSeconds ? Number(body.perQuestionSeconds) : null,
           questionPaperUrl: body.questionPaperUrl || '',
           answerKeyUrl: body.answerKeyUrl || '',
           explanationUrl: body.explanationUrl || '',
-          isActive: true,
+          isActive: canManageExam(authUser),
+          status: canManageExam(authUser) ? (body.status || 'Published') : 'Draft',
+          createdBy: authUser?.id,
           createdAt: new Date().toISOString()
         };
 
@@ -1007,14 +1255,16 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               INSERT INTO public.exam_mock_tests (
                 id, title, category_id, category_name, target_profession,
                 total_questions, duration_minutes, passing_score, difficulty,
+                per_question_seconds,
                 question_paper_url, answer_key_url, explanation_url, is_active, created_at, updated_at
               )
-              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, TRUE, NOW(), NOW());
+              VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, TRUE, NOW(), NOW());
             `, testRecord.id, testRecord.title, testRecord.categoryId, testRecord.categoryName,
             testRecord.targetProfession, testRecord.totalQuestions, testRecord.durationMinutes,
-            testRecord.passingScore, testRecord.difficulty, testRecord.questionPaperUrl,
-            testRecord.answerKeyUrl, testRecord.explanationUrl);
+            testRecord.passingScore, testRecord.difficulty, testRecord.perQuestionSeconds,
+            testRecord.questionPaperUrl, testRecord.answerKeyUrl, testRecord.explanationUrl);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Mock test insert DB error:', err.message);
           }
         }
@@ -1031,7 +1281,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_mock_tests WHERE id = $1;`, mockId);
-          } catch (err) {}
+          } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         MEMORY_MOCK_TESTS = MEMORY_MOCK_TESTS.filter(m => m.id !== mockId);
         sendJson(res, 200, { success: true, message: 'Mock test deleted' });
@@ -1048,7 +1299,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_provisions ORDER BY provision_date DESC;`);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               provisions = rows.map(r => ({
                 id: r.id,
                 candidateName: r.candidate_name,
@@ -1067,6 +1318,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Provisions DB fallback:', err.message);
           }
         }
@@ -1114,6 +1366,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             provisionRecord.accessStatus, JSON.stringify(provisionRecord.materialsIncluded),
             provisionRecord.providedBy, provisionRecord.notes);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Provision insert DB error:', err.message);
           }
         }
@@ -1130,7 +1383,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_provisions WHERE id = $1;`, provId);
-          } catch (err) {}
+          } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         MEMORY_PROVISIONS = MEMORY_PROVISIONS.filter(p => p.id !== provId);
         sendJson(res, 200, { success: true, message: 'Exam provision record deleted' });
@@ -1198,7 +1452,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             queryStr += ` ORDER BY display_order ASC, created_at DESC;`;
 
             const rows = await prisma.$queryRawUnsafe(queryStr, ...params);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               questions = rows.map(r => ({
                 id: r.id,
                 title: r.title,
@@ -1224,6 +1478,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] MCQ questions DB fallback:', err.message);
           }
         }
@@ -1312,6 +1567,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               qRecord.difficulty, qRecord.displayOrder
             );
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] MCQ insert DB error:', err.message);
           }
         }
@@ -1325,7 +1581,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     // 8.2 PUT & DELETE /api/exam/mcq/questions/:id
     if (pathname.startsWith('/api/exam/mcq/questions/')) {
       const qId = pathname.replace('/api/exam/mcq/questions/', '');
-      
+
       if (req.method === 'PUT') {
         const body = await parseJsonBody(req);
         const correct = body.correctAnswer ? String(body.correctAnswer).toUpperCase().trim() : undefined;
@@ -1362,6 +1618,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               body.difficulty, body.displayOrder
             );
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] MCQ update DB error:', err.message);
           }
         }
@@ -1385,6 +1642,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_mcq_questions WHERE id = $1;`, qId);
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] MCQ delete DB error:', err.message);
           }
         }
@@ -1444,6 +1702,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             attemptRecord.finalCorrectAnswer, attemptRecord.isCorrectFirstTry, attemptRecord.timeSpentSeconds
           );
         } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
           console.warn('⚠️ [ExamRoutes] Attempt insert DB error:', err.message);
         }
       }
@@ -1469,7 +1728,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           queryStr += ` ORDER BY created_at DESC LIMIT ${limit};`;
 
           const rows = await prisma.$queryRawUnsafe(queryStr, ...params);
-          if (rows && rows.length > 0) {
+          if (Array.isArray(rows)) {
             attempts = rows.map(r => ({
               id: r.id,
               sessionId: r.session_id,
@@ -1490,6 +1749,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             }));
           }
         } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
           console.warn('⚠️ [ExamRoutes] Attempts DB fallback:', err.message);
         }
       }
@@ -1519,6 +1779,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           if (fCount?.[0]) firstTryCorrect = fCount[0].count;
           if (sCount?.[0]) uniqueStudents = sCount[0].count;
         } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
           console.warn('⚠️ [ExamRoutes] MCQ stats DB error:', err.message);
         }
       }
@@ -1541,7 +1802,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
     // -------------------------------------------------------------------------
     // 9. HEALTHCARE LICENSING EXAM PLATFORM: COURSES & SUBJECTS
     // -------------------------------------------------------------------------
-    await ensurePlatformSeedData(prisma);
+    // Academic demo content is never inserted by a normal read request.
+    if (process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true') await ensurePlatformSeedData(prisma);
 
     // 9.1 Courses: GET /api/exam/courses & POST /api/exam/courses
     if (pathname === '/api/exam/courses') {
@@ -1550,7 +1812,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_courses ORDER BY created_at ASC;`);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               courses = rows.map(r => ({
                 id: r.id,
                 courseCode: r.course_code,
@@ -1567,6 +1829,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Courses DB fallback:', e.message);
           }
         }
@@ -1575,6 +1838,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.course.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create course drafts.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.courseName || !body.examAuthority || !body.profession) {
           sendJson(res, 400, { success: false, error: 'Course name, exam authority, and profession are required' });
@@ -1608,6 +1875,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             courseRecord.profession, courseRecord.country, courseRecord.description, courseRecord.thumbnail,
             courseRecord.status, courseRecord.accessType, authUser?.fullName || 'Admin');
           } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Course insert DB error:', err.message);
           }
         }
@@ -1620,7 +1888,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
     if (pathname.startsWith('/api/exam/courses/')) {
       const rest = pathname.replace('/api/exam/courses/', '');
-      
+
       // Sub-route: /api/exam/courses/:courseId/subjects
       if (rest.includes('/subjects')) {
         const courseId = rest.replace('/subjects', '');
@@ -1629,7 +1897,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           if (prisma) {
             try {
               const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_subjects WHERE course_id = $1 ORDER BY sort_order ASC;`, courseId);
-              if (rows && rows.length > 0) {
+              if (Array.isArray(rows)) {
                 subjects = rows.map(r => ({
                   id: r.id,
                   courseId: r.course_id,
@@ -1640,7 +1908,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                   createdAt: r.created_at
                 }));
               }
-            } catch (err) {}
+            } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
           }
           sendJson(res, 200, { success: true, data: subjects });
           return true;
@@ -1669,11 +1938,37 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 INSERT INTO public.exam_subjects (id, course_id, subject_name, description, status, sort_order, created_at)
                 VALUES ($1, $2, $3, $4, $5, $6, NOW());
               `, subjRecord.id, subjRecord.courseId, subjRecord.subjectName, subjRecord.description, subjRecord.status, subjRecord.sortOrder);
-            } catch (err) {}
+            } catch (err) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
           }
 
           MEMORY_SUBJECTS.push(subjRecord);
           sendJson(res, 201, { success: true, data: subjRecord });
+          return true;
+        }
+      }
+
+
+      if (req.method === 'PUT') {
+        const courseId = rest;
+        const existingCourse = MEMORY_COURSES.find(c => c.id === courseId);
+        if (existingCourse) {
+          const isPublished = existingCourse.status === 'Active' || existingCourse.status === 'Published';
+          if (isPublished && !canManageExam(authUser)) {
+            sendJson(res, 403, { success: false, error: 'Forbidden: Published courses can only be modified by Exam Department Managers.' });
+            return true;
+          }
+          if (!canManageExam(authUser) && existingCourse.createdBy && existingCourse.createdBy !== authUser.id) {
+            sendJson(res, 403, { success: false, error: 'Forbidden: You cannot edit another user\'s course draft.' });
+            return true;
+          }
+          const body = await parseJsonBody(req);
+          if (body.courseName) existingCourse.courseName = body.courseName.trim();
+          if (body.description) existingCourse.description = body.description.trim();
+          if (body.profession) existingCourse.profession = body.profession.trim();
+          if (body.examAuthority) existingCourse.examAuthority = body.examAuthority.trim();
+          if (canManageExam(authUser) && body.status) existingCourse.status = body.status;
+          sendJson(res, 200, { success: true, data: existingCourse, message: 'Course updated' });
           return true;
         }
       }
@@ -1701,7 +1996,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 createdAt: r.created_at
               };
             }
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
 
         if (!course) {
@@ -1733,10 +2029,21 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'DELETE') {
+        const existingCourse = MEMORY_COURSES.find(c => c.id === courseId);
+        const isPublished = !existingCourse || existingCourse.status === 'Active' || existingCourse.status === 'Published';
+        if (isPublished && !hasExamCapability(authUser, 'exam.content.delete')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Only Exam Department Managers can delete published courses.' });
+          return true;
+        }
+        if (!isPublished && existingCourse.createdBy && existingCourse.createdBy !== authUser.id && !canManageExam(authUser)) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: You cannot delete another user\'s draft.' });
+          return true;
+        }
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_courses WHERE id = $1;`, courseId);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         const idx = MEMORY_COURSES.findIndex(c => c.id === courseId);
         if (idx !== -1) MEMORY_COURSES.splice(idx, 1);
@@ -1784,7 +2091,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             sql += ` ORDER BY created_at DESC;`;
 
             const rows = await prisma.$queryRawUnsafe(sql, ...params);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               questions = rows.map(r => ({
                 id: r.id,
                 questionCode: r.question_code || `DHA-RN-${String(r.id).slice(-5)}`,
@@ -1812,6 +2119,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               }));
             }
           } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Questions DB query error:', e.message);
           }
         }
@@ -1821,6 +2129,10 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.question.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create questions.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.questionText || !body.optionA || !body.optionB || !body.optionC || !body.optionD || !body.optionE || !body.correctAnswer) {
           sendJson(res, 400, { success: false, error: 'Question text, all 5 options, and correct answer are required' });
@@ -1852,7 +2164,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           detailedExplanation: body.detailedExplanation?.trim() || body.explanation?.trim() || '',
           difficulty: body.difficulty || 'Medium',
           questionType: body.questionType || 'Both',
-          status: body.status || 'Active',
+          status: canManageExam(authUser) ? (body.status || 'Active') : 'Draft',
+          createdBy: authUser?.id,
           createdAt: new Date().toISOString()
         };
 
@@ -1878,6 +2191,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             qRecord.correctAnswer, qRecord.rememberNote1, qRecord.rememberNote2, qRecord.rememberNote3,
             qRecord.detailedExplanation, qRecord.difficulty, qRecord.questionType, qRecord.status);
           } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Question insert DB error:', e.message);
           }
         }
@@ -1972,7 +2286,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             newQ.optionA, newQ.optionB, newQ.optionC, newQ.optionD, newQ.optionE,
             newQ.correctAnswer, newQ.rememberNote1, newQ.rememberNote2, newQ.rememberNote3,
             newQ.detailedExplanation, newQ.difficulty, newQ.questionType, newQ.status);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
 
         MEMORY_QUESTIONS.push(newQ);
@@ -2025,7 +2340,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               detailedExplanation: r.detailed_explanation || r.explanation
             };
           }
-        } catch (e) {}
+        } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
       }
 
       if (!question) {
@@ -2080,7 +2396,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`
-              SELECT * FROM public.exam_practice_sessions 
+              SELECT * FROM public.exam_practice_sessions
               WHERE student_id = $1 AND course_id = $2;
             `, studentId, courseId);
             if (rows && rows[0]) {
@@ -2092,7 +2408,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 totalTimeSpent: r.total_time_spent || 0
               };
             }
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
 
         sendJson(res, 200, { success: true, data: sessionData });
@@ -2138,7 +2455,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             JSON.stringify(sessionRecord.completedQuestionIds),
             JSON.stringify(sessionRecord.questionAttemptsState),
             sessionRecord.totalTimeSpent);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
 
         sendJson(res, 200, { success: true, message: 'Practice progress saved automatically' });
@@ -2159,7 +2477,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           await prisma.$executeRawUnsafe(`
             DELETE FROM public.exam_practice_sessions WHERE student_id = $1 AND course_id = $2;
           `, studentId, courseId);
-        } catch (e) {}
+        } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
       }
 
       sendJson(res, 200, { success: true, message: 'Session restarted' });
@@ -2174,13 +2493,14 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       if (prisma) {
         try {
           const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mock_tests ORDER BY created_at DESC;`);
-          if (rows && rows.length > 0) {
+          if (Array.isArray(rows)) {
             mockTests = rows.map(r => ({
               id: r.id,
               courseId: r.category_id || 'course-dha-rn',
               mockTestName: r.title,
               subjectScope: r.target_profession || 'Full Exam Scope',
               durationMinutes: r.duration_minutes || 120,
+              perQuestionSeconds: r.per_question_seconds || null,
               totalQuestions: r.total_questions || 10,
               passPercentage: r.passing_score || 65,
               randomQuestionOrder: true,
@@ -2190,7 +2510,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               status: 'Published'
             }));
           }
-        } catch (e) {}
+        } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
       }
       sendJson(res, 200, { success: true, data: mockTests });
       return true;
@@ -2303,6 +2624,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             attemptRecord.unanswered, attemptRecord.score, attemptRecord.percentage,
             attemptRecord.result, attemptRecord.timeTakenSeconds, JSON.stringify(attemptRecord.answersSnapshot));
           } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
             console.warn('⚠️ [ExamRoutes] Mock attempt save error:', e.message);
           }
         }
@@ -2315,14 +2637,68 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       // 12.2 Get Mock Test for Test Taker (NO correct answers during exam!)
       const mockTestId = rest;
       if (req.method === 'GET' && !rest.includes('/')) {
-        const mockTest = MEMORY_MOCK_TESTS_PLATFORM.find(m => m.id === mockTestId);
+        let mockTest = MEMORY_MOCK_TESTS_PLATFORM.find(m => m.id === mockTestId);
+        if (prisma) {
+          try {
+            const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mock_tests WHERE id = $1 AND is_active = TRUE LIMIT 1;`, mockTestId);
+            if (Array.isArray(rows) && rows[0]) {
+              const row = rows[0];
+              mockTest = {
+                id: row.id,
+                courseId: row.category_id || 'course-dha-rn',
+                mockTestName: row.title,
+                subjectScope: row.target_profession || 'Full Exam Scope',
+                durationMinutes: row.duration_minutes || 120,
+                perQuestionSeconds: row.per_question_seconds || null,
+                totalQuestions: row.total_questions || 10,
+                passPercentage: row.passing_score || 65,
+                randomQuestionOrder: true,
+                randomAnswerOrder: false,
+                allowBackNavigation: true,
+                showResults: 'Immediately',
+                status: 'Published'
+              };
+            }
+          } catch (error) {
+            console.warn('⚠️ [ExamRoutes] Mock test lookup fallback:', error.message);
+          }
+        }
         if (!mockTest) {
           sendJson(res, 404, { success: false, error: 'Mock test not found' });
           return true;
         }
 
         // Return questions with correct answers and explanations REDACTED
-        const sanitizedQuestions = MEMORY_QUESTIONS.map(q => ({
+        let sourceQuestions = MEMORY_QUESTIONS;
+        if (prisma) {
+          try {
+            const rows = await prisma.$queryRawUnsafe(`
+              SELECT * FROM public.exam_mcq_questions
+              WHERE course_id = $1 AND is_active = TRUE AND (question_type IN ('Mock Test', 'Both') OR question_type IS NULL)
+              ORDER BY display_order ASC, created_at ASC
+              LIMIT $2
+            `, mockTest.courseId, Math.max(1, Number(mockTest.totalQuestions) || 10));
+            if (Array.isArray(rows) && rows.length > 0) {
+              sourceQuestions = rows.map(r => ({
+                id: r.id,
+                questionCode: r.question_code || r.id,
+                title: r.title,
+                questionText: r.question_text,
+                questionImage: r.image_url,
+                optionA: r.option_a,
+                optionB: r.option_b,
+                optionC: r.option_c,
+                optionD: r.option_d,
+                optionE: r.option_e,
+                correctAnswer: r.correct_answer,
+                topic: r.topic || r.subject
+              }));
+            }
+          } catch (error) {
+            console.warn('⚠️ [ExamRoutes] Mock test question lookup fallback:', error.message);
+          }
+        }
+        const sanitizedQuestions = sourceQuestions.map(q => ({
           id: q.id,
           questionCode: q.questionCode,
           title: q.title,
@@ -2353,7 +2729,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
       if (prisma) {
         try {
           const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_mock_test_attempts ORDER BY submitted_at DESC LIMIT 50;`);
-          if (rows && rows.length > 0) {
+          if (Array.isArray(rows)) {
             attempts = rows.map(r => ({
               id: r.id,
               studentId: r.student_id,
@@ -2373,7 +2749,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               submittedAt: r.submitted_at
             }));
           }
-        } catch (e) {}
+        } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
       }
       sendJson(res, 200, { success: true, data: attempts });
       return true;
@@ -2388,7 +2765,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_study_materials WHERE status = 'Active' ORDER BY uploaded_at DESC;`);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               materials = rows.map(r => ({
                 id: r.id,
                 courseId: r.course_id,
@@ -2406,13 +2783,18 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 uploadedAt: r.uploaded_at
               }));
             }
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         sendJson(res, 200, { success: true, data: materials });
         return true;
       }
 
       if (req.method === 'POST') {
+        if (!hasExamCapability(authUser, 'exam.material.create_draft')) {
+          sendJson(res, 403, { success: false, error: 'Forbidden: Your role is not authorized to create study materials.' });
+          return true;
+        }
         const body = await parseJsonBody(req);
         if (!body.title) {
           sendJson(res, 400, { success: false, error: 'Title is required' });
@@ -2431,8 +2813,9 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
           externalUrl: body.externalUrl?.trim() || '',
           thumbnail: body.thumbnail?.trim() || '',
           allowDownload: body.allowDownload !== false,
-          status: 'Active',
-          uploadedBy: authUser?.fullName || 'Clinical Instructor',
+          status: canManageExam(authUser) ? (body.status || 'Active') : 'Draft',
+          uploadedBy: authUser?.fullName || authUser?.id || 'Staff',
+          createdBy: authUser?.id,
           uploadedAt: new Date().toISOString()
         };
 
@@ -2447,7 +2830,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             `, matRecord.id, matRecord.courseId, matRecord.subjectId, matRecord.topic,
             matRecord.title, matRecord.description, matRecord.materialType, matRecord.fileUrl,
             matRecord.externalUrl, matRecord.thumbnail, matRecord.allowDownload, matRecord.status, matRecord.uploadedBy);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
 
         MEMORY_STUDY_MATERIALS_PLATFORM.unshift(matRecord);
@@ -2462,7 +2846,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_study_materials WHERE id = $1;`, matId);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         const idx = MEMORY_STUDY_MATERIALS_PLATFORM.findIndex(m => m.id === matId);
         if (idx !== -1) MEMORY_STUDY_MATERIALS_PLATFORM.splice(idx, 1);
@@ -2480,7 +2865,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             const rows = await prisma.$queryRawUnsafe(`SELECT * FROM public.exam_guidelines WHERE status = 'Active' ORDER BY updated_date DESC;`);
-            if (rows && rows.length > 0) {
+            if (Array.isArray(rows)) {
               guidelines = rows.map(r => ({
                 id: r.id,
                 courseId: r.course_id,
@@ -2492,7 +2877,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
                 status: r.status
               }));
             }
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         sendJson(res, 200, { success: true, data: guidelines });
         return true;
@@ -2525,7 +2911,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               ) VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7, 'Admin', 'Admin');
             `, guideRecord.id, guideRecord.courseId, guideRecord.guidelineTitle,
             guideRecord.section, guideRecord.content, guideRecord.officialReferenceUrl, guideRecord.status);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
 
         MEMORY_GUIDELINES_PLATFORM.unshift(guideRecord);
@@ -2540,7 +2927,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         if (prisma) {
           try {
             await prisma.$executeRawUnsafe(`DELETE FROM public.exam_guidelines WHERE id = $1;`, guideId);
-          } catch (e) {}
+          } catch (e) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }}
         }
         const idx = MEMORY_GUIDELINES_PLATFORM.findIndex(g => g.id === guideId);
         if (idx !== -1) MEMORY_GUIDELINES_PLATFORM.splice(idx, 1);
@@ -2634,7 +3022,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
         try {
           const [reqsStats, matCount, mockCount, provCount, catStats, provs] = await Promise.all([
             prisma.$queryRawUnsafe(`
-              SELECT 
+              SELECT
                 COUNT(*)::int as total,
                 COUNT(CASE WHEN status = 'Approved' THEN 1 END)::int as approved,
                 COUNT(CASE WHEN status = 'Pending' THEN 1 END)::int as pending,
@@ -2652,8 +3040,8 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
               ORDER BY c.display_order ASC;
             `),
             prisma.$queryRawUnsafe(`
-              SELECT * FROM public.exam_provisions 
-              ORDER BY provision_date DESC 
+              SELECT * FROM public.exam_provisions
+              ORDER BY provision_date DESC
               LIMIT 5;
             `)
           ]);
@@ -2694,6 +3082,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
             }));
           }
         } catch (dbErr) {
+            if (!(process.env.NODE_ENV === 'test' && process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true')) { sendJson(res, 503, { success: false, error: 'Exam data could not be read or saved. No successful change is confirmed.' }); return true; }
           console.warn('⚠️ [ExamRoutes] Reports DB query error:', dbErr.message);
         }
       } else {
@@ -2738,7 +3127,7 @@ export async function handleExamRoutes(req, res, pathname, authUser) {
 
   } catch (routeErr) {
     console.error('❌ [ExamRoutes] Unhandled error:', routeErr);
-    sendJson(res, 500, { success: false, error: 'Internal Server Error: ' + routeErr.message });
+    sendJson(res, routeErr instanceof ExamError ? routeErr.status : 500, { success: false, error: routeErr instanceof ExamError ? routeErr.message : 'Unable to complete the exam operation.' });
     return true;
   }
 }

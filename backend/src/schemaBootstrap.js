@@ -16,6 +16,19 @@
  */
 
 const STATEMENTS = [
+  // --- departmental staff roles ----------------------------------------------
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'sales_coordinator';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'exam_department_manager';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'exam_coordinator';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'exam_providing_officer';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'clinical_nurse';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'clinical_doctor';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'report_analyst';`,
+
+  // --- lead workflow forwarding stages ---------------------------------------
+  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'forwarded_to_exam_department';`,
+  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'forwarded_to_processing_department';`,
+
   // --- leads table shape -------------------------------------------------------
   `ALTER TABLE "leads" ALTER COLUMN "categoryId" DROP NOT NULL;`,
   `ALTER TABLE "leads" ALTER COLUMN "treatmentId" DROP NOT NULL;`,
@@ -30,12 +43,16 @@ const STATEMENTS = [
      next_value INTEGER NOT NULL DEFAULT 1
    );`,
   `INSERT INTO public.company_lead_serials (company, next_value)
-   VALUES ('RWC', 1), ('CRAS', 1)
+   VALUES ('RWC', 1), ('CRAS', 1), ('AHC', 1)
    ON CONFLICT (company) DO NOTHING;`,
   `CREATE OR REPLACE FUNCTION public.next_company_lead_serial(company_code VARCHAR)
    RETURNS VARCHAR LANGUAGE plpgsql AS $serial$
    DECLARE
-     normalized_company VARCHAR(10) := CASE WHEN upper(company_code) = 'CRAS' THEN 'CRAS' ELSE 'RWC' END;
+     normalized_company VARCHAR(10) := CASE 
+       WHEN upper(company_code) = 'CRAS' THEN 'CRAS' 
+       WHEN upper(company_code) = 'AHC' THEN 'AHC' 
+       ELSE 'RWC' 
+     END;
      allocated_value INTEGER;
      candidate_serial VARCHAR(50);
      serial_exists BOOLEAN;
@@ -94,6 +111,29 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_security_audit_created ON public.security_audit_events(created_at DESC);`,
   `CREATE INDEX IF NOT EXISTS idx_security_audit_actor ON public.security_audit_events(actor_id, created_at DESC);`,
+
+  // --- patient assessment and report workflow -------------------------------
+  `CREATE TABLE IF NOT EXISTS public.clinical_ops_records (
+     kind VARCHAR(80) NOT NULL,
+     id VARCHAR(100) NOT NULL,
+     data JSONB NOT NULL,
+     revision INTEGER NOT NULL DEFAULT 1,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY(kind, id)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_kind_updated ON public.clinical_ops_records(kind, updated_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_status ON public.clinical_ops_records(kind, (data->>'status'));`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_doctor ON public.clinical_ops_records(kind, (data->>'assignedDoctorId'));`,
+  `CREATE TABLE IF NOT EXISTS public.clinical_ops_audit (
+     id BIGSERIAL PRIMARY KEY,
+     actor_id VARCHAR(100),
+     action VARCHAR(120) NOT NULL,
+     target VARCHAR(120) NOT NULL,
+     details JSONB NOT NULL DEFAULT '{}'::jsonb,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_clinical_ops_audit_created ON public.clinical_ops_audit(created_at DESC);`,
 
   // --- staff broadcasts --------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.team_broadcasts (
@@ -283,273 +323,6 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_avail_blocks_branch ON public.availability_blocks(branch_id, start_time, end_time);`,
 
-  // --- Exam Department Module Tables ----------------------------------------
-  `CREATE TABLE IF NOT EXISTS public.exam_categories (
-     id VARCHAR(100) PRIMARY KEY,
-     name VARCHAR(100) NOT NULL,
-     code VARCHAR(50) UNIQUE NOT NULL,
-     description TEXT,
-     icon VARCHAR(50) DEFAULT 'GraduationCap',
-     color VARCHAR(50) DEFAULT '#06b6d4',
-     is_active BOOLEAN DEFAULT TRUE,
-     display_order INTEGER DEFAULT 0,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_categories_order ON public.exam_categories(display_order);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_materials (
-     id VARCHAR(100) PRIMARY KEY,
-     title VARCHAR(255) NOT NULL,
-     category_id VARCHAR(100),
-     category_name VARCHAR(100),
-     type VARCHAR(50) NOT NULL,
-     description TEXT,
-     file_name VARCHAR(255),
-     file_url TEXT,
-     file_type VARCHAR(100),
-     file_size BIGINT DEFAULT 0,
-     file_size_formatted VARCHAR(50),
-     external_url TEXT,
-     target_profession VARCHAR(100),
-     uploaded_by VARCHAR(100),
-     uploader_name VARCHAR(100),
-     download_count INTEGER DEFAULT 0,
-     is_active BOOLEAN DEFAULT TRUE,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_materials_cat ON public.exam_materials(category_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_materials_type ON public.exam_materials(type);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_material_requests (
-     id VARCHAR(100) PRIMARY KEY,
-     request_number VARCHAR(50) UNIQUE,
-     title VARCHAR(255) NOT NULL,
-     category_id VARCHAR(100),
-     category_name VARCHAR(100),
-     type VARCHAR(50) NOT NULL,
-     requested_by VARCHAR(100) NOT NULL,
-     requester_id VARCHAR(100),
-     candidate_name VARCHAR(150),
-     candidate_phone VARCHAR(50),
-     lead_id VARCHAR(100),
-     request_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     status VARCHAR(50) DEFAULT 'Pending',
-     urgency VARCHAR(20) DEFAULT 'Normal',
-     notes TEXT,
-     material_id VARCHAR(100),
-     reviewed_by VARCHAR(100),
-     reviewed_at TIMESTAMP WITH TIME ZONE,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_requests_status ON public.exam_material_requests(status);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_requests_cat ON public.exam_material_requests(category_id);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_mock_tests (
-     id VARCHAR(100) PRIMARY KEY,
-     title VARCHAR(255) NOT NULL,
-     category_id VARCHAR(100),
-     category_name VARCHAR(100),
-     target_profession VARCHAR(100),
-     total_questions INTEGER DEFAULT 50,
-     duration_minutes INTEGER DEFAULT 60,
-     passing_score INTEGER DEFAULT 70,
-     difficulty VARCHAR(20) DEFAULT 'Medium',
-     question_paper_url TEXT,
-     answer_key_url TEXT,
-     explanation_url TEXT,
-     is_active BOOLEAN DEFAULT TRUE,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mock_cat ON public.exam_mock_tests(category_id);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_provisions (
-     id VARCHAR(100) PRIMARY KEY,
-     candidate_name VARCHAR(150) NOT NULL,
-     candidate_phone VARCHAR(50),
-     candidate_email VARCHAR(150),
-     lead_id VARCHAR(100),
-     category_id VARCHAR(100),
-     category_name VARCHAR(100),
-     package_name VARCHAR(255) NOT NULL,
-     provision_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     valid_until TIMESTAMP WITH TIME ZONE,
-     access_status VARCHAR(50) DEFAULT 'Active',
-     materials_included JSONB DEFAULT '[]'::jsonb,
-     provided_by VARCHAR(100),
-     notes TEXT,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_provisions_cat ON public.exam_provisions(category_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_provisions_status ON public.exam_provisions(access_status);`,
-
-  // --- Interactive MCQ Practice Module Tables -------------------------------
-  `CREATE TABLE IF NOT EXISTS public.exam_mcq_questions (
-     id VARCHAR(100) PRIMARY KEY,
-     title VARCHAR(255) NOT NULL,
-     question_text TEXT NOT NULL,
-     category_id VARCHAR(100),
-     category_name VARCHAR(100),
-     subject VARCHAR(150) DEFAULT 'General Medicine',
-     image_url TEXT,
-     option_a TEXT NOT NULL,
-     option_b TEXT NOT NULL,
-     option_c TEXT NOT NULL,
-     option_d TEXT NOT NULL,
-     option_e TEXT NOT NULL,
-     correct_answer VARCHAR(5) NOT NULL,
-     remember_note_1 TEXT NOT NULL,
-     remember_note_2 TEXT NOT NULL,
-     remember_note_3 TEXT NOT NULL,
-     explanation TEXT,
-     difficulty VARCHAR(20) DEFAULT 'Medium',
-     display_order INTEGER DEFAULT 0,
-     is_active BOOLEAN DEFAULT TRUE,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_cat ON public.exam_mcq_questions(category_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_active ON public.exam_mcq_questions(is_active);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_order ON public.exam_mcq_questions(display_order);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_mcq_practice_attempts (
-     id VARCHAR(100) PRIMARY KEY,
-     session_id VARCHAR(100),
-     student_id VARCHAR(100),
-     student_name VARCHAR(150) NOT NULL,
-     student_identifier VARCHAR(100),
-     exam_title VARCHAR(255),
-     category_id VARCHAR(100),
-     question_id VARCHAR(100) NOT NULL,
-     question_title VARCHAR(255),
-     first_selected_answer VARCHAR(5) NOT NULL,
-     number_of_attempts INTEGER NOT NULL DEFAULT 1,
-     attempts_history JSONB DEFAULT '[]'::jsonb,
-     final_correct_answer VARCHAR(5) NOT NULL,
-     is_correct_first_try BOOLEAN DEFAULT FALSE,
-     time_spent_seconds INTEGER DEFAULT 0,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_student ON public.exam_mcq_practice_attempts(student_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_session ON public.exam_mcq_practice_attempts(session_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_question ON public.exam_mcq_practice_attempts(question_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_attempts_created ON public.exam_mcq_practice_attempts(created_at);`,
-
-  // --- Healthcare Licensing Exam Preparation Platform Tables ---------------
-  `CREATE TABLE IF NOT EXISTS public.exam_courses (
-     id VARCHAR(100) PRIMARY KEY,
-     course_code VARCHAR(50) UNIQUE NOT NULL,
-     course_name VARCHAR(255) NOT NULL,
-     exam_authority VARCHAR(100) NOT NULL,
-     profession VARCHAR(100) NOT NULL,
-     country VARCHAR(100) DEFAULT 'UAE',
-     description TEXT,
-     thumbnail TEXT,
-     status VARCHAR(50) DEFAULT 'Active',
-     access_type VARCHAR(50) DEFAULT 'Free',
-     created_by VARCHAR(100),
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_courses_authority ON public.exam_courses(exam_authority);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_courses_profession ON public.exam_courses(profession);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_subjects (
-     id VARCHAR(100) PRIMARY KEY,
-     course_id VARCHAR(100) NOT NULL,
-     subject_name VARCHAR(150) NOT NULL,
-     description TEXT,
-     status VARCHAR(50) DEFAULT 'Active',
-     sort_order INTEGER DEFAULT 0,
-     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_subjects_course ON public.exam_subjects(course_id);`,
-
-  // Additive columns for Question Bank in exam_mcq_questions
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS question_code VARCHAR(50);`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS course_id VARCHAR(100);`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS subject_id VARCHAR(100);`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS topic VARCHAR(150);`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS detailed_explanation TEXT;`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS question_type VARCHAR(50) DEFAULT 'Both';`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Active';`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
-  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_course ON public.exam_mcq_questions(course_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mcq_qcode ON public.exam_mcq_questions(question_code);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_practice_sessions (
-     id VARCHAR(100) PRIMARY KEY,
-     student_id VARCHAR(100),
-     student_name VARCHAR(150) NOT NULL,
-     course_id VARCHAR(100),
-     current_question_index INTEGER DEFAULT 0,
-     completed_question_ids JSONB DEFAULT '[]'::jsonb,
-     question_attempts_state JSONB DEFAULT '{}'::jsonb,
-     total_time_spent INTEGER DEFAULT 0,
-     last_active_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_practice_sess_student ON public.exam_practice_sessions(student_id, course_id);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_mock_test_attempts (
-     id VARCHAR(100) PRIMARY KEY,
-     student_id VARCHAR(100),
-     student_name VARCHAR(150) NOT NULL,
-     mock_test_id VARCHAR(100) NOT NULL,
-     mock_test_name VARCHAR(255),
-     course_id VARCHAR(100),
-     started_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     submitted_at TIMESTAMP WITH TIME ZONE,
-     total_questions INTEGER DEFAULT 0,
-     correct_answers INTEGER DEFAULT 0,
-     wrong_answers INTEGER DEFAULT 0,
-     unanswered INTEGER DEFAULT 0,
-     score NUMERIC(5,2) DEFAULT 0,
-     percentage NUMERIC(5,2) DEFAULT 0,
-     result VARCHAR(20) DEFAULT 'FAIL',
-     time_taken_seconds INTEGER DEFAULT 0,
-     answers_snapshot JSONB DEFAULT '{}'::jsonb
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mock_att_student ON public.exam_mock_test_attempts(student_id);`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_mock_att_test ON public.exam_mock_test_attempts(mock_test_id);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_study_materials (
-     id VARCHAR(100) PRIMARY KEY,
-     course_id VARCHAR(100),
-     subject_id VARCHAR(100),
-     topic VARCHAR(150),
-     title VARCHAR(255) NOT NULL,
-     description TEXT,
-     material_type VARCHAR(50) DEFAULT 'PDF',
-     file_url TEXT,
-     external_url TEXT,
-     thumbnail TEXT,
-     allow_download BOOLEAN DEFAULT TRUE,
-     status VARCHAR(50) DEFAULT 'Active',
-     uploaded_by VARCHAR(100),
-     uploaded_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_materials_course ON public.exam_study_materials(course_id);`,
-
-  `CREATE TABLE IF NOT EXISTS public.exam_guidelines (
-     id VARCHAR(100) PRIMARY KEY,
-     course_id VARCHAR(100) NOT NULL,
-     guideline_title VARCHAR(255) NOT NULL,
-     section VARCHAR(100) NOT NULL,
-     content TEXT NOT NULL,
-     official_reference_url TEXT,
-     updated_date TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-     status VARCHAR(50) DEFAULT 'Active',
-     created_by VARCHAR(100),
-     updated_by VARCHAR(100)
-   );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_guidelines_course ON public.exam_guidelines(course_id);`,
-
   // --- marketing module foundations & serials ----------------------------------
   `CREATE TABLE IF NOT EXISTS public.marketing_contact_serials (
      id SMALLINT PRIMARY KEY DEFAULT 1 CHECK (id = 1), 
@@ -558,6 +331,48 @@ const STATEMENTS = [
   `INSERT INTO public.marketing_contact_serials (id, next_value) 
    VALUES (1, 1) 
    ON CONFLICT (id) DO NOTHING;`,
+
+  // --- exam academic content workflow ----------------------------------------
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Draft';`,
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_courses ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_study_materials ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Draft';`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS updated_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS course_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mcq_questions ADD COLUMN IF NOT EXISTS subject_id VARCHAR(100);`,
+
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS status VARCHAR(50) DEFAULT 'Draft';`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS created_by VARCHAR(100);`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS reviewer_id VARCHAR(100);`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS review_comments TEXT;`,
+  `ALTER TABLE public.exam_mock_tests ADD COLUMN IF NOT EXISTS published_at TIMESTAMP WITH TIME ZONE;`,
+
+  `CREATE TABLE IF NOT EXISTS public.exam_academic_audit (
+     id VARCHAR(100) PRIMARY KEY,
+     entity_type VARCHAR(50) NOT NULL,
+     entity_id VARCHAR(100) NOT NULL,
+     action VARCHAR(50) NOT NULL,
+     from_status VARCHAR(50),
+     to_status VARCHAR(50),
+     actor_id VARCHAR(100) NOT NULL,
+     actor_name VARCHAR(150),
+     actor_role VARCHAR(50),
+     comments TEXT,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_exam_academic_audit_entity ON public.exam_academic_audit(entity_type, entity_id);`
+,
   `CREATE OR REPLACE FUNCTION public.next_marketing_contact_serial() RETURNS VARCHAR LANGUAGE plpgsql AS $mkt$
    DECLARE allocated_value BIGINT;
    BEGIN
@@ -567,6 +382,9 @@ const STATEMENTS = [
    $mkt$;`,
 
   // --- marketing contacts additive columns -------------------------------------
+  `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS last_reassigned_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.marketing_assignment_history ADD COLUMN IF NOT EXISTS event_type VARCHAR(30) NOT NULL DEFAULT 'assigned';`,
+  `CREATE INDEX IF NOT EXISTS marketing_contacts_last_reassigned_at_idx ON public.marketing_contacts(last_reassigned_at);`,
   `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS lifecycle_status VARCHAR(50) NOT NULL DEFAULT 'new';`,
   `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS converted_lead_id VARCHAR(50);`,
   `ALTER TABLE public.marketing_contacts ADD COLUMN IF NOT EXISTS last_activity_at TIMESTAMPTZ;`,
@@ -608,7 +426,128 @@ const STATEMENTS = [
 
   // --- leads marketing linkage -------------------------------------------------
   `ALTER TABLE public.leads ADD COLUMN IF NOT EXISTS marketing_contact_id VARCHAR(36);`,
-  `CREATE UNIQUE INDEX IF NOT EXISTS leads_marketing_contact_id_key ON public.leads(marketing_contact_id);`
+  `CREATE UNIQUE INDEX IF NOT EXISTS leads_marketing_contact_id_key ON public.leads(marketing_contact_id);`,
+
+  // --- security role/user permission profiles ----------------------------------
+  `CREATE TABLE IF NOT EXISTS public.security_permission_profiles (
+     subject_type VARCHAR(10) NOT NULL,
+     subject_id VARCHAR(100) NOT NULL,
+     overrides JSONB NOT NULL DEFAULT '{}'::jsonb,
+     scope VARCHAR(20),
+     revision INTEGER NOT NULL DEFAULT 1,
+     updated_by VARCHAR(100),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (subject_type, subject_id)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_security_profiles_subject ON public.security_permission_profiles(subject_type, updated_at DESC);`,
+
+  // --- user management & session security (additive only) ----------------------
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS employee_id VARCHAR(50);`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS department_id VARCHAR(36);`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS manager_id VARCHAR(36);`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS suspended_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_login_at TIMESTAMPTZ;`,
+  `ALTER TABLE public.users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS users_employee_id_key ON public.users(employee_id) WHERE employee_id IS NOT NULL;`,
+  `CREATE TABLE IF NOT EXISTS public.departments (
+     id VARCHAR(36) PRIMARY KEY,
+     name VARCHAR(120) NOT NULL,
+     company VARCHAR(50),
+     branch VARCHAR(100),
+     description TEXT,
+     active BOOLEAN NOT NULL DEFAULT TRUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS departments_company_idx ON public.departments(company, branch);`,
+  `CREATE TABLE IF NOT EXISTS public.teams (
+     id VARCHAR(36) PRIMARY KEY,
+     department_id VARCHAR(36),
+     name VARCHAR(120) NOT NULL,
+     company VARCHAR(50),
+     branch VARCHAR(100),
+     lead_user_id VARCHAR(36),
+     active BOOLEAN NOT NULL DEFAULT TRUE,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS teams_department_idx ON public.teams(department_id);`,
+  `CREATE TABLE IF NOT EXISTS public.team_members (
+     team_id VARCHAR(36) NOT NULL,
+     user_id VARCHAR(36) NOT NULL,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     PRIMARY KEY (team_id, user_id)
+   );`,
+  `CREATE TABLE IF NOT EXISTS public.user_invitations (
+     id VARCHAR(36) PRIMARY KEY,
+     email VARCHAR(255) NOT NULL,
+     full_name VARCHAR(255) NOT NULL,
+     role VARCHAR(50) NOT NULL,
+     company VARCHAR(50),
+     branch VARCHAR(100),
+     department_id VARCHAR(36),
+     token_hash VARCHAR(128) NOT NULL UNIQUE,
+     invited_by VARCHAR(36),
+     expires_at TIMESTAMPTZ NOT NULL,
+     accepted_at TIMESTAMPTZ,
+     revoked_at TIMESTAMPTZ,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS user_invitations_email_idx ON public.user_invitations(LOWER(email));`,
+  `CREATE INDEX IF NOT EXISTS user_invitations_pending_idx ON public.user_invitations(expires_at) WHERE accepted_at IS NULL AND revoked_at IS NULL;`,
+  `CREATE TABLE IF NOT EXISTS public.user_sessions (
+     id VARCHAR(36) PRIMARY KEY,
+     user_id VARCHAR(36) NOT NULL,
+     token_version INTEGER NOT NULL DEFAULT 0,
+     ip VARCHAR(100),
+     user_agent VARCHAR(500),
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     last_seen_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     revoked_at TIMESTAMPTZ,
+     revoked_by VARCHAR(36),
+     revoke_reason VARCHAR(255)
+   );`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_user_idx ON public.user_sessions(user_id, created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS user_sessions_active_idx ON public.user_sessions(user_id) WHERE revoked_at IS NULL;`,
+  `CREATE INDEX IF NOT EXISTS security_audit_events_created_idx ON public.security_audit_events(created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS security_audit_events_action_idx ON public.security_audit_events(action, created_at DESC);`,
+  // Append-only: the trail is INSERT-only at the API and the database refuses rewrites.
+  `CREATE OR REPLACE FUNCTION public.security_audit_events_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
+     BEGIN RAISE EXCEPTION 'security_audit_events is append-only'; END;
+   $$;`,
+  `DROP TRIGGER IF EXISTS security_audit_events_no_rewrite ON public.security_audit_events;`,
+  `CREATE TRIGGER security_audit_events_no_rewrite BEFORE UPDATE OR DELETE ON public.security_audit_events
+     FOR EACH ROW EXECUTE FUNCTION public.security_audit_events_immutable();`,
+  `DO $$ BEGIN
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_department_id_fkey') THEN
+       ALTER TABLE public.users ADD CONSTRAINT users_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_manager_id_fkey') THEN
+       ALTER TABLE public.users ADD CONSTRAINT users_manager_id_fkey FOREIGN KEY (manager_id) REFERENCES public.users(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'teams_department_id_fkey') THEN
+       ALTER TABLE public.teams ADD CONSTRAINT teams_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'teams_lead_user_id_fkey') THEN
+       ALTER TABLE public.teams ADD CONSTRAINT teams_lead_user_id_fkey FOREIGN KEY (lead_user_id) REFERENCES public.users(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'team_members_team_id_fkey') THEN
+       ALTER TABLE public.team_members ADD CONSTRAINT team_members_team_id_fkey FOREIGN KEY (team_id) REFERENCES public.teams(id) ON DELETE CASCADE;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'team_members_user_id_fkey') THEN
+       ALTER TABLE public.team_members ADD CONSTRAINT team_members_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_invitations_department_id_fkey') THEN
+       ALTER TABLE public.user_invitations ADD CONSTRAINT user_invitations_department_id_fkey FOREIGN KEY (department_id) REFERENCES public.departments(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_invitations_invited_by_fkey') THEN
+       ALTER TABLE public.user_invitations ADD CONSTRAINT user_invitations_invited_by_fkey FOREIGN KEY (invited_by) REFERENCES public.users(id) ON DELETE SET NULL;
+     END IF;
+     IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_sessions_user_id_fkey') THEN
+       ALTER TABLE public.user_sessions ADD CONSTRAINT user_sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+     END IF;
+   END $$;`
 ];
 
 const SEED_STATEMENTS = [
@@ -642,17 +581,17 @@ const SEED_STATEMENTS = [
     ON CONFLICT (id) DO NOTHING;`
 ];
 
-const EXAM_SEED_STATEMENTS = [
-  // 1. Initial Exam Categories
-  `INSERT INTO public.exam_categories (id, name, code, description, icon, color, is_active, display_order, created_at, updated_at)
+const FORWARDING_STAGE_STATEMENTS = [
+  `INSERT INTO public.lead_stages (id, key, label, description, color, order_index, is_active, is_system, company, updated_at)
    VALUES
-     ('cat-dha', 'DHA', 'DHA', 'Dubai Health Authority licensing exams for doctors, nurses, allied health', 'Stethoscope', '#06b6d4', TRUE, 1, NOW(), NOW()),
-     ('cat-haad', 'HAAD', 'HAAD', 'Health Authority Abu Dhabi / DoH healthcare professional exams', 'PlusCircle', '#10b981', TRUE, 2, NOW(), NOW()),
-     ('cat-moh', 'MOH', 'MOH', 'Ministry of Health UAE licensing exams and assessment modules', 'Activity', '#8b5cf6', TRUE, 3, NOW(), NOW()),
-     ('cat-prometric', 'Prometric', 'PROMETRIC', 'Saudi Commission (SCFHS), Qatar (QCHP), Oman & Bahrain Prometric exams', 'ClipboardCheck', '#f59e0b', TRUE, 4, NOW(), NOW()),
-     ('cat-nclex', 'NCLEX', 'NCLEX', 'National Council Licensure Examination for Registered Nurses (RN/PN)', 'ShieldAlert', '#ef4444', TRUE, 5, NOW(), NOW()),
-     ('cat-other', 'Other Exams', 'OTHER', 'Specialized international board exams and nursing entrance credentials', 'Globe', '#64748b', TRUE, 6, NOW(), NOW())
-   ON CONFLICT (id) DO NOTHING;`
+     ('stage-forwarded-exam', 'forwarded_to_exam_department', 'Forwarded to Exam Department', 'Lead handed over to the healthcare exam preparation team.', 'cyan', 5, TRUE, FALSE, 'ALL', NOW()),
+     ('stage-forwarded-processing', 'forwarded_to_processing_department', 'Forwarded to Processing Department', 'Lead handed over to the document and application processing team.', 'orange', 6, TRUE, FALSE, 'ALL', NOW())
+   ON CONFLICT (key) DO UPDATE SET
+     label = EXCLUDED.label,
+     description = EXCLUDED.description,
+     color = EXCLUDED.color,
+     is_active = TRUE,
+     updated_at = NOW();`
 ];
 
 async function runAll(prisma, statements, failures) {
@@ -679,13 +618,7 @@ export async function ensureSchema(prisma) {
   if (seeded && seeded[0] && seeded[0].count === 0) {
     await runAll(prisma, SEED_STATEMENTS, failures);
   }
-
-  const examCatCount = await prisma
-    .$queryRawUnsafe(`SELECT COUNT(*)::int AS count FROM public.exam_categories;`)
-    .catch(() => null);
-  if (examCatCount && examCatCount[0] && examCatCount[0].count === 0) {
-    await runAll(prisma, EXAM_SEED_STATEMENTS, failures);
-  }
+  await runAll(prisma, FORWARDING_STAGE_STATEMENTS, failures);
 
   if (failures.length > 0) {
     console.warn(`⚠️ [Schema] ${failures.length} bootstrap statement(s) did not apply:`);

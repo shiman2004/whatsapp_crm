@@ -41,7 +41,7 @@ The user's pre-existing servers (backend on `:3000` pointed at production Supaba
 
 Evidence is DOM text, `scrollTop`/`scrollHeight` instrumentation, network status codes, and
 console output — all stronger than a screenshot for these assertions. Screenshots are in
-`../../PHASE_3_EVIDENCE/` for the visual record.
+`PHASE_3_EVIDENCE/` for the visual record.
 
 ### Test fixture
 

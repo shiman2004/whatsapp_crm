@@ -45,7 +45,7 @@
 | M3 | Quotation, Payment Verification & Maker-Checker Release | Features 13–18 (UAT 10–13) | M1, M2 | IN_PROGRESS | Prerequisites: M1 (Done), M2 (Done). Implementing Maker-Checker approval and Finance payment verification. |
 | M4 | Dynamic Masters & Examination Content System | Features 19–23 (UAT 14–18) | M2, M3 | PLANNED | Prerequisites: M2, M3 |
 | M5 | Centralized Monitoring, Reporting & Immutable Audit Trail | Features 24–26 (UAT 19–20) | M1, M2, M3, M4 | PLANNED | Prerequisites: M1-M4 |
-| M6 | Final Milestone: 100% E2E Test Suite & Adversarial Hardening | Phase 1 (Tiers 1-4, UAT 1-20) + Phase 2 (Tier 5 Challenger) | M1–M5, TEST_READY | PLANNED | `testing/TEST_READY.md` published, 24/24 suites pass |
+| M6 | Final Milestone: 100% E2E Test Suite & Adversarial Hardening | Phase 1 (Tiers 1-4, UAT 1-20) + Phase 2 (Tier 5 Challenger) | M1–M5, TEST_READY | PLANNED | `TEST_READY.md` published, 24/24 suites pass |
 
 ## Interface Contracts
 

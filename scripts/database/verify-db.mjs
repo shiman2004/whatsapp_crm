@@ -1,4 +1,4 @@
-import { checkDbConnection, getPrisma } from './backend/src/db.js';
+import { checkDbConnection, getPrisma } from '../../backend/src/db.js';
 
 async function test() {
   const res = await checkDbConnection();

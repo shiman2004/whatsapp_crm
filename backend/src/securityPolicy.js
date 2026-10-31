@@ -50,6 +50,7 @@ const CAPABILITIES = Object.freeze([
   capability('exam', 'exam.content.review', 'Approve', 'Academic Content: Review', 'Review drafts and request changes.', 'department', { immutable: true }),
   capability('exam', 'exam.content.publish', 'Publish', 'Academic Content: Publish', 'Publish authorized academic content.', 'department', { immutable: true }),
   capability('exam', 'exam.content.delete', 'Delete', 'Academic Content: Delete', 'Delete published academic content.', 'department', { immutable: true }),
+  capability('exam', 'exam.finance.verify', 'Approve', 'Payment: Verify', 'Verify bank and transaction payments independently.', 'all', { immutable: true }),
 
   // Clinical — enforced by clinicalPolicy.js and clinicalRoutes.js.
   capability('clinical', 'clinical.assessment.view_own', 'View', 'Assessments: View own', 'View own patient assessments.', 'own', { scopes: ['own'] }),
@@ -157,6 +158,10 @@ const ROLE_DEFINITIONS = Object.freeze({
   report_analyst: {
     label: 'Report Analyst', category: 'Departments', maxScope: 'assigned',
     capabilities: ['clinical.report.view_assigned', 'clinical.report.draft'],
+  },
+  finance_officer: {
+    label: 'Finance Officer', category: 'Operations', maxScope: 'all',
+    capabilities: ['crm.contact.view', 'exam.operations.view', 'exam.finance.verify'],
   },
 });
 

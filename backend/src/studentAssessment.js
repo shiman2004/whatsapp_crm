@@ -24,7 +24,7 @@ export async function handleStudentAssessmentRoutes(req, res, pathname, browser,
       requireValue(courseId && /^[A-Za-z0-9_-]{1,120}$/.test(courseId) && allowedModes.has(mode), 'ASSESSMENT_NOT_AVAILABLE', 'Select an available assessment.');
       const result = await store.transaction(async tx => {
         const student = await access.authenticate(tx, session, browser, true);
-        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && item.courseId === courseId && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || []).some(s => allowedServices.has(String(s))));
+        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && (item.courseId === courseId || (!item.courseId && courseId === 'course-dha-rn-2026')) && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || item.allowedServices || []).some(s => allowedServices.has(String(s))));
         requireValue(entitlements.length > 0, 'NO_ACCESS', 'This practice course is not included in your active access.', 403);
         const typeFilter = mode === 'mock' ? "('Mock Test','Both')" : "('Practice','Both')";
         const rows = await tx.query("SELECT id,question_code,title,question_text,subject,topic,difficulty,option_a,option_b,option_c,option_d,option_e FROM public.exam_mcq_questions WHERE is_active=TRUE AND COALESCE(status,'Active')='Active' AND (question_type IN " + typeFilter + " OR question_type IS NULL) AND (course_id=$1 OR course_id IS NULL) ORDER BY display_order ASC, created_at ASC LIMIT 100", courseId);
@@ -38,15 +38,18 @@ export async function handleStudentAssessmentRoutes(req, res, pathname, browser,
       requireValue(Array.isArray(body.answers) && body.answers.length <= 100, 'INVALID_ANSWERS', 'Answers are invalid.');
       const result = await store.transaction(async tx => {
         const student = await access.authenticate(tx, session, browser, true);
-        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && item.courseId === body.courseId && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || []).some(s => allowedServices.has(String(s))));
+        const entitlements = (await tx.list('entitlement', student.id)).filter(item => item.status === 'ACTIVE' && (item.courseId === body.courseId || (!item.courseId && body.courseId === 'course-dha-rn-2026')) && Date.parse(item.startsAt || '') <= Date.now() && Date.parse(item.endsAt || '') > Date.now() && (item.services || item.allowedServices || []).some(s => allowedServices.has(String(s))));
         requireValue(entitlements.length > 0, 'NO_ACCESS', 'This practice course is not included in your active access.', 403);
         const previous = (await tx.list('assessment-attempt', student.id)).filter(a => a.courseId === body.courseId && a.mode === body.mode);
         const allowance = Math.max(...entitlements.map(e => Number(e.attemptAllowance || 0)));
         requireValue(allowance <= 0 || previous.length < allowance, 'ATTEMPTS_EXHAUSTED', 'Your practice attempt allowance has been used.', 403);
         const ids = [...new Set(body.answers.map(a => a?.questionId).filter(x => typeof x === 'string' && x.length <= 120))];
         requireValue(ids.length > 0, 'INVALID_ANSWERS', 'Submit at least one answer.');
+        requireValue(ids.length === body.answers.length, 'INVALID_ANSWERS', 'Each question can only be answered once.');
         const placeholders = ids.map((_, index) => '$' + (index + 1)).join(',');
-        const rows = await tx.query("SELECT id,correct_answer FROM public.exam_mcq_questions WHERE id IN (" + placeholders + ") AND is_active=TRUE", ...ids);
+        const typeFilter = body.mode === 'mock' ? "('Mock Test','Both')" : "('Practice','Both')";
+        const rows = await tx.query("SELECT id,correct_answer FROM public.exam_mcq_questions WHERE id IN (" + placeholders + ") AND is_active=TRUE AND COALESCE(status,'Active')='Active' AND (question_type IN " + typeFilter + " OR question_type IS NULL) AND (course_id=$" + (ids.length + 1) + " OR course_id IS NULL)", ...ids, body.courseId);
+        requireValue(rows.length === ids.length, 'INVALID_ANSWERS', 'Answers include questions outside this assessment.');
         const correct = new Map(rows.map(row => [row.id, String(row.correct_answer || '').toUpperCase()]));
         let answered = 0; let score = 0;
         const evaluated = body.answers.map(answer => { const expected = correct.get(answer?.questionId); const selected = typeof answer?.answer === 'string' ? answer.answer.toUpperCase() : ''; const valid = Boolean(expected && ['A','B','C','D','E'].includes(selected)); if (valid) answered++; const isCorrect = valid && selected === expected; if (isCorrect) score++; return { questionId: answer?.questionId, selected: valid ? selected : null, correct: isCorrect }; });

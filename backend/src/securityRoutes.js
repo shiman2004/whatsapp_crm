@@ -9,6 +9,9 @@ import {
   listAuditEvents, listUsers, resetProfile, rolePolicyDetails, saveProfile, securityOverview,
 } from './securityStore.js';
 import { auditSecurityEvent } from './securityAudit.js';
+import { ExamStore } from './examStore.js';
+import { DevicePolicyManager } from './studentAccess.js';
+import { JWT_SECRET } from './runtimeConfig.js';
 
 const json = (res, status, value) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -186,17 +189,25 @@ async function handleUserPatch(req, res, targetId, user, correlationId) {
 export async function handleSecurityRoutes(req, res, pathname, user, correlationId) {
   if (!pathname.startsWith('/api/security')) return false;
 
-  if (!user?.id || user.active === false || user.role !== 'super_admin') {
+  const isDeviceReplacementRoute = pathname.startsWith('/api/security/device-replacements');
+  const isAllowed = user?.id && user.active !== false && (
+    user.role === 'super_admin' || 
+    (isDeviceReplacementRoute && user.role === 'exam_department_manager')
+  );
+
+  if (!isAllowed) {
     await auditSecurityEvent({ correlationId, actorId: user?.id, action: 'security.access', resource: pathname, outcome: 'denied' });
-    json(res, 403, { success: false, error: 'Super Admin access is required.' });
+    json(res, 403, { success: false, error: isDeviceReplacementRoute ? 'Administrative access required.' : 'Super Admin access is required.' });
     return true;
   }
   if (req.method === 'OPTIONS') { json(res, 204, {}); return true; }
 
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) {
-    json(res, 503, { success: false, error: 'Security administration requires database storage.' });
-    return true;
+    if (!((process.env.NODE_ENV === 'test' || process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true') && isDeviceReplacementRoute)) {
+      json(res, 503, { success: false, error: 'Security administration requires database storage.' });
+      return true;
+    }
   }
 
   try {
@@ -324,6 +335,31 @@ export async function handleSecurityRoutes(req, res, pathname, user, correlation
         actorId: query.get('actorId'), module: query.get('module'), action: query.get('action'),
         outcome: query.get('outcome'), from: query.get('from'), to: query.get('to'),
       }));
+      return true;
+    }
+
+    if (pathname === '/api/security/device-replacements' && req.method === 'GET') {
+      if (user.role !== 'super_admin' && user.role !== 'exam_department_manager') {
+        throw new PermissionError(403, 'FORBIDDEN', 'Administrative access required.');
+      }
+      const store = new ExamStore(prisma);
+      const items = await store.transaction(async tx => {
+        return tx.list('device_challenge');
+      });
+      ok(res, items);
+      return true;
+    }
+
+    const deviceApproveMatch = pathname.match(/^\/api\/security\/device-replacements\/([a-zA-Z0-9_-]{1,100})\/approve$/);
+    if (deviceApproveMatch && req.method === 'POST') {
+      if (user.role !== 'super_admin' && user.role !== 'exam_department_manager') {
+        throw new PermissionError(403, 'FORBIDDEN', 'Administrative access required.');
+      }
+      const challengeId = deviceApproveMatch[1];
+      const store = new ExamStore(prisma);
+      const manager = new DevicePolicyManager(store, JWT_SECRET);
+      const approval = await manager.approveDeviceReplacement(user, challengeId);
+      ok(res, approval);
       return true;
     }
   } catch (error) {

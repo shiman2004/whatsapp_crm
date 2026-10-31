@@ -52,6 +52,10 @@ function dispatchRoute(method, path, body = null, user = { id: 'test-admin', ful
 }
 
 async function runTests() {
+  const appointmentDay = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  appointmentDay.setUTCHours(10, 0, 0, 0);
+  const appointmentTime = (hours) => new Date(appointmentDay.getTime() + hours * 60 * 60 * 1000).toISOString();
+
   // --- Test Group 1: Mathematical Overlap Formula ---
   console.log('--- Test Group 1: Overlap Formula & Boundary Conditions ---');
   
@@ -128,8 +132,8 @@ async function runTests() {
     roomId: testRoomId,
     doctorId: 'doc-1',
     treatmentId: 't-skin-1',
-    startTime: '2026-10-25T10:00:00Z',
-    endTime: '2026-10-25T11:00:00Z',
+    startTime: appointmentTime(0),
+    endTime: appointmentTime(1),
     patientName: 'Jane Perera',
     patientPhone: '+94771234567',
     notes: 'Initial clinical assessment'
@@ -145,8 +149,8 @@ async function runTests() {
     roomId: testRoomId,
     doctorId: 'doc-2', // Different doctor, but SAME room
     treatmentId: 't-skin-1',
-    startTime: '2026-10-25T10:30:00Z', // Overlaps with 10:00-11:00
-    endTime: '2026-10-25T11:30:00Z',
+    startTime: appointmentTime(0.5), // Overlaps with 10:00-11:00
+    endTime: appointmentTime(1.5),
     patientName: 'Kamal Silva',
     patientPhone: '+94779876543'
   });
@@ -161,8 +165,8 @@ async function runTests() {
     roomId: 'room-col-2', // Different room
     doctorId: 'doc-1',    // SAME doctor
     treatmentId: 't-skin-1',
-    startTime: '2026-10-25T10:15:00Z', // Overlaps with doc-1's 10:00-11:00
-    endTime: '2026-10-25T10:45:00Z',
+    startTime: appointmentTime(0.25), // Overlaps with doc-1's 10:00-11:00
+    endTime: appointmentTime(0.75),
     patientName: 'Nimal Fernando',
     patientPhone: '+94775551234'
   });
@@ -176,8 +180,8 @@ async function runTests() {
     roomId: testRoomId,
     doctorId: 'doc-2',
     treatmentId: 't-skin-1',
-    startTime: '2026-10-25T11:00:00Z',
-    endTime: '2026-10-25T12:00:00Z',
+    startTime: appointmentTime(1),
+    endTime: appointmentTime(2),
     patientName: 'Sunil Wickrama',
     patientPhone: '+94776662222'
   });
@@ -197,8 +201,8 @@ async function runTests() {
 
   // 4.2 Reschedule to open slot
   const reschedRes = await dispatchRoute('POST', `/api/appointments/${appt1Id}/reschedule`, {
-    newStartTime: '2026-10-25T14:00:00Z',
-    newEndTime: '2026-10-25T15:00:00Z',
+    newStartTime: appointmentTime(4),
+    newEndTime: appointmentTime(5),
     reason: 'Patient requested afternoon time'
   });
   assert.strictEqual(reschedRes.status, 200);
@@ -224,8 +228,8 @@ async function runTests() {
     roomId: testRoomId,
     doctorId: 'doc-1',
     treatmentId: 't-skin-1',
-    startTime: '2026-10-25T14:00:00Z',
-    endTime: '2026-10-25T15:00:00Z',
+    startTime: appointmentTime(4),
+    endTime: appointmentTime(5),
     patientName: 'Anusha Dias',
     patientPhone: '+94773334444'
   });

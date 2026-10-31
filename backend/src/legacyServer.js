@@ -1004,6 +1004,8 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/stages' ||
     pathname === '/api/coordinators'
   )) return true;
+  // 6. Student Portal & Controlled Device Security API Routes
+  if (pathname.startsWith('/api/student/')) return true;
 
   return false;
 }
@@ -1606,6 +1608,10 @@ const server = http.createServer(async (req, res) => {
 
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
+
+  // Milestone 2: Student Portal & Controlled Device Security Routes
+  if (await handleStudentRoutes(req, res, pathname, authUser)) return;
+
   if (!isPublicRoute(req, pathname)) {
     if (req.method === 'GET' && pathname === '/api/events') {
       if (parsedUrl.query.ticket) {

@@ -33,6 +33,9 @@ import {
   Sparkles,
   GraduationCap,
   Clock,
+  Layers,
+  TrendingUp,
+  Award,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -96,6 +99,7 @@ export const EXAM_STAFF_ROLES: UserRole[] = [
   'exam_department_manager',
   'exam_coordinator',
   'exam_providing_officer',
+  'finance_officer',
 ];
 
 export const CLINICAL_ROLES: UserRole[] = [
@@ -115,16 +119,22 @@ export const MARKETING_ROLES: UserRole[] = [
 ];
 
 const examChildren: NavChild[] = [
-  { id: 'operations', label: 'Exam Operations', icon: Inbox, path: '/exam-department/operations', intentEvent: 'exam-subtab-change', intentValue: 'operations' },
-  { id: 'dashboard', label: 'Exam Dashboard', icon: LayoutDashboard, path: '/exam-department/dashboard', intentEvent: 'exam-subtab-change', intentValue: 'dashboard' },
-  { id: 'courses', label: 'Course Catalog', icon: BookOpen, path: '/exam-department/courses', intentEvent: 'exam-subtab-change', intentValue: 'courses' },
-  { id: 'study-materials', label: 'Study Materials', icon: FileText, path: '/exam-department/study-materials', intentEvent: 'exam-subtab-change', intentValue: 'study-materials' },
-  { id: 'question-bank', label: 'Question Bank', icon: Database, path: '/exam-department/question-bank', intentEvent: 'exam-subtab-change', intentValue: 'question-bank' },
-  { id: 'mock-tests', label: 'Mock Tests', icon: FileCheck2, path: '/exam-department/mock-tests', intentEvent: 'exam-subtab-change', intentValue: 'mock-tests' },
-  { id: 'my-drafts', label: 'My Drafts', icon: Edit3, path: '/exam-department/my-drafts', intentEvent: 'exam-subtab-change', intentValue: 'my-drafts' },
-  { id: 'approval-queue', label: 'Approval Queue', icon: CheckSquare, path: '/exam-department/approval-queue', intentEvent: 'exam-subtab-change', intentValue: 'approval-queue' },
-  { id: 'mcq-practice', label: 'MCQ Practice', icon: Target, path: '/exam-department/mcq-practice', intentEvent: 'exam-subtab-change', intentValue: 'mcq-practice' },
+  { id: 'operations', label: '1. Operations & Case Management', icon: Inbox, path: '/exam-department/operations', intentEvent: 'exam-subtab-change', intentValue: 'operations' },
+  { id: 'dashboard', label: '2. Operations Dashboard', icon: LayoutDashboard, path: '/exam-department/dashboard', intentEvent: 'exam-subtab-change', intentValue: 'dashboard' },
+  { id: 'courses', label: '3. Course Catalog', icon: BookOpen, path: '/exam-department/courses', intentEvent: 'exam-subtab-change', intentValue: 'courses' },
+  { id: 'mcq-practice', label: '4. Interactive MCQ Practice', icon: Target, path: '/exam-department/mcq-practice', intentEvent: 'exam-subtab-change', intentValue: 'mcq-practice' },
+  { id: 'mock-tests', label: '5. Mock Tests', icon: FileCheck2, path: '/exam-department/mock-tests', intentEvent: 'exam-subtab-change', intentValue: 'mock-tests' },
+  { id: 'question-bank', label: '6. Question Bank', icon: Database, path: '/exam-department/question-bank', intentEvent: 'exam-subtab-change', intentValue: 'question-bank' },
+  { id: 'study-materials', label: '7. Study Materials', icon: FileText, path: '/exam-department/study-materials', intentEvent: 'exam-subtab-change', intentValue: 'study-materials' },
+  { id: 'guidelines', label: '8. Exam Guidelines', icon: ShieldCheck, path: '/exam-department/guidelines', intentEvent: 'exam-subtab-change', intentValue: 'guidelines' },
+  { id: 'my-drafts', label: '9. My Drafts & Submissions', icon: Edit3, path: '/exam-department/my-drafts', intentEvent: 'exam-subtab-change', intentValue: 'my-drafts' },
+  { id: 'approval-queue', label: '10. Manager Approval Queue', icon: CheckSquare, path: '/exam-department/approval-queue', intentEvent: 'exam-subtab-change', intentValue: 'approval-queue' },
+  { id: 'progress', label: '11. Student Progress', icon: TrendingUp, path: '/exam-department/progress', intentEvent: 'exam-subtab-change', intentValue: 'progress' },
+  { id: 'reports', label: '12. Exam Reports & Analytics', icon: BarChart3, path: '/exam-department/reports', intentEvent: 'exam-subtab-change', intentValue: 'reports' },
+  { id: 'results', label: 'Exam Results', icon: Award, path: '/exam-department/results', intentEvent: 'exam-subtab-change', intentValue: 'results' },
+  { id: 'categories', label: 'Categories', icon: Layers, path: '/exam-department/categories', intentEvent: 'exam-subtab-change', intentValue: 'categories' },
   { id: 'requests', label: 'Material Requests', icon: Inbox, path: '/exam-department/requests', intentEvent: 'exam-subtab-change', intentValue: 'requests' },
+  { id: 'settings', label: 'Exam Settings', icon: Sliders, path: '/exam-department/settings', intentEvent: 'exam-subtab-change', intentValue: 'settings' },
 ];
 
 const settingsChildren: NavChild[] = [

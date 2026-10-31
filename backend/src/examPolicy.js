@@ -16,6 +16,16 @@ export const EXAM_CAPABILITIES = Object.freeze([
   'exam.permissions.manage'
 ]);
 
+export function isExamDepartmentManager(user) {
+  const title = String(user?.roleTitle || '').toLowerCase();
+  return Boolean(user?.id && (user.role === 'exam_department_manager' || title.includes('head of exam') || title.includes('exam department manager')));
+}
+
+export function canVerifyPayment(user) {
+  const title = String(user?.roleTitle || '').toLowerCase();
+  return Boolean(user?.id && user.active !== false && (['finance_officer', 'super_admin'].includes(user.role) || title.includes('finance')));
+}
+
 export function canManageExam(user) {
   const title = String(user?.roleTitle || '').toLowerCase();
   return Boolean(user?.id && user.active !== false && (['super_admin', 'exam_department_manager'].includes(user.role) || title.includes('head of exam') || title.includes('exam department manager')));

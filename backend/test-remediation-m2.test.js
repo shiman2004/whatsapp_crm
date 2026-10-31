@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'test';
 process.env.EXAM_ALLOW_MEMORY_FIXTURES = 'true';
-process.env.TEST_DATABASE_URL = 'postgresql://postgres:postgres@localhost:5432/crm_test';
+process.env.TEST_DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://ci:ci@localhost:5432/ci_test';
 
 const { test, describe } = await import('node:test');
 const { default: assert } = await import('node:assert/strict');

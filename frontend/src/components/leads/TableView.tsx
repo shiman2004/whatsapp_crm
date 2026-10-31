@@ -7,6 +7,7 @@ import { PatientContactDrawer } from './PatientContactDrawer';
 import { appointmentService } from '../../services/appointmentService';
 import { BookUpdateAppointmentModal } from '../appointments/BookUpdateAppointmentModal';
 import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
+import { getLeadCompany } from '../../utils/companyUtils';
 import { 
   ChevronRight, 
   ChevronLeft,
@@ -29,7 +30,8 @@ import {
   User,
   Clock as NoteClock,
   Calendar,
-  RotateCcw
+  RotateCcw,
+  ExternalLink
 } from 'lucide-react';
 import { 
   getWindowStatus, 
@@ -87,7 +89,6 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   const [branches, setBranches] = useState<Branch[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [doctors, setDoctors] = useState<any[]>([]);
-  const [bookingModalLead, setBookingModalLead] = useState<Lead | null>(null);
   const [selectedApptId, setSelectedApptId] = useState<string | null>(null);
   const [detailModalMode, setDetailModalMode] = useState<'view' | 'reschedule'>('view');
 
@@ -496,49 +497,44 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   };
 
   /**
-   * Renders Column 1: Book Appointment Action / Booked Date Indicator
+   * Renders Column 18 (Task): Direct brand external portal links
+   * 1- Book Your Appointment -> RWC Booking (https://rwc.nxhis.com/login)
+   * 2- Get your Quotation -> AHC (https://360.alphahc.ae/login)
+   * 3- Enrolled -> CRAS (https://cras.lk/login)
    */
-  const renderBookAppointmentCell = (lead: Lead, appt?: Appointment) => {
-    if (appt) {
-      const startD = new Date(appt.startTime);
-      const formattedDate = startD.toLocaleDateString([], { month: 'short', day: 'numeric' });
-      const formattedTime = startD.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const renderTaskPortalCell = (lead: Lead) => {
+    const compConfig = getLeadCompany(lead);
+    const compCode = compConfig.code;
 
-      return (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setSelectedApptId(appt.id);
-            setDetailModalMode('view');
-          }}
-          className="px-2.5 py-1 rounded-lg bg-slate-900/90 hover:bg-slate-800 text-teal-300 border border-slate-700/80 hover:border-teal-500/50 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-          title={`Booked on ${startD.toLocaleString()} in ${appt.roomName || 'Room'}. Click to view details.`}
-        >
-          <Calendar className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-          <span>{formattedDate}, {formattedTime}</span>
-          {appt.roomNumber && (
-            <span className="text-[9px] px-1 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700 font-mono">
-              {appt.roomNumber}
-            </span>
-          )}
-        </button>
-      );
+    let label = 'Book Your Appointment';
+    let url = 'https://rwc.nxhis.com/login';
+    let badgeClasses = 'bg-emerald-500/15 hover:bg-emerald-500/25 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 hover:border-emerald-500/50';
+    let iconClass = 'text-emerald-600 dark:text-emerald-400';
+
+    if (compCode === 'AHC') {
+      label = 'Get your Quotation';
+      url = 'https://360.alphahc.ae/login';
+      badgeClasses = 'bg-cyan-500/15 hover:bg-cyan-500/25 text-cyan-700 dark:text-cyan-300 border-cyan-500/30 hover:border-cyan-500/50';
+      iconClass = 'text-cyan-600 dark:text-cyan-400';
+    } else if (compCode === 'CRAS') {
+      label = 'Enrolled';
+      url = 'https://cras.lk/login';
+      badgeClasses = 'bg-rose-500/15 hover:bg-rose-500/25 text-rose-700 dark:text-rose-300 border-rose-500/30 hover:border-rose-500/50';
+      iconClass = 'text-rose-600 dark:text-rose-400';
     }
 
     return (
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          setBookingModalLead(lead);
-        }}
-        className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap"
-        title={lead.company === 'CRAS' ? 'Open enrollment workflow for this lead' : 'Book clinical appointment for this lead'}
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={`px-2.5 py-1 rounded-lg border text-[11px] font-semibold inline-flex items-center gap-1.5 transition-all shadow-xs cursor-pointer active:scale-95 whitespace-nowrap ${badgeClasses}`}
+        title={`Open ${compConfig.shortName || compConfig.name} portal: ${label} (${url})`}
       >
-        <Plus className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-        <span>{lead.company === 'CRAS' ? 'Enrollment' : 'Book Appointment'}</span>
-      </button>
+        <span>{label}</span>
+        <ExternalLink className={`w-3.5 h-3.5 ${iconClass} shrink-0`} />
+      </a>
     );
   };
 
@@ -1079,9 +1075,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       </button>
                     </td>
 
-                    {/* 13. Book Appointment */}
+                    {/* 13. Task / External Portal */}
                     <td className="py-3.5 px-3 min-w-[170px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {renderBookAppointmentCell(lead, appt)}
+                      {renderTaskPortalCell(lead)}
                     </td>
 
                     {/* 14. Output */}
@@ -1264,21 +1260,19 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
       )}
 
       {/* Book / Update Clinical Appointment Modal */}
-      {(bookingModalLead || selectedApptId) && (
+      {selectedApptId && (
         <BookUpdateAppointmentModal
-          isOpen={Boolean(bookingModalLead || selectedApptId)}
+          isOpen={Boolean(selectedApptId)}
           onClose={() => {
-            setBookingModalLead(null);
             setSelectedApptId(null);
             setDetailModalMode('view');
           }}
           onSuccess={() => {
-            setBookingModalLead(null);
             setSelectedApptId(null);
             setDetailModalMode('view');
             fetchAppointmentsData();
           }}
-          lead={bookingModalLead || leads.find(l => {
+          lead={leads.find(l => {
             const appt = appointments.find(a => a.id === selectedApptId);
             return appt && (l.customerId === appt.patientId || l.customer?.id === appt.patientId);
           }) || null}

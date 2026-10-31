@@ -9,7 +9,7 @@
 ## 1. Test Philosophy & Design Principles
 
 ### 1.1 Opaque-Box & Requirement-Driven
-The testing strategy is strictly **opaque-box** and **specification-driven**, derived directly from `ORIGINAL_REQUEST.md`, `PROJECT.md`, and the Section 32 User Acceptance Testing specifications. Tests treat the system as a black/opaque box:
+The testing strategy is strictly **opaque-box** and **specification-driven**, derived directly from `ORIGINAL_REQUEST.md`, `../PROJECT.md`, and the Section 32 User Acceptance Testing specifications. Tests treat the system as a black/opaque box:
 - Interactions occur strictly via defined API contracts, public service entry points, state machine triggers, and observable HTTP request/response payloads.
 - Expected outputs are derived from authoritative specifications, mathematical/cryptographic properties (e.g. SHA-256 digests, scrypt verification, revision monotonicity), and documented error codes.
 - Tests do not assert against internal private implementation variables; instead, they verify contract guarantees, HTTP status codes, security boundaries, and immutable audit logs.

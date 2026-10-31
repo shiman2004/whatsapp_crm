@@ -110,11 +110,11 @@ export const ApprovalQueueView: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[#111B21] dark:text-[#E9EDEF] tracking-tight flex items-center gap-2">
             <Inbox className="w-5 h-5 text-teal-400" />
             <span>Academic Approval Queue</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">
             Review submissions from Exam Coordinators and Providing Officers. Approve to publish or request revisions.
           </p>
         </div>
@@ -123,7 +123,7 @@ export const ApprovalQueueView: React.FC = () => {
           type="button"
           onClick={loadQueue}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#E0E5E7] dark:border-[#222D34] bg-[#F0F2F5] dark:bg-[#202C33] hover:bg-[#E4E8EB] dark:hover:bg-[#2A3942] text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] transition-colors disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh Queue ({queue.total})</span>
@@ -171,7 +171,7 @@ export const ApprovalQueueView: React.FC = () => {
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">Pending Review</span>
                       </div>
                       <h4 className="text-sm font-bold text-white mt-1">{course.courseName}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">{course.profession} • {course.examAuthority} • Submitted by: {course.createdBy || 'Exam Coordinator'}</p>
+                      <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">{course.profession} • {course.examAuthority} • Submitted by: {course.createdBy || 'Exam Coordinator'}</p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -213,7 +213,7 @@ export const ApprovalQueueView: React.FC = () => {
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">Pending Review</span>
                       </div>
                       <h4 className="text-sm font-bold text-white mt-1">{mat.title}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">{mat.topic || 'Resource'} • Author: {mat.uploadedBy || 'Staff'}</p>
+                      <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">{mat.topic || 'Resource'} • Author: {mat.uploadedBy || 'Staff'}</p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -255,7 +255,7 @@ export const ApprovalQueueView: React.FC = () => {
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">Pending Review</span>
                       </div>
                       <h4 className="text-sm font-bold text-white line-clamp-2 mt-1">{q.title || q.questionText}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">{q.subject} • Correct Answer: {q.correctAnswer}</p>
+                      <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">{q.subject} • Correct Answer: {q.correctAnswer}</p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
@@ -297,7 +297,7 @@ export const ApprovalQueueView: React.FC = () => {
                         <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500/15 text-amber-300 border border-amber-500/30">Pending Review</span>
                       </div>
                       <h4 className="text-sm font-bold text-white mt-1">{mock.mockTestName || mock.title}</h4>
-                      <p className="text-xs text-slate-400 mt-0.5">{mock.subjectScope || 'Exam Simulation'}</p>
+                      <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">{mock.subjectScope || 'Exam Simulation'}</p>
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">

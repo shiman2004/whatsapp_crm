@@ -349,11 +349,11 @@ export const QuestionBankView: React.FC<QuestionBankViewProps> = ({ initialCours
       {/* Top Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg sm:text-xl font-black text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-lg sm:text-xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-teal-400" />
             <span>Centralized Question Bank</span>
           </h2>
-          <p className="text-xs text-slate-400 font-medium mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
             Manage single source of truth questions used across MCQ Practice and Timed Mock Tests.
           </p>
         </div>

@@ -113,11 +113,11 @@ export const MyDraftsView: React.FC<MyDraftsViewProps> = ({ onNavigateToSection 
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
+          <h2 className="text-xl font-bold text-[#111B21] dark:text-[#E9EDEF] tracking-tight flex items-center gap-2">
             <FileText className="w-5 h-5 text-teal-400" />
             <span>My Academic Drafts & Submissions</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
+          <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">
             Manage your personal course, material, question, and mock test drafts before departmental approval.
           </p>
         </div>
@@ -126,7 +126,7 @@ export const MyDraftsView: React.FC<MyDraftsViewProps> = ({ onNavigateToSection 
           type="button"
           onClick={loadDrafts}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-slate-700 bg-slate-900 hover:bg-slate-800 text-xs font-semibold text-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
+          className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-[#E0E5E7] dark:border-[#222D34] bg-[#F0F2F5] dark:bg-[#202C33] hover:bg-[#E4E8EB] dark:hover:bg-[#2A3942] text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] transition-colors disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin' : ''}`} />
           <span>Refresh</span>

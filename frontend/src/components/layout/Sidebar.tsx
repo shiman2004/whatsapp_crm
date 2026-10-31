@@ -18,6 +18,7 @@ import {
   navigateToPath,
   dispatchIntent,
   resolveRoute,
+  type NavChild,
   type NavItem,
   type NavSection,
   type NavTab,
@@ -90,7 +91,6 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
 
   const path = useHashPath();
   const route = resolveRoute(path);
-  const examModule = route?.item.id === 'exam-department' ? route.item : null;
 
   const [isCollapsed, setIsCollapsed] = React.useState<boolean>(() => {
     try {
@@ -153,13 +153,21 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
 
   const visibleSections = React.useMemo(
     () =>
-      (examModule
-        ? [{ id: 'exam-department', title: 'Exam Department', items: [examModule] }]
-        : NAV_SECTIONS).map((section) => ({
+      NAV_SECTIONS.map((section) => ({
         ...section,
         items: section.items.filter((item) => isNavItemVisible(item, currentUser)),
       })).filter((section) => section.items.length > 0),
-    [currentUser, examModule],
+    [currentUser],
+  );
+
+  const isChildVisible = React.useCallback(
+    (child: NavChild) => {
+      if (child.adminOnly) {
+        return ['super_admin', 'exam_department_manager'].includes(currentUser?.role || '');
+      }
+      return true;
+    },
+    [currentUser?.role],
   );
 
   const filteredSections: NavSection[] = React.useMemo(() => {
@@ -169,7 +177,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
       .map((section) => {
         const items = section.items
           .map((item) => {
-            const childMatches = item.children?.filter((c) => c.label.toLowerCase().includes(term)) || [];
+            const childMatches = item.children?.filter((c) => isChildVisible(c) && c.label.toLowerCase().includes(term)) || [];
             if (item.label.toLowerCase().includes(term)) return item;
             if (childMatches.length > 0) return { ...item, children: childMatches };
             return null;
@@ -178,7 +186,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
         return { ...section, items };
       })
       .filter((section) => section.items.length > 0);
-  }, [visibleSections, query]);
+  }, [visibleSections, query, isChildVisible]);
 
   const handleItemClick = (item: NavItem) => {
     const alreadyActive = route?.item.id === item.id;
@@ -218,7 +226,8 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
     if (target) dispatchIntent(target);
   };
 
-  const isChildActive = (item: NavItem, childPath: string) => activeTab === item.id && path === childPath;
+  const isChildActive = (item: NavItem, childPath: string) =>
+    activeTab === item.id && (path === childPath || (path === item.path && childPath === item.children?.[0]?.path));
 
   return (
     <>
@@ -378,7 +387,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
 
                           {hasChildren && isExpanded && !isCollapsed && (
                             <ul className="mb-1 ml-4 mt-0.5 space-y-0.5 border-l border-[#E0E5E7] pl-2 dark:border-[#222D34]" aria-label={item.label}>
-                              {item.children!.map((child) => {
+                              {item.children!.filter(isChildVisible).map((child) => {
                                 const childActive = isChildActive(item, child.path);
                                 const ChildIcon = child.icon;
                                 return (

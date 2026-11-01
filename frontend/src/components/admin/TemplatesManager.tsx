@@ -18,7 +18,9 @@ import {
   Edit2,
   Trash2,
   Search,
-  AlertTriangle
+  AlertTriangle,
+  RefreshCw,
+  Sparkles
 } from 'lucide-react';
 
 export const TemplatesManager: React.FC = () => {
@@ -27,15 +29,23 @@ export const TemplatesManager: React.FC = () => {
     sequences, 
     categories, 
     addTemplate,
+    deleteTemplate,
+    syncTemplatesWithMeta,
+    metaConnected,
+    metaWabaId,
     quickResponses,
     addQuickResponse,
     updateQuickResponse,
     deleteQuickResponse
   } = useCrm();
 
-  const [activeSubTab, setActiveSubTab] = useState<'templates' | 'quick-responses' | 'sequences'>('quick-responses');
+  const [activeSubTab, setActiveSubTab] = useState<'templates' | 'quick-responses' | 'sequences'>('templates');
   const [showAddModal, setShowAddModal] = useState(false);
   const [copiedTplId, setCopiedTplId] = useState<string | null>(null);
+  const [isSyncingMeta, setIsSyncingMeta] = useState(false);
+  const [tplSearchQuery, setTplSearchQuery] = useState('');
+  const [tplStatusFilter, setTplStatusFilter] = useState<'ALL' | 'APPROVED' | 'PENDING' | 'REJECTED'>('ALL');
+  const [deletingTpl, setDeletingTpl] = useState<WhatsAppTemplate | null>(null);
 
   // Quick Responses State
   const [showQrModal, setShowQrModal] = useState(false);
@@ -66,28 +76,92 @@ export const TemplatesManager: React.FC = () => {
 
   // Template form state
   const [tplName, setTplName] = useState('');
+  const [tplSlug, setTplSlug] = useState('');
   const [tplLang, setTplLang] = useState<'en' | 'si' | 'ta'>('en');
   const [tplCategory, setTplCategory] = useState<'UTILITY' | 'MARKETING'>('UTILITY');
   const [tplBody, setTplBody] = useState('');
+  const [isSubmittingTpl, setIsSubmittingTpl] = useState(false);
+  const [tplSubmitError, setTplSubmitError] = useState<string | null>(null);
 
-  const handleCreateTemplate = (e: React.FormEvent) => {
+  const handleTplNameChange = (val: string) => {
+    setTplName(val);
+    const autoSlug = val.trim().toLowerCase().replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').slice(0, 50);
+    setTplSlug(autoSlug);
+  };
+
+  const handleCreateTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tplName.trim() || !tplBody.trim()) return;
 
-    addTemplate({
+    setIsSubmittingTpl(true);
+    setTplSubmitError(null);
+
+    const slug = (tplSlug || tplName)
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9_]/g, '_')
+      .replace(/_+/g, '_')
+      .replace(/^_+|_+$/g, '');
+
+    const res = await addTemplate({
       name: tplName.trim(),
       language: tplLang,
-      waTemplateName: tplName.toLowerCase().replace(/[^a-z0-9]/g, '_') + '_v1',
+      waTemplateName: slug || 'tpl_' + Date.now().toString(36),
       body: tplBody.trim(),
       variables: ['Customer Name', 'Treatment Name'],
-      approved: true, // auto-approved in simulation
+      approved: false,
+      status: 'PENDING',
       category: tplCategory,
     });
 
-    setTplName('');
-    setTplBody('');
-    setShowAddModal(false);
+    setIsSubmittingTpl(false);
+
+    if (res?.success) {
+      setTplName('');
+      setTplSlug('');
+      setTplBody('');
+      setTplSubmitError(null);
+      setShowAddModal(false);
+    } else {
+      setTplSubmitError(res?.error || 'Failed to submit template to Meta Cloud API.');
+    }
   };
+
+  const handleConfirmDeleteTpl = async () => {
+    if (!deletingTpl) return;
+    await deleteTemplate(deletingTpl.id);
+    setDeletingTpl(null);
+  };
+
+  const handleSyncMeta = async () => {
+    setIsSyncingMeta(true);
+    await syncTemplatesWithMeta();
+    setIsSyncingMeta(false);
+  };
+
+  const filteredTemplates = useMemo(() => {
+    return templates.filter((tpl) => {
+      const curStatus = tpl.status || (tpl.approved ? 'APPROVED' : 'PENDING');
+      const matchesStatus = 
+        tplStatusFilter === 'ALL' ||
+        (tplStatusFilter === 'APPROVED' && (curStatus === 'APPROVED' || tpl.approved)) ||
+        (tplStatusFilter === 'PENDING' && (curStatus === 'PENDING' && !tpl.approved)) ||
+        (tplStatusFilter === 'REJECTED' && curStatus === 'REJECTED');
+
+      const q = tplSearchQuery.toLowerCase().trim();
+      const matchesSearch = 
+        !q ||
+        tpl.name.toLowerCase().includes(q) ||
+        tpl.waTemplateName.toLowerCase().includes(q) ||
+        tpl.body.toLowerCase().includes(q);
+
+      return matchesStatus && matchesSearch;
+    });
+  }, [templates, tplStatusFilter, tplSearchQuery]);
+
+  const approvedCount = useMemo(() => templates.filter(t => t.status === 'APPROVED' || (t.approved && t.status !== 'REJECTED')).length, [templates]);
+  const pendingCount = useMemo(() => templates.filter(t => t.status === 'PENDING' || (!t.approved && t.status !== 'REJECTED')).length, [templates]);
+  const rejectedCount = useMemo(() => templates.filter(t => t.status === 'REJECTED').length, [templates]);
 
   // Open Add QR Modal
   const handleOpenAddQr = () => {
@@ -457,75 +531,273 @@ export const TemplatesManager: React.FC = () => {
 
       {/* META TEMPLATES SUB-TAB */}
       {activeSubTab === 'templates' && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {templates.map((tpl) => {
-            const isCopied = copiedTplId === tpl.id;
-            return (
-              <div
-                key={tpl.id}
-                className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-3">
-                  {/* Header: Name, Language & Status */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 tracking-tight">{tpl.name}</h4>
-                      <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5">
-                        Meta ID: {tpl.waTemplateName}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
-                        {tpl.language.toUpperCase()}
-                      </span>
-                      <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 dark:border-emerald-500/30 text-[10px] font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> APPROVED
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Body with exact pre-wrapped emojis & line breaks */}
-                  <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 leading-relaxed font-sans whitespace-pre-wrap select-all max-h-64 overflow-y-auto">
-                    {tpl.body}
-                  </div>
-                </div>
-
-                {/* Copy Button & Category Footer */}
-                <div className="pt-2 space-y-2.5">
-                  <button
-                    type="button"
-                    onClick={() => handleCopy(tpl)}
-                    className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98 ${
-                      isCopied
-                        ? 'bg-emerald-600 text-white border border-emerald-400'
-                        : 'bg-[#00a884] hover:bg-[#00c298] text-slate-950'
-                    }`}
-                  >
-                    {isCopied ? (
-                      <>
-                        <Check className="w-4 h-4 stroke-[3]" />
-                        <span>Copied to Clipboard!</span>
-                      </>
-                    ) : (
-                      <>
-                        <Copy className="w-4 h-4 stroke-[2.5]" />
-                        <span>Copy Message</span>
-                      </>
-                    )}
-                  </button>
-
-                  <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
-                    <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
-                      Category: {tpl.category}
-                    </span>
-                    <span className="text-[10px] text-teal-700 dark:text-teal-400 font-medium">
-                      Ready to Paste into WhatsApp
-                    </span>
-                  </div>
-                </div>
+        <div className="space-y-4">
+          {/* Real-time Meta Connection & Status Banner */}
+          <div className="p-4 rounded-2xl bg-teal-50/80 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800/60 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-[#008069] dark:text-[#00a884] flex items-center justify-center shrink-0">
+                <Globe className="w-4 h-4" />
               </div>
-            );
-          })}
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                  <h4 className="text-xs font-bold text-teal-950 dark:text-teal-200">
+                    Meta WhatsApp Cloud API Connected
+                  </h4>
+                  {metaWabaId && (
+                    <span className="px-2 py-0.5 rounded-md font-mono text-[10px] bg-teal-200/60 dark:bg-teal-900/60 text-teal-900 dark:text-teal-200">
+                      WABA ID: {metaWabaId}
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-teal-800/80 dark:text-teal-300/80 mt-0.5">
+                  Official 24-hour service window re-engagement templates synced directly with Meta Graph API.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={handleSyncMeta}
+                disabled={isSyncingMeta}
+                className="px-3 py-1.5 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-800 dark:text-slate-200 font-semibold text-xs rounded-xl border border-slate-300 dark:border-slate-700 shadow-2xs transition-all flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+              >
+                <RefreshCw className={`w-3.5 h-3.5 text-teal-600 dark:text-teal-400 ${isSyncingMeta ? 'animate-spin' : ''}`} />
+                <span>{isSyncingMeta ? 'Syncing with Meta...' : 'Sync with Meta'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setTplSubmitError(null);
+                  setShowAddModal(true);
+                }}
+                className="px-3.5 py-1.5 bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5 stroke-[3]" />
+                <span>Create Template</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Search & Real-time Status Filter Bar */}
+          <div className="p-3 bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 shadow-xs">
+            <div className="relative flex-1 min-w-[240px]">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                value={tplSearchQuery}
+                onChange={(e) => setTplSearchQuery(e.target.value)}
+                placeholder="Search Meta templates by name, ID, or content..."
+                className="w-full pl-9 pr-8 py-2 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-white text-xs focus:outline-hidden focus:border-[#00a884]"
+              />
+              {tplSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setTplSearchQuery('')}
+                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Status Filter Pills */}
+            <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-950 p-1 rounded-xl border border-slate-200 dark:border-slate-800 text-xs">
+              <button
+                type="button"
+                onClick={() => setTplStatusFilter('ALL')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer ${
+                  tplStatusFilter === 'ALL'
+                    ? 'bg-[#00a884] text-slate-950 font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                All ({templates.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setTplStatusFilter('APPROVED')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  tplStatusFilter === 'APPROVED'
+                    ? 'bg-emerald-500 text-white font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                <span>Approved ({approvedCount})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setTplStatusFilter('PENDING')}
+                className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  tplStatusFilter === 'PENDING'
+                    ? 'bg-amber-500 text-slate-950 font-bold'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                }`}
+              >
+                <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"></span>
+                <span>Pending ({pendingCount})</span>
+              </button>
+              {rejectedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setTplStatusFilter('REJECTED')}
+                  className={`px-3 py-1 rounded-lg font-semibold transition-colors cursor-pointer flex items-center gap-1.5 ${
+                    tplStatusFilter === 'REJECTED'
+                      ? 'bg-rose-500 text-white font-bold'
+                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                  }`}
+                >
+                  <span className="w-2 h-2 rounded-full bg-rose-400"></span>
+                  <span>Rejected ({rejectedCount})</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Templates Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            {filteredTemplates.length === 0 ? (
+              <div className="col-span-full p-12 text-center bg-white dark:bg-slate-900/60 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 space-y-3">
+                <FileText className="w-10 h-10 text-slate-400 mx-auto" />
+                <h4 className="font-bold text-sm text-slate-800 dark:text-slate-200">No templates found</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  {tplSearchQuery ? 'Try clearing your search query or status filter.' : 'Click "Create Template" to draft a new WhatsApp template and submit it to Meta for approval.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(true)}
+                  className="px-4 py-2 bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Create Template
+                </button>
+              </div>
+            ) : (
+              filteredTemplates.map((tpl) => {
+                const isCopied = copiedTplId === tpl.id;
+                const curStatus = tpl.status || (tpl.approved ? 'APPROVED' : 'PENDING');
+                const isApproved = curStatus === 'APPROVED' || tpl.approved;
+                const isPending = curStatus === 'PENDING' && !tpl.approved;
+                const isRejected = curStatus === 'REJECTED';
+
+                return (
+                  <div
+                    key={tpl.id}
+                    className="bg-white dark:bg-slate-900/90 rounded-2xl border border-slate-200 dark:border-slate-800 p-5 space-y-4 shadow-sm hover:border-slate-300 dark:hover:border-slate-700 transition-all flex flex-col justify-between"
+                  >
+                    <div className="space-y-3">
+                      {/* Header: Name, Language & Status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <h4 className="font-bold text-sm text-slate-900 dark:text-slate-100 tracking-tight truncate" title={tpl.name}>
+                            {tpl.name}
+                          </h4>
+                          <p className="text-[10px] text-slate-500 dark:text-slate-400 font-mono mt-0.5 truncate" title={tpl.waTemplateName}>
+                            Meta ID: {tpl.waTemplateName}
+                          </p>
+                        </div>
+
+                        {/* Top Actions: Badges & Delete */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span className="px-2 py-0.5 rounded font-mono font-bold text-[10px] bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 uppercase">
+                            {tpl.language.toUpperCase()}
+                          </span>
+
+                          {/* Real-time Status Badge */}
+                          {isApproved ? (
+                            <span className="px-2 py-0.5 rounded-full bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/20 dark:border-emerald-500/30 text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" /> APPROVED
+                            </span>
+                          ) : isPending ? (
+                            <span className="px-2 py-0.5 rounded-full bg-amber-500/10 dark:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/20 dark:border-amber-500/30 text-[10px] font-bold flex items-center gap-1 shadow-2xs animate-pulse">
+                              <Clock className="w-3 h-3 text-amber-600 dark:text-amber-400 animate-spin" /> PENDING
+                            </span>
+                          ) : isRejected ? (
+                            <span className="px-2 py-0.5 rounded-full bg-rose-500/10 dark:bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/20 dark:border-rose-500/30 text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                              <AlertTriangle className="w-3 h-3 text-rose-600 dark:text-rose-400" /> REJECTED
+                            </span>
+                          ) : (
+                            <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold">
+                              {curStatus}
+                            </span>
+                          )}
+
+                          {/* Delete Template Option */}
+                          <button
+                            type="button"
+                            onClick={() => setDeletingTpl(tpl)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer ml-0.5"
+                            title="Delete WhatsApp Template"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Informational banners for pending/rejected */}
+                      {isPending && (
+                        <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800/60 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-2">
+                          <Clock className="w-3.5 h-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                          <div>
+                            <span className="font-bold">Pending Meta Review:</span> Submitted to WhatsApp Cloud API. Real-time status will automatically update to Approved once verified.
+                          </div>
+                        </div>
+                      )}
+
+                      {isRejected && (
+                        <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800/60 text-[11px] text-rose-800 dark:text-rose-300 flex items-start gap-2">
+                          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                          <div>
+                            <span className="font-bold">Meta Rejected:</span> {tpl.rejectedReason || 'Template does not meet Meta WhatsApp Business messaging requirements.'}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Body with exact pre-wrapped emojis & line breaks */}
+                      <div className="bg-slate-50 dark:bg-slate-950 p-4 rounded-xl border border-slate-200 dark:border-slate-800 text-xs sm:text-sm text-slate-800 dark:text-slate-100 leading-relaxed font-sans whitespace-pre-wrap select-all max-h-64 overflow-y-auto">
+                        {tpl.body}
+                      </div>
+                    </div>
+
+                    {/* Copy Button & Category Footer */}
+                    <div className="pt-2 space-y-2.5">
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(tpl)}
+                        className={`w-full py-2.5 px-3 rounded-xl font-bold text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm active:scale-98 ${
+                          isCopied
+                            ? 'bg-emerald-600 text-white border border-emerald-400'
+                            : 'bg-[#00a884] hover:bg-[#00c298] text-slate-950'
+                        }`}
+                      >
+                        {isCopied ? (
+                          <>
+                            <Check className="w-4 h-4 stroke-[3]" />
+                            <span>Copied to Clipboard!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="w-4 h-4 stroke-[2.5]" />
+                            <span>Copy Message</span>
+                          </>
+                        )}
+                      </button>
+
+                      <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400 px-1">
+                        <span className="text-[10px] font-semibold text-slate-600 dark:text-slate-400">
+                          Category: {tpl.category}
+                        </span>
+                        <span className="text-[10px] text-teal-700 dark:text-teal-400 font-medium">
+                          {isApproved ? 'Ready for 24h WhatsApp Re-engagement' : 'Awaiting Meta Approval'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
 
@@ -587,38 +859,86 @@ export const TemplatesManager: React.FC = () => {
       {/* Modal: Create Meta Template */}
       {showAddModal && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Draft WhatsApp Template (Meta Graph API)</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-3">
+              <div className="flex items-center gap-2">
+                <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-[#008069] dark:text-[#00a884] flex items-center justify-center">
+                  <Globe className="w-4 h-4" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                    Create WhatsApp Template (Meta Graph API)
+                  </h3>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Submits directly to Meta Cloud API for automated verification & approval.
+                  </p>
+                </div>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => {
+                  setShowAddModal(false);
+                  setTplSubmitError(null);
+                }} 
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateTemplate} className="space-y-3 text-xs">
-              <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Template Name</label>
-                <input
-                  type="text"
-                  required
-                  value={tplName}
-                  onChange={(e) => setTplName(e.target.value)}
-                  placeholder="e.g. Laser Consultation Reminder"
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 outline-none focus:border-teal-500"
-                />
+            {tplSubmitError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 text-xs text-rose-800 dark:text-rose-200 flex items-start gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-rose-600" />
+                <div>
+                  <span className="font-bold">Submission Notice:</span> {tplSubmitError}
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateTemplate} className="space-y-3.5 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Template Display Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tplName}
+                    onChange={(e) => handleTplNameChange(e.target.value)}
+                    placeholder="e.g. Laser Consultation Reminder"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-slate-100 outline-none focus:border-[#00a884]"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
+                    Meta System Name (Slug) *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={tplSlug}
+                    onChange={(e) => setTplSlug(e.target.value)}
+                    placeholder="e.g. laser_consultation_reminder"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-slate-100 font-mono text-[11px] outline-none focus:border-[#00a884]"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    Lowercase letters & underscores only.
+                  </p>
+                </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">Language</label>
                   <select
                     value={tplLang}
                     onChange={(e) => setTplLang(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 outline-none focus:border-teal-500"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-slate-100 outline-none focus:border-[#00a884]"
                   >
-                    <option value="en">English (en)</option>
-                    <option value="si">Sinhala (si)</option>
-                    <option value="ta">Tamil (ta)</option>
+                    <option value="en">English (en_US)</option>
+                    <option value="si">සිංහල – Sinhala (si_LK)</option>
+                    <option value="ta">தமிழ் – Tamil (ta)</option>
                   </select>
                 </div>
                 <div>
@@ -626,41 +946,71 @@ export const TemplatesManager: React.FC = () => {
                   <select
                     value={tplCategory}
                     onChange={(e) => setTplCategory(e.target.value as any)}
-                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 outline-none focus:border-teal-500"
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-2.5 text-slate-900 dark:text-slate-100 outline-none focus:border-[#00a884]"
                   >
-                    <option value="UTILITY">UTILITY (Customer Service)</option>
-                    <option value="MARKETING">MARKETING (Promotions)</option>
+                    <option value="UTILITY">UTILITY (Customer Service / Account Update)</option>
+                    <option value="MARKETING">MARKETING (Promotions / Offers)</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold text-slate-700 dark:text-slate-300 mb-1">
-                  Template Body (Use {'{{1}}'}, {'{{2}}'} for variables)
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="font-semibold text-slate-700 dark:text-slate-300">
+                    Template Body (Use {'{{1}}'}, {'{{2}}'} for variables) *
+                  </label>
+                  <span className="text-[10px] text-slate-400">{tplBody.length} characters</span>
+                </div>
                 <textarea
                   rows={4}
                   required
                   value={tplBody}
                   onChange={(e) => setTplBody(e.target.value)}
                   placeholder="Hi {{1}}, we are following up on your inquiry for {{2}} at Royal Wellness Center..."
-                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg p-2 text-slate-900 dark:text-slate-100 outline-none focus:border-teal-500 resize-none"
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-xl p-3 text-slate-900 dark:text-slate-100 font-sans outline-none focus:border-[#00a884] leading-relaxed resize-none"
                 />
               </div>
 
-              <div className="flex justify-end gap-2 pt-2">
+              {/* Live Preview Box */}
+              {tplBody.trim() && (
+                <div className="p-3 rounded-xl bg-slate-100 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                    <span>Live WhatsApp Client Preview</span>
+                    <span className="text-teal-600 dark:text-teal-400">Meta Preview</span>
+                  </div>
+                  <div className="p-3 bg-[#DCF8C6] dark:bg-[#005C4B] rounded-xl text-xs text-slate-900 dark:text-slate-100 whitespace-pre-wrap leading-relaxed shadow-2xs max-w-sm">
+                    {tplBody}
+                  </div>
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(false)}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-lg font-semibold cursor-pointer"
+                  onClick={() => {
+                    setShowAddModal(false);
+                    setTplSubmitError(null);
+                  }}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-300 rounded-xl font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-1.5 bg-teal-600 hover:bg-teal-500 text-white rounded-lg font-bold shadow cursor-pointer"
+                  disabled={isSubmittingTpl}
+                  className="px-5 py-2 bg-[#00a884] hover:bg-[#00c298] text-slate-950 rounded-xl font-bold shadow-xs transition-colors cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
                 >
-                  Submit for Approval
+                  {isSubmittingTpl ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      <span>Submitting to Meta...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Submit for Approval</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
@@ -797,7 +1147,7 @@ export const TemplatesManager: React.FC = () => {
         </div>
       )}
 
-      {/* Modal: Delete Confirmation */}
+      {/* Modal: Delete Quick Response Confirmation */}
       {deletingQrId && (
         <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
@@ -808,7 +1158,7 @@ export const TemplatesManager: React.FC = () => {
               <div>
                 <h4 className="font-bold text-sm text-slate-900 dark:text-white">Delete Quick Response?</h4>
                 <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                  This will remove the message from all coordinators' chat lists.
+                  Are you sure you want to delete this quick response? This cannot be undone.
                 </p>
               </div>
             </div>
@@ -827,6 +1177,42 @@ export const TemplatesManager: React.FC = () => {
                 className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs cursor-pointer shadow-sm"
               >
                 Yes, Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Delete Template Confirmation */}
+      {deletingTpl && (
+        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-full bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-5 h-5" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-900 dark:text-white">Delete WhatsApp Template?</h4>
+                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                  This will remove <strong className="text-slate-700 dark:text-slate-300">"{deletingTpl.name}"</strong> ({deletingTpl.waTemplateName}) from the CRM and delete it from Meta Cloud API.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setDeletingTpl(null)}
+                className="px-3.5 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 text-slate-700 dark:text-slate-300 font-semibold text-xs hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteTpl}
+                className="px-4 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs cursor-pointer shadow-sm"
+              >
+                Yes, Delete Template
               </button>
             </div>
           </div>

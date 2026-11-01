@@ -2799,34 +2799,400 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 5c. GET Available WhatsApp Templates from Meta Cloud API
-  if (req.method === 'GET' && (pathname === '/api/templates' || pathname === '/api/whatsapp/templates')) {
-    try {
-      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-      const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+  // 5c. WhatsApp Templates Management (Meta Cloud API & Database Sync)
+  if (pathname === '/api/templates' || pathname.startsWith('/api/templates/') || pathname === '/api/whatsapp/templates') {
+    const prisma = getPrisma();
+    const cleanSubPath = pathname.replace('/api/templates', '').replace(/^\//, '');
 
-      let metaTemplates = [];
-      if (metaToken && wabaId) {
+    // Helper: Meta language mapping
+    const getMetaLangCode = (crmLang) => {
+      switch (crmLang) {
+        case 'en': return 'en_US';
+        case 'si': return 'si_LK';
+        case 'ta': return 'ta';
+        default: return crmLang || 'en_US';
+      }
+    };
+
+    // Helper: format Meta slug
+    const formatMetaSlug = (name, customSlug) => {
+      let raw = (customSlug || name || '').trim().toLowerCase();
+      let slug = raw.replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+      if (!slug) slug = 'tpl_' + Date.now().toString(36);
+      return slug;
+    };
+
+    // 1. GET: Fetch all templates (with live Meta reconciliation)
+    if (req.method === 'GET' && (!cleanSubPath || cleanSubPath === '')) {
+      try {
+        const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+        let dbTemplates = [];
+        if (prisma && getDbStatus()) {
+          try {
+            const rawRows = await prisma.$queryRawUnsafe(`
+              SELECT 
+                id, 
+                name, 
+                wa_template_name as "waTemplateName", 
+                category, 
+                language, 
+                body, 
+                variables, 
+                status, 
+                meta_id as "metaId", 
+                rejected_reason as "rejectedReason", 
+                created_at as "createdAt", 
+                updated_at as "updatedAt"
+              FROM public.whatsapp_templates 
+              ORDER BY created_at ASC;
+            `);
+            if (Array.isArray(rawRows)) {
+              dbTemplates = rawRows;
+            }
+          } catch (dbErr) {
+            console.warn('⚠️ [Templates DB Query Warning]:', dbErr.message);
+          }
+        }
+
+        // Live reconciliation with Meta Graph API
+        let metaTemplates = [];
+        if (metaToken && wabaId) {
+          try {
+            const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=100`, {
+              headers: { 'Authorization': `Bearer ${metaToken}` }
+            });
+            const dataMeta = await resMeta.json().catch(() => ({}));
+            if (Array.isArray(dataMeta?.data)) {
+              metaTemplates = dataMeta.data;
+
+              // Reconcile status in DB
+              for (const mt of metaTemplates) {
+                const matchInDb = dbTemplates.find(dt => dt.waTemplateName === mt.name || dt.metaId === mt.id);
+                if (matchInDb && matchInDb.status !== mt.status) {
+                  matchInDb.status = mt.status;
+                  matchInDb.metaId = mt.id;
+                  if (prisma && getDbStatus()) {
+                    prisma.$executeRawUnsafe(
+                      `UPDATE public.whatsapp_templates SET status = $1, meta_id = $2, updated_at = NOW() WHERE id = $3;`,
+                      mt.status, mt.id, matchInDb.id
+                    ).catch(() => {});
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [Meta Live Reconciliation Warning]:', e.message);
+          }
+        }
+
+        // If DB had no templates, fallback to pre-seeded defaults
+        if (dbTemplates.length === 0) {
+          dbTemplates = [
+            { id: 'tpl-rwc-en', name: '🌿 Royal Wellness Center (English - Meta Approved)', waTemplateName: 'rwc_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+            { id: 'tpl-cras-en', name: '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)', waTemplateName: 'cras_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', variables: ['Dr. Perera'], status: 'APPROVED', approved: true },
+            { id: 'tpl-rwc-si', name: '🌿 Royal Wellness Center (Sinhala – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_si', category: 'MARKETING', language: 'si', body: 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+            { id: 'tpl-rwc-ta', name: '🌿 Royal Wellness Center (Tamil – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_ta', category: 'MARKETING', language: 'ta', body: 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+            { id: 'tpl-rwc-followup-si', name: '🌿 RWC Treatment Discussion Follow-Up (Sinhala – Meta Approved)', waTemplateName: 'rwc_followup_discussion_si', category: 'MARKETING', language: 'si', body: 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', variables: [], status: 'APPROVED', approved: true },
+            { id: 'tpl-cras-course-followup-en', name: '🎓 CRAS Course Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'cras_course_followup_en', category: 'MARKETING', language: 'en', body: 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true },
+            { id: 'tpl-rwc-followup-ta', name: '🌿 RWC Treatment Discussion Follow-Up (Tamil – Meta Approved)', waTemplateName: 'rwc_followup_discussion_ta', category: 'MARKETING', language: 'ta', body: 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', variables: [], status: 'APPROVED', approved: true },
+            { id: 'tpl-rwc-followup-en', name: '🌿 RWC Treatment Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'rwc_followup_discussion_en', category: 'MARKETING', language: 'en', body: 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true }
+          ];
+        }
+
+        // Ensure all formatted properly
+        const formattedTemplates = dbTemplates.map(t => {
+          let parsedVars = [];
+          if (Array.isArray(t.variables)) {
+            parsedVars = t.variables;
+          } else if (typeof t.variables === 'string') {
+            try { parsedVars = JSON.parse(t.variables); } catch { parsedVars = []; }
+          }
+          const curStatus = t.status || 'APPROVED';
+          return {
+            id: t.id,
+            name: t.name,
+            waTemplateName: t.waTemplateName || t.name,
+            category: t.category || 'UTILITY',
+            language: t.language || 'en',
+            body: t.body,
+            variables: parsedVars,
+            status: curStatus,
+            approved: curStatus === 'APPROVED',
+            metaId: t.metaId || null,
+            rejectedReason: t.rejectedReason || null,
+            createdAt: t.createdAt || new Date().toISOString(),
+            updatedAt: t.updatedAt || new Date().toISOString()
+          };
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          templates: formattedTemplates,
+          metaConnected: Boolean(metaToken && wabaId),
+          wabaId: wabaId || null 
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message, templates: [] }));
+      }
+      return;
+    }
+
+    // 2. POST /api/templates (Create template & submit to Meta Graph API)
+    if (req.method === 'POST' && (!cleanSubPath || cleanSubPath === '')) {
+      let bodyData = '';
+      req.on('data', chunk => { bodyData += chunk; });
+      req.on('end', async () => {
         try {
-          const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=50`, {
+          const payload = JSON.parse(bodyData || '{}');
+          const name = String(payload.name || '').trim();
+          const body = String(payload.body || '').trim();
+          const category = (payload.category === 'MARKETING' ? 'MARKETING' : 'UTILITY');
+          const language = String(payload.language || 'en').trim();
+          const requestedSlug = payload.waTemplateName ? String(payload.waTemplateName).trim() : null;
+
+          if (!name || !body) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Template name and body text are required.' }));
+            return;
+          }
+
+          const cleanSlug = formatMetaSlug(name, requestedSlug);
+          const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+          const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+          let metaStatus = 'PENDING';
+          let metaId = null;
+          let metaError = null;
+
+          // Build Meta Graph API body component
+          const components = [{
+            type: 'BODY',
+            text: body
+          }];
+          const varMatches = body.match(/\{\{(\d+)\}\}/g);
+          if (varMatches && varMatches.length > 0) {
+            components[0].example = {
+              body_text: [varMatches.map((_, i) => `Sample ${i + 1}`)]
+            };
+          }
+
+          // Call Meta Cloud API if token configured
+          if (metaToken && wabaId) {
+            try {
+              const metaPayload = {
+                name: cleanSlug,
+                category,
+                language: getMetaLangCode(language),
+                components
+              };
+              console.log(`🚀 [Meta Graph API] Creating Template: ${cleanSlug} (${category}, ${language})`);
+              const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${metaToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(metaPayload)
+              });
+              const dataMeta = await resMeta.json().catch(() => ({}));
+              if (dataMeta.error) {
+                console.warn('⚠️ [Meta Graph API Template Create Error]:', dataMeta.error);
+                metaError = dataMeta.error.error_user_msg || dataMeta.error.message || 'Meta template submission rejected.';
+                res.writeHead(400, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ 
+                  success: false, 
+                  error: `Meta Cloud API: ${metaError}`,
+                  details: dataMeta.error
+                }));
+                return;
+              } else if (dataMeta.id) {
+                metaId = String(dataMeta.id);
+                metaStatus = dataMeta.status || 'PENDING';
+                console.log(`✅ [Meta Graph API] Template created with ID: ${metaId}, Status: ${metaStatus}`);
+              }
+            } catch (netErr) {
+              console.warn('⚠️ [Meta Network Call Failed]:', netErr.message);
+              metaStatus = 'PENDING';
+            }
+          }
+
+          const newId = payload.id || `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const variables = payload.variables || (varMatches ? varMatches.map((_, i) => `Param ${i + 1}`) : []);
+
+          if (prisma && getDbStatus()) {
+            try {
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, variables, status, meta_id, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
+                ON CONFLICT (wa_template_name) DO UPDATE SET
+                  name = EXCLUDED.name,
+                  category = EXCLUDED.category,
+                  language = EXCLUDED.language,
+                  body = EXCLUDED.body,
+                  variables = EXCLUDED.variables,
+                  status = EXCLUDED.status,
+                  meta_id = EXCLUDED.meta_id,
+                  updated_at = NOW();
+              `, newId, name, cleanSlug, category, language, body, JSON.stringify(variables), metaStatus, metaId);
+            } catch (dbErr) {
+              console.warn('⚠️ [DB Template Save Error]:', dbErr.message);
+            }
+          }
+
+          const createdTemplate = {
+            id: newId,
+            name,
+            waTemplateName: cleanSlug,
+            category,
+            language,
+            body,
+            variables,
+            status: metaStatus,
+            approved: metaStatus === 'APPROVED',
+            metaId,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          broadcastScopedSSE(null, {
+            type: 'TEMPLATES_UPDATED',
+            action: 'create',
+            template: createdTemplate
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            template: createdTemplate,
+            metaStatus,
+            metaConnected: Boolean(metaToken && wabaId)
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // 3. POST /api/templates/sync (Manual sync with Meta Graph API)
+    if (req.method === 'POST' && cleanSubPath === 'sync') {
+      try {
+        const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+        let updatedCount = 0;
+        if (metaToken && wabaId) {
+          const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=100`, {
             headers: { 'Authorization': `Bearer ${metaToken}` }
           });
           const dataMeta = await resMeta.json().catch(() => ({}));
-          if (Array.isArray(dataMeta?.data)) {
-            metaTemplates = dataMeta.data;
+          if (Array.isArray(dataMeta?.data) && prisma && getDbStatus()) {
+            for (const mt of dataMeta.data) {
+              try {
+                await prisma.$executeRawUnsafe(`
+                  UPDATE public.whatsapp_templates
+                  SET status = $1, meta_id = COALESCE(meta_id, $2), updated_at = NOW()
+                  WHERE wa_template_name = $3 OR meta_id = $2;
+                `, mt.status, mt.id, mt.name);
+                updatedCount++;
+              } catch {}
+            }
           }
-        } catch (e) {
-          console.warn('⚠️ [Meta Templates Fetch Warning]:', e.message);
+        }
+
+        broadcastScopedSSE(null, {
+          type: 'TEMPLATES_UPDATED',
+          action: 'sync',
+          count: updatedCount
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, count: updatedCount, metaConnected: Boolean(metaToken && wabaId) }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+      return;
+    }
+
+    // 4. DELETE /api/templates/:id or POST /api/templates/delete
+    if ((req.method === 'DELETE' && cleanSubPath) || (req.method === 'POST' && cleanSubPath === 'delete')) {
+      let targetId = (cleanSubPath && cleanSubPath !== 'delete') ? cleanSubPath : null;
+      if (!targetId) {
+        let bodyDel = '';
+        req.on('data', chunk => { bodyDel += chunk; });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+          const payload = JSON.parse(bodyDel || '{}');
+          targetId = payload.id || payload.waTemplateName;
+        } catch {}
+      }
+
+      if (!targetId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Template ID or waTemplateName is required.' }));
+        return;
+      }
+
+      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+      const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+      // Look up template in DB to get waTemplateName
+      let tplWaName = targetId;
+      if (prisma && getDbStatus()) {
+        try {
+          const rows = await prisma.$queryRawUnsafe(`
+            SELECT id, wa_template_name as "waTemplateName", meta_id as "metaId"
+            FROM public.whatsapp_templates
+            WHERE id = $1 OR wa_template_name = $1;
+          `, targetId);
+          if (Array.isArray(rows) && rows[0]) {
+            tplWaName = rows[0].waTemplateName;
+          }
+        } catch {}
+      }
+
+      // Attempt to delete on Meta Cloud API
+      if (metaToken && wabaId && tplWaName) {
+        try {
+          console.log(`🗑️ [Meta Graph API] Deleting template: ${tplWaName} from WABA: ${wabaId}`);
+          const delRes = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?name=${encodeURIComponent(tplWaName)}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${metaToken}` }
+          });
+          const delData = await delRes.json().catch(() => ({}));
+          console.log('🗑️ [Meta Graph API Delete Result]:', delData);
+        } catch (delErr) {
+          console.warn('⚠️ [Meta Delete Template Warning]:', delErr.message);
         }
       }
 
+      // Delete from local DB
+      if (prisma && getDbStatus()) {
+        try {
+          await prisma.$executeRawUnsafe(`
+            DELETE FROM public.whatsapp_templates WHERE id = $1 OR wa_template_name = $1;
+          `, targetId);
+        } catch (dbErr) {
+          console.warn('⚠️ [DB Template Delete Warning]:', dbErr.message);
+        }
+      }
+
+      broadcastScopedSSE(null, {
+        type: 'TEMPLATES_UPDATED',
+        action: 'delete',
+        id: targetId
+      });
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, templates: metaTemplates }));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: true, message: 'Template deleted successfully.', id: targetId }));
+      return;
     }
-    return;
   }
 
   // 6. Disconnect / Unlink Central Clinic WhatsApp Line (Super Admin Only)
@@ -7082,6 +7448,40 @@ const server = http.createServer(async (req, res) => {
                       });
                     }
                   }
+                }
+
+                // Handle Meta real-time template status updates (APPROVED, REJECTED, PENDING)
+                if (change.field === 'message_template_status_update' && change.value) {
+                  const val = change.value;
+                  const eventStatus = String(val.event || val.status || '').toUpperCase();
+                  const tplName = val.message_template_name;
+                  const tplId = val.message_template_id;
+                  const reason = val.reason || val.disable_info || null;
+                  console.log(`📢 [Meta Webhook Template Status] Name: ${tplName}, Status: ${eventStatus}, Reason: ${reason}`);
+
+                  const prisma = getPrisma();
+                  if (prisma && getDbStatus()) {
+                    try {
+                      await prisma.$executeRawUnsafe(
+                        `UPDATE public.whatsapp_templates 
+                         SET status = $1, rejected_reason = $2, meta_id = COALESCE(meta_id, $3), updated_at = NOW() 
+                         WHERE wa_template_name = $4 OR meta_id = $3;`,
+                        eventStatus, reason ? String(reason) : null, String(tplId || ''), tplName
+                      );
+                    } catch (e) {
+                      console.warn('⚠️ [Meta Webhook Template DB Update Error]:', e.message);
+                    }
+                  }
+
+                  broadcastScopedSSE(null, {
+                    type: 'TEMPLATES_UPDATED',
+                    action: 'status_update',
+                    waTemplateName: tplName,
+                    metaId: tplId,
+                    status: eventStatus,
+                    rejectedReason: reason,
+                    timestamp: new Date().toISOString()
+                  });
                 }
               }
             }

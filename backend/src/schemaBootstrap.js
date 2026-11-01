@@ -171,6 +171,34 @@ const STATEMENTS = [
    ('qr-gfc-tamil', '💉 Advanced GFC Hair Therapy (Tamil – Scalp Checking)', 'வணக்கம்! 😊🌸\n\n**Royal Wellness Center** ஐத் தொடர்புகொண்டமைக்கு நன்றி!\n\n💉 **Advanced GFC Hair Therapy (Growth Factor Concentrate)**\n\nGFC என்பது உங்கள் சொந்த இரத்தத்திலிருந்து பெறப்படும் வளர்ச்சிக் காரணிகளை (Growth Factors) பயன்படுத்தி மேற்கொள்ளப்படும் நவீன தலைமுடி சிகிச்சை முறையாகும்.\n\n🌿 **GFC சிகிச்சையின் முக்கிய நோக்கங்கள்:**\n✅ முடி உதிர்வைக் குறைக்க உதவுதல்\n✅ மெலிந்த முடிகளின் வளர்ச்சியை மேம்படுத்த உதவுதல்\n✅ முடியின் அடர்த்தியை அதிகரிக்க உதவுதல்\n✅ பலவீனமான முடி வேர்களின் செயல்பாட்டை மேம்படுத்த உதவுதல்\n\nசிகிச்சையின் பலன்கள் ஒவ்வொருவருக்கும் மாறுபடலாம். உங்கள் தலைமுடியின் நிலையைப் பொறுத்து மருத்துவர் பொருத்தமான சிகிச்சையைப் பரிந்துரைப்பார்.\n\n🔬 **இலவச தலைமுடி மற்றும் தலைச்சருமப் பரிசோதனை (Scalp Checking)**\n\n📍 **நீங்கள் எந்தப் பகுதியைச் சேர்ந்தவர்?**\n1️⃣ மருதமுனை / கல்முனை\n2️⃣ கொழும்பு\n\nஉங்களுக்கு அருகிலுள்ள எமது கிளையில் மருத்துவர் ஆலோசனைக்கான நேரத்தை முன்பதிவு செய்து தர முடியும். 😊\n\n**நன்றி!**\nRoyal Wellness Center\n*Part of Alpha Health Group*', 'Hair Treatments', 'ta', 'gfc-ta')
    ON CONFLICT (id) DO NOTHING;`,
 
+  // --- whatsapp pre-approved templates (meta graph api) -----------------------
+  `CREATE TABLE IF NOT EXISTS public.whatsapp_templates (
+     id VARCHAR(100) PRIMARY KEY,
+     name VARCHAR(255) NOT NULL,
+     wa_template_name VARCHAR(255) NOT NULL UNIQUE,
+     category VARCHAR(50) DEFAULT 'UTILITY',
+     language VARCHAR(20) DEFAULT 'en',
+     body TEXT NOT NULL,
+     variables TEXT DEFAULT '[]',
+     status VARCHAR(50) DEFAULT 'APPROVED',
+     meta_id VARCHAR(100),
+     rejected_reason TEXT,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_status ON public.whatsapp_templates(status);`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, variables, status)
+   VALUES
+   ('tpl-rwc-en', '🌿 Royal Wellness Center (English - Meta Approved)', 'rwc_welcome_greeting', 'UTILITY', 'en', 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', '[\"Valued Client\"]', 'APPROVED'),
+   ('tpl-cras-en', '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)', 'cras_welcome_greeting', 'UTILITY', 'en', 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', '[\"Dr. Perera\"]', 'APPROVED'),
+   ('tpl-rwc-si', '🌿 Royal Wellness Center (Sinhala – Meta Approved)', 'rwc_welcome_greeting_si', 'MARKETING', 'si', 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', '[\"Valued Client\"]', 'APPROVED'),
+   ('tpl-rwc-ta', '🌿 Royal Wellness Center (Tamil – Meta Approved)', 'rwc_welcome_greeting_ta', 'MARKETING', 'ta', 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', '[\"Valued Client\"]', 'APPROVED'),
+   ('tpl-rwc-followup-si', '🌿 RWC Treatment Discussion Follow-Up (Sinhala – Meta Approved)', 'rwc_followup_discussion_si', 'MARKETING', 'si', 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', '[]', 'APPROVED'),
+   ('tpl-cras-course-followup-en', '🎓 CRAS Course Discussion Follow-Up (English – Meta Approved)', 'cras_course_followup_en', 'MARKETING', 'en', 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', '[]', 'APPROVED'),
+   ('tpl-rwc-followup-ta', '🌿 RWC Treatment Discussion Follow-Up (Tamil – Meta Approved)', 'rwc_followup_discussion_ta', 'MARKETING', 'ta', 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', '[]', 'APPROVED'),
+   ('tpl-rwc-followup-en', '🌿 RWC Treatment Discussion Follow-Up (English – Meta Approved)', 'rwc_followup_discussion_en', 'MARKETING', 'en', 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', '[]', 'APPROVED')
+   ON CONFLICT (id) DO NOTHING;`,
+
   // --- permanent sender audit trail -------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.message_audits (
      id VARCHAR(50) PRIMARY KEY,

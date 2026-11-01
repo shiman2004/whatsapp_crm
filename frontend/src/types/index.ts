@@ -279,6 +279,11 @@ export interface WhatsAppTemplate {
   variables: string[];
   approved: boolean;
   category: 'UTILITY' | 'MARKETING';
+  status?: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED';
+  metaId?: string | null;
+  rejectedReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface QuickResponse {

@@ -281,6 +281,17 @@ export interface WhatsAppTemplate {
   category: 'UTILITY' | 'MARKETING';
 }
 
+export interface QuickResponse {
+  id: string;
+  title: string;
+  content: string;
+  category?: string;
+  language?: LanguageCode | 'multi';
+  shortcut?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface AuditLog {
   id: string;
   userId: string;

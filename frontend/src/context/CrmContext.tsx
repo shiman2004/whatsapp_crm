@@ -21,13 +21,15 @@ import {
   OnboardingSession,
   WhatsAppConnectionStatus,
   CompanyCode,
-  TeamBroadcast
+  TeamBroadcast,
+  QuickResponse
 } from '../types';
 import {
   INITIAL_USERS,
   INITIAL_CATEGORIES,
   INITIAL_TREATMENTS,
   INITIAL_TEMPLATES,
+  INITIAL_QUICK_RESPONSES,
   INITIAL_SEQUENCES,
   INITIAL_CUSTOMERS,
   INITIAL_LEADS,
@@ -200,6 +202,13 @@ interface CrmContextType {
   toggleTreatmentStatus: (id: string, active: boolean) => Promise<{ success: boolean; error?: string }>;
   addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => void;
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
+  
+  // Quick Responses (Non-Meta Client Messages)
+  quickResponses: QuickResponse[];
+  addQuickResponse: (data: Omit<QuickResponse, 'id' | 'createdAt' | 'updatedAt'>) => Promise<{ success: boolean; quickResponse?: QuickResponse; error?: string }>;
+  updateQuickResponse: (id: string, updates: Partial<QuickResponse>) => Promise<{ success: boolean; error?: string }>;
+  deleteQuickResponse: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchQuickResponses: () => Promise<void>;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
   addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => Promise<void>;
@@ -420,6 +429,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
   });
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
+  const [quickResponses, setQuickResponses] = useState<QuickResponse[]>(() => getStored('rw_crm_quick_responses', INITIAL_QUICK_RESPONSES));
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
   const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', []));
@@ -894,6 +904,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       fetchStages().catch(() => null);
       fetchCourses().catch(() => null);
       fetchTreatments().catch(() => null);
+      fetchQuickResponses().catch(() => null);
       if (currentUser?.role === 'super_admin') {
         fetchSuperAdmins().catch(() => null);
       }
@@ -1630,6 +1641,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             if (messageId && content) {
               setMessages(prev => prev.map(m => m.id === messageId ? { ...m, content, edited: true } : m));
             }
+            return;
+          }
+
+          if (data.type === 'QUICK_RESPONSES_UPDATED') {
+            fetchQuickResponses().catch(() => null);
             return;
           }
 
@@ -3792,6 +3808,107 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Template Updated', 'Template details updated', 'info');
   };
 
+  const fetchQuickResponses = async () => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/quick-responses`, {
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data.quickResponses) && data.quickResponses.length > 0) {
+          setQuickResponses(data.quickResponses);
+          try {
+            localStorage.setItem('rw_crm_quick_responses', JSON.stringify(data.quickResponses));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch quick responses:', err);
+    }
+  };
+
+  const addQuickResponse = async (data: Omit<QuickResponse, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newId = `qr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newQR: QuickResponse = {
+      ...data,
+      id: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setQuickResponses(prev => {
+      const updated = [newQR, ...prev];
+      try {
+        localStorage.setItem('rw_crm_quick_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    notify('Quick Response Created', `"${newQR.title}" saved successfully`, 'success');
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/quick-responses`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(newQR)
+      });
+    } catch (err) {
+      console.warn('Failed to sync quick response to backend:', err);
+    }
+    return { success: true, quickResponse: newQR };
+  };
+
+  const updateQuickResponse = async (id: string, updates: Partial<QuickResponse>) => {
+    setQuickResponses(prev => {
+      const updated = prev.map(q => q.id === id ? { ...q, ...updates, updatedAt: new Date().toISOString() } : q);
+      try {
+        localStorage.setItem('rw_crm_quick_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    notify('Quick Response Updated', 'Changes saved successfully', 'info');
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/quick-responses/${id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(updates)
+      });
+    } catch (err) {
+      console.warn('Failed to sync quick response update to backend:', err);
+    }
+    return { success: true };
+  };
+
+  const deleteQuickResponse = async (id: string) => {
+    setQuickResponses(prev => {
+      const updated = prev.filter(q => q.id !== id);
+      try {
+        localStorage.setItem('rw_crm_quick_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    notify('Quick Response Deleted', 'Removed from available quick responses', 'info');
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/quick-responses/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      });
+    } catch (err) {
+      console.warn('Failed to sync quick response deletion to backend:', err);
+    }
+    return { success: true };
+  };
+
   const updateSequence = (id: string, updates: Partial<FollowupSequence>) => {
     setSequences(prev => prev.map(s => s.id === id ? { ...s, ...updates } : s));
     logAudit('UPDATE_SEQUENCE', 'Followup', id, null, updates);
@@ -4768,6 +4885,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteSuperAdmin,
     addTemplate,
     updateTemplate,
+    quickResponses,
+    addQuickResponse,
+    updateQuickResponse,
+    deleteQuickResponse,
+    fetchQuickResponses,
     updateSequence,
     updateCustomer,
     addCoordinator,

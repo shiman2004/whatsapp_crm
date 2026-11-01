@@ -153,6 +153,24 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON public.team_broadcasts(created_at DESC);`,
 
+  // --- quick responses (non-meta client message templates) --------------------
+  `CREATE TABLE IF NOT EXISTS public.quick_responses (
+     id VARCHAR(50) PRIMARY KEY,
+     title VARCHAR(255) NOT NULL,
+     content TEXT NOT NULL,
+     category VARCHAR(100) DEFAULT 'General',
+     language VARCHAR(20) DEFAULT 'en',
+     shortcut VARCHAR(50),
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_quick_responses_created ON public.quick_responses(created_at DESC);`,
+  `INSERT INTO public.quick_responses (id, title, content, category, language, shortcut)
+   VALUES 
+   ('qr-welcome-lang', '🌸 Welcome to Royal Wellness Center (Language Selection)', '🌸 Welcome to Royal Wellness Center!\n\nThank you for contacting us 😊\nWe are happy to assist you with treatment details, pricing, and appointment information.\n\n🌐 Please select your preferred language to continue:\n1️⃣ සිංහල – Sinhala\n2️⃣ தமிழ் – Tamil\n\n👉 Kindly reply with 1 or 2 to continue in your preferred language.\n\nThank you!\nRoyal Wellness Center\nPart of Alpha Health Group', 'Welcome & Greeting', 'multi', 'welcome'),
+   ('qr-gfc-tamil', '💉 Advanced GFC Hair Therapy (Tamil – Scalp Checking)', 'வணக்கம்! 😊🌸\n\n**Royal Wellness Center** ஐத் தொடர்புகொண்டமைக்கு நன்றி!\n\n💉 **Advanced GFC Hair Therapy (Growth Factor Concentrate)**\n\nGFC என்பது உங்கள் சொந்த இரத்தத்திலிருந்து பெறப்படும் வளர்ச்சிக் காரணிகளை (Growth Factors) பயன்படுத்தி மேற்கொள்ளப்படும் நவீன தலைமுடி சிகிச்சை முறையாகும்.\n\n🌿 **GFC சிகிச்சையின் முக்கிய நோக்கங்கள்:**\n✅ முடி உதிர்வைக் குறைக்க உதவுதல்\n✅ மெலிந்த முடிகளின் வளர்ச்சியை மேம்படுத்த உதவுதல்\n✅ முடியின் அடர்த்தியை அதிகரிக்க உதவுதல்\n✅ பலவீனமான முடி வேர்களின் செயல்பாட்டை மேம்படுத்த உதவுதல்\n\nசிகிச்சையின் பலன்கள் ஒவ்வொருவருக்கும் மாறுபடலாம். உங்கள் தலைமுடியின் நிலையைப் பொறுத்து மருத்துவர் பொருத்தமான சிகிச்சையைப் பரிந்துரைப்பார்.\n\n🔬 **இலவச தலைமுடி மற்றும் தலைச்சருமப் பரிசோதனை (Scalp Checking)**\n\n📍 **நீங்கள் எந்தப் பகுதியைச் சேர்ந்தவர்?**\n1️⃣ மருதமுனை / கல்முனை\n2️⃣ கொழும்பு\n\nஉங்களுக்கு அருகிலுள்ள எமது கிளையில் மருத்துவர் ஆலோசனைக்கான நேரத்தை முன்பதிவு செய்து தர முடியும். 😊\n\n**நன்றி!**\nRoyal Wellness Center\n*Part of Alpha Health Group*', 'Hair Treatments', 'ta', 'gfc-ta')
+   ON CONFLICT (id) DO NOTHING;`,
+
   // --- permanent sender audit trail -------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.message_audits (
      id VARCHAR(50) PRIMARY KEY,

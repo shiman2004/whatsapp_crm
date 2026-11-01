@@ -6370,6 +6370,187 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 10d-2. Quick Responses (Client Message Templates - Non-Meta HSM)
+  if (pathname === '/api/quick-responses' || pathname.startsWith('/api/quick-responses/')) {
+    const prisma = getPrisma();
+    const cleanPath = pathname.replace('/api/quick-responses', '').replace(/^\//, '');
+
+    // GET /api/quick-responses
+    if (req.method === 'GET') {
+      try {
+        let quickResponses = [];
+        if (prisma && getDbStatus()) {
+          try {
+            const rawRows = await prisma.$queryRawUnsafe(`
+              SELECT 
+                id, 
+                title, 
+                content, 
+                category, 
+                language, 
+                shortcut, 
+                created_at as "createdAt",
+                updated_at as "updatedAt"
+              FROM public.quick_responses 
+              ORDER BY created_at ASC;
+            `);
+            if (Array.isArray(rawRows)) {
+              quickResponses = rawRows;
+            }
+          } catch (dbErr) {
+            console.warn('⚠️ [Quick Responses DB Query]:', dbErr.message);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, quickResponses }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message, quickResponses: [] }));
+      }
+      return;
+    }
+
+    // POST /api/quick-responses (Create)
+    if (req.method === 'POST' && (!cleanPath || cleanPath === '')) {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const title = (payload.title || '').trim();
+          const content = (payload.content || '').trim();
+          const category = (payload.category || 'General').trim();
+          const language = (payload.language || 'en').trim();
+          const shortcut = (payload.shortcut || '').trim();
+
+          if (!title || !content) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Title and content are required.' }));
+            return;
+          }
+
+          const newId = payload.id || `qr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          if (prisma && getDbStatus()) {
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.quick_responses (id, title, content, category, language, shortcut, created_at, updated_at)
+              VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+              ON CONFLICT (id) DO UPDATE SET 
+                title = EXCLUDED.title,
+                content = EXCLUDED.content,
+                category = EXCLUDED.category,
+                language = EXCLUDED.language,
+                shortcut = EXCLUDED.shortcut,
+                updated_at = NOW();
+            `, newId, title, content, category, language, shortcut);
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'QUICK_RESPONSES_UPDATED',
+            action: 'create',
+            id: newId
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            quickResponse: { id: newId, title, content, category, language, shortcut, createdAt: new Date().toISOString() }
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // PUT /api/quick-responses/:id or POST /api/quick-responses/update (Update)
+    if ((req.method === 'PUT' && cleanPath) || (req.method === 'POST' && (cleanPath === 'update' || (cleanPath && cleanPath !== 'delete')))) {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const targetId = (cleanPath && cleanPath !== 'update') ? cleanPath : payload.id;
+          const title = payload.title !== undefined ? String(payload.title).trim() : null;
+          const content = payload.content !== undefined ? String(payload.content).trim() : null;
+          const category = payload.category !== undefined ? String(payload.category).trim() : null;
+          const language = payload.language !== undefined ? String(payload.language).trim() : null;
+          const shortcut = payload.shortcut !== undefined ? String(payload.shortcut).trim() : null;
+
+          if (!targetId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Quick response ID is required.' }));
+            return;
+          }
+
+          if (prisma && getDbStatus()) {
+            await prisma.$executeRawUnsafe(`
+              UPDATE public.quick_responses 
+              SET 
+                title = COALESCE($2, title),
+                content = COALESCE($3, content),
+                category = COALESCE($4, category),
+                language = COALESCE($5, language),
+                shortcut = COALESCE($6, shortcut),
+                updated_at = NOW()
+              WHERE id = $1;
+            `, targetId, title, content, category, language, shortcut);
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'QUICK_RESPONSES_UPDATED',
+            action: 'update',
+            id: targetId
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Quick response updated' }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // DELETE /api/quick-responses/:id or POST /api/quick-responses/delete (Delete)
+    if ((req.method === 'DELETE' && cleanPath) || (req.method === 'POST' && cleanPath === 'delete')) {
+      let targetId = (cleanPath && cleanPath !== 'delete') ? cleanPath : null;
+      if (!targetId) {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+          const payload = JSON.parse(body || '{}');
+          targetId = payload.id;
+        } catch {}
+      }
+
+      if (!targetId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Quick response ID is required.' }));
+        return;
+      }
+
+      if (prisma && getDbStatus()) {
+        await prisma.$executeRawUnsafe(`
+          DELETE FROM public.quick_responses WHERE id = $1;
+        `, targetId);
+      }
+
+      broadcastScopedSSE(null, {
+        type: 'QUICK_RESPONSES_UPDATED',
+        action: 'delete',
+        id: targetId
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Quick response deleted', id: targetId }));
+      return;
+    }
+  }
+
   // 10e. REST: Get/Save Meta Cloud API Configuration
   if (pathname === '/api/meta/config' || pathname === '/api/meta/token') {
     if (req.method === 'GET') {

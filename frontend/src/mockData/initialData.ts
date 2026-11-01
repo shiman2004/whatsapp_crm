@@ -6,6 +6,7 @@ import {
   TreatmentCategory,
   Treatment,
   WhatsAppTemplate,
+  QuickResponse,
   FollowupSequence,
   Followup,
   LeadNote,
@@ -489,6 +490,68 @@ export const INITIAL_TEMPLATES: WhatsAppTemplate[] = [
     body: `Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!`,
     variables: [],
     approved: true,
+  }
+];
+
+export const INITIAL_QUICK_RESPONSES: QuickResponse[] = [
+  {
+    id: 'qr-welcome-lang',
+    title: '🌸 Welcome to Royal Wellness Center (Language Selection)',
+    shortcut: 'welcome',
+    category: 'Welcome & Greeting',
+    language: 'multi',
+    content: `🌸 Welcome to Royal Wellness Center!
+
+Thank you for contacting us 😊
+We are happy to assist you with treatment details, pricing, and appointment information.
+
+🌐 Please select your preferred language to continue:
+1️⃣ සිංහල – Sinhala
+2️⃣ தமிழ் – Tamil
+
+👉 Kindly reply with 1 or 2 to continue in your preferred language.
+
+Thank you!
+Royal Wellness Center
+Part of Alpha Health Group`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  },
+  {
+    id: 'qr-gfc-tamil',
+    title: '💉 Advanced GFC Hair Therapy (Tamil – Scalp Checking)',
+    shortcut: 'gfc-ta',
+    category: 'Hair Treatments',
+    language: 'ta',
+    content: `வணக்கம்! 😊🌸
+
+**Royal Wellness Center** ஐத் தொடர்புகொண்டமைக்கு நன்றி!
+
+💉 **Advanced GFC Hair Therapy (Growth Factor Concentrate)**
+
+GFC என்பது உங்கள் சொந்த இரத்தத்திலிருந்து பெறப்படும் வளர்ச்சிக் காரணிகளை (Growth Factors) பயன்படுத்தி மேற்கொள்ளப்படும் நவீன தலைமுடி சிகிச்சை முறையாகும்.
+
+🌿 **GFC சிகிச்சையின் முக்கிய நோக்கங்கள்:**
+✅ முடி உதிர்வைக் குறைக்க உதவுதல்
+✅ மெலிந்த முடிகளின் வளர்ச்சியை மேம்படுத்த உதவுதல்
+✅ முடியின் அடர்த்தியை அதிகரிக்க உதவுதல்
+✅ பலவீனமான முடி வேர்களின் செயல்பாட்டை மேம்படுத்த உதவுதல்
+
+சிகிச்சையின் பலன்கள் ஒவ்வொருவருக்கும் மாறுபடலாம். உங்கள் தலைமுடியின் நிலையைப் பொறுத்து மருத்துவர் பொருத்தமான சிகிச்சையைப் பரிந்துரைப்பார்.
+
+🔬 **இலவச தலைமுடி மற்றும் தலைச்சருமப் பரிசோதனை (Scalp Checking)**
+
+📍 **நீங்கள் எந்தப் பகுதியைச் சேர்ந்தவர்?**
+1️⃣ மருதமுனை / கல்முனை
+2️⃣ கொழும்பு
+
+உங்களுக்கு அருகிலுள்ள எமது கிளையில் மருத்துவர் ஆலோசனைக்கான நேரத்தை முன்பதிவு செய்து தர முடியும். 😊
+
+**நன்றி!**
+Royal Wellness Center
+*Part of Alpha Health Group*`,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
   }
 ];
 

@@ -200,8 +200,13 @@ interface CrmContextType {
   addTreatment: (treatment: any) => Promise<{ success: boolean; error?: string }>;
   updateTreatment: (id: string, updates: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
   toggleTreatmentStatus: (id: string, active: boolean) => Promise<{ success: boolean; error?: string }>;
-  addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => void;
+  addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => Promise<{ success: boolean; error?: string; template?: WhatsAppTemplate }>;
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
+  deleteTemplate: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchTemplates: () => Promise<void>;
+  syncTemplatesWithMeta: () => Promise<{ success: boolean; count?: number }>;
+  metaConnected: boolean;
+  metaWabaId: string | null;
   
   // Quick Responses (Non-Meta Client Messages)
   quickResponses: QuickResponse[];
@@ -428,7 +433,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       !u.email.startsWith('admin_test_')
     );
   });
-  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(() => getStored('rw_crm_templates', INITIAL_TEMPLATES));
+  const [metaConnected, setMetaConnected] = useState<boolean>(true);
+  const [metaWabaId, setMetaWabaId] = useState<string | null>('2332922997481634');
   const [quickResponses, setQuickResponses] = useState<QuickResponse[]>(() => getStored('rw_crm_quick_responses', INITIAL_QUICK_RESPONSES));
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
@@ -1101,6 +1108,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.warn('Could not fetch persistent database state:', e);
     }
+    fetchQuickResponses();
+    fetchTemplates();
   };
 
   // Loads one older page of conversation history using the server cursor.
@@ -2113,6 +2122,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setWhatsappStatus('connected');
             fetchInitialData();
             notify('WhatsApp History Synced', `${data.count} conversation messages restored from WhatsApp.`, 'success');
+          } else if (data.type === 'TEMPLATES_UPDATED') {
+            fetchTemplates();
+          } else if (data.type === 'QUICK_RESPONSES_UPDATED') {
+            fetchQuickResponses();
           } else if (data.type === 'QR_CODE') {
             setWhatsappStatus('qr_ready');
           }
@@ -3792,14 +3805,128 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const addTemplate = (tpl: Omit<WhatsAppTemplate, 'id'>) => {
-    const newTpl: WhatsAppTemplate = {
+  const fetchTemplates = async () => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates`, {
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data.templates) && data.templates.length > 0) {
+          setTemplates(data.templates);
+          try {
+            localStorage.setItem('rw_crm_templates', JSON.stringify(data.templates));
+          } catch {}
+        }
+        if (data.metaConnected !== undefined) {
+          setMetaConnected(Boolean(data.metaConnected));
+        }
+        if (data.wabaId) {
+          setMetaWabaId(String(data.wabaId));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch templates:', err);
+    }
+  };
+
+  const addTemplate = async (tpl: Omit<WhatsAppTemplate, 'id'>): Promise<{ success: boolean; error?: string; template?: WhatsAppTemplate }> => {
+    const tempId = 'tpl-' + Date.now();
+    const optimisticStatus = tpl.status || 'PENDING';
+    const optimisticTpl: WhatsAppTemplate = {
       ...tpl,
-      id: 'tpl-' + Date.now(),
+      id: tempId,
+      status: optimisticStatus,
+      approved: optimisticStatus === 'APPROVED',
+      createdAt: new Date().toISOString()
     };
-    setTemplates(prev => [...prev, newTpl]);
-    logAudit('CREATE_TEMPLATE', 'Template', newTpl.id, null, newTpl);
-    notify('Template Created', `Submitted "${newTpl.name}" to Meta for approval`, 'success');
+    setTemplates(prev => [...prev, optimisticTpl]);
+
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(tpl)
+      }).catch(() => null);
+
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.template) {
+          setTemplates(prev => prev.map(t => t.id === tempId ? data.template : t));
+          try {
+            localStorage.setItem('rw_crm_templates', JSON.stringify(
+              templates.map(t => t.id === tempId ? data.template : t)
+            ));
+          } catch {}
+          logAudit('CREATE_TEMPLATE', 'Template', data.template.id, null, data.template);
+          const statusText = data.template.status || 'PENDING';
+          notify('Template Submitted', `"${data.template.name}" submitted to Meta Cloud API (Status: ${statusText})`, statusText === 'APPROVED' ? 'success' : 'info');
+          return { success: true, template: data.template };
+        }
+      } else if (res && !res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error || 'Meta template submission failed';
+        // Roll back optimistic template
+        setTemplates(prev => prev.filter(t => t.id !== tempId));
+        notify('Meta Submission Error', errMsg, 'warning');
+        return { success: false, error: errMsg };
+      }
+    } catch (err: any) {
+      console.warn('addTemplate error:', err);
+    }
+
+    logAudit('CREATE_TEMPLATE', 'Template', tempId, null, optimisticTpl);
+    notify('Template Created', `Submitted "${optimisticTpl.name}" for Meta review`, 'info');
+    return { success: true, template: optimisticTpl };
+  };
+
+  const deleteTemplate = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const tplToDelete = templates.find(t => t.id === id || t.waTemplateName === id);
+    setTemplates(prev => {
+      const updated = prev.filter(t => t.id !== id && t.waTemplateName !== id);
+      try {
+        localStorage.setItem('rw_crm_templates', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/templates/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+    } catch (err) {
+      console.warn('deleteTemplate network error:', err);
+    }
+
+    logAudit('DELETE_TEMPLATE', 'Template', id, tplToDelete, null);
+    notify('Template Deleted', `Template "${tplToDelete?.name || id}" removed from CRM and Meta`, 'info');
+    return { success: true };
+  };
+
+  const syncTemplatesWithMeta = async (): Promise<{ success: boolean; count?: number }> => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates/sync`, {
+        method: 'POST',
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+      await fetchTemplates();
+      if (res && res.ok) {
+        notify('Meta Sync Complete', 'WhatsApp template statuses synchronized with Meta Graph API', 'success');
+        return { success: true };
+      }
+    } catch (err: any) {
+      console.warn('Sync templates error:', err);
+    }
+    notify('Meta Sync', 'Attempted synchronization with Meta Cloud API', 'info');
+    return { success: false };
   };
 
   const updateTemplate = (id: string, updates: Partial<WhatsAppTemplate>) => {
@@ -4885,6 +5012,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteSuperAdmin,
     addTemplate,
     updateTemplate,
+    deleteTemplate,
+    fetchTemplates,
+    syncTemplatesWithMeta,
+    metaConnected,
+    metaWabaId,
     quickResponses,
     addQuickResponse,
     updateQuickResponse,

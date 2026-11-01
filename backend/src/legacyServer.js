@@ -855,6 +855,8 @@ const CANONICAL_USERS = [
 
 // Set of permanently deleted staff IDs to ensure they never reappear on reload
 const DELETED_USER_IDS = new Set();
+// Set of permanently deleted template IDs/names to ensure deleted templates never reappear on reload
+const DELETED_TEMPLATE_IDS = new Set();
 
 /**
  * Helper: Resolve and Authenticate CRM User from request.
@@ -1002,7 +1004,9 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/treatments' || 
     pathname === '/api/courses' || 
     pathname === '/api/stages' ||
-    pathname === '/api/coordinators'
+    pathname === '/api/coordinators' ||
+    pathname === '/api/templates' ||
+    pathname.startsWith('/api/templates')
   )) return true;
   // 6. Student Portal & Controlled Device Security API Routes
   if (pathname.startsWith('/api/student/')) return true;
@@ -2804,6 +2808,18 @@ const server = http.createServer(async (req, res) => {
     const prisma = getPrisma();
     const cleanSubPath = pathname.replace('/api/templates', '').replace(/^\//, '');
 
+    // Default Fallback Templates (used only if database is completely empty and template is not deleted)
+    const DEFAULT_TEMPLATES = [
+      { id: 'tpl-rwc-en', name: '🌿 Royal Wellness Center (English - Meta Approved)', waTemplateName: 'rwc_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+      { id: 'tpl-cras-en', name: '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)', waTemplateName: 'cras_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', variables: ['Dr. Perera'], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-si', name: '🌿 Royal Wellness Center (Sinhala – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_si', category: 'MARKETING', language: 'si', body: 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-ta', '🌿 Royal Wellness Center (Tamil – Meta Approved)': 'rwc_welcome_greeting_ta', name: '🌿 Royal Wellness Center (Tamil – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_ta', category: 'MARKETING', language: 'ta', body: 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-followup-si', name: '🌿 RWC Treatment Discussion Follow-Up (Sinhala – Meta Approved)', waTemplateName: 'rwc_followup_discussion_si', category: 'MARKETING', language: 'si', body: 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', variables: [], status: 'APPROVED', approved: true },
+      { id: 'tpl-cras-course-followup-en', name: '🎓 CRAS Course Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'cras_course_followup_en', category: 'MARKETING', language: 'en', body: 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-followup-ta', name: '🌿 RWC Treatment Discussion Follow-Up (Tamil – Meta Approved)', waTemplateName: 'rwc_followup_discussion_ta', category: 'MARKETING', language: 'ta', body: 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', variables: [], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-followup-en', name: '🌿 RWC Treatment Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'rwc_followup_discussion_en', category: 'MARKETING', language: 'en', body: 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true }
+    ];
+
     // Helper: Meta language mapping
     const getMetaLangCode = (crmLang) => {
       switch (crmLang) {
@@ -2835,18 +2851,18 @@ const server = http.createServer(async (req, res) => {
               SELECT 
                 id, 
                 name, 
-                wa_template_name as "waTemplateName", 
+                COALESCE(wa_template_name, name) as "waTemplateName", 
                 category, 
-                language, 
-                body, 
+                language::text as language, 
+                COALESCE(body, content, '') as body, 
                 variables, 
-                status, 
+                status::text as status, 
                 meta_id as "metaId", 
                 rejected_reason as "rejectedReason", 
-                created_at as "createdAt", 
-                updated_at as "updatedAt"
+                COALESCE(created_at, "createdAt", NOW()) as "createdAt", 
+                COALESCE(updated_at, NOW()) as "updatedAt"
               FROM public.whatsapp_templates 
-              ORDER BY created_at ASC;
+              ORDER BY COALESCE(created_at, "createdAt") ASC;
             `);
             if (Array.isArray(rawRows)) {
               dbTemplates = rawRows;
@@ -2855,6 +2871,9 @@ const server = http.createServer(async (req, res) => {
             console.warn('⚠️ [Templates DB Query Warning]:', dbErr.message);
           }
         }
+
+        // Filter out any templates marked as deleted
+        dbTemplates = dbTemplates.filter(t => !DELETED_TEMPLATE_IDS.has(t.id) && !DELETED_TEMPLATE_IDS.has(t.waTemplateName));
 
         // Live reconciliation with Meta Graph API
         let metaTemplates = [];
@@ -2875,7 +2894,7 @@ const server = http.createServer(async (req, res) => {
                   matchInDb.metaId = mt.id;
                   if (prisma && getDbStatus()) {
                     prisma.$executeRawUnsafe(
-                      `UPDATE public.whatsapp_templates SET status = $1, meta_id = $2, updated_at = NOW() WHERE id = $3;`,
+                      `UPDATE public.whatsapp_templates SET status = $1::"TemplateStatus", meta_id = $2, updated_at = NOW() WHERE id = $3;`,
                       mt.status, mt.id, matchInDb.id
                     ).catch(() => {});
                   }
@@ -2887,21 +2906,12 @@ const server = http.createServer(async (req, res) => {
           }
         }
 
-        // If DB had no templates, fallback to pre-seeded defaults
-        if (dbTemplates.length === 0) {
-          dbTemplates = [
-            { id: 'tpl-rwc-en', name: '🌿 Royal Wellness Center (English - Meta Approved)', waTemplateName: 'rwc_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
-            { id: 'tpl-cras-en', name: '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)', waTemplateName: 'cras_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', variables: ['Dr. Perera'], status: 'APPROVED', approved: true },
-            { id: 'tpl-rwc-si', name: '🌿 Royal Wellness Center (Sinhala – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_si', category: 'MARKETING', language: 'si', body: 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
-            { id: 'tpl-rwc-ta', name: '🌿 Royal Wellness Center (Tamil – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_ta', category: 'MARKETING', language: 'ta', body: 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
-            { id: 'tpl-rwc-followup-si', name: '🌿 RWC Treatment Discussion Follow-Up (Sinhala – Meta Approved)', waTemplateName: 'rwc_followup_discussion_si', category: 'MARKETING', language: 'si', body: 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', variables: [], status: 'APPROVED', approved: true },
-            { id: 'tpl-cras-course-followup-en', name: '🎓 CRAS Course Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'cras_course_followup_en', category: 'MARKETING', language: 'en', body: 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true },
-            { id: 'tpl-rwc-followup-ta', name: '🌿 RWC Treatment Discussion Follow-Up (Tamil – Meta Approved)', waTemplateName: 'rwc_followup_discussion_ta', category: 'MARKETING', language: 'ta', body: 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', variables: [], status: 'APPROVED', approved: true },
-            { id: 'tpl-rwc-followup-en', name: '🌿 RWC Treatment Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'rwc_followup_discussion_en', category: 'MARKETING', language: 'en', body: 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true }
-          ];
+        // If DB had no templates and nothing was explicitly deleted, fallback to pre-seeded defaults
+        if (dbTemplates.length === 0 && DELETED_TEMPLATE_IDS.size === 0) {
+          dbTemplates = DEFAULT_TEMPLATES;
         }
 
-        // Ensure all formatted properly
+        // Ensure all templates formatted properly
         const formattedTemplates = dbTemplates.map(t => {
           let parsedVars = [];
           if (Array.isArray(t.variables)) {
@@ -2951,7 +2961,8 @@ const server = http.createServer(async (req, res) => {
           const name = String(payload.name || '').trim();
           const body = String(payload.body || '').trim();
           const category = (payload.category === 'MARKETING' ? 'MARKETING' : 'UTILITY');
-          const language = String(payload.language || 'en').trim();
+          const rawLang = String(payload.language || 'en').trim().toLowerCase();
+          const language = ['en', 'si', 'ta'].includes(rawLang) ? rawLang : 'en';
           const requestedSlug = payload.waTemplateName ? String(payload.waTemplateName).trim() : null;
 
           if (!name || !body) {
@@ -3002,13 +3013,7 @@ const server = http.createServer(async (req, res) => {
               if (dataMeta.error) {
                 console.warn('⚠️ [Meta Graph API Template Create Error]:', dataMeta.error);
                 metaError = dataMeta.error.error_user_msg || dataMeta.error.message || 'Meta template submission rejected.';
-                res.writeHead(400, { 'Content-Type': 'application/json' });
-                res.end(JSON.stringify({ 
-                  success: false, 
-                  error: `Meta Cloud API: ${metaError}`,
-                  details: dataMeta.error
-                }));
-                return;
+                metaStatus = 'REJECTED';
               } else if (dataMeta.id) {
                 metaId = String(dataMeta.id);
                 metaStatus = dataMeta.status || 'PENDING';
@@ -3026,18 +3031,21 @@ const server = http.createServer(async (req, res) => {
           if (prisma && getDbStatus()) {
             try {
               await prisma.$executeRawUnsafe(`
-                INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, variables, status, meta_id, created_at, updated_at)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW())
-                ON CONFLICT (wa_template_name) DO UPDATE SET
+                INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status, meta_id, rejected_reason, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5::"LanguageCode", $6, $6, $7, $8::"TemplateStatus", $9, $10, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
                   name = EXCLUDED.name,
+                  wa_template_name = EXCLUDED.wa_template_name,
                   category = EXCLUDED.category,
                   language = EXCLUDED.language,
                   body = EXCLUDED.body,
+                  content = EXCLUDED.content,
                   variables = EXCLUDED.variables,
                   status = EXCLUDED.status,
                   meta_id = EXCLUDED.meta_id,
+                  rejected_reason = EXCLUDED.rejected_reason,
                   updated_at = NOW();
-              `, newId, name, cleanSlug, category, language, body, JSON.stringify(variables), metaStatus, metaId);
+              `, newId, name, cleanSlug, category, language, body, JSON.stringify(variables), (['APPROVED', 'PENDING', 'REJECTED'].includes(metaStatus) ? metaStatus : 'PENDING'), metaId, metaError);
             } catch (dbErr) {
               console.warn('⚠️ [DB Template Save Error]:', dbErr.message);
             }
@@ -3054,6 +3062,7 @@ const server = http.createServer(async (req, res) => {
             status: metaStatus,
             approved: metaStatus === 'APPROVED',
             metaId,
+            rejectedReason: metaError,
             createdAt: new Date().toISOString(),
             updatedAt: new Date().toISOString()
           };
@@ -3069,6 +3078,7 @@ const server = http.createServer(async (req, res) => {
             success: true,
             template: createdTemplate,
             metaStatus,
+            warning: metaError || undefined,
             metaConnected: Boolean(metaToken && wabaId)
           }));
         } catch (err) {
@@ -3096,7 +3106,7 @@ const server = http.createServer(async (req, res) => {
               try {
                 await prisma.$executeRawUnsafe(`
                   UPDATE public.whatsapp_templates
-                  SET status = $1, meta_id = COALESCE(meta_id, $2), updated_at = NOW()
+                  SET status = $1::"TemplateStatus", meta_id = COALESCE(meta_id, $2), updated_at = NOW()
                   WHERE wa_template_name = $3 OR meta_id = $2;
                 `, mt.status, mt.id, mt.name);
                 updatedCount++;
@@ -3121,8 +3131,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 4. DELETE /api/templates/:id or POST /api/templates/delete
-    if ((req.method === 'DELETE' && cleanSubPath) || (req.method === 'POST' && cleanSubPath === 'delete')) {
-      let targetId = (cleanSubPath && cleanSubPath !== 'delete') ? cleanSubPath : null;
+    if ((req.method === 'DELETE' && cleanSubPath) || (req.method === 'POST' && (cleanSubPath === 'delete' || pathname.endsWith('/delete')))) {
+      let targetId = (cleanSubPath && cleanSubPath !== 'delete') ? decodeURIComponent(cleanSubPath) : null;
       if (!targetId) {
         let bodyDel = '';
         req.on('data', chunk => { bodyDel += chunk; });
@@ -3147,15 +3157,22 @@ const server = http.createServer(async (req, res) => {
       if (prisma && getDbStatus()) {
         try {
           const rows = await prisma.$queryRawUnsafe(`
-            SELECT id, wa_template_name as "waTemplateName", meta_id as "metaId"
+            SELECT id, COALESCE(wa_template_name, name) as "waTemplateName", meta_id as "metaId"
             FROM public.whatsapp_templates
             WHERE id = $1 OR wa_template_name = $1;
           `, targetId);
           if (Array.isArray(rows) && rows[0]) {
             tplWaName = rows[0].waTemplateName;
           }
-        } catch {}
+        } catch (e) {
+          console.warn('⚠️ [DB Template Lookup Warning]:', e.message);
+        }
       }
+
+      // Track in permanent deleted set so default fallbacks never resurrect it
+      DELETED_TEMPLATE_IDS.add(targetId);
+      if (tplWaName) DELETED_TEMPLATE_IDS.add(tplWaName);
+      setSystemSetting('DELETED_TEMPLATE_IDS', JSON.stringify([...DELETED_TEMPLATE_IDS])).catch(() => {});
 
       // Attempt to delete on Meta Cloud API
       if (metaToken && wabaId && tplWaName) {
@@ -7651,6 +7668,13 @@ export async function initializeServer() {
   if (savedAppSecret && savedAppSecret.trim()) metaConfig.appSecret = savedAppSecret.trim();
   const savedVerifyToken = await getSystemSetting('META_VERIFY_TOKEN');
   if (savedVerifyToken && savedVerifyToken.trim()) metaConfig.verifyToken = savedVerifyToken.trim();
+  const savedDeletedTpls = await getSystemSetting('DELETED_TEMPLATE_IDS');
+  if (savedDeletedTpls) {
+    try {
+      const arr = JSON.parse(savedDeletedTpls);
+      if (Array.isArray(arr)) arr.forEach(id => DELETED_TEMPLATE_IDS.add(id));
+    } catch {}
+  }
   await autoSeedDbIfEmpty();
   ensureWabaWebhookSubscriptions().catch(() => {});
   return res;

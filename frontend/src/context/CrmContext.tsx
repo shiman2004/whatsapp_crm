@@ -3813,7 +3813,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }).catch(() => null);
       if (res && res.ok) {
         const data = await res.json().catch(() => ({}));
-        if (Array.isArray(data.templates) && data.templates.length > 0) {
+        if (Array.isArray(data.templates)) {
           setTemplates(data.templates);
           try {
             localStorage.setItem('rw_crm_templates', JSON.stringify(data.templates));
@@ -3841,7 +3841,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       approved: optimisticStatus === 'APPROVED',
       createdAt: new Date().toISOString()
     };
-    setTemplates(prev => [...prev, optimisticTpl]);
+    setTemplates(prev => [optimisticTpl, ...prev.filter(t => t.id !== tempId)]);
 
     try {
       const token = await ensureValidAuthToken();
@@ -3857,24 +3857,35 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (res && res.ok) {
         const data = await res.json().catch(() => ({}));
         if (data.template) {
-          setTemplates(prev => prev.map(t => t.id === tempId ? data.template : t));
-          try {
-            localStorage.setItem('rw_crm_templates', JSON.stringify(
-              templates.map(t => t.id === tempId ? data.template : t)
-            ));
-          } catch {}
+          setTemplates(prev => {
+            const next = prev.map(t => (t.id === tempId || t.waTemplateName === data.template.waTemplateName) ? data.template : t);
+            try { localStorage.setItem('rw_crm_templates', JSON.stringify(next)); } catch {}
+            return next;
+          });
           logAudit('CREATE_TEMPLATE', 'Template', data.template.id, null, data.template);
           const statusText = data.template.status || 'PENDING';
-          notify('Template Submitted', `"${data.template.name}" submitted to Meta Cloud API (Status: ${statusText})`, statusText === 'APPROVED' ? 'success' : 'info');
+          if (data.warning) {
+            notify('Template Notice', data.warning, 'warning');
+          } else {
+            notify('Template Submitted', `"${data.template.name}" submitted to Meta Cloud API (Status: ${statusText})`, statusText === 'APPROVED' ? 'success' : 'info');
+          }
           return { success: true, template: data.template };
         }
       } else if (res && !res.ok) {
         const errData = await res.json().catch(() => ({}));
-        const errMsg = errData.error || 'Meta template submission failed';
-        // Roll back optimistic template
-        setTemplates(prev => prev.filter(t => t.id !== tempId));
-        notify('Meta Submission Error', errMsg, 'warning');
-        return { success: false, error: errMsg };
+        const errMsg = errData.error || 'Meta template submission returned an error';
+        const rejectedTpl: WhatsAppTemplate = {
+          ...optimisticTpl,
+          status: 'REJECTED',
+          rejectedReason: errMsg
+        };
+        setTemplates(prev => {
+          const next = prev.map(t => t.id === tempId ? rejectedTpl : t);
+          try { localStorage.setItem('rw_crm_templates', JSON.stringify(next)); } catch {}
+          return next;
+        });
+        notify('Meta Notice', errMsg, 'warning');
+        return { success: true, template: rejectedTpl, error: errMsg };
       }
     } catch (err: any) {
       console.warn('addTemplate error:', err);
@@ -3888,7 +3899,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const deleteTemplate = async (id: string): Promise<{ success: boolean; error?: string }> => {
     const tplToDelete = templates.find(t => t.id === id || t.waTemplateName === id);
     setTemplates(prev => {
-      const updated = prev.filter(t => t.id !== id && t.waTemplateName !== id);
+      const updated = prev.filter(t => t.id !== id && t.waTemplateName !== id && (tplToDelete ? t.id !== tplToDelete.id && t.waTemplateName !== tplToDelete.waTemplateName : true));
       try {
         localStorage.setItem('rw_crm_templates', JSON.stringify(updated));
       } catch {}
@@ -3897,10 +3908,22 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     try {
       const token = await ensureValidAuthToken();
-      await fetch(`${API_BASE_URL}/api/templates/${encodeURIComponent(id)}`, {
+      const res = await fetch(`${API_BASE_URL}/api/templates/${encodeURIComponent(id)}`, {
         method: 'DELETE',
         headers: { Authorization: token ? `Bearer ${token}` : '' }
       }).catch(() => null);
+
+      if (!res || !res.ok) {
+        // Fallback POST /api/templates/delete if DELETE method is restricted by network proxy
+        await fetch(`${API_BASE_URL}/api/templates/delete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({ id, waTemplateName: tplToDelete?.waTemplateName })
+        }).catch(() => null);
+      }
     } catch (err) {
       console.warn('deleteTemplate network error:', err);
     }

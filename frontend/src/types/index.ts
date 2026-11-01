@@ -94,6 +94,7 @@ export interface Lead {
   lastCustomerMessageAt: string;
   notesCount?: number;
   unreadCount?: number;
+  labels?: string[];
 }
 
 export interface LeadAssignmentHistory {
@@ -204,6 +205,24 @@ export interface Treatment {
   startingPrice?: number;
   description?: string;
   benefits?: string;
+}
+
+
+export interface ChatLabel {
+  id: string;
+  key: string;
+  name: string;
+  color: string;
+  dotColor?: string;
+  bgColor?: string;
+  description?: string;
+  company?: string;
+  allowedRoles?: string;
+  isActive?: boolean;
+  isSystem?: boolean;
+  orderIndex?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface LeadStageConfig {

@@ -1004,6 +1004,7 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/treatments' || 
     pathname === '/api/courses' || 
     pathname === '/api/stages' ||
+    pathname === '/api/chat-labels' ||
     pathname === '/api/coordinators' ||
     pathname === '/api/templates' ||
     pathname.startsWith('/api/templates')
@@ -4006,6 +4007,384 @@ const server = http.createServer(async (req, res) => {
   }
 
   // =============================================================================
+  // 8g. REST: Chat Assign Labels Management (Supabase Cloud Sync)
+  // =============================================================================
+
+  // 8g1. GET /api/chat-labels & GET /api/admin/chat-labels (Fetch configured labels)
+  if (req.method === 'GET' && (pathname === '/api/chat-labels' || pathname === '/api/admin/chat-labels')) {
+    const isSuperAdminReq = pathname === '/api/admin/chat-labels';
+    if (isSuperAdminReq && !requireSuperAdmin(authUser, res)) return;
+
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const labels = await prisma.chatLabel.findMany({
+          orderBy: { orderIndex: 'asc' }
+        });
+        if (Array.isArray(labels) && labels.length > 0) {
+          const filtered = isSuperAdminReq
+            ? labels
+            : labels.filter(lbl => lbl.isActive !== false);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, labels: filtered }));
+          return;
+        }
+      } catch (err) {
+        console.warn('⚠️ Error querying chat_labels:', err.message);
+      }
+    }
+
+    // Default canonical preset labels fallback
+    const defaultLabels = [
+      { id: 'vip', key: 'vip', name: 'VIP Patient', color: '#f59e0b', dotColor: 'bg-amber-400', bgColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30', description: 'High-priority VIP customer requiring dedicated attention', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 0 },
+      { id: 'hot', key: 'hot', name: 'Hot Lead', color: '#f43f5e', dotColor: 'bg-rose-400', bgColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30', description: 'Urgent prospective patient or student ready to convert', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 1 },
+      { id: 'booked', key: 'booked', name: 'Consultation Booked', color: '#10b981', dotColor: 'bg-emerald-400', bgColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', description: 'Clinical consultation or course admission confirmed', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 2 },
+      { id: 'followup', key: 'followup', name: 'Follow-up Needed', color: '#0ea5e9', dotColor: 'bg-sky-400', bgColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30', description: 'Pending client reply or scheduled follow-up outreach', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 3 },
+      { id: 'prescription', key: 'prescription', name: 'Prescription Sent', color: '#8b5cf6', dotColor: 'bg-purple-400', bgColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30', description: 'Medical prescription or academic syllabus forwarded', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 4 }
+    ];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, labels: defaultLabels }));
+    return;
+  }
+
+  // 8g2. GET /api/lead-labels (Fetch all lead label assignments)
+  if (req.method === 'GET' && pathname === '/api/lead-labels') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const leadIdParam = parsedUrl.query.leadId;
+        const whereClause = leadIdParam ? { leadId: String(leadIdParam) } : {};
+        const rows = await prisma.leadLabelAssignment.findMany({
+          where: whereClause,
+          select: { leadId: true, labelId: true }
+        });
+
+        const leadLabels = {};
+        for (const row of rows) {
+          if (!leadLabels[row.leadId]) leadLabels[row.leadId] = [];
+          if (!leadLabels[row.leadId].includes(row.labelId)) {
+            leadLabels[row.leadId].push(row.labelId);
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, leadLabels }));
+        return;
+      } catch (err) {
+        console.warn('⚠️ Error fetching lead_label_assignments:', err.message);
+      }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, leadLabels: {} }));
+    return;
+  }
+
+  // 8g3. POST /api/admin/chat-labels (Super Admin: Add new assign label to Supabase)
+  if (req.method === 'POST' && pathname === '/api/admin/chat-labels') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const name = String(payload.name || '').trim();
+        if (!name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Label name is required.' }));
+          return;
+        }
+
+        const rawKey = String(payload.key || name)
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9_]/g, '_')
+          .slice(0, 45);
+
+        const color = String(payload.color || '#f59e0b').trim();
+        const dotColor = payload.dotColor ? String(payload.dotColor).trim() : null;
+        const bgColor = payload.bgColor ? String(payload.bgColor).trim() : null;
+        const description = payload.description ? String(payload.description).trim() : null;
+        const company = String(payload.company || 'ALL').trim();
+        const allowedRoles = payload.allowedRoles ? (Array.isArray(payload.allowedRoles) ? JSON.stringify(payload.allowedRoles) : String(payload.allowedRoles)) : 'ALL';
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.chatLabel.findFirst({
+            where: {
+              OR: [
+                { key: { equals: rawKey, mode: 'insensitive' } },
+                { name: { equals: name, mode: 'insensitive' } }
+              ]
+            }
+          });
+
+          if (existing) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: `An assign label with key "${rawKey}" or name "${name}" already exists.`
+            }));
+            return;
+          }
+
+          const count = await prisma.chatLabel.count();
+          const labelId = `lbl-${rawKey}-${Date.now().toString(36)}`;
+
+          const created = await prisma.chatLabel.create({
+            data: {
+              id: labelId,
+              key: rawKey,
+              name,
+              color,
+              dotColor,
+              bgColor,
+              description,
+              company,
+              allowedRoles,
+              isActive: true,
+              isSystem: false,
+              orderIndex: count
+            }
+          });
+
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, label: created, message: 'Assign label created successfully in Supabase.' }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Label created (offline mode)' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8g4. PUT/PATCH /api/admin/chat-labels/:id (Super Admin: Edit label)
+  if ((req.method === 'PUT' || req.method === 'PATCH') && pathname.startsWith('/api/admin/chat-labels/') && !pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const labelId = pathname.replace('/api/admin/chat-labels/', '').trim();
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.chatLabel.findUnique({ where: { id: labelId } });
+          if (!existing) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Assign label not found.' }));
+            return;
+          }
+
+          const updateData = {};
+          if (payload.name !== undefined) updateData.name = String(payload.name).trim();
+          if (payload.color !== undefined) updateData.color = String(payload.color).trim();
+          if (payload.dotColor !== undefined) updateData.dotColor = payload.dotColor ? String(payload.dotColor).trim() : null;
+          if (payload.bgColor !== undefined) updateData.bgColor = payload.bgColor ? String(payload.bgColor).trim() : null;
+          if (payload.description !== undefined) updateData.description = payload.description ? String(payload.description).trim() : null;
+          if (payload.company !== undefined) updateData.company = String(payload.company).trim();
+          if (payload.allowedRoles !== undefined) {
+            updateData.allowedRoles = Array.isArray(payload.allowedRoles) ? JSON.stringify(payload.allowedRoles) : String(payload.allowedRoles);
+          }
+
+          const updated = await prisma.chatLabel.update({
+            where: { id: labelId },
+            data: updateData
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            label: updated,
+            message: 'Assign label updated successfully in Supabase.'
+          }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Assign label updated (offline mode)' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8g5. PATCH/POST /api/admin/chat-labels/:id/status (Super Admin: Activate/Deactivate label)
+  if ((req.method === 'PATCH' || req.method === 'POST') && pathname.startsWith('/api/admin/chat-labels/') && pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const labelId = pathname.replace('/api/admin/chat-labels/', '').replace('/status', '').trim();
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.chatLabel.findUnique({ where: { id: labelId } });
+          if (!existing) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Assign label not found.' }));
+            return;
+          }
+
+          const newStatus = payload.isActive !== undefined ? Boolean(payload.isActive) : !existing.isActive;
+
+          await prisma.chatLabel.update({
+            where: { id: labelId },
+            data: { isActive: newStatus }
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            isActive: newStatus,
+            message: `Label "${existing.name}" is now ${newStatus ? 'active' : 'inactive'}.`
+          }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Status updated (offline)' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8g6. DELETE /api/admin/chat-labels/:id (Super Admin: Delete custom label)
+  if (req.method === 'DELETE' && pathname.startsWith('/api/admin/chat-labels/')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const labelId = pathname.replace('/api/admin/chat-labels/', '').trim();
+    try {
+      const prisma = getPrisma();
+      if (prisma && getDbStatus()) {
+        const existing = await prisma.chatLabel.findUnique({ where: { id: labelId } });
+        if (!existing) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Assign label not found.' }));
+          return;
+        }
+
+        if (existing.isSystem) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `System label "${existing.name}" cannot be deleted. You can deactivate it instead.`
+          }));
+          return;
+        }
+
+        // Clean up assignments first
+        await prisma.leadLabelAssignment.deleteMany({ where: { labelId } });
+        // Delete label definition
+        await prisma.chatLabel.delete({ where: { id: labelId } });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          message: `Assign label "${existing.name}" deleted successfully.`
+        }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Assign label deleted (offline)' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // 8g7. POST /api/leads/:leadId/labels (Staff: Assign / Toggle label on lead in Supabase)
+  if (req.method === 'POST' && pathname.startsWith('/api/leads/') && pathname.endsWith('/labels')) {
+    const parts = pathname.split('/');
+    const leadId = parts[3];
+    if (!leadId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Lead ID is required.' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          if (Array.isArray(payload.labels)) {
+            await prisma.leadLabelAssignment.deleteMany({ where: { leadId } });
+            for (const lblId of payload.labels) {
+              const assignId = `lla-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+              await prisma.leadLabelAssignment.create({
+                data: {
+                  id: assignId,
+                  leadId,
+                  labelId: String(lblId),
+                  assignedBy: authUser?.id || null
+                }
+              }).catch(() => null);
+            }
+          } else if (payload.labelId) {
+            const labelId = String(payload.labelId).trim();
+            const action = payload.action || 'toggle';
+
+            const existingAssign = await prisma.leadLabelAssignment.findFirst({
+              where: { leadId, labelId }
+            });
+
+            if (action === 'remove' || (action === 'toggle' && existingAssign)) {
+              if (existingAssign) {
+                await prisma.leadLabelAssignment.deleteMany({
+                  where: { leadId, labelId }
+                });
+              }
+            } else if (action === 'add' || (action === 'toggle' && !existingAssign)) {
+              const assignId = `lla-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+              await prisma.leadLabelAssignment.create({
+                data: {
+                  id: assignId,
+                  leadId,
+                  labelId,
+                  assignedBy: authUser?.id || null
+                }
+              }).catch(() => null);
+            }
+          }
+
+          const currentAssignments = await prisma.leadLabelAssignment.findMany({
+            where: { leadId },
+            select: { labelId: true }
+          });
+
+          const currentLabels = currentAssignments.map(r => r.labelId);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            leadId,
+            labels: currentLabels,
+            message: 'Lead labels updated in Supabase.'
+          }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, leadId, labels: payload.labels || [payload.labelId] }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // =============================================================================
   // 9. REST: Course Management (CRAS Academic Programs)
   // =============================================================================
 
@@ -4668,6 +5047,21 @@ const server = http.createServer(async (req, res) => {
               })
             ];
 
+        let leadLabelsMap = {};
+        try {
+          const leadIds = leads.map(l => l.id);
+          if (leadIds.length > 0) {
+            const assignRows = await prisma.$queryRawUnsafe(
+              `SELECT lead_id, label_id FROM public.lead_label_assignments WHERE lead_id = ANY($1::text[]);`,
+              leadIds
+            );
+            for (const r of assignRows) {
+              if (!leadLabelsMap[r.lead_id]) leadLabelsMap[r.lead_id] = [];
+              leadLabelsMap[r.lead_id].push(r.label_id);
+            }
+          }
+        } catch (e) {}
+
         const enrichedLeads = leads.map(l => {
           const compCode = resolveLeadCompany(l);
           const comp = COMPANIES[compCode] || COMPANIES.RWC;
@@ -4684,7 +5078,8 @@ const server = http.createServer(async (req, res) => {
             companyTag: comp.tag,
             companyColor: comp.colorHex,
             companyPhoneNumberId: comp.phoneId,
-            companyPhoneNumber: comp.phoneNumber
+            companyPhoneNumber: comp.phoneNumber,
+            labels: leadLabelsMap[l.id] || []
           };
         });
 
@@ -5111,7 +5506,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 10b2. REST: Update Lead Treatment & Serial Number & Stage
-  const isLeadsUpdateRoute = (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || (pathname.startsWith('/api/leads/') && pathname !== '/api/leads/create' && pathname !== '/api/leads/assign' && pathname !== '/api/leads/delete' && !pathname.startsWith('/api/leads/delete/')));
+  const isLeadsUpdateRoute = (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || (pathname.startsWith('/api/leads/') && pathname !== '/api/leads/create' && pathname !== '/api/leads/assign' && pathname !== '/api/leads/delete' && !pathname.startsWith('/api/leads/delete/') && !pathname.endsWith('/labels')));
   if (isLeadsUpdateRoute) {
     let body = '';
     req.on('data', chunk => { body += chunk; });

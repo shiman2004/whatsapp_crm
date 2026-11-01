@@ -9,6 +9,8 @@ import { BookUpdateAppointmentModal } from '../appointments/BookUpdateAppointmen
 import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
 import { getLeadCompany } from '../../utils/companyUtils';
 import { 
+  ChevronDown,
+  Check,
   ChevronRight, 
   ChevronLeft,
   ChevronsLeft,
@@ -69,6 +71,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   // Scroll container ref for direct "Scroll to Bottom" and "Scroll to Top"
   const tableContainerRef = useRef<HTMLDivElement>(null);
   const [showScrollTop, setShowScrollTop] = useState(false);
+  const [openStageMenuLeadId, setOpenStageMenuLeadId] = useState<string | null>(null);
+  const [openSourceMenuLeadId, setOpenSourceMenuLeadId] = useState<string | null>(null);
   const [noteLeadId, setNoteLeadId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -905,28 +909,73 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     {/* 5. Source Channel (icon-only) */}
                     <td className="py-3.5 px-2 min-w-[90px]" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
-                        <div 
-                          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border cursor-pointer transition-all shadow-xs whitespace-nowrap ${sourceInfo.badgeClass}`}
-                          title={`Source: ${sourceInfo.label}. Click to switch acquisition channel.`}
+                        <button
+                          type="button"
+                          disabled={!canModifyAssignment(lead)}
+                          onClick={() => {
+                            if (canModifyAssignment(lead)) {
+                              setOpenSourceMenuLeadId(openSourceMenuLeadId === lead.id ? null : lead.id);
+                              setOpenStageMenuLeadId(null);
+                            }
+                          }}
+                          className={`inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-semibold border transition-all shadow-xs whitespace-nowrap ${sourceInfo.badgeClass} ${
+                            canModifyAssignment(lead) ? 'cursor-pointer hover:brightness-110 active:scale-95' : 'cursor-default'
+                          }`}
+                          title={`Source: ${sourceInfo.label}. ${canModifyAssignment(lead) ? 'Click to switch acquisition channel.' : ''}`}
                         >
                           {sourceInfo.icon}
-                        </div>
-                        {canModifyAssignment(lead) && (
-                          <select
-                            value={sourceInfo.key}
-                            onChange={(e) => updateLeadSource(lead.id, e.target.value)}
-                            aria-label="Change Lead Source"
-                            // Do not use opacity: 0 here. Chromium applies that opacity
-                            // to the native option popup as well, making non-selected
-                            // sources nearly invisible on the dark table.
-                            className="absolute inset-0 w-full h-full cursor-pointer appearance-none border-0 bg-transparent text-transparent [color-scheme:dark]"
-                            title={`Current Source: ${sourceInfo.label}. Click to change (WhatsApp, Facebook, Instagram, Website).`}
-                          >
-                            <option value="whatsapp" >WhatsApp</option>
-                            <option value="facebook" >Facebook</option>
-                            <option value="instagram" >Instagram</option>
-                            <option value="website" >Website</option>
-                          </select>
+                          {canModifyAssignment(lead) && <ChevronDown className="w-3 h-3 opacity-60" />}
+                        </button>
+
+                        {canModifyAssignment(lead) && openSourceMenuLeadId === lead.id && (
+                          <>
+                            {/* Backdrop to close on outside click */}
+                            <div 
+                              className="fixed inset-0 z-40 cursor-default" 
+                              onClick={() => setOpenSourceMenuLeadId(null)} 
+                            />
+
+                            {/* Dropdown Menu */}
+                            <div 
+                              className="absolute left-0 top-full mt-1.5 w-48 bg-[#202C33] dark:bg-[#202C33] border border-[#2A3942] dark:border-[#2A3942] rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#2A3942]">
+                                Source Channel
+                              </div>
+                              <div className="py-1">
+                                {[
+                                  { key: 'whatsapp', label: 'WhatsApp', icon: '💬' },
+                                  { key: 'facebook', label: 'Facebook', icon: '📘' },
+                                  { key: 'instagram', label: 'Instagram', icon: '📸' },
+                                  { key: 'website', label: 'Website', icon: '🌐' }
+                                ].map((src) => {
+                                  const isSelected = sourceInfo.key === src.key;
+                                  return (
+                                    <button
+                                      key={src.key}
+                                      type="button"
+                                      onClick={() => {
+                                        updateLeadSource(lead.id, src.key);
+                                        setOpenSourceMenuLeadId(null);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer ${
+                                        isSelected 
+                                          ? 'bg-teal-500/15 text-teal-300' 
+                                          : 'text-slate-200 hover:bg-[#111B21] hover:text-white'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2">
+                                        <span>{src.icon}</span>
+                                        <span>{src.label}</span>
+                                      </div>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-teal-400 stroke-[2.5]" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
                         )}
                       </div>
                     </td>
@@ -1083,20 +1132,69 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     {/* 14. Output */}
                     <td className="py-3.5 px-3 min-w-[220px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       <div className="relative inline-block">
-                        <StageBadge stage={lead.stage} />
-                        <select
-                          value={lead.stage}
-                          onChange={(e) => updateLeadStage(lead.id, e.target.value as LeadStage, 'Output changed via Pipeline table')}
-                          aria-label={`Change output stage for ${lead.customer?.displayName || 'lead'}`}
-                          className="absolute inset-0 h-full w-full cursor-pointer appearance-none border-0 bg-transparent text-transparent [color-scheme:dark]"
-                          title="Change lead output stage"
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setOpenStageMenuLeadId(openStageMenuLeadId === lead.id ? null : lead.id);
+                            setOpenSourceMenuLeadId(null);
+                          }}
+                          className="group inline-flex items-center gap-1.5 cursor-pointer focus:outline-none transition-transform active:scale-95"
+                          title="Click to change lead output stage"
                         >
-                          {activeStages.map((stage) => (
-                            <option key={stage.id} value={stage.key} >
-                              {stage.label}
-                            </option>
-                          ))}
-                        </select>
+                          <StageBadge stage={lead.stage} />
+                          <ChevronDown className="w-3 h-3 text-slate-400 group-hover:text-slate-200 transition-colors" />
+                        </button>
+
+                        {openStageMenuLeadId === lead.id && (
+                          <>
+                            {/* Backdrop to close on outside click */}
+                            <div 
+                              className="fixed inset-0 z-40 cursor-default" 
+                              onClick={() => setOpenStageMenuLeadId(null)} 
+                            />
+
+                            {/* Custom Stage Dropdown Menu */}
+                            <div 
+                              className="absolute left-0 top-full mt-1.5 w-64 bg-[#202C33] dark:bg-[#202C33] border border-[#2A3942] dark:border-[#2A3942] rounded-xl shadow-2xl z-50 py-1.5 max-h-72 overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#2A3942] flex items-center justify-between">
+                                <span>Change Output Stage</span>
+                                <span className="text-[9px] text-[#8696a0] font-mono">{activeStages.length} stages</span>
+                              </div>
+
+                              <div className="py-1">
+                                {activeStages.map((stage) => {
+                                  const isSelected = lead.stage === stage.key;
+                                  return (
+                                    <button
+                                      key={stage.id}
+                                      type="button"
+                                      onClick={() => {
+                                        updateLeadStage(lead.id, stage.key as LeadStage, 'Output changed via Pipeline table');
+                                        setOpenStageMenuLeadId(null);
+                                      }}
+                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer ${
+                                        isSelected 
+                                          ? 'bg-teal-500/15 text-teal-300 dark:text-teal-300 font-bold' 
+                                          : 'text-slate-200 hover:bg-[#111B21] hover:text-white'
+                                      }`}
+                                    >
+                                      <div className="flex items-center gap-2 min-w-0">
+                                        <span 
+                                          className="w-2 h-2 rounded-full shrink-0"
+                                          style={{ backgroundColor: stage.color || '#fbbf24' }}
+                                        />
+                                        <span className="truncate">{stage.label}</span>
+                                      </div>
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0 stroke-[2.5]" />}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </div>
                     </td>
 

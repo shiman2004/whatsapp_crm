@@ -401,6 +401,33 @@
 }
 
 /* ------------------------------------------------------------------ */
+/* ------------------------------------------------------------------ */
+/* Universal Select & Option Dropdown Legibility Normalization         */
+/* ------------------------------------------------------------------ */
+
+select {
+  color-scheme: dark;
+}
+
+[data-theme="light"] select,
+.light select {
+  color-scheme: light;
+}
+
+select option {
+  background-color: #202c33 !important;
+  color: #e9edef !important;
+  font-weight: 500;
+  padding: 6px 10px;
+}
+
+[data-theme="light"] select option,
+.light select option {
+  background-color: #ffffff !important;
+  color: #111b21 !important;
+}
+
+/* ------------------------------------------------------------------ */
 /* Pipeline Management Table Light & Dark Mode Adaptability           */
 /* ------------------------------------------------------------------ */
 .pipeline-table {

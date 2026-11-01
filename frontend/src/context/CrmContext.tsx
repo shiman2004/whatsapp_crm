@@ -17,6 +17,7 @@ import {
   AuditLog,
   LeadStage,
   LeadStageConfig,
+  ChatLabel,
   LanguageCode,
   OnboardingSession,
   WhatsAppConnectionStatus,
@@ -114,6 +115,15 @@ const mergeDefaultStages = (stageList: LeadStageConfig[]): LeadStageConfig[] => 
   return [...existing, ...DEFAULT_STAGES.filter(stage => !existingKeys.has(stage.key))]
     .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 };
+
+
+export const DEFAULT_CHAT_PRESET_LABELS: ChatLabel[] = [
+  { id: 'vip', key: 'vip', name: 'VIP Patient', color: '#f59e0b', dotColor: 'bg-amber-400', bgColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30', description: 'High-priority VIP customer requiring dedicated attention', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 0 },
+  { id: 'hot', key: 'hot', name: 'Hot Lead', color: '#f43f5e', dotColor: 'bg-rose-400', bgColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30', description: 'Urgent prospective patient or student ready to convert', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 1 },
+  { id: 'booked', key: 'booked', name: 'Consultation Booked', color: '#10b981', dotColor: 'bg-emerald-400', bgColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', description: 'Clinical consultation or course admission confirmed', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 2 },
+  { id: 'followup', key: 'followup', name: 'Follow-up Needed', color: '#0ea5e9', dotColor: 'bg-sky-400', bgColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30', description: 'Pending client reply or scheduled follow-up outreach', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 3 },
+  { id: 'prescription', key: 'prescription', name: 'Prescription Sent', color: '#8b5cf6', dotColor: 'bg-purple-400', bgColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30', description: 'Medical prescription or academic syllabus forwarded', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 4 }
+];
 
 interface CrmContextType {
   // Authentication & RBAC
@@ -232,6 +242,17 @@ interface CrmContextType {
   reorderStages: (order: { id: string; orderIndex: number }[]) => Promise<{ success: boolean; error?: string }>;
   toggleStageStatus: (id: string, isActive: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteStage: (id: string) => Promise<{ success: boolean; error?: string }>;
+  // Chat Assign Labels & Supabase Cloud Sync
+  chatLabels: ChatLabel[];
+  leadLabels: Record<string, string[]>;
+  fetchChatLabels: () => Promise<void>;
+  fetchLeadLabels: () => Promise<void>;
+  addChatLabel: (label: Partial<ChatLabel>) => Promise<{ success: boolean; error?: string; label?: ChatLabel }>;
+  updateChatLabel: (id: string, updates: Partial<ChatLabel>) => Promise<{ success: boolean; error?: string; label?: ChatLabel }>;
+  toggleChatLabelStatus: (id: string, isActive?: boolean) => Promise<{ success: boolean; error?: string; isActive?: boolean }>;
+  deleteChatLabel: (id: string) => Promise<{ success: boolean; error?: string }>;
+  toggleLeadLabel: (leadId: string, labelId: string) => Promise<void>;
+
 
   fetchCourses: () => Promise<void>;
   addCourse: (course: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
@@ -425,6 +446,38 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return stored.length > 0 ? stored : INITIAL_TREATMENTS.filter(t => t.company === 'CRAS');
   });
   const [stages, setStages] = useState<LeadStageConfig[]>(() => mergeDefaultStages(getStored('rw_crm_stages', DEFAULT_STAGES)));
+  const [chatLabels, setChatLabels] = useState<ChatLabel[]>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_chat_labels');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_CHAT_PRESET_LABELS;
+  });
+
+  const [leadLabels, setLeadLabels] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_lead_labels');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_lead_labels', JSON.stringify(leadLabels));
+    } catch {}
+  }, [leadLabels]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_chat_labels', JSON.stringify(chatLabels));
+    } catch {}
+  }, [chatLabels]);
+
   const [superAdmins, setSuperAdmins] = useState<User[]>(() => {
     const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
     return storedUsers.filter(u => 
@@ -909,6 +962,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Dynamic Catalogs & Stage Config Fetch
       fetchStages().catch(() => null);
+      fetchChatLabels().catch(() => null);
+      fetchLeadLabels().catch(() => null);
       fetchCourses().catch(() => null);
       fetchTreatments().catch(() => null);
       fetchQuickResponses().catch(() => null);
@@ -3317,6 +3372,173 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Category Updated', 'Changes saved to catalogue', 'info');
   };
 
+  
+  // Dynamic Chat Assign Labels (Supabase Cloud Sync)
+  const fetchChatLabels = useCallback(async () => {
+    try {
+      const isSuper = currentUser?.role === 'super_admin';
+      const token = await ensureValidAuthToken();
+      const endpoint = isSuper ? `${API_BASE_URL}/api/admin/chat-labels` : `${API_BASE_URL}/api/chat-labels`;
+      const res = await fetch(endpoint, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.labels) && data.labels.length > 0) {
+          setChatLabels(data.labels);
+          localStorage.setItem('rw_crm_chat_labels', JSON.stringify(data.labels));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch chat labels:', e);
+    }
+  }, [currentUser?.role]);
+
+  const fetchLeadLabels = useCallback(async () => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/lead-labels`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && data.leadLabels) {
+          setLeadLabels(prev => ({
+            ...prev,
+            ...data.leadLabels
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch lead labels:', e);
+    }
+  }, []);
+
+  const addChatLabel = async (labelData: Partial<ChatLabel>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(labelData)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to create assign label' };
+      }
+      await fetchChatLabels();
+      notify('Assign Label Created', `Label "${labelData.name}" saved to Supabase.`, 'success');
+      return { success: true, label: data.label };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error creating assign label' };
+    }
+  };
+
+  const updateChatLabel = async (id: string, updates: Partial<ChatLabel>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update assign label' };
+      }
+      await fetchChatLabels();
+      notify('Assign Label Updated', `Label updated in Supabase.`, 'success');
+      return { success: true, label: data.label };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error updating assign label' };
+    }
+  };
+
+  const toggleChatLabelStatus = async (id: string, isActive?: boolean) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isActive })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to toggle label status' };
+      }
+      await fetchChatLabels();
+      notify('Status Updated', data.message || 'Assign label status updated.', 'info');
+      return { success: true, isActive: data.isActive };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error toggling label status' };
+    }
+  };
+
+  const deleteChatLabel = async (id: string) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to delete assign label' };
+      }
+      await fetchChatLabels();
+      notify('Assign Label Deleted', data.message || 'Assign label deleted.', 'info');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error deleting assign label' };
+    }
+  };
+
+  const toggleLeadLabel = async (leadId: string, labelId: string) => {
+    // 1. Optimistic local state update + localStorage
+    setLeadLabels(prev => {
+      const current = prev[leadId] || [];
+      const updated = current.includes(labelId)
+        ? current.filter(id => id !== labelId)
+        : [...current, labelId];
+      return { ...prev, [leadId]: updated };
+    });
+
+    // 2. Persist in Supabase Cloud
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/leads/${leadId}/labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ labelId, action: 'toggle' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.labels)) {
+          setLeadLabels(prev => ({
+            ...prev,
+            [leadId]: data.labels
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not sync lead label to Supabase, saved locally:', e);
+    }
+  };
+
   // Dynamic Configuration & Super Admin Methods
   const fetchStages = useCallback(async () => {
     try {
@@ -5018,6 +5240,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stages,
     courses,
     superAdmins,
+    chatLabels,
+    leadLabels,
+    fetchChatLabels,
+    fetchLeadLabels,
+    addChatLabel,
+    updateChatLabel,
+    toggleChatLabelStatus,
+    deleteChatLabel,
+    toggleLeadLabel,
     fetchStages,
     addStage,
     updateStage,

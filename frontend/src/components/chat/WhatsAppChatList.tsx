@@ -83,7 +83,10 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     chatListFilter,
     setChatListFilter,
     totalUnreadCountForUser,
-    userReadTimestamps
+    userReadTimestamps,
+    chatLabels,
+    leadLabels,
+    toggleLeadLabel
   } = useCrm();
 
   const [search, setSearch] = useState('');
@@ -144,16 +147,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     }
   });
 
-  const [leadLabels, setLeadLabels] = useState<Record<string, string[]>>(() => {
-    try {
-      const saved = localStorage.getItem('rw_crm_lead_labels');
-      return saved ? JSON.parse(saved) : {};
-    } catch {
-      return {};
-    }
-  });
-  
-  const menuRef = useRef<HTMLDivElement>(null);
+  // leadLabels provided by useCrm()
+const menuRef = useRef<HTMLDivElement>(null);
 
   // Save changes to localStorage
   useEffect(() => {
@@ -180,13 +175,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     } catch (e) { console.warn(e); }
   }, [lockedLeadIds]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem('rw_crm_lead_labels', JSON.stringify(leadLabels));
-    } catch (e) { console.warn(e); }
-  }, [leadLabels]);
-
-  // Close context menu on outside click
+  // leadLabels persistence handled in useCrm()
+// Close context menu on outside click
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -392,17 +382,33 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
     setContextMenuLeadId(null);
   };
 
-  const toggleLeadLabel = (leadId: string, labelId: string) => {
-    setLeadLabels(prev => {
-      const current = prev[leadId] || [];
-      const updated = current.includes(labelId)
-        ? current.filter(id => id !== labelId)
-        : [...current, labelId];
-      return { ...prev, [leadId]: updated };
-    });
-  };
+  // toggleLeadLabel provided by useCrm()
 
   const activeContextMenuLead = leads.find(l => l.id === contextMenuLeadId);
+
+  // Dynamic labels with role & company access filtering
+  const allAvailableLabels = chatLabels && chatLabels.length > 0 ? chatLabels : PRESET_LABELS;
+  const availableLabels = allAvailableLabels.filter((lbl: any) => {
+    if (lbl.isActive === false) return false;
+    // Check company scope
+    if (lbl.company && lbl.company !== 'ALL' && activeContextMenuLead) {
+      const leadComp = getLeadCompany(activeContextMenuLead).code;
+      if (lbl.company !== leadComp) return false;
+    }
+    // Check role access permissions:
+    if (lbl.allowedRoles && lbl.allowedRoles !== 'ALL' && currentUser?.role) {
+      try {
+        const allowed = Array.isArray(lbl.allowedRoles)
+          ? lbl.allowedRoles
+          : (lbl.allowedRoles.startsWith('[') ? JSON.parse(lbl.allowedRoles) : lbl.allowedRoles.split(',').map((s: string) => s.trim()));
+        if (!allowed.includes('ALL') && !allowed.includes('all') && !allowed.includes(currentUser.role)) {
+          return false;
+        }
+      } catch {}
+    }
+    return true;
+  });
+
 
   return (
     <div className={`w-full md:w-80 lg:w-[380px] bg-white dark:bg-[#111b21] border-r border-[#E0E5E7] dark:border-[#222D34] flex flex-col h-full select-none shrink-0 ${className}`}>
@@ -697,7 +703,7 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
             const isPinned = pinnedLeadIds.has(lead.id);
             const isFav = favouriteLeadIds.has(lead.id);
             const isLocked = lockedLeadIds.has(lead.id);
-            const appliedLabels = (leadLabels[lead.id] || []).map(id => PRESET_LABELS.find(p => p.id === id)).filter(Boolean);
+            const appliedLabels = (leadLabels[lead.id] || lead.labels || []).map(id => allAvailableLabels.find((p: any) => p.id === id || (p as any).key === id) || PRESET_LABELS.find(p => p.id === id || (p as any).key === id)).filter(Boolean);
 
             // Format timestamp matching WhatsApp Web: "12:27", "Yesterday", "Sun", "10/10/26"
             const latestTimeMs = getLeadLatestTime(lead);
@@ -786,12 +792,22 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   {/* Micro Tag Badges (VIP, Hot Lead, etc.) */}
                   {appliedLabels.length > 0 && (
                     <div className="flex items-center gap-1 mt-0.5 flex-wrap">
-                      {appliedLabels.map((lbl: any) => (
-                        <span key={lbl.id} className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border ${lbl.color}`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${lbl.dot}`} />
-                          <span>{lbl.name}</span>
-                        </span>
-                      ))}
+                      {appliedLabels.map((lbl: any) => {
+                        const isCustom = !lbl.bgColor && !lbl.color?.includes('bg-') && lbl.color;
+                        return (
+                          <span
+                            key={lbl.id || lbl.key}
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-semibold border ${lbl.bgColor || lbl.color || 'bg-amber-500/20 text-amber-300 border-amber-500/30'}`}
+                            style={isCustom ? { backgroundColor: `${lbl.color}20`, color: lbl.color, borderColor: `${lbl.color}40` } : undefined}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                              style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                            />
+                            <span>{lbl.name}</span>
+                          </span>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -959,21 +975,25 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
                   <Tag className="w-3 h-3" />
                   <span>Assign Labels</span>
                 </div>
-                {PRESET_LABELS.map(lbl => {
-                  const isActive = (leadLabels[contextMenuLeadId] || []).includes(lbl.id);
+                {availableLabels.map((lbl: any) => {
+                  const isActive = (leadLabels[contextMenuLeadId] || []).includes(lbl.id) || (leadLabels[contextMenuLeadId] || []).includes(lbl.key);
+                  const isCustom = !lbl.dotColor && !lbl.dot && lbl.color;
                   return (
                     <div
-                      key={lbl.id}
-                      onClick={() => toggleLeadLabel(contextMenuLeadId, lbl.id)}
-                      className="wa-context-item justify-between py-2"
+                      key={lbl.id || lbl.key}
+                      onClick={() => toggleLeadLabel(contextMenuLeadId, lbl.id || lbl.key)}
+                      className="wa-context-item justify-between py-2 cursor-pointer"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className={`w-2 h-2 rounded-full ${lbl.dot}`} />
-                        <span className={isActive ? 'text-white font-semibold' : 'text-[#d1d7db]'}>
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span
+                          className={`w-2 h-2 rounded-full shrink-0 ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                          style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                        />
+                        <span className={`truncate ${isActive ? 'text-white font-semibold' : 'text-[#d1d7db]'}`}>
                           {lbl.name}
                         </span>
                       </div>
-                      {isActive && <Check className="w-3.5 h-3.5 text-[#00a884] stroke-[2.5]" />}
+                      {isActive && <Check className="w-3.5 h-3.5 text-[#00a884] stroke-[2.5] shrink-0" />}
                     </div>
                   );
                 })}

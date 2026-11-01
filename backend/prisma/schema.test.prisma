@@ -280,6 +280,47 @@ model LeadStageConfig {
   @@map("lead_stages")
 }
 
+
+// 4c. Dynamic Chat / Assign Labels Configuration
+model ChatLabel {
+  id           String   @id @db.VarChar(50)
+  key          String   @unique @db.VarChar(50)
+  name         String   @db.VarChar(100)
+  color        String   @db.VarChar(50)
+  dotColor     String?  @map("dot_color") @db.VarChar(50)
+  bgColor      String?  @map("bg_color") @db.VarChar(100)
+  description  String?  @db.Text
+  company      String?  @default("ALL") @db.VarChar(50)
+  allowedRoles String?  @default("ALL") @map("allowed_roles") @db.VarChar(255)
+  isActive     Boolean  @default(true) @map("is_active")
+  isSystem     Boolean  @default(false) @map("is_system")
+  orderIndex   Int      @default(0) @map("order_index")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  assignments  LeadLabelAssignment[]
+
+  @@index([orderIndex])
+  @@index([isActive])
+  @@map("chat_labels")
+}
+
+model LeadLabelAssignment {
+  id         String    @id @default(uuid()) @db.VarChar(50)
+  leadId     String    @map("lead_id") @db.VarChar(50)
+  labelId    String    @map("label_id") @db.VarChar(50)
+  assignedBy String?   @map("assigned_by") @db.VarChar(50)
+  assignedAt DateTime  @default(now()) @map("assigned_at")
+
+  lead       Lead      @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  label      ChatLabel @relation(fields: [labelId], references: [id], onDelete: Cascade)
+
+  @@unique([leadId, labelId])
+  @@index([leadId])
+  @@index([labelId])
+  @@map("lead_label_assignments")
+}
+
 // 5. WhatsApp Customers / Patients
 model Customer {
   id                String        @id @default(uuid()) @db.VarChar(50)
@@ -336,6 +377,7 @@ model Lead {
   notes                 LeadNote[]
   stageHistories        LeadStageHistory[]
   assignmentHistories   LeadAssignmentHistory[]
+  labelAssignments      LeadLabelAssignment[]
 
   @@index([customerId])
   @@index([categoryId])

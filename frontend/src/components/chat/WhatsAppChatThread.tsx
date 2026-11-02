@@ -463,6 +463,16 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                 <button 
                   onClick={() => {
                     setThreadMenuOpen(false);
+                    setCrmPanelOpen(true);
+                  }} 
+                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <ListPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Add to list (Assign Labels)</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    setThreadMenuOpen(false);
                     setSearchInChat(true);
                   }} 
                   className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
@@ -700,11 +710,14 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           </button>
 
           <button
-            onClick={() => setBgMenuOpen(false)}
+            onClick={() => {
+              setBgMenuOpen(false);
+              setCrmPanelOpen(true);
+            }}
             className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
           >
             <ListPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
-            <span>Add to list</span>
+            <span>Add to list (Assign Labels)</span>
           </button>
 
           <button

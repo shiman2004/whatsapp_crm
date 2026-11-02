@@ -23,10 +23,13 @@ import {
   RotateCcw,
   Globe,
   Building2,
-  Lock
+  Lock,
+  Tag,
+  ListPlus
 } from 'lucide-react';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { WhatsApp24hWindowInfo } from './WhatsApp24hWindowInfo';
+import { PRESET_LABELS } from './WhatsAppChatList';
 
 import { 
   formatWhatsAppDisplay, 
@@ -58,7 +61,11 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     updateLeadLanguage,
     updateLeadCompany,
     updateCustomer,
-    stages
+    stages,
+    chatLabels,
+    leadLabels,
+    toggleLeadLabel,
+    currentUser
   } = useCrm();
 
   const leadMessages = (messages || []).filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
@@ -128,6 +135,50 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [treatmentDropdownOpen]);
+
+  // Assign Labels & Lists state
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [labelSearchQuery, setLabelSearchQuery] = useState('');
+  const labelPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (labelPickerRef.current && !labelPickerRef.current.contains(event.target as Node)) {
+        setLabelPickerOpen(false);
+      }
+    };
+    if (labelPickerOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [labelPickerOpen]);
+
+  const allAvailableLabels = chatLabels && chatLabels.length > 0 ? chatLabels : PRESET_LABELS;
+  const availableLabels = allAvailableLabels.filter((lbl: any) => {
+    if (lbl.isActive === false) return false;
+    if (lbl.company && lbl.company !== 'ALL' && lead.company) {
+      if (lbl.company !== lead.company) return false;
+    }
+    if (lbl.allowedRoles && lbl.allowedRoles !== 'ALL' && currentUser?.role) {
+      try {
+        const allowed = Array.isArray(lbl.allowedRoles)
+          ? lbl.allowedRoles
+          : (lbl.allowedRoles.startsWith('[') ? JSON.parse(lbl.allowedRoles) : lbl.allowedRoles.split(',').map((s: string) => s.trim()));
+        if (!allowed.includes('ALL') && !allowed.includes('all') && !allowed.includes(currentUser.role)) {
+          return false;
+        }
+      } catch {}
+    }
+    return true;
+  });
+
+  const activeLabelIds = leadLabels[lead.id] || lead.labels || [];
+  const assignedLabels = activeLabelIds.map(id => 
+    allAvailableLabels.find((l: any) => l.id === id || l.key === id) || 
+    PRESET_LABELS.find(l => l.id === id || (l as any).key === id)
+  ).filter(Boolean);
 
   const handleCopy = () => {
     if (rawPhone) {
@@ -823,6 +874,100 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             </select>
             <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
           </div>
+        </div>
+
+        {/* Assign Labels / Add to List Section */}
+        <div className="space-y-1.5 relative" ref={labelPickerRef}>
+          <div className="flex items-center justify-between">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
+              <Tag className="w-3 h-3 text-amber-400" />
+              <span>Assign Labels</span>
+            </label>
+            <button
+              type="button"
+              onClick={() => setLabelPickerOpen(prev => !prev)}
+              className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-lg bg-teal-600/20 hover:bg-teal-600/30 text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
+              title="Add to list / assign labels to this contact"
+            >
+              <ListPlus className="w-3 h-3" />
+              <span>Add to list</span>
+            </button>
+          </div>
+
+          {/* Active Assigned Labels Badges */}
+          <div className="flex flex-wrap gap-1.5 items-center min-h-[30px] p-1.5 rounded-lg bg-[#111b21] border border-slate-800">
+            {assignedLabels.length > 0 ? (
+              assignedLabels.map((lbl: any) => {
+                const isCustom = !lbl.bgColor && !lbl.color?.includes('bg-') && lbl.color;
+                return (
+                  <span
+                    key={lbl.id || lbl.key}
+                    className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-[10px] font-bold border transition-all ${
+                      lbl.bgColor || lbl.color || 'bg-amber-500/20 text-amber-300 border-amber-500/30'
+                    }`}
+                    style={isCustom ? { backgroundColor: `${lbl.color}20`, color: lbl.color, borderColor: `${lbl.color}40` } : undefined}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                      style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                    />
+                    <span>{lbl.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleLeadLabel(lead.id, lbl.id || lbl.key)}
+                      className="hover:opacity-75 p-0.5 -mr-0.5 cursor-pointer text-slate-400 hover:text-white"
+                      title={`Remove ${lbl.name}`}
+                    >
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                );
+              })
+            ) : (
+              <span className="text-[10px] text-slate-500 italic px-1">
+                No labels assigned. Click "+ Add to list" to assign.
+              </span>
+            )}
+          </div>
+
+          {/* Label Picker Dropdown Popover */}
+          {labelPickerOpen && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-[#182229] border border-slate-700 rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto">
+              <div className="flex items-center justify-between pb-1 border-b border-slate-700/80 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                <span className="flex items-center gap-1">
+                  <Tag className="w-3 h-3 text-teal-400" /> Select Assign Labels
+                </span>
+                <span className="text-[9px] text-slate-500 font-normal">Click to toggle</span>
+              </div>
+              <div className="space-y-1 pt-0.5">
+                {availableLabels.map((lbl: any) => {
+                  const isChecked = activeLabelIds.includes(lbl.id) || activeLabelIds.includes(lbl.key);
+                  const isCustom = !lbl.dotColor && !lbl.dot && lbl.color;
+                  return (
+                    <button
+                      key={lbl.id || lbl.key}
+                      type="button"
+                      onClick={() => toggleLeadLabel(lead.id, lbl.id || lbl.key)}
+                      className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                        isChecked
+                          ? 'bg-teal-950/50 text-teal-200 border border-teal-500/40'
+                          : 'hover:bg-[#202c33] text-slate-300 border border-transparent'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2">
+                        <span
+                          className={`w-2 h-2 rounded-full ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                          style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                        />
+                        <span>{lbl.name}</span>
+                      </span>
+                      {isChecked && <Check className="w-3.5 h-3.5 text-teal-400" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     )}

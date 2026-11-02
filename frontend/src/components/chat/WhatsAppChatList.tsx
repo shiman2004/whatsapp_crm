@@ -286,6 +286,13 @@ const menuRef = useRef<HTMLDivElement>(null);
     if (activeFilter === 'lost' && lead.stage !== 'lost') return false;
     if (activeFilter === 'not_eligible' && lead.stage !== 'not_eligible') return false;
 
+    // Filter by Assign Label / List
+    if (activeFilter.startsWith('label:')) {
+      const targetLabelId = activeFilter.replace('label:', '');
+      const activeTags = leadLabels[lead.id] || lead.labels || [];
+      if (!activeTags.includes(targetLabelId)) return false;
+    }
+
     // Search query
     if (search.trim()) {
       const q = search.toLowerCase();
@@ -295,7 +302,7 @@ const menuRef = useRef<HTMLDivElement>(null);
       const matchCompany = lead.company?.toLowerCase().includes(q) || lead.companyTag?.toLowerCase().includes(q);
       const activeTags = leadLabels[lead.id] || [];
       const matchTag = activeTags.some(t => {
-        const found = PRESET_LABELS.find(p => p.id === t);
+        const found = allAvailableLabels.find((p: any) => p.id === t || p.key === t) || PRESET_LABELS.find(p => p.id === t || (p as any).key === t);
         return found?.name.toLowerCase().includes(q);
       });
       if (!matchName && !matchPhone && !matchCategory && !matchCompany && !matchTag) return false;
@@ -656,6 +663,41 @@ const menuRef = useRef<HTMLDivElement>(null);
             <Heart className="w-3 h-3 text-rose-500 fill-current" />
             <span>Favourites</span>
           </button>
+
+          {/* Dynamic Assign Labels / Lists Filter Chips */}
+          {availableLabels.map((lbl: any) => {
+            const labelKey = `label:${lbl.id || lbl.key}`;
+            const isCustom = !lbl.bgColor && !lbl.color?.includes('bg-') && lbl.color;
+            const count = accessibleLeads.filter(l => {
+              const tags = leadLabels[l.id] || l.labels || [];
+              return tags.includes(lbl.id) || tags.includes(lbl.key);
+            }).length;
+
+            return (
+              <button
+                key={lbl.id || lbl.key}
+                type="button"
+                onClick={() => handleFilterSelect(activeFilter === labelKey ? 'all' : labelKey)}
+                className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-all shrink-0 flex items-center gap-1.5 border cursor-pointer ${
+                  activeFilter === labelKey
+                    ? 'bg-amber-100 text-amber-900 border-amber-400 dark:bg-amber-500/25 dark:text-amber-300 dark:border-amber-500/40 font-bold shadow-xs'
+                    : 'bg-[#f0f2f5] dark:bg-[#202c33] text-[#54656f] dark:text-[#8696a0] border-transparent hover:bg-[#e9edef] dark:hover:bg-[#2a3942]'
+                }`}
+                title={`Filter chat list by label: ${lbl.name}`}
+              >
+                <span
+                  className={`w-1.5 h-1.5 rounded-full ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                  style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                />
+                <span>{lbl.name}</span>
+                {count > 0 && (
+                  <span className="text-[10px] font-mono px-1 rounded bg-black/5 dark:bg-white/10 font-bold">
+                    {count}
+                  </span>
+                )}
+              </button>
+            );
+          })}
         </div>
       </div>
 

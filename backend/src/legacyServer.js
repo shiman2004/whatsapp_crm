@@ -855,6 +855,8 @@ const CANONICAL_USERS = [
 
 // Set of permanently deleted staff IDs to ensure they never reappear on reload
 const DELETED_USER_IDS = new Set();
+// Set of permanently deleted template IDs/names to ensure deleted templates never reappear on reload
+const DELETED_TEMPLATE_IDS = new Set();
 
 /**
  * Helper: Resolve and Authenticate CRM User from request.
@@ -1002,7 +1004,10 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/treatments' || 
     pathname === '/api/courses' || 
     pathname === '/api/stages' ||
-    pathname === '/api/coordinators'
+    pathname === '/api/chat-labels' ||
+    pathname === '/api/coordinators' ||
+    pathname === '/api/templates' ||
+    pathname.startsWith('/api/templates')
   )) return true;
   // 6. Student Portal & Controlled Device Security API Routes
   if (pathname.startsWith('/api/student/')) return true;
@@ -2799,34 +2804,413 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 5c. GET Available WhatsApp Templates from Meta Cloud API
-  if (req.method === 'GET' && (pathname === '/api/templates' || pathname === '/api/whatsapp/templates')) {
-    try {
-      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-      const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+  // 5c. WhatsApp Templates Management (Meta Cloud API & Database Sync)
+  if (pathname === '/api/templates' || pathname.startsWith('/api/templates/') || pathname === '/api/whatsapp/templates') {
+    const prisma = getPrisma();
+    const cleanSubPath = pathname.replace('/api/templates', '').replace(/^\//, '');
 
-      let metaTemplates = [];
-      if (metaToken && wabaId) {
+    // Default Fallback Templates (used only if database is completely empty and template is not deleted)
+    const DEFAULT_TEMPLATES = [
+      { id: 'tpl-rwc-en', name: '🌿 Royal Wellness Center (English - Meta Approved)', waTemplateName: 'rwc_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+      { id: 'tpl-cras-en', name: '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)', waTemplateName: 'cras_welcome_greeting', category: 'UTILITY', language: 'en', body: 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', variables: ['Dr. Perera'], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-si', name: '🌿 Royal Wellness Center (Sinhala – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_si', category: 'MARKETING', language: 'si', body: 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-ta', '🌿 Royal Wellness Center (Tamil – Meta Approved)': 'rwc_welcome_greeting_ta', name: '🌿 Royal Wellness Center (Tamil – Meta Approved)', waTemplateName: 'rwc_welcome_greeting_ta', category: 'MARKETING', language: 'ta', body: 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', variables: ['Valued Client'], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-followup-si', name: '🌿 RWC Treatment Discussion Follow-Up (Sinhala – Meta Approved)', waTemplateName: 'rwc_followup_discussion_si', category: 'MARKETING', language: 'si', body: 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', variables: [], status: 'APPROVED', approved: true },
+      { id: 'tpl-cras-course-followup-en', name: '🎓 CRAS Course Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'cras_course_followup_en', category: 'MARKETING', language: 'en', body: 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-followup-ta', name: '🌿 RWC Treatment Discussion Follow-Up (Tamil – Meta Approved)', waTemplateName: 'rwc_followup_discussion_ta', category: 'MARKETING', language: 'ta', body: 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', variables: [], status: 'APPROVED', approved: true },
+      { id: 'tpl-rwc-followup-en', name: '🌿 RWC Treatment Discussion Follow-Up (English – Meta Approved)', waTemplateName: 'rwc_followup_discussion_en', category: 'MARKETING', language: 'en', body: 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', variables: [], status: 'APPROVED', approved: true }
+    ];
+
+    // Helper: Meta language mapping
+    const getMetaLangCode = (crmLang) => {
+      switch (crmLang) {
+        case 'en': return 'en_US';
+        case 'si': return 'si_LK';
+        case 'ta': return 'ta';
+        default: return crmLang || 'en_US';
+      }
+    };
+
+    // Helper: format Meta slug
+    const formatMetaSlug = (name, customSlug) => {
+      let raw = (customSlug || name || '').trim().toLowerCase();
+      let slug = raw.replace(/[^a-z0-9_]/g, '_').replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+      if (!slug) slug = 'tpl_' + Date.now().toString(36);
+      return slug;
+    };
+
+    // 1. GET: Fetch all templates (with live Meta reconciliation)
+    if (req.method === 'GET' && (!cleanSubPath || cleanSubPath === '')) {
+      try {
+        const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+        let dbTemplates = [];
+        if (prisma && getDbStatus()) {
+          try {
+            const rawRows = await prisma.$queryRawUnsafe(`
+              SELECT 
+                id, 
+                name, 
+                COALESCE(wa_template_name, name) as "waTemplateName", 
+                category, 
+                language::text as language, 
+                COALESCE(body, content, '') as body, 
+                variables, 
+                status::text as status, 
+                meta_id as "metaId", 
+                rejected_reason as "rejectedReason", 
+                COALESCE(created_at, "createdAt", NOW()) as "createdAt", 
+                COALESCE(updated_at, NOW()) as "updatedAt"
+              FROM public.whatsapp_templates 
+              ORDER BY COALESCE(created_at, "createdAt") ASC;
+            `);
+            if (Array.isArray(rawRows)) {
+              dbTemplates = rawRows;
+            }
+          } catch (dbErr) {
+            console.warn('⚠️ [Templates DB Query Warning]:', dbErr.message);
+          }
+        }
+
+        // Filter out any templates marked as deleted
+        dbTemplates = dbTemplates.filter(t => !DELETED_TEMPLATE_IDS.has(t.id) && !DELETED_TEMPLATE_IDS.has(t.waTemplateName));
+
+        // Live reconciliation with Meta Graph API
+        let metaTemplates = [];
+        if (metaToken && wabaId) {
+          try {
+            const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=100`, {
+              headers: { 'Authorization': `Bearer ${metaToken}` }
+            });
+            const dataMeta = await resMeta.json().catch(() => ({}));
+            if (Array.isArray(dataMeta?.data)) {
+              metaTemplates = dataMeta.data;
+
+              // Reconcile status in DB
+              for (const mt of metaTemplates) {
+                const matchInDb = dbTemplates.find(dt => dt.waTemplateName === mt.name || dt.metaId === mt.id);
+                if (matchInDb && matchInDb.status !== mt.status) {
+                  matchInDb.status = mt.status;
+                  matchInDb.metaId = mt.id;
+                  if (prisma && getDbStatus()) {
+                    prisma.$executeRawUnsafe(
+                      `UPDATE public.whatsapp_templates SET status = $1::"TemplateStatus", meta_id = $2, updated_at = NOW() WHERE id = $3;`,
+                      mt.status, mt.id, matchInDb.id
+                    ).catch(() => {});
+                  }
+                }
+              }
+            }
+          } catch (e) {
+            console.warn('⚠️ [Meta Live Reconciliation Warning]:', e.message);
+          }
+        }
+
+        // If DB had no templates and nothing was explicitly deleted, fallback to pre-seeded defaults
+        if (dbTemplates.length === 0 && DELETED_TEMPLATE_IDS.size === 0) {
+          dbTemplates = DEFAULT_TEMPLATES;
+        }
+
+        // Ensure all templates formatted properly
+        const formattedTemplates = dbTemplates.map(t => {
+          let parsedVars = [];
+          if (Array.isArray(t.variables)) {
+            parsedVars = t.variables;
+          } else if (typeof t.variables === 'string') {
+            try { parsedVars = JSON.parse(t.variables); } catch { parsedVars = []; }
+          }
+          const curStatus = t.status || 'APPROVED';
+          return {
+            id: t.id,
+            name: t.name,
+            waTemplateName: t.waTemplateName || t.name,
+            category: t.category || 'UTILITY',
+            language: t.language || 'en',
+            body: t.body,
+            variables: parsedVars,
+            status: curStatus,
+            approved: curStatus === 'APPROVED',
+            metaId: t.metaId || null,
+            rejectedReason: t.rejectedReason || null,
+            createdAt: t.createdAt || new Date().toISOString(),
+            updatedAt: t.updatedAt || new Date().toISOString()
+          };
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ 
+          success: true, 
+          templates: formattedTemplates,
+          metaConnected: Boolean(metaToken && wabaId),
+          wabaId: wabaId || null 
+        }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message, templates: [] }));
+      }
+      return;
+    }
+
+    // 2. POST /api/templates (Create template & submit to Meta Graph API)
+    if (req.method === 'POST' && (!cleanSubPath || cleanSubPath === '')) {
+      let bodyData = '';
+      req.on('data', chunk => { bodyData += chunk; });
+      req.on('end', async () => {
         try {
-          const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=50`, {
+          const payload = JSON.parse(bodyData || '{}');
+          const name = String(payload.name || '').trim();
+          const body = String(payload.body || '').trim();
+          const category = (payload.category === 'MARKETING' ? 'MARKETING' : 'UTILITY');
+          const rawLang = String(payload.language || 'en').trim().toLowerCase();
+          const language = ['en', 'si', 'ta'].includes(rawLang) ? rawLang : 'en';
+          const requestedSlug = payload.waTemplateName ? String(payload.waTemplateName).trim() : null;
+
+          if (!name || !body) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Template name and body text are required.' }));
+            return;
+          }
+
+          const cleanSlug = formatMetaSlug(name, requestedSlug);
+          const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+          const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+          let metaStatus = 'PENDING';
+          let metaId = null;
+          let metaError = null;
+
+          // Build Meta Graph API body component
+          const components = [{
+            type: 'BODY',
+            text: body
+          }];
+          const varMatches = body.match(/\{\{(\d+)\}\}/g);
+          if (varMatches && varMatches.length > 0) {
+            components[0].example = {
+              body_text: [varMatches.map((_, i) => `Sample ${i + 1}`)]
+            };
+          }
+
+          // Call Meta Cloud API if token configured
+          if (metaToken && wabaId) {
+            try {
+              const metaPayload = {
+                name: cleanSlug,
+                category,
+                language: getMetaLangCode(language),
+                components
+              };
+              console.log(`🚀 [Meta Graph API] Creating Template: ${cleanSlug} (${category}, ${language})`);
+              const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates`, {
+                method: 'POST',
+                headers: {
+                  'Authorization': `Bearer ${metaToken}`,
+                  'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(metaPayload)
+              });
+              const dataMeta = await resMeta.json().catch(() => ({}));
+              if (dataMeta.error) {
+                console.warn('⚠️ [Meta Graph API Template Create Error]:', dataMeta.error);
+                metaError = dataMeta.error.error_user_msg || dataMeta.error.message || 'Meta template submission rejected.';
+                metaStatus = 'REJECTED';
+              } else if (dataMeta.id) {
+                metaId = String(dataMeta.id);
+                metaStatus = dataMeta.status || 'PENDING';
+                console.log(`✅ [Meta Graph API] Template created with ID: ${metaId}, Status: ${metaStatus}`);
+              }
+            } catch (netErr) {
+              console.warn('⚠️ [Meta Network Call Failed]:', netErr.message);
+              metaStatus = 'PENDING';
+            }
+          }
+
+          const newId = payload.id || `tpl-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          const variables = payload.variables || (varMatches ? varMatches.map((_, i) => `Param ${i + 1}`) : []);
+
+          if (prisma && getDbStatus()) {
+            try {
+              await prisma.$executeRawUnsafe(`
+                INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status, meta_id, rejected_reason, created_at, updated_at)
+                VALUES ($1, $2, $3, $4, $5::"LanguageCode", $6, $6, $7, $8::"TemplateStatus", $9, $10, NOW(), NOW())
+                ON CONFLICT (id) DO UPDATE SET
+                  name = EXCLUDED.name,
+                  wa_template_name = EXCLUDED.wa_template_name,
+                  category = EXCLUDED.category,
+                  language = EXCLUDED.language,
+                  body = EXCLUDED.body,
+                  content = EXCLUDED.content,
+                  variables = EXCLUDED.variables,
+                  status = EXCLUDED.status,
+                  meta_id = EXCLUDED.meta_id,
+                  rejected_reason = EXCLUDED.rejected_reason,
+                  updated_at = NOW();
+              `, newId, name, cleanSlug, category, language, body, JSON.stringify(variables), (['APPROVED', 'PENDING', 'REJECTED'].includes(metaStatus) ? metaStatus : 'PENDING'), metaId, metaError);
+            } catch (dbErr) {
+              console.warn('⚠️ [DB Template Save Error]:', dbErr.message);
+            }
+          }
+
+          const createdTemplate = {
+            id: newId,
+            name,
+            waTemplateName: cleanSlug,
+            category,
+            language,
+            body,
+            variables,
+            status: metaStatus,
+            approved: metaStatus === 'APPROVED',
+            metaId,
+            rejectedReason: metaError,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+
+          broadcastScopedSSE(null, {
+            type: 'TEMPLATES_UPDATED',
+            action: 'create',
+            template: createdTemplate
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            template: createdTemplate,
+            metaStatus,
+            warning: metaError || undefined,
+            metaConnected: Boolean(metaToken && wabaId)
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // 3. POST /api/templates/sync (Manual sync with Meta Graph API)
+    if (req.method === 'POST' && cleanSubPath === 'sync') {
+      try {
+        const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+        const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+        let updatedCount = 0;
+        if (metaToken && wabaId) {
+          const resMeta = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?limit=100`, {
             headers: { 'Authorization': `Bearer ${metaToken}` }
           });
           const dataMeta = await resMeta.json().catch(() => ({}));
-          if (Array.isArray(dataMeta?.data)) {
-            metaTemplates = dataMeta.data;
+          if (Array.isArray(dataMeta?.data) && prisma && getDbStatus()) {
+            for (const mt of dataMeta.data) {
+              try {
+                await prisma.$executeRawUnsafe(`
+                  UPDATE public.whatsapp_templates
+                  SET status = $1::"TemplateStatus", meta_id = COALESCE(meta_id, $2), updated_at = NOW()
+                  WHERE wa_template_name = $3 OR meta_id = $2;
+                `, mt.status, mt.id, mt.name);
+                updatedCount++;
+              } catch {}
+            }
+          }
+        }
+
+        broadcastScopedSSE(null, {
+          type: 'TEMPLATES_UPDATED',
+          action: 'sync',
+          count: updatedCount
+        });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, count: updatedCount, metaConnected: Boolean(metaToken && wabaId) }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+      return;
+    }
+
+    // 4. DELETE /api/templates/:id or POST /api/templates/delete
+    if ((req.method === 'DELETE' && cleanSubPath) || (req.method === 'POST' && (cleanSubPath === 'delete' || pathname.endsWith('/delete')))) {
+      let targetId = (cleanSubPath && cleanSubPath !== 'delete') ? decodeURIComponent(cleanSubPath) : null;
+      if (!targetId) {
+        let bodyDel = '';
+        req.on('data', chunk => { bodyDel += chunk; });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+          const payload = JSON.parse(bodyDel || '{}');
+          targetId = payload.id || payload.waTemplateName;
+        } catch {}
+      }
+
+      if (!targetId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Template ID or waTemplateName is required.' }));
+        return;
+      }
+
+      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+      const wabaId = (metaConfig.wabaId || process.env.META_WABA_ID || '2332922997481634').trim();
+
+      // Look up template in DB to get waTemplateName
+      let tplWaName = targetId;
+      if (prisma && getDbStatus()) {
+        try {
+          const rows = await prisma.$queryRawUnsafe(`
+            SELECT id, COALESCE(wa_template_name, name) as "waTemplateName", meta_id as "metaId"
+            FROM public.whatsapp_templates
+            WHERE id = $1 OR wa_template_name = $1;
+          `, targetId);
+          if (Array.isArray(rows) && rows[0]) {
+            tplWaName = rows[0].waTemplateName;
           }
         } catch (e) {
-          console.warn('⚠️ [Meta Templates Fetch Warning]:', e.message);
+          console.warn('⚠️ [DB Template Lookup Warning]:', e.message);
         }
       }
 
+      // Track in permanent deleted set so default fallbacks never resurrect it
+      DELETED_TEMPLATE_IDS.add(targetId);
+      if (tplWaName) DELETED_TEMPLATE_IDS.add(tplWaName);
+      setSystemSetting('DELETED_TEMPLATE_IDS', JSON.stringify([...DELETED_TEMPLATE_IDS])).catch(() => {});
+
+      // Attempt to delete on Meta Cloud API
+      if (metaToken && wabaId && tplWaName) {
+        try {
+          console.log(`🗑️ [Meta Graph API] Deleting template: ${tplWaName} from WABA: ${wabaId}`);
+          const delRes = await fetch(`https://graph.facebook.com/v20.0/${wabaId}/message_templates?name=${encodeURIComponent(tplWaName)}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${metaToken}` }
+          });
+          const delData = await delRes.json().catch(() => ({}));
+          console.log('🗑️ [Meta Graph API Delete Result]:', delData);
+        } catch (delErr) {
+          console.warn('⚠️ [Meta Delete Template Warning]:', delErr.message);
+        }
+      }
+
+      // Delete from local DB
+      if (prisma && getDbStatus()) {
+        try {
+          await prisma.$executeRawUnsafe(`
+            DELETE FROM public.whatsapp_templates WHERE id = $1 OR wa_template_name = $1;
+          `, targetId);
+        } catch (dbErr) {
+          console.warn('⚠️ [DB Template Delete Warning]:', dbErr.message);
+        }
+      }
+
+      broadcastScopedSSE(null, {
+        type: 'TEMPLATES_UPDATED',
+        action: 'delete',
+        id: targetId
+      });
+
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: true, templates: metaTemplates }));
-    } catch (err) {
-      res.writeHead(500, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ success: false, error: err.message }));
+      res.end(JSON.stringify({ success: true, message: 'Template deleted successfully.', id: targetId }));
+      return;
     }
-    return;
   }
 
   // 6. Disconnect / Unlink Central Clinic WhatsApp Line (Super Admin Only)
@@ -3623,6 +4007,384 @@ const server = http.createServer(async (req, res) => {
   }
 
   // =============================================================================
+  // 8g. REST: Chat Assign Labels Management (Supabase Cloud Sync)
+  // =============================================================================
+
+  // 8g1. GET /api/chat-labels & GET /api/admin/chat-labels (Fetch configured labels)
+  if (req.method === 'GET' && (pathname === '/api/chat-labels' || pathname === '/api/admin/chat-labels')) {
+    const isSuperAdminReq = pathname === '/api/admin/chat-labels';
+    if (isSuperAdminReq && !requireSuperAdmin(authUser, res)) return;
+
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const labels = await prisma.chatLabel.findMany({
+          orderBy: { orderIndex: 'asc' }
+        });
+        if (Array.isArray(labels) && labels.length > 0) {
+          const filtered = isSuperAdminReq
+            ? labels
+            : labels.filter(lbl => lbl.isActive !== false);
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, labels: filtered }));
+          return;
+        }
+      } catch (err) {
+        console.warn('⚠️ Error querying chat_labels:', err.message);
+      }
+    }
+
+    // Default canonical preset labels fallback
+    const defaultLabels = [
+      { id: 'vip', key: 'vip', name: 'VIP Patient', color: '#f59e0b', dotColor: 'bg-amber-400', bgColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30', description: 'High-priority VIP customer requiring dedicated attention', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 0 },
+      { id: 'hot', key: 'hot', name: 'Hot Lead', color: '#f43f5e', dotColor: 'bg-rose-400', bgColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30', description: 'Urgent prospective patient or student ready to convert', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 1 },
+      { id: 'booked', key: 'booked', name: 'Consultation Booked', color: '#10b981', dotColor: 'bg-emerald-400', bgColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', description: 'Clinical consultation or course admission confirmed', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 2 },
+      { id: 'followup', key: 'followup', name: 'Follow-up Needed', color: '#0ea5e9', dotColor: 'bg-sky-400', bgColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30', description: 'Pending client reply or scheduled follow-up outreach', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 3 },
+      { id: 'prescription', key: 'prescription', name: 'Prescription Sent', color: '#8b5cf6', dotColor: 'bg-purple-400', bgColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30', description: 'Medical prescription or academic syllabus forwarded', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 4 }
+    ];
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, labels: defaultLabels }));
+    return;
+  }
+
+  // 8g2. GET /api/lead-labels (Fetch all lead label assignments)
+  if (req.method === 'GET' && pathname === '/api/lead-labels') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const leadIdParam = parsedUrl.query.leadId;
+        const whereClause = leadIdParam ? { leadId: String(leadIdParam) } : {};
+        const rows = await prisma.leadLabelAssignment.findMany({
+          where: whereClause,
+          select: { leadId: true, labelId: true }
+        });
+
+        const leadLabels = {};
+        for (const row of rows) {
+          if (!leadLabels[row.leadId]) leadLabels[row.leadId] = [];
+          if (!leadLabels[row.leadId].includes(row.labelId)) {
+            leadLabels[row.leadId].push(row.labelId);
+          }
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, leadLabels }));
+        return;
+      } catch (err) {
+        console.warn('⚠️ Error fetching lead_label_assignments:', err.message);
+      }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ success: true, leadLabels: {} }));
+    return;
+  }
+
+  // 8g3. POST /api/admin/chat-labels (Super Admin: Add new assign label to Supabase)
+  if (req.method === 'POST' && pathname === '/api/admin/chat-labels') {
+    if (!requireSuperAdmin(authUser, res)) return;
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const name = String(payload.name || '').trim();
+        if (!name) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Label name is required.' }));
+          return;
+        }
+
+        const rawKey = String(payload.key || name)
+          .toLowerCase()
+          .trim()
+          .replace(/[^a-z0-9_]/g, '_')
+          .slice(0, 45);
+
+        const color = String(payload.color || '#f59e0b').trim();
+        const dotColor = payload.dotColor ? String(payload.dotColor).trim() : null;
+        const bgColor = payload.bgColor ? String(payload.bgColor).trim() : null;
+        const description = payload.description ? String(payload.description).trim() : null;
+        const company = String(payload.company || 'ALL').trim();
+        const allowedRoles = payload.allowedRoles ? (Array.isArray(payload.allowedRoles) ? JSON.stringify(payload.allowedRoles) : String(payload.allowedRoles)) : 'ALL';
+
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.chatLabel.findFirst({
+            where: {
+              OR: [
+                { key: { equals: rawKey, mode: 'insensitive' } },
+                { name: { equals: name, mode: 'insensitive' } }
+              ]
+            }
+          });
+
+          if (existing) {
+            res.writeHead(409, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: `An assign label with key "${rawKey}" or name "${name}" already exists.`
+            }));
+            return;
+          }
+
+          const count = await prisma.chatLabel.count();
+          const labelId = `lbl-${rawKey}-${Date.now().toString(36)}`;
+
+          const created = await prisma.chatLabel.create({
+            data: {
+              id: labelId,
+              key: rawKey,
+              name,
+              color,
+              dotColor,
+              bgColor,
+              description,
+              company,
+              allowedRoles,
+              isActive: true,
+              isSystem: false,
+              orderIndex: count
+            }
+          });
+
+          res.writeHead(201, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, label: created, message: 'Assign label created successfully in Supabase.' }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Label created (offline mode)' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8g4. PUT/PATCH /api/admin/chat-labels/:id (Super Admin: Edit label)
+  if ((req.method === 'PUT' || req.method === 'PATCH') && pathname.startsWith('/api/admin/chat-labels/') && !pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const labelId = pathname.replace('/api/admin/chat-labels/', '').trim();
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.chatLabel.findUnique({ where: { id: labelId } });
+          if (!existing) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Assign label not found.' }));
+            return;
+          }
+
+          const updateData = {};
+          if (payload.name !== undefined) updateData.name = String(payload.name).trim();
+          if (payload.color !== undefined) updateData.color = String(payload.color).trim();
+          if (payload.dotColor !== undefined) updateData.dotColor = payload.dotColor ? String(payload.dotColor).trim() : null;
+          if (payload.bgColor !== undefined) updateData.bgColor = payload.bgColor ? String(payload.bgColor).trim() : null;
+          if (payload.description !== undefined) updateData.description = payload.description ? String(payload.description).trim() : null;
+          if (payload.company !== undefined) updateData.company = String(payload.company).trim();
+          if (payload.allowedRoles !== undefined) {
+            updateData.allowedRoles = Array.isArray(payload.allowedRoles) ? JSON.stringify(payload.allowedRoles) : String(payload.allowedRoles);
+          }
+
+          const updated = await prisma.chatLabel.update({
+            where: { id: labelId },
+            data: updateData
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            label: updated,
+            message: 'Assign label updated successfully in Supabase.'
+          }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Assign label updated (offline mode)' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8g5. PATCH/POST /api/admin/chat-labels/:id/status (Super Admin: Activate/Deactivate label)
+  if ((req.method === 'PATCH' || req.method === 'POST') && pathname.startsWith('/api/admin/chat-labels/') && pathname.endsWith('/status')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const labelId = pathname.replace('/api/admin/chat-labels/', '').replace('/status', '').trim();
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          const existing = await prisma.chatLabel.findUnique({ where: { id: labelId } });
+          if (!existing) {
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Assign label not found.' }));
+            return;
+          }
+
+          const newStatus = payload.isActive !== undefined ? Boolean(payload.isActive) : !existing.isActive;
+
+          await prisma.chatLabel.update({
+            where: { id: labelId },
+            data: { isActive: newStatus }
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            isActive: newStatus,
+            message: `Label "${existing.name}" is now ${newStatus ? 'active' : 'inactive'}.`
+          }));
+          return;
+        }
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Status updated (offline)' }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 8g6. DELETE /api/admin/chat-labels/:id (Super Admin: Delete custom label)
+  if (req.method === 'DELETE' && pathname.startsWith('/api/admin/chat-labels/')) {
+    if (!requireSuperAdmin(authUser, res)) return;
+    const labelId = pathname.replace('/api/admin/chat-labels/', '').trim();
+    try {
+      const prisma = getPrisma();
+      if (prisma && getDbStatus()) {
+        const existing = await prisma.chatLabel.findUnique({ where: { id: labelId } });
+        if (!existing) {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Assign label not found.' }));
+          return;
+        }
+
+        if (existing.isSystem) {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            error: `System label "${existing.name}" cannot be deleted. You can deactivate it instead.`
+          }));
+          return;
+        }
+
+        // Clean up assignments first
+        await prisma.leadLabelAssignment.deleteMany({ where: { labelId } });
+        // Delete label definition
+        await prisma.chatLabel.delete({ where: { id: labelId } });
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          message: `Assign label "${existing.name}" deleted successfully.`
+        }));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Assign label deleted (offline)' }));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    }
+    return;
+  }
+
+  // 8g7. POST /api/leads/:leadId/labels (Staff: Assign / Toggle label on lead in Supabase)
+  if (req.method === 'POST' && pathname.startsWith('/api/leads/') && pathname.endsWith('/labels')) {
+    const parts = pathname.split('/');
+    const leadId = parts[3];
+    if (!leadId) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Lead ID is required.' }));
+      return;
+    }
+
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        const payload = JSON.parse(body || '{}');
+        const prisma = getPrisma();
+        if (prisma && getDbStatus()) {
+          if (Array.isArray(payload.labels)) {
+            await prisma.leadLabelAssignment.deleteMany({ where: { leadId } });
+            for (const lblId of payload.labels) {
+              const assignId = `lla-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+              await prisma.leadLabelAssignment.create({
+                data: {
+                  id: assignId,
+                  leadId,
+                  labelId: String(lblId),
+                  assignedBy: authUser?.id || null
+                }
+              }).catch(() => null);
+            }
+          } else if (payload.labelId) {
+            const labelId = String(payload.labelId).trim();
+            const action = payload.action || 'toggle';
+
+            const existingAssign = await prisma.leadLabelAssignment.findFirst({
+              where: { leadId, labelId }
+            });
+
+            if (action === 'remove' || (action === 'toggle' && existingAssign)) {
+              if (existingAssign) {
+                await prisma.leadLabelAssignment.deleteMany({
+                  where: { leadId, labelId }
+                });
+              }
+            } else if (action === 'add' || (action === 'toggle' && !existingAssign)) {
+              const assignId = `lla-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+              await prisma.leadLabelAssignment.create({
+                data: {
+                  id: assignId,
+                  leadId,
+                  labelId,
+                  assignedBy: authUser?.id || null
+                }
+              }).catch(() => null);
+            }
+          }
+
+          const currentAssignments = await prisma.leadLabelAssignment.findMany({
+            where: { leadId },
+            select: { labelId: true }
+          });
+
+          const currentLabels = currentAssignments.map(r => r.labelId);
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            leadId,
+            labels: currentLabels,
+            message: 'Lead labels updated in Supabase.'
+          }));
+          return;
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, leadId, labels: payload.labels || [payload.labelId] }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // =============================================================================
   // 9. REST: Course Management (CRAS Academic Programs)
   // =============================================================================
 
@@ -4285,6 +5047,21 @@ const server = http.createServer(async (req, res) => {
               })
             ];
 
+        let leadLabelsMap = {};
+        try {
+          const leadIds = leads.map(l => l.id);
+          if (leadIds.length > 0) {
+            const assignRows = await prisma.$queryRawUnsafe(
+              `SELECT lead_id, label_id FROM public.lead_label_assignments WHERE lead_id = ANY($1::text[]);`,
+              leadIds
+            );
+            for (const r of assignRows) {
+              if (!leadLabelsMap[r.lead_id]) leadLabelsMap[r.lead_id] = [];
+              leadLabelsMap[r.lead_id].push(r.label_id);
+            }
+          }
+        } catch (e) {}
+
         const enrichedLeads = leads.map(l => {
           const compCode = resolveLeadCompany(l);
           const comp = COMPANIES[compCode] || COMPANIES.RWC;
@@ -4301,7 +5078,8 @@ const server = http.createServer(async (req, res) => {
             companyTag: comp.tag,
             companyColor: comp.colorHex,
             companyPhoneNumberId: comp.phoneId,
-            companyPhoneNumber: comp.phoneNumber
+            companyPhoneNumber: comp.phoneNumber,
+            labels: leadLabelsMap[l.id] || []
           };
         });
 
@@ -4728,7 +5506,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 10b2. REST: Update Lead Treatment & Serial Number & Stage
-  const isLeadsUpdateRoute = (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || (pathname.startsWith('/api/leads/') && pathname !== '/api/leads/create' && pathname !== '/api/leads/assign' && pathname !== '/api/leads/delete' && !pathname.startsWith('/api/leads/delete/')));
+  const isLeadsUpdateRoute = (req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/leads/update' || (pathname.startsWith('/api/leads/') && pathname !== '/api/leads/create' && pathname !== '/api/leads/assign' && pathname !== '/api/leads/delete' && !pathname.startsWith('/api/leads/delete/') && !pathname.endsWith('/labels')));
   if (isLeadsUpdateRoute) {
     let body = '';
     req.on('data', chunk => { body += chunk; });
@@ -6370,6 +7148,187 @@ const server = http.createServer(async (req, res) => {
     }
   }
 
+  // 10d-2. Quick Responses (Client Message Templates - Non-Meta HSM)
+  if (pathname === '/api/quick-responses' || pathname.startsWith('/api/quick-responses/')) {
+    const prisma = getPrisma();
+    const cleanPath = pathname.replace('/api/quick-responses', '').replace(/^\//, '');
+
+    // GET /api/quick-responses
+    if (req.method === 'GET') {
+      try {
+        let quickResponses = [];
+        if (prisma && getDbStatus()) {
+          try {
+            const rawRows = await prisma.$queryRawUnsafe(`
+              SELECT 
+                id, 
+                title, 
+                content, 
+                category, 
+                language, 
+                shortcut, 
+                created_at as "createdAt",
+                updated_at as "updatedAt"
+              FROM public.quick_responses 
+              ORDER BY created_at ASC;
+            `);
+            if (Array.isArray(rawRows)) {
+              quickResponses = rawRows;
+            }
+          } catch (dbErr) {
+            console.warn('⚠️ [Quick Responses DB Query]:', dbErr.message);
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, quickResponses }));
+      } catch (err) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message, quickResponses: [] }));
+      }
+      return;
+    }
+
+    // POST /api/quick-responses (Create)
+    if (req.method === 'POST' && (!cleanPath || cleanPath === '')) {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const title = (payload.title || '').trim();
+          const content = (payload.content || '').trim();
+          const category = (payload.category || 'General').trim();
+          const language = (payload.language || 'en').trim();
+          const shortcut = (payload.shortcut || '').trim();
+
+          if (!title || !content) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Title and content are required.' }));
+            return;
+          }
+
+          const newId = payload.id || `qr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+          if (prisma && getDbStatus()) {
+            await prisma.$executeRawUnsafe(`
+              INSERT INTO public.quick_responses (id, title, content, category, language, shortcut, created_at, updated_at)
+              VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+              ON CONFLICT (id) DO UPDATE SET 
+                title = EXCLUDED.title,
+                content = EXCLUDED.content,
+                category = EXCLUDED.category,
+                language = EXCLUDED.language,
+                shortcut = EXCLUDED.shortcut,
+                updated_at = NOW();
+            `, newId, title, content, category, language, shortcut);
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'QUICK_RESPONSES_UPDATED',
+            action: 'create',
+            id: newId
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: true,
+            quickResponse: { id: newId, title, content, category, language, shortcut, createdAt: new Date().toISOString() }
+          }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // PUT /api/quick-responses/:id or POST /api/quick-responses/update (Update)
+    if ((req.method === 'PUT' && cleanPath) || (req.method === 'POST' && (cleanPath === 'update' || (cleanPath && cleanPath !== 'delete')))) {
+      let body = '';
+      req.on('data', chunk => { body += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(body || '{}');
+          const targetId = (cleanPath && cleanPath !== 'update') ? cleanPath : payload.id;
+          const title = payload.title !== undefined ? String(payload.title).trim() : null;
+          const content = payload.content !== undefined ? String(payload.content).trim() : null;
+          const category = payload.category !== undefined ? String(payload.category).trim() : null;
+          const language = payload.language !== undefined ? String(payload.language).trim() : null;
+          const shortcut = payload.shortcut !== undefined ? String(payload.shortcut).trim() : null;
+
+          if (!targetId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Quick response ID is required.' }));
+            return;
+          }
+
+          if (prisma && getDbStatus()) {
+            await prisma.$executeRawUnsafe(`
+              UPDATE public.quick_responses 
+              SET 
+                title = COALESCE($2, title),
+                content = COALESCE($3, content),
+                category = COALESCE($4, category),
+                language = COALESCE($5, language),
+                shortcut = COALESCE($6, shortcut),
+                updated_at = NOW()
+              WHERE id = $1;
+            `, targetId, title, content, category, language, shortcut);
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'QUICK_RESPONSES_UPDATED',
+            action: 'update',
+            id: targetId
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, message: 'Quick response updated' }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
+    // DELETE /api/quick-responses/:id or POST /api/quick-responses/delete (Delete)
+    if ((req.method === 'DELETE' && cleanPath) || (req.method === 'POST' && cleanPath === 'delete')) {
+      let targetId = (cleanPath && cleanPath !== 'delete') ? cleanPath : null;
+      if (!targetId) {
+        let body = '';
+        req.on('data', chunk => { body += chunk; });
+        await new Promise(resolve => req.on('end', resolve));
+        try {
+          const payload = JSON.parse(body || '{}');
+          targetId = payload.id;
+        } catch {}
+      }
+
+      if (!targetId) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'Quick response ID is required.' }));
+        return;
+      }
+
+      if (prisma && getDbStatus()) {
+        await prisma.$executeRawUnsafe(`
+          DELETE FROM public.quick_responses WHERE id = $1;
+        `, targetId);
+      }
+
+      broadcastScopedSSE(null, {
+        type: 'QUICK_RESPONSES_UPDATED',
+        action: 'delete',
+        id: targetId
+      });
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, message: 'Quick response deleted', id: targetId }));
+      return;
+    }
+  }
+
   // 10e. REST: Get/Save Meta Cloud API Configuration
   if (pathname === '/api/meta/config' || pathname === '/api/meta/token') {
     if (req.method === 'GET') {
@@ -6902,6 +7861,40 @@ const server = http.createServer(async (req, res) => {
                     }
                   }
                 }
+
+                // Handle Meta real-time template status updates (APPROVED, REJECTED, PENDING)
+                if (change.field === 'message_template_status_update' && change.value) {
+                  const val = change.value;
+                  const eventStatus = String(val.event || val.status || '').toUpperCase();
+                  const tplName = val.message_template_name;
+                  const tplId = val.message_template_id;
+                  const reason = val.reason || val.disable_info || null;
+                  console.log(`📢 [Meta Webhook Template Status] Name: ${tplName}, Status: ${eventStatus}, Reason: ${reason}`);
+
+                  const prisma = getPrisma();
+                  if (prisma && getDbStatus()) {
+                    try {
+                      await prisma.$executeRawUnsafe(
+                        `UPDATE public.whatsapp_templates 
+                         SET status = $1, rejected_reason = $2, meta_id = COALESCE(meta_id, $3), updated_at = NOW() 
+                         WHERE wa_template_name = $4 OR meta_id = $3;`,
+                        eventStatus, reason ? String(reason) : null, String(tplId || ''), tplName
+                      );
+                    } catch (e) {
+                      console.warn('⚠️ [Meta Webhook Template DB Update Error]:', e.message);
+                    }
+                  }
+
+                  broadcastScopedSSE(null, {
+                    type: 'TEMPLATES_UPDATED',
+                    action: 'status_update',
+                    waTemplateName: tplName,
+                    metaId: tplId,
+                    status: eventStatus,
+                    rejectedReason: reason,
+                    timestamp: new Date().toISOString()
+                  });
+                }
               }
             }
           }
@@ -7070,6 +8063,13 @@ export async function initializeServer() {
   if (savedAppSecret && savedAppSecret.trim()) metaConfig.appSecret = savedAppSecret.trim();
   const savedVerifyToken = await getSystemSetting('META_VERIFY_TOKEN');
   if (savedVerifyToken && savedVerifyToken.trim()) metaConfig.verifyToken = savedVerifyToken.trim();
+  const savedDeletedTpls = await getSystemSetting('DELETED_TEMPLATE_IDS');
+  if (savedDeletedTpls) {
+    try {
+      const arr = JSON.parse(savedDeletedTpls);
+      if (Array.isArray(arr)) arr.forEach(id => DELETED_TEMPLATE_IDS.add(id));
+    } catch {}
+  }
   await autoSeedDbIfEmpty();
   ensureWabaWebhookSubscriptions().catch(() => {});
   return res;

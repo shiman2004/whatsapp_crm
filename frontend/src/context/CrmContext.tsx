@@ -168,6 +168,8 @@ interface CrmContextType {
 
   // Lead actions
   assignLead: (leadId: string, coordinatorId: string) => Promise<boolean>;
+  recallLeadToAdmin: (leadId: string) => Promise<boolean>;
+  recallLeadsBulk: (leadIds: string[]) => Promise<{ success: boolean; recalledCount: number }>;
   updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string, examDetails?: ExamHandoffDetails) => void;
   examHandoffDraft: { leadId: string; reason?: string } | null;
   cancelExamHandoff: () => void;
@@ -421,7 +423,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return filteredUsers.map(u => ({
       ...u,
       branch: u.branch || 'Colombo',
-        company: ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || 'RWC'),
+        company: u.role === 'super_admin' ? 'ALL' : ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || 'RWC'),
       roleTitle: getStaffRoleTitle(u),
     }));
   });
@@ -433,11 +435,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const authId = localStorage.getItem('rw_crm_auth_user_id');
     const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    let resolvedUser: User | undefined;
     if (authId) {
-      const match = storedUsers.find(u => u.id === authId);
-      if (match) return match;
+      resolvedUser = storedUsers.find(u => u.id === authId);
     }
-    return storedUsers[0] || INITIAL_USERS[0];
+    const finalUser = resolvedUser || storedUsers[0] || INITIAL_USERS[0];
+    if (finalUser && finalUser.role === 'super_admin') {
+      return { ...finalUser, company: 'ALL' };
+    }
+    return finalUser;
   });
   const [categories, setCategories] = useState<TreatmentCategory[]>(INITIAL_CATEGORIES);
   const [treatments, setTreatments] = useState<Treatment[]>(INITIAL_TREATMENTS);
@@ -2444,7 +2450,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       }));
 
       if (!coordinatorId) {
-        notify('Lead Unassigned', 'Lead marked as Unassigned by Super Admin', 'info');
+        notify('Inquiry Recalled', 'Inquiry recalled to Admin and returned to New Inquiry pool', 'info');
       } else {
         notify('Lead Assigned', `Lead successfully assigned to ${coord?.fullName || 'Coordinator'}`, 'success');
       }
@@ -2452,6 +2458,70 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err: any) {
       notify('Assignment Error', err.message || 'Failed to communicate with server', 'warning');
       return false;
+    }
+  };
+
+  // Recall single lead to Admin
+  const recallLeadToAdmin = async (leadId: string): Promise<boolean> => {
+    return assignLead(leadId, '');
+  };
+
+  // Bulk recall leads to Admin
+  const recallLeadsBulk = async (leadIds: string[]): Promise<{ success: boolean; recalledCount: number }> => {
+    if (!isSuperAdmin) {
+      notify('Action Forbidden', 'Only Super Admin can recall inquiries to Admin.', 'warning');
+      return { success: false, recalledCount: 0 };
+    }
+    const cleanIds = leadIds.filter(Boolean);
+    if (cleanIds.length === 0) return { success: false, recalledCount: 0 };
+
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/leads/recall-bulk`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${getAuthToken()}`,
+        },
+        body: JSON.stringify({ leadIds: cleanIds })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || !data.success) {
+        // Fallback to sequential recall
+        let count = 0;
+        for (const id of cleanIds) {
+          const ok = await assignLead(id, '');
+          if (ok) count++;
+        }
+        notify('Inquiries Recalled', `Recalled ${count} inquiry/inquiries to Admin queue.`, 'success');
+        return { success: true, recalledCount: count };
+      }
+
+      const nowIso = new Date().toISOString();
+      const idSet = new Set(cleanIds);
+      setLeads(prev => prev.map(l => {
+        if (idSet.has(l.id)) {
+          logAudit('LEAD_UNASSIGNED', 'Assignment', l.id, { assignedTo: l.assignedTo }, { assignedTo: undefined, stage: 'new' });
+          return {
+            ...l,
+            assignedTo: undefined,
+            assignedById: currentUser.id,
+            assignedByName: currentUser.fullName,
+            assignedAt: nowIso,
+            acceptedAt: undefined,
+            stage: 'new' as LeadStage,
+            updatedAt: nowIso
+          };
+        }
+        return l;
+      }));
+
+      notify('Inquiries Recalled', `Successfully recalled ${data.recalledCount || cleanIds.length} inquiry/inquiries to Admin.`, 'success');
+      return { success: true, recalledCount: data.recalledCount || cleanIds.length };
+    } catch (err: any) {
+      console.error('Bulk recall error:', err);
+      notify('Recall Error', err.message || 'Failed to recall inquiries in bulk.', 'warning');
+      return { success: false, recalledCount: 0 };
     }
   };
 
@@ -5200,6 +5270,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setSelectedLeadId,
     selectedLead: resolvedSelectedLead,
     assignLead,
+    recallLeadToAdmin,
+    recallLeadsBulk,
     updateLeadStage,
     examHandoffDraft,
     cancelExamHandoff,

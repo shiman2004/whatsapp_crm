@@ -10,7 +10,8 @@ import {
   Sparkles,
   UserCheck,
   GraduationCap,
-  UserPlus
+  UserPlus,
+  RotateCcw
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -58,7 +59,7 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   company = 'RWC'
 }) => {
   const [isFilterOpen, setIsFilterOpen] = React.useState(false);
-  const { categories, treatments, users, stages, isSuperAdmin, isLeadsOfficer } = useCrm();
+  const { categories, treatments, users, stages, isSuperAdmin, isLeadsOfficer, leads, recallLeadsBulk } = useCrm();
 
   const isCras = company === 'CRAS';
   const isRwc = company === 'RWC';
@@ -428,6 +429,28 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             <span>Export CSV</span>
           </button>
         )}
+
+        {/* Recall All Inquiries for Selected Coordinator - Super Admin only */}
+        {isSuperAdmin && selectedCoordinator !== 'all' && selectedCoordinator !== 'unassigned' && (() => {
+          const coordLeads = leads.filter(l => l.assignedTo === selectedCoordinator);
+          if (coordLeads.length === 0) return null;
+          const coordName = relevantCoordinators.find(u => u.id === selectedCoordinator)?.fullName || 'this coordinator';
+          return (
+            <button
+              type="button"
+              onClick={() => {
+                if (window.confirm(`Recall all ${coordLeads.length} inquiry/inquiries assigned to ${coordName} back to Admin queue?\n\nThis will unassign the staff member and revert the status to 'New Inquiry'.`)) {
+                  recallLeadsBulk(coordLeads.map(l => l.id));
+                }
+              }}
+              className="h-9 px-3 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 rounded-lg text-[13px] font-semibold flex items-center gap-1.5 transition-colors shadow-sm cursor-pointer active:scale-95"
+              title={`Recall all inquiries assigned to ${coordName} back to Admin`}
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+              <span>Recall All ({coordLeads.length})</span>
+            </button>
+          );
+        })()}
 
         {/* New Contact Button */}
         <button

@@ -79,3 +79,4 @@ test('7. buildSecureWhereClause returns denied condition for unauthorized action
   const where = await buildSecureWhereClause(actor, 'staff.manage', 'RWC');
   assert.equal(where.id, '__DENIED_BY_POLICY__');
 });
+

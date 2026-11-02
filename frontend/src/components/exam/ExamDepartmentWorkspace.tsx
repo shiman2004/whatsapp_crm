@@ -2,10 +2,6 @@ import { useCrm } from '../../context/CrmContext';
 import { ExamOperationsView } from './ExamOperationsView';
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  GraduationCap,
-  Plus,
-} from 'lucide-react';
-import {
   examService,
   ExamDashboardStats,
   ExamCategory,
@@ -191,34 +187,7 @@ export const ExamDepartmentWorkspace: React.FC<ExamDepartmentWorkspaceProps> = (
           </button>
         </div>
       )}
-      {/* Top Header */}
-      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-[#F0F2F5] dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] flex items-center justify-center text-[#128C7E] dark:text-[#25D366] shrink-0 shadow-sm">
-            <GraduationCap className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl sm:text-2xl font-black text-[#111B21] dark:text-[#E9EDEF] tracking-tight">
-              Exam Department
-            </h1>
-            <p className="text-xs text-[#667781] dark:text-[#8696A0] font-medium mt-0.5">
-              Healthcare Licensing Exam Preparation Platform • DHA, DOH, MOH, Prometric
-            </p>
-          </div>
-        </div>
 
-        {/* Top Right Quick Actions */}
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setIsNewRequestOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-bold transition-all shadow-lg shadow-blue-600/25 flex items-center justify-center gap-2 shrink-0 cursor-pointer"
-          >
-            <Plus className="w-4 h-4 stroke-[2.5]" />
-            <span>New Material Request</span>
-          </button>
-        </div>
-      </div>
 
       {/* ----------------------------------------------------------------- */}
       {/* 12-SECTION ROUTER                                                 */}

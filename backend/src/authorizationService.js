@@ -323,3 +323,4 @@ export async function buildSecureWhereClause(actor, capability, company = 'RWC',
 
   return where;
 }
+

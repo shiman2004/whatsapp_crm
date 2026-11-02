@@ -58,3 +58,4 @@ main().catch(err => {
   console.error('Fatal error executing migration:', err);
   process.exit(1);
 });
+

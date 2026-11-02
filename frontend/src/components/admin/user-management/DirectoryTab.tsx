@@ -235,7 +235,7 @@ export const DirectoryTab: React.FC<DirectoryTabProps> = ({
       >
         {/* Toolbar: search + filters on one line, clear chip pushed right */}
         <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3 dark:border-[#222D34]/70">
-          <div className="relative w-full sm:w-48 xl:w-56">
+          <div className="relative w-full sm:w-56 xl:w-64">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
               type="search"
@@ -254,21 +254,21 @@ export const DirectoryTab: React.FC<DirectoryTabProps> = ({
             ))}
           </FilterSelect>
 
-          <FilterSelect icon={Building2} label="Filter by company" value={company} onChange={setCompany}>
+          <FilterSelect icon={Building2} label="Filter by company" value={company} onChange={setCompany} width="w-38">
             <option value="">All companies</option>
             {COMPANY_OPTIONS.filter((option) => option !== 'ALL').map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </FilterSelect>
 
-          <FilterSelect icon={MapPin} label="Filter by branch" value={branch} onChange={setBranch}>
+          <FilterSelect icon={MapPin} label="Filter by branch" value={branch} onChange={setBranch} width="w-36">
             <option value="">All branches</option>
             {branchOptions.filter((option) => option.toUpperCase() !== 'ALL').map((option) => (
               <option key={option} value={option}>{option}</option>
             ))}
           </FilterSelect>
 
-          <FilterSelect icon={FolderTree} label="Filter by department" value={department} onChange={setDepartment}>
+          <FilterSelect icon={FolderTree} label="Filter by department" value={department} onChange={setDepartment} width="w-42">
             <option value="">All departments</option>
             {departments.map((option) => (
               <option key={option.id} value={option.id}>{option.name}</option>
@@ -276,7 +276,7 @@ export const DirectoryTab: React.FC<DirectoryTabProps> = ({
           </FilterSelect>
 
           {!lockStatus && (
-            <FilterSelect icon={Activity} label="Filter by status" value={status} onChange={setStatus}>
+            <FilterSelect icon={Activity} label="Filter by status" value={status} onChange={setStatus} width="w-34">
               <option value="">All statuses</option>
               {STATUSES.map((option) => (
                 <option key={option} value={option}>{option}</option>
@@ -428,7 +428,7 @@ export const DirectoryTab: React.FC<DirectoryTabProps> = ({
                       {/* Company Badge */}
                       {visible.includes('company') && (
                         <td className="px-4 py-1.5 whitespace-nowrap">
-                          <CompanyBadge company={row.company} />
+                          <CompanyBadge company={row.role === 'super_admin' ? 'ALL' : row.company} />
                         </td>
                       )}
 

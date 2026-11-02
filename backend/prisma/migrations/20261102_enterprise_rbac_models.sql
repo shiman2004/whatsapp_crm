@@ -274,3 +274,4 @@ SELECT
 FROM public.users u
 JOIN public.roles r ON r.key = u.role::text
 ON CONFLICT (user_id, role_key, company) DO NOTHING;
+

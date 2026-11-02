@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowRightLeft, History, RefreshCw } from 'lucide-react';
+import { ArrowRightLeft, History, RefreshCw, RotateCcw } from 'lucide-react';
+import { useCrm } from '../../../context/CrmContext';
 import { ErrorState, LoadingSkeleton, SearchInput, SectionCard, cn } from '../../ui';
 import { userManagementApi, COMPANY_OPTIONS, type Assignment, type AssignmentHistoryEntry, type ManagedUser, type Page } from './api';
 import { ErrorNote, Field, GhostButton, PrimaryButton, formatWhen, inputClass, timeAgo } from './bits';
@@ -7,6 +8,7 @@ import { ErrorNote, Field, GhostButton, PrimaryButton, formatWhen, inputClass, t
 export const AssignmentsTab: React.FC<{
   onNotify: (title: string, message: string, tone?: 'success' | 'warning' | 'info') => void;
 }> = ({ onNotify }) => {
+  const { recallLeadToAdmin } = useCrm();
   const [type, setType] = useState<'all' | 'lead' | 'marketing_contact'>('lead');
   const [search, setSearch] = useState('');
   const [debounced, setDebounced] = useState('');
@@ -76,6 +78,21 @@ export const AssignmentsTab: React.FC<{
       onNotify('Reassignment refused', cause instanceof Error ? cause.message : 'The record could not be reassigned.', 'warning');
     } finally {
       setBusy(null);
+    }
+  };
+
+  const recall = async (row: Assignment) => {
+    if (window.confirm(`Recall ${row.reference} back to Admin queue?\n\nThis will unassign the staff member.`)) {
+      setBusy(row.id);
+      try {
+        await recallLeadToAdmin(row.id);
+        onNotify('Inquiry Recalled', `${row.reference} returned to Admin queue.`, 'success');
+        await load();
+      } catch (err: any) {
+        onNotify('Recall Error', err.message || 'Failed to recall inquiry.', 'warning');
+      } finally {
+        setBusy(null);
+      }
     }
   };
 
@@ -167,6 +184,11 @@ export const AssignmentsTab: React.FC<{
                         <PrimaryButton disabled={!target[row.id] || busy === row.id} onClick={() => void reassign(row)}>
                           <ArrowRightLeft className="h-3.5 w-3.5" /> {busy === row.id ? '…' : 'Move'}
                         </PrimaryButton>
+                        {row.type === 'lead' && (
+                          <GhostButton disabled={busy === row.id} onClick={() => void recall(row)} title="Recall to Admin">
+                            <RotateCcw className="h-3.5 w-3.5 text-amber-500" /> Recall
+                          </GhostButton>
+                        )}
                       </div>
                     </td>
                   </tr>

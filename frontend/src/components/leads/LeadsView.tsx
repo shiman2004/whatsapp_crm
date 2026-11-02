@@ -55,6 +55,17 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
     return () => window.removeEventListener('leads-view-change', onViewIntent);
   }, []);
 
+  React.useEffect(() => {
+    const onScopeChange = (e: Event) => {
+      const comp = (e as CustomEvent<string>).detail as PipelineCompany;
+      if (['RWC', 'CRAS', 'AHC', 'ALL'].includes(comp)) {
+        setSelectedCompany(comp);
+      }
+    };
+    window.addEventListener('company-scope-change', onScopeChange);
+    return () => window.removeEventListener('company-scope-change', onScopeChange);
+  }, []);
+
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
     : (currentUser.company === 'CRAS' ? 'CRAS' : 'RWC');

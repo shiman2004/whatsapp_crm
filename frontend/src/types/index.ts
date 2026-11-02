@@ -39,7 +39,7 @@ export interface User {
   pin?: string;
   phone?: string;
   branch?: string;
-  company?: CompanyCode;
+  company?: CompanyCode | 'ALL';
   role: UserRole;
   roleTitle?: string; // Display title, e.g. 'Super Admin', 'Sales Officer', 'Clinic Manager'
   treatmentCategoryId?: string;

@@ -20,6 +20,7 @@ import {
   Copy,
   Search,
   RotateCw,
+  RotateCcw,
   Globe,
   Building2,
   Lock
@@ -50,7 +51,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     canModifyAssignment,
     isSuperAdmin,
     isLeadsOfficer,
-    assignLead, 
+    assignLead,
+    recallLeadToAdmin, 
     updateLeadStage,
     updateLeadTreatment,
     updateLeadLanguage,
@@ -588,11 +590,27 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
               Assigned {isCras ? 'Education Counsellor' : isAhc ? 'Consultancy Advisor' : 'Patient Coordinator'}
             </label>
-            {isLeadsOfficer && lead.assignedTo && (
-              <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
-                <Lock className="w-2.5 h-2.5" /> Locked
-              </span>
-            )}
+            <div className="flex items-center gap-1.5">
+              {isSuperAdmin && lead.assignedTo && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (window.confirm('Recall this inquiry back to Admin? (This unassigns the coordinator)')) {
+                      recallLeadToAdmin(lead.id);
+                    }
+                  }}
+                  className="inline-flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 font-semibold bg-amber-500/10 hover:bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30 transition-colors cursor-pointer"
+                  title="Recall this inquiry to Admin (Unassign)"
+                >
+                  <RotateCcw className="w-2.5 h-2.5" /> Recall
+                </button>
+              )}
+              {isLeadsOfficer && lead.assignedTo && !isSuperAdmin && (
+                <span className="inline-flex items-center gap-1 text-[10px] text-amber-400/90 font-medium bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                  <Lock className="w-2.5 h-2.5" /> Locked
+                </span>
+              )}
+            </div>
           </div>
 
           {canModifyAssignment(lead) ? (

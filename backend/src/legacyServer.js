@@ -5134,6 +5134,116 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10c. REST: Bulk Recall Assigned Inquiries to Admin (Strictly Super Admin only)
+  if (req.method === 'POST' && pathname === '/api/leads/recall-bulk') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', async () => {
+      try {
+        if (!authUser || !authUser.id) {
+          res.writeHead(401, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'Unauthorized: Authentication required.' }));
+          return;
+        }
+
+        if (authUser.role !== 'super_admin') {
+          res.writeHead(403, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            success: false,
+            errorCode: 'RECALL_FORBIDDEN',
+            error: 'Forbidden: Only Super Admin can recall assigned inquiries to Admin.'
+          }));
+          return;
+        }
+
+        const payload = JSON.parse(body || '{}');
+        const leadIds = Array.isArray(payload.leadIds) ? payload.leadIds.filter(Boolean) : [];
+        if (leadIds.length === 0) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: 'No lead IDs provided for recall.' }));
+          return;
+        }
+
+        const assignerId = authUser.id;
+        const assignerName = authUser.fullName || 'Super Admin';
+        const now = new Date();
+        const prisma = getPrisma();
+
+        const updatedLeads = [];
+        if (prisma && getDbStatus()) {
+          for (const leadId of leadIds) {
+            const currentLead = await prisma.lead.findUnique({ where: { id: leadId } }).catch(() => null);
+            if (!currentLead) continue;
+            const prevCoord = currentLead.assignedTo || null;
+
+            const updated = await prisma.lead.update({
+              where: { id: leadId },
+              data: {
+                assignedTo: null,
+                assignedById: assignerId,
+                assignedByName: assignerName,
+                assignedAt: now,
+                acceptedAt: null,
+                stage: 'new',
+                updatedAt: now
+              },
+              include: {
+                customer: true,
+                category: true,
+                treatment: true,
+                assignedCoordinator: true
+              }
+            }).catch(() => null);
+
+            if (updated) {
+              updatedLeads.push(updated);
+              await prisma.leadAssignmentHistory.create({
+                data: {
+                  leadId,
+                  assignedToId: null,
+                  assignedToName: 'Unassigned (Recalled to Admin)',
+                  assignedById: assignerId,
+                  assignedByName: assignerName,
+                  assignedAt: now
+                }
+              }).catch(() => null);
+
+              if (prevCoord) {
+                broadcastScopedSSE(prevCoord, {
+                  type: 'LEAD_UNASSIGNED',
+                  leadId,
+                  previousCoordinatorId: prevCoord,
+                  reassignedTo: null,
+                  lead: updated
+                });
+              }
+
+              broadcastScopedSSE(null, {
+                type: 'LEAD_ASSIGNED',
+                leadId,
+                clientLeadId: leadId,
+                coordinatorId: null,
+                lead: updated
+              });
+            }
+          }
+        }
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          success: true,
+          recalledCount: updatedLeads.length,
+          leads: updatedLeads
+        }));
+      } catch (err) {
+        console.error('Error recalling leads in bulk:', err);
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: err.message }));
+      }
+    });
+    return;
+  }
+
   // 10b. REST: Assign Lead to Coordinator (Admin or Leads Officer Dispatches to Coordinator)
   // 10b. REST: Assign Lead to Coordinator (Strict Role-Based Locking & Permission Enforcement)
   if (req.method === 'POST' && (pathname === '/api/leads/assign' || pathname === '/api/assign')) {

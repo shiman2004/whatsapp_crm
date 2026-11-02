@@ -53,9 +53,11 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
   const [showAccounts, setShowAccounts] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [themeMenuOpen, setThemeMenuOpen] = useState(false);
+  const [companyMenuOpen, setCompanyMenuOpen] = useState(false);
 
   const accountRef = useRef<HTMLDivElement>(null);
   const themeRef = useRef<HTMLDivElement>(null);
+  const companyMenuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onDown = (event: MouseEvent) => {
@@ -64,6 +66,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
       }
       if (themeRef.current && !themeRef.current.contains(event.target as Node)) {
         setThemeMenuOpen(false);
+      }
+      if (companyMenuRef.current && !companyMenuRef.current.contains(event.target as Node)) {
+        setCompanyMenuOpen(false);
       }
     };
     const onKey = (event: KeyboardEvent) => {
@@ -74,6 +79,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
       if (event.key === 'Escape') {
         setAccountOpen(false);
         setThemeMenuOpen(false);
+        setCompanyMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', onDown);
@@ -84,7 +90,10 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
     };
   }, []);
 
-  const scope = currentUser?.company || 'All brands';
+  const isSuper = isSuperAdmin || currentUser?.role === 'super_admin';
+  const [selectedCompanyScope, setSelectedCompanyScope] = useState<string>(() => {
+    return localStorage.getItem('rw_crm_selected_company') || 'ALL';
+  });
 
   const themeOptions: Array<{ id: ThemeMode; label: string; icon: React.ComponentType<{ className?: string }> }> = [
     { id: 'light', label: 'Light', icon: Sun },
@@ -142,14 +151,73 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
             <Search className="h-4 w-4" />
           </button>
 
-          {/* Company scope — read-only, server-enforced */}
-          <span
-            title="Company scope is enforced by the server. Change the active brand inside a module."
-            className="hidden items-center gap-1.5 rounded-lg border border-[#E0E5E7] bg-white px-2 py-1.5 text-[10px] font-semibold text-[#111B21] lg:flex dark:border-[#222D34] dark:bg-[#2A3942] dark:text-[#E9EDEF]"
-          >
-            <ShieldCheck className="h-3.5 w-3.5 text-[#128C7E] dark:text-[#25D366]" />
-            {scope === 'All brands' ? 'All brands' : <CompanyTagBadge company={scope} />}
-          </span>
+          {/* Company scope badge / switcher */}
+          {isSuper ? (
+            <div ref={companyMenuRef} className="relative hidden lg:block">
+              <button
+                type="button"
+                onClick={() => setCompanyMenuOpen((prev) => !prev)}
+                aria-expanded={companyMenuOpen}
+                title="Super Admin: Click to view all companies or choose a specific company"
+                className="flex h-9 items-center gap-1.5 rounded-lg border border-[#E0E5E7] bg-white px-2.5 py-1.5 text-[10px] font-semibold text-[#111B21] transition-colors hover:border-[#128C7E] hover:bg-[#F0F2F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] dark:border-[#222D34] dark:bg-[#2A3942] dark:text-[#E9EDEF] dark:hover:bg-[#202C33]"
+              >
+                <ShieldCheck className="h-3.5 w-3.5 text-[#128C7E] dark:text-[#25D366]" />
+                <CompanyTagBadge company={selectedCompanyScope} />
+                <ChevronDown className={cn('h-3 w-3 text-[#667781] transition-transform dark:text-[#8696A0]', companyMenuOpen && 'rotate-180')} />
+              </button>
+
+              {companyMenuOpen && (
+                <div
+                  role="menu"
+                  className="absolute right-0 top-full mt-1.5 z-[70] w-56 overflow-hidden rounded-xl border border-[#E0E5E7] bg-white p-1 shadow-2xl animate-in fade-in zoom-in-95 duration-100 dark:border-[#222D34] dark:bg-[#202C33]"
+                >
+                  <div className="px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wider text-[#667781] dark:text-[#8696A0]">
+                    Company Scope
+                  </div>
+                  {[
+                    { id: 'ALL', label: 'All Companies' },
+                    { id: 'RWC', label: 'Royal Wellness Center' },
+                    { id: 'CRAS', label: 'CRAS College' },
+                    { id: 'AHC', label: 'Alpha Health Consultancy' },
+                  ].map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        setSelectedCompanyScope(item.id);
+                        localStorage.setItem('rw_crm_selected_company', item.id);
+                        localStorage.setItem('rw_crm_selected_pipeline_company', item.id);
+                        window.dispatchEvent(new CustomEvent('company-scope-change', { detail: item.id }));
+                        setCompanyMenuOpen(false);
+                      }}
+                      className={cn(
+                        'flex w-full items-center justify-between gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition-colors',
+                        selectedCompanyScope === item.id
+                          ? 'bg-[#DDF5EC] font-semibold text-[#075E54] dark:bg-[#005C4B] dark:text-[#E9EDEF]'
+                          : 'text-[#111B21] hover:bg-[#F0F2F5] dark:text-[#E9EDEF] dark:hover:bg-[#2A3942]'
+                      )}
+                    >
+                      <span className="flex items-center gap-2">
+                        <CompanyTagBadge company={item.id} size="xs" />
+                        <span className="truncate">{item.label}</span>
+                      </span>
+                      {selectedCompanyScope === item.id && (
+                        <Check className="h-3.5 w-3.5 shrink-0 text-[#128C7E] dark:text-[#25D366]" />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <span
+              title="Company scope is enforced by the server for your role."
+              className="hidden items-center gap-1.5 rounded-lg border border-[#E0E5E7] bg-white px-2 py-1.5 text-[10px] font-semibold text-[#111B21] lg:flex dark:border-[#222D34] dark:bg-[#2A3942] dark:text-[#E9EDEF]"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-[#128C7E] dark:text-[#25D366]" />
+              <CompanyTagBadge company={currentUser?.company || 'RWC'} />
+            </span>
+          )}
 
           {/* Meta API bridge */}
           <button
@@ -261,7 +329,7 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
                     <span className="rounded bg-[#F0F2F5] px-1.5 py-0.5 text-[9.5px] font-semibold text-[#667781] dark:bg-[#2A3942] dark:text-[#8696A0]">
                       {roleTitle(currentUser)}
                     </span>
-                    {currentUser?.company && <CompanyTagBadge company={currentUser.company} />}
+                    <CompanyTagBadge company={isSuper ? 'ALL' : (currentUser?.company || 'RWC')} />
                     <span className="ml-auto flex items-center gap-1 text-[9.5px] text-[#128C7E] dark:text-[#25D366]">
                       <ShieldCheck className="h-3 w-3" /> Verified session
                     </span>

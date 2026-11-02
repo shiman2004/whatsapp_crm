@@ -17,6 +17,30 @@ export const CompanyTagBadge: React.FC<CompanyTagBadgeProps> = ({
   showFullName = false,
   className = ''
 }) => {
+  const isAll = company === 'ALL' || company === 'all' || company === 'ALL_SCOPE' || company === 'All brands' || company === 'All Companies';
+
+  if (isAll) {
+    return (
+      <span
+        style={{
+          backgroundColor: '#0F172A',
+          color: '#ffffff',
+          borderColor: '#334155'
+        }}
+        className={`inline-flex items-center gap-1 font-black tracking-wider uppercase rounded shadow-sm border select-none shrink-0 ${
+          size === 'xs'
+            ? 'px-1.5 py-0.2 text-[8.5px] leading-tight'
+            : size === 'sm'
+            ? 'px-2 py-0.5 text-[9.5px] leading-tight'
+            : 'px-2.5 py-1 text-xs'
+        } ${className}`}
+        title="All Companies"
+      >
+        <span>{showFullName ? 'All Companies' : 'ALL'}</span>
+      </span>
+    );
+  }
+
   let comp: CompanyConfig;
   if (company && COMPANIES[company as CompanyCode]) {
     comp = COMPANIES[company as CompanyCode];

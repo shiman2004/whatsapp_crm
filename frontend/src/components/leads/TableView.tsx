@@ -33,6 +33,7 @@ import {
   Clock as NoteClock,
   Calendar,
   RotateCcw,
+  CheckSquare,
   ExternalLink
 } from 'lucide-react';
 import { 
@@ -57,9 +58,12 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     users, 
     messages, 
     selectedLeadId, 
+    isSuperAdmin,
     isLeadsOfficer, 
     canModifyAssignment, 
     assignLead,
+    recallLeadToAdmin,
+    recallLeadsBulk,
     updateLeadSource,
     updateLeadStage,
     stages,
@@ -73,6 +77,48 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   const [showScrollTop, setShowScrollTop] = useState(false);
   const [openStageMenuLeadId, setOpenStageMenuLeadId] = useState<string | null>(null);
   const [openSourceMenuLeadId, setOpenSourceMenuLeadId] = useState<string | null>(null);
+  const [selectedRowIds, setSelectedRowIds] = useState<Set<string>>(new Set());
+  const [isRecalling, setIsRecalling] = useState(false);
+
+  const toggleSelectRow = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedRowIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedRowIds.size === paginatedLeads.length && paginatedLeads.length > 0) {
+      setSelectedRowIds(new Set());
+    } else {
+      setSelectedRowIds(new Set(paginatedLeads.map(l => l.id)));
+    }
+  };
+
+  const assignedSelectedCount = useMemo(() => {
+    return leads.filter(l => selectedRowIds.has(l.id) && Boolean(l.assignedTo)).length;
+  }, [leads, selectedRowIds]);
+
+  const handleRecallSingle = async (lead: Lead) => {
+    const contactName = lead.customer?.displayName || lead.serialNumber || 'this inquiry';
+    if (window.confirm(`Recall ${contactName} back to Admin queue?\n\nThis will unassign the staff member and revert the status to 'New Inquiry'.`)) {
+      await recallLeadToAdmin(lead.id);
+    }
+  };
+
+  const handleBulkRecall = async () => {
+    const assignedIds = leads.filter(l => selectedRowIds.has(l.id) && Boolean(l.assignedTo)).map(l => l.id);
+    if (assignedIds.length === 0) return;
+    if (window.confirm(`Recall ${assignedIds.length} assigned inquiry/inquiries back to Admin queue?\n\nAll assigned staff will be unassigned and inquiries returned to 'New Inquiry' pool.`)) {
+      setIsRecalling(true);
+      await recallLeadsBulk(assignedIds);
+      setSelectedRowIds(new Set());
+      setIsRecalling(false);
+    }
+  };
   const [noteLeadId, setNoteLeadId] = useState<string | null>(null);
   const [noteText, setNoteText] = useState('');
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null);
@@ -793,9 +839,50 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table thead th:nth-child(3),
           .pipeline-table thead th:nth-child(17) { z-index: 30; }
         `}</style>
+        {selectedRowIds.size > 0 && (
+          <div className="flex items-center justify-between gap-3 bg-amber-500/10 border border-amber-500/30 text-amber-900 dark:text-amber-200 px-4 py-2.5 rounded-xl mb-3 text-xs font-semibold animate-in fade-in duration-100">
+            <div className="flex items-center gap-2">
+              <CheckSquare className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+              <span>{selectedRowIds.size} {selectedRowIds.size === 1 ? 'inquiry' : 'inquiries'} selected</span>
+              {assignedSelectedCount > 0 && (
+                <span className="text-[11px] opacity-80">({assignedSelectedCount} assigned)</span>
+              )}
+            </div>
+            <div className="flex items-center gap-2">
+              {isSuperAdmin && assignedSelectedCount > 0 && (
+                <button
+                  type="button"
+                  onClick={handleBulkRecall}
+                  disabled={isRecalling}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold transition-all shadow-sm cursor-pointer active:scale-95 disabled:opacity-50"
+                  title="Recall selected assigned inquiries back to Admin"
+                >
+                  <RotateCcw className={`w-3.5 h-3.5 ${isRecalling ? 'animate-spin' : ''}`} />
+                  <span>Recall Selected to Admin ({assignedSelectedCount})</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setSelectedRowIds(new Set())}
+                className="px-2.5 py-1.5 rounded-lg bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-medium transition-colors cursor-pointer"
+              >
+                Deselect
+              </button>
+            </div>
+          </div>
+        )}
         <table className="pipeline-table text-left text-xs">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-100/95 dark:bg-[#202C33]/95 shadow-sm border-b border-slate-200 dark:border-slate-800">
             <tr className="text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
+              <th className="py-3.5 px-2 text-center w-8">
+                <input
+                  type="checkbox"
+                  checked={selectedRowIds.size === paginatedLeads.length && paginatedLeads.length > 0}
+                  onChange={toggleSelectAll}
+                  className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer h-3.5 w-3.5"
+                  aria-label="Select all"
+                />
+              </th>
               <th className="py-3.5 px-3 text-center">No.</th>
               <th className="py-3.5 px-3">Serial No.</th>
               <th className="py-3.5 px-4">
@@ -846,7 +933,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={19} className="py-16 text-center text-slate-500">
+                <td colSpan={20} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -870,8 +957,18 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     onClick={() => onSelectLead(lead.id)}
                     className={`[&>td]:py-2 hover:bg-slate-800/50 cursor-pointer transition-colors ${
                       isSelected ? 'bg-teal-950/40' : ''
-                    }`}
+                    } ${selectedRowIds.has(lead.id) ? 'bg-amber-500/5 dark:bg-amber-500/10' : ''}`}
                   >
+                    {/* Checkbox */}
+                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
+                      <input
+                        type="checkbox"
+                        checked={selectedRowIds.has(lead.id)}
+                        onChange={(e) => toggleSelectRow(lead.id, e as any)}
+                        className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer h-3.5 w-3.5"
+                        aria-label={`Select ${lead.customer?.displayName || 'lead'}`}
+                      />
+                    </td>
                     {/* 1. Sequential row number for the current displayed order */}
                     <td className="py-3.5 px-3 text-center min-w-[60px] whitespace-nowrap">
                       <span className="font-mono font-bold text-slate-500 dark:text-slate-400">{String(globalRowNumber).padStart(3, '0')}</span>
@@ -1007,15 +1104,27 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
                     {/* 5. Assigned Status */}
                     <td className="py-3.5 px-3 whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={lead.assignedTo ? 'reassign' : 'assign'}
-                        onChange={(e) => { if (e.target.value === 'assign' && lead.assignedTo) assignLead(lead.id, ''); }}
-                        className={`marketing-status-select rounded-lg border px-2 py-1.5 text-[10px] font-semibold outline-none cursor-pointer [color-scheme:dark] ${lead.assignedTo ? 'bg-amber-500/15 border-amber-500/50 text-amber-300 focus:border-amber-400' : 'bg-teal-500/15 border-teal-500/50 text-teal-300 focus:border-teal-400'}`}
-                        aria-label={`Assignment status for ${lead.customer?.displayName || 'lead'}`}
-                      >
-                        <option value="assign">Assign</option>
-                        <option value="reassign">Re-Assign</option>
-                      </select>
+                      {lead.assignedTo ? (
+                        <div className="flex items-center gap-1">
+                          <span className="rounded-lg border px-2 py-1 text-[10px] font-semibold bg-amber-500/15 border-amber-500/50 text-amber-700 dark:text-amber-300">
+                            Assigned
+                          </span>
+                          {isSuperAdmin && (
+                            <button
+                              type="button"
+                              onClick={() => handleRecallSingle(lead)}
+                              title="Recall to Admin"
+                              className="p-1 rounded-md text-amber-600 dark:text-amber-400 hover:bg-amber-500/20 transition-colors"
+                            >
+                              <RotateCcw className="w-3 h-3" />
+                            </button>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="rounded-lg border px-2 py-1 text-[10px] font-semibold bg-teal-500/15 border-teal-500/50 text-teal-700 dark:text-teal-300">
+                          Unassigned
+                        </span>
+                      )}
                     </td>
 
                     {/* 6. Current Status */}
@@ -1040,7 +1149,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                           onChange={(e) => assignLead(lead.id, e.target.value)}
                           className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg px-3 py-1.5 text-xs text-slate-800 dark:text-slate-100 outline-none focus:border-teal-500 cursor-pointer w-full min-w-0 shadow-sm"
                         >
-                          <option value="">{lead.assignedTo ? '-- Unassign Staff --' : (isCrasLead ? '-- Assign Counsellor --' : '-- Assign Coordinator --')}</option>
+                          <option value="">{lead.assignedTo ? '↩ Recall to Admin (Unassign)' : (isCrasLead ? '-- Assign Counsellor --' : '-- Assign Coordinator --')}</option>
                           {[...coordinators]
                             .filter(c => isCrasLead ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company))
                             .sort((a, b) => a.fullName.localeCompare(b.fullName))
@@ -1114,14 +1223,28 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     </td>
 
                     {/* 12. Action */}
-                    <td className="py-3.5 px-4 text-center min-w-[90px] whitespace-nowrap">
-                      <button
-                        onClick={() => onSelectLead(lead.id)}
-                        className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-500/15 dark:hover:bg-teal-500/25 dark:text-teal-400 dark:border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
-                      >
-                        <span>Chat</span>
-                        <MessageCircle className="w-3.5 h-3.5" />
-                      </button>
+                    <td className="py-3.5 px-4 text-center min-w-[120px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <button
+                          type="button"
+                          onClick={() => onSelectLead(lead.id)}
+                          className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 text-teal-700 border border-teal-200 dark:bg-teal-500/15 dark:hover:bg-teal-500/25 dark:text-teal-400 dark:border-teal-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer"
+                        >
+                          <span>Chat</span>
+                          <MessageCircle className="w-3.5 h-3.5" />
+                        </button>
+                        {isSuperAdmin && lead.assignedTo && (
+                          <button
+                            type="button"
+                            onClick={() => handleRecallSingle(lead)}
+                            title="Recall inquiry back to Admin (Unassign coordinator)"
+                            className="px-2 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 dark:bg-amber-500/15 dark:hover:bg-amber-500/25 dark:text-amber-300 dark:border-amber-500/30 text-xs font-semibold inline-flex items-center gap-1 shadow-sm transition-colors cursor-pointer active:scale-95"
+                          >
+                            <RotateCcw className="w-3 h-3 text-amber-600 dark:text-amber-400" />
+                            <span>Recall</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
 
                     {/* 13. Task / External Portal */}

@@ -144,8 +144,9 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
     return true;
   });
 
-  // CSV Export handler adapts to active company pipeline
+  // CSV Export handler adapts to active company pipeline (Super Admin only)
   const handleExportCsv = () => {
+    if (!isSuperAdmin) return;
     const isCrasExport = effectiveCompany === 'CRAS';
     const headers = [
       'Lead ID', 

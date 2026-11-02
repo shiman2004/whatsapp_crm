@@ -390,3 +390,171 @@ export async function rolePolicyDetails(prisma, role) {
 }
 
 export { SCOPES };
+
+export async function listAccessRequests(prisma, { status, page = 1, pageSize = 20 } = {}) {
+  const p = Math.max(Number(page) || 1, 1);
+  const ps = Math.min(Math.max(Number(pageSize) || 20, 1), 100);
+  const where = {};
+  if (status && status !== 'all') where.status = status;
+
+  const [total, items] = await Promise.all([
+    prisma.accessRequest.count({ where }),
+    prisma.accessRequest.findMany({
+      where,
+      include: {
+        requester: {
+          select: { id: true, fullName: true, email: true, role: true, company: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: (p - 1) * ps,
+      take: ps,
+    })
+  ]);
+
+  return {
+    items,
+    pagination: { page: p, pageSize: ps, total, totalPages: Math.ceil(total / ps) }
+  };
+}
+
+export async function createAccessRequest(prisma, payload) {
+  const { requesterId, targetCompany, targetDepartmentId, requestedRoleKey, requestedPermissionKey, requestType, reason, durationHours } = payload;
+  return prisma.accessRequest.create({
+    data: {
+      requesterId,
+      targetCompany: targetCompany || null,
+      targetDepartmentId: targetDepartmentId || null,
+      requestedRoleKey: requestedRoleKey || null,
+      requestedPermissionKey: requestedPermissionKey || null,
+      requestType,
+      reason,
+      durationHours: durationHours ? Number(durationHours) : null,
+      status: 'pending',
+    }
+  });
+}
+
+export async function reviewAccessRequest(prisma, id, decision, actorId, reviewNotes = '') {
+  const request = await prisma.accessRequest.findUnique({ where: { id } });
+  if (!request) throw new PermissionError(404, 'NOT_FOUND', 'Access request not found.');
+  if (request.status !== 'pending') throw new PermissionError(409, 'ALREADY_REVIEWED', 'This request has already been reviewed.');
+
+  const status = decision === 'approve' ? 'approved' : 'rejected';
+  const now = new Date();
+  let expiresAt = null;
+  if (decision === 'approve' && request.durationHours) {
+    expiresAt = new Date(Date.now() + request.durationHours * 3600 * 1000);
+  }
+
+  // If approved, provision the membership or override automatically
+  if (decision === 'approve') {
+    if (request.requestType === 'cross_company_access' && request.targetCompany) {
+      await prisma.companyMembership.upsert({
+        where: { userId_company: { userId: request.requesterId, company: request.targetCompany } },
+        create: { userId: request.requesterId, company: request.targetCompany, active: true },
+        update: { active: true }
+      });
+    } else if (request.requestType === 'role_assignment' && request.requestedRoleKey) {
+      await prisma.userRoleAssignment.upsert({
+        where: {
+          userId_roleKey_company: {
+            userId: request.requesterId,
+            roleKey: request.requestedRoleKey,
+            company: request.targetCompany || 'RWC'
+          }
+        },
+        create: {
+          userId: request.requesterId,
+          roleKey: request.requestedRoleKey,
+          company: request.targetCompany || 'RWC',
+          assignedBy: actorId,
+          expiresAt,
+          active: true,
+        },
+        update: { active: true, expiresAt }
+      });
+    } else if (request.requestType === 'permission_override' && request.requestedPermissionKey) {
+      await prisma.userPermissionOverride.upsert({
+        where: {
+          userId_permissionKey_company: {
+            userId: request.requesterId,
+            permissionKey: request.requestedPermissionKey,
+            company: request.targetCompany || 'ALL'
+          }
+        },
+        create: {
+          userId: request.requesterId,
+          permissionKey: request.requestedPermissionKey,
+          effect: 'allow',
+          company: request.targetCompany || 'ALL',
+          reason: request.reason,
+          assignedBy: actorId,
+          approvedBy: actorId,
+          approvedAt: now,
+          expiresAt,
+        },
+        update: { effect: 'allow', approvedBy: actorId, approvedAt: now, expiresAt }
+      });
+    }
+  }
+
+  return prisma.accessRequest.update({
+    where: { id },
+    data: {
+      status,
+      reviewedBy: actorId,
+      reviewedAt: now,
+      reviewNotes: reviewNotes || null,
+    }
+  });
+}
+
+export async function getUserMemberships(prisma, userId) {
+  const [companies, departments, roleAssignments, overrides] = await Promise.all([
+    prisma.companyMembership.findMany({ where: { userId } }),
+    prisma.departmentMembership.findMany({
+      where: { userId },
+      include: { department: true }
+    }),
+    prisma.userRoleAssignment.findMany({
+      where: { userId },
+      include: { role: true }
+    }),
+    prisma.userPermissionOverride.findMany({
+      where: { userId },
+      include: { permission: true }
+    }),
+  ]);
+  return { companies, departments, roleAssignments, overrides };
+}
+
+export async function saveUserMemberships(prisma, userId, input) {
+  const { companies = [], defaultCompany = 'RWC', departmentIds = [], primaryDepartmentId } = input;
+
+  for (const comp of companies) {
+    await prisma.companyMembership.upsert({
+      where: { userId_company: { userId, company: comp } },
+      create: { userId, company: comp, isDefault: comp === defaultCompany, active: true },
+      update: { isDefault: comp === defaultCompany, active: true }
+    });
+  }
+  await prisma.companyMembership.updateMany({
+    where: { userId, company: { notIn: companies } },
+    data: { active: false }
+  });
+
+  for (const deptId of departmentIds) {
+    await prisma.departmentMembership.upsert({
+      where: { userId_departmentId: { userId, departmentId: deptId } },
+      create: { userId, departmentId: deptId, isPrimary: deptId === primaryDepartmentId, active: true },
+      update: { isPrimary: deptId === primaryDepartmentId, active: true }
+    });
+  }
+  await prisma.departmentMembership.updateMany({
+    where: { userId, departmentId: { notIn: departmentIds } },
+    data: { active: false }
+  });
+
+  return getUserMemberships(prisma, userId);
+}

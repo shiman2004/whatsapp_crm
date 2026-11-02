@@ -190,3 +190,90 @@ export interface Overview {
     customized: number;
   }[];
 }
+
+export interface AccessRequestItem {
+  id: string;
+  requesterId: string;
+  requester?: {
+    id: string;
+    fullName: string;
+    email: string;
+    role: string;
+    company: string;
+  };
+  targetCompany?: string | null;
+  targetDepartmentId?: string | null;
+  requestedRoleKey?: string | null;
+  requestedPermissionKey?: string | null;
+  requestType: 'role_assignment' | 'permission_override' | 'cross_company_access';
+  reason: string;
+  status: 'pending' | 'approved' | 'rejected' | 'expired';
+  durationHours?: number | null;
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccessRequestPage {
+  items: AccessRequestItem[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    total: number;
+    totalPages: number;
+  };
+}
+
+export interface CompanyMembershipItem {
+  id: string;
+  userId: string;
+  company: string;
+  isDefault: boolean;
+  active: boolean;
+  createdAt: string;
+}
+
+export interface DepartmentMembershipItem {
+  id: string;
+  userId: string;
+  departmentId: string;
+  isPrimary: boolean;
+  active: boolean;
+  department?: {
+    id: string;
+    name: string;
+    company?: string;
+  };
+}
+
+export interface UserMemberships {
+  companies: CompanyMembershipItem[];
+  departments: DepartmentMembershipItem[];
+  roleAssignments: Array<{
+    id: string;
+    roleKey: string;
+    company: string;
+    active: boolean;
+    expiresAt?: string | null;
+    role?: { key: string; label: string };
+  }>;
+  overrides: Array<{
+    id: string;
+    permissionKey: string;
+    effect: 'allow' | 'deny';
+    scope?: string | null;
+    company: string;
+    reason?: string | null;
+    expiresAt?: string | null;
+    permission?: { key: string; label: string };
+  }>;
+}
+
+export interface SaveMembershipsPayload {
+  companies: string[];
+  defaultCompany?: string;
+  departmentIds?: string[];
+  primaryDepartmentId?: string;
+}

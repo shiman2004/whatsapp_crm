@@ -9,6 +9,9 @@ import type {
   Scope,
   UserDetail,
   UserPage,
+  AccessRequestPage,
+  UserMemberships,
+  SaveMembershipsPayload,
 } from './types';
 
 // The shell registers the context's token reader once, so every tab reuses the
@@ -99,6 +102,14 @@ export const securityApi = {
     request<Preview>('POST', '/permissions/preview', payload),
   audit: (params: { page?: number; pageSize?: number; search?: string; actorId?: string; module?: string; action?: string; outcome?: string; from?: string; to?: string }) =>
     request<AuditPage>('GET', `/audit-logs${toQuery(params)}`),
+  accessRequests: (params: { status?: string; page?: number; pageSize?: number }) =>
+    request<AccessRequestPage>('GET', `/access-requests${toQuery(params)}`),
+  reviewAccessRequest: (id: string, decision: 'approve' | 'reject', reviewNotes?: string) =>
+    request<unknown>('POST', `/access-requests/${encodeURIComponent(id)}/${decision}`, { reviewNotes }),
+  userMemberships: (userId: string) =>
+    request<UserMemberships>('GET', `/users/${encodeURIComponent(userId)}/memberships`),
+  saveUserMemberships: (userId: string, data: SaveMembershipsPayload) =>
+    request<UserMemberships>('POST', `/users/${encodeURIComponent(userId)}/memberships`, data),
 };
 
 export { toQuery };

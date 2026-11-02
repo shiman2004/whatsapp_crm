@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Clock3, Copy, MessageCircle, Phone, ShieldCheck, User, X } from 'lucide-react';
+import { Check, Clock3, Copy, ListPlus, MessageCircle, Phone, ShieldCheck, Tag, User, X } from 'lucide-react';
+import { PRESET_LABELS } from '../chat/WhatsAppChatList';
 import { Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
@@ -8,7 +9,7 @@ import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 interface PatientContactDrawerProps { lead: Lead; onClose: () => void; onOpenWhatsApp: () => void; }
 
 export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead, onClose, onOpenWhatsApp }) => {
-  const { categories, treatments, users, messages, notes } = useCrm();
+  const { categories, treatments, users, messages, notes, chatLabels, leadLabels, toggleLeadLabel, currentUser } = useCrm();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const [copyState, setCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
@@ -16,6 +17,49 @@ export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead
   const treatment = treatments.find(item => item.id === lead.treatmentId);
   const coordinator = users.find(user => user.id === lead.assignedTo);
   const assignedBy = lead.assignedByName || users.find(user => user.id === lead.assignedById)?.fullName || 'System';
+  // Assign Labels & Lists state
+  const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const labelPickerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (labelPickerRef.current && !labelPickerRef.current.contains(event.target as Node)) {
+        setLabelPickerOpen(false);
+      }
+    };
+    if (labelPickerOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [labelPickerOpen]);
+
+  const allAvailableLabels = chatLabels && chatLabels.length > 0 ? chatLabels : PRESET_LABELS;
+  const availableLabels = allAvailableLabels.filter((lbl: any) => {
+    if (lbl.isActive === false) return false;
+    if (lbl.company && lbl.company !== 'ALL' && lead.company) {
+      if (lbl.company !== lead.company) return false;
+    }
+    if (lbl.allowedRoles && lbl.allowedRoles !== 'ALL' && currentUser?.role) {
+      try {
+        const allowed = Array.isArray(lbl.allowedRoles)
+          ? lbl.allowedRoles
+          : (lbl.allowedRoles.startsWith('[') ? JSON.parse(lbl.allowedRoles) : lbl.allowedRoles.split(',').map((s: string) => s.trim()));
+        if (!allowed.includes('ALL') && !allowed.includes('all') && !allowed.includes(currentUser.role)) {
+          return false;
+        }
+      } catch {}
+    }
+    return true;
+  });
+
+  const activeLabelIds = leadLabels[lead.id] || lead.labels || [];
+  const assignedLabels = activeLabelIds.map(id => 
+    allAvailableLabels.find((l: any) => l.id === id || l.key === id) || 
+    PRESET_LABELS.find(l => l.id === id || (l as any).key === id)
+  ).filter(Boolean);
+
   const rawPhone = lead.customer?.whatsappNumber || '';
   const displayPhone = lead.customer?.phoneNumber || formatWhatsAppDisplay(rawPhone);
   const customerName = lead.customer?.displayName || 'WhatsApp Customer';
@@ -99,6 +143,100 @@ export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead
         <section aria-labelledby="status-section-title" className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.07] p-4">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2"><h3 id="status-section-title" className="text-sm font-semibold text-slate-100">Current status</h3><span className="rounded-full bg-violet-500/20 px-3 py-1 text-xs font-semibold capitalize text-violet-200">{lead.stage.replace(/_/g, ' ')}</span></div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><Status label="Coordinator" value={coordinator?.fullName || 'Unassigned'} /><Status label="Assigned by" value={assignedBy} /></div>
+        </section>
+
+        {/* Assign Labels / Lists Section */}
+        <section aria-labelledby="labels-section-title" className="space-y-2 relative" ref={labelPickerRef}>
+          <div className="flex items-center justify-between">
+            <h3 id="labels-section-title" className="text-sm font-semibold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
+              <Tag className="h-4 w-4 text-amber-500 dark:text-amber-400" />
+              <span>Assign Labels</span>
+            </h3>
+            <button
+              type="button"
+              onClick={() => setLabelPickerOpen(prev => !prev)}
+              className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 border border-teal-500/30 transition-colors cursor-pointer"
+              title="Add to list / assign labels"
+            >
+              <ListPlus className="h-3.5 w-3.5" />
+              <span>Add to list</span>
+            </button>
+          </div>
+
+          {/* Active Assigned Labels Badges */}
+          <div className="flex flex-wrap gap-1.5 items-center min-h-[34px] p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800">
+            {assignedLabels.length > 0 ? (
+              assignedLabels.map((lbl: any) => {
+                const isCustom = !lbl.bgColor && !lbl.color?.includes('bg-') && lbl.color;
+                return (
+                  <span
+                    key={lbl.id || lbl.key}
+                    className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-semibold border transition-all ${
+                      lbl.bgColor || lbl.color || 'bg-amber-500/20 text-amber-800 dark:text-amber-300 border-amber-500/30'
+                    }`}
+                    style={isCustom ? { backgroundColor: `${lbl.color}20`, color: lbl.color, borderColor: `${lbl.color}40` } : undefined}
+                  >
+                    <span
+                      className={`h-2 w-2 rounded-full ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                      style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                    />
+                    <span>{lbl.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => toggleLeadLabel(lead.id, lbl.id || lbl.key)}
+                      className="hover:opacity-75 p-0.5 -mr-0.5 cursor-pointer text-slate-500 hover:text-slate-800 dark:hover:text-white"
+                      title={`Remove ${lbl.name}`}
+                    >
+                      <X className="h-3 w-3" />
+                    </button>
+                  </span>
+                );
+              })
+            ) : (
+              <span className="text-xs text-slate-500 italic px-1">
+                No labels assigned yet. Click "+ Add to list" to assign.
+              </span>
+            )}
+          </div>
+
+          {/* Label Picker Popover */}
+          {labelPickerOpen && (
+            <div className="absolute left-0 right-0 top-full mt-1 bg-white dark:bg-[#182229] border border-slate-200 dark:border-slate-700 rounded-xl shadow-2xl z-50 p-2 space-y-1.5 animate-in fade-in zoom-in-95 duration-100 max-h-64 overflow-y-auto">
+              <div className="flex items-center justify-between pb-1.5 border-b border-slate-200 dark:border-slate-700/80 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                <span className="flex items-center gap-1.5">
+                  <Tag className="h-3.5 w-3.5 text-teal-600 dark:text-teal-400" /> Select Assign Labels
+                </span>
+                <span className="text-[10px] text-slate-400 font-normal">Click to toggle</span>
+              </div>
+              <div className="space-y-1 pt-1">
+                {availableLabels.map((lbl: any) => {
+                  const isChecked = activeLabelIds.includes(lbl.id) || activeLabelIds.includes(lbl.key);
+                  const isCustom = !lbl.dotColor && !lbl.dot && lbl.color;
+                  return (
+                    <button
+                      key={lbl.id || lbl.key}
+                      type="button"
+                      onClick={() => toggleLeadLabel(lead.id, lbl.id || lbl.key)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs font-medium transition-colors text-left cursor-pointer ${
+                        isChecked
+                          ? 'bg-teal-50 dark:bg-teal-950/50 text-teal-900 dark:text-teal-200 border border-teal-300 dark:border-teal-500/40 font-semibold'
+                          : 'hover:bg-slate-100 dark:hover:bg-[#202c33] text-slate-700 dark:text-slate-300 border border-transparent'
+                      }`}
+                    >
+                      <span className="flex items-center gap-2.5">
+                        <span
+                          className={`h-2.5 w-2.5 rounded-full ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                          style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                        />
+                        <span>{lbl.name}</span>
+                      </span>
+                      {isChecked && <Check className="h-4 w-4 text-teal-600 dark:text-teal-400" />}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </section>
 
         <section aria-labelledby="details-section-title">

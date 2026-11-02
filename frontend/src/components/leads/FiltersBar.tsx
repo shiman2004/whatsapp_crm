@@ -300,15 +300,17 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
           </button>
         </div>
 
-        {/* CSV Export Button */}
-        <button
-          onClick={onExportCsv}
-          className="h-9 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[13px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
-          title="Export Filtered Leads as CSV"
-        >
-          <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
-          <span>Export CSV</span>
-        </button>
+        {/* CSV Export Button - Super Admin only */}
+        {isSuperAdmin && (
+          <button
+            onClick={onExportCsv}
+            className="h-9 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 rounded-lg text-[13px] font-medium flex items-center gap-1.5 transition-colors shadow-sm"
+            title="Export Filtered Leads as CSV"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500 dark:text-slate-300" />
+            <span>Export CSV</span>
+          </button>
+        )}
 
         {/* New Contact Button */}
         <button

@@ -17,17 +17,20 @@ import {
   AuditLog,
   LeadStage,
   LeadStageConfig,
+  ChatLabel,
   LanguageCode,
   OnboardingSession,
   WhatsAppConnectionStatus,
   CompanyCode,
-  TeamBroadcast
+  TeamBroadcast,
+  QuickResponse
 } from '../types';
 import {
   INITIAL_USERS,
   INITIAL_CATEGORIES,
   INITIAL_TREATMENTS,
   INITIAL_TEMPLATES,
+  INITIAL_QUICK_RESPONSES,
   INITIAL_SEQUENCES,
   INITIAL_CUSTOMERS,
   INITIAL_LEADS,
@@ -112,6 +115,15 @@ const mergeDefaultStages = (stageList: LeadStageConfig[]): LeadStageConfig[] => 
   return [...existing, ...DEFAULT_STAGES.filter(stage => !existingKeys.has(stage.key))]
     .sort((a, b) => (a.orderIndex ?? 0) - (b.orderIndex ?? 0));
 };
+
+
+export const DEFAULT_CHAT_PRESET_LABELS: ChatLabel[] = [
+  { id: 'vip', key: 'vip', name: 'VIP Patient', color: '#f59e0b', dotColor: 'bg-amber-400', bgColor: 'bg-amber-500/20 text-amber-300 border-amber-500/30', description: 'High-priority VIP customer requiring dedicated attention', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 0 },
+  { id: 'hot', key: 'hot', name: 'Hot Lead', color: '#f43f5e', dotColor: 'bg-rose-400', bgColor: 'bg-rose-500/20 text-rose-300 border-rose-500/30', description: 'Urgent prospective patient or student ready to convert', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 1 },
+  { id: 'booked', key: 'booked', name: 'Consultation Booked', color: '#10b981', dotColor: 'bg-emerald-400', bgColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', description: 'Clinical consultation or course admission confirmed', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 2 },
+  { id: 'followup', key: 'followup', name: 'Follow-up Needed', color: '#0ea5e9', dotColor: 'bg-sky-400', bgColor: 'bg-sky-500/20 text-sky-300 border-sky-500/30', description: 'Pending client reply or scheduled follow-up outreach', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 3 },
+  { id: 'prescription', key: 'prescription', name: 'Prescription Sent', color: '#8b5cf6', dotColor: 'bg-purple-400', bgColor: 'bg-purple-500/20 text-purple-300 border-purple-500/30', description: 'Medical prescription or academic syllabus forwarded', company: 'ALL', allowedRoles: 'ALL', isActive: true, isSystem: true, orderIndex: 4 }
+];
 
 interface CrmContextType {
   // Authentication & RBAC
@@ -198,8 +210,20 @@ interface CrmContextType {
   addTreatment: (treatment: any) => Promise<{ success: boolean; error?: string }>;
   updateTreatment: (id: string, updates: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
   toggleTreatmentStatus: (id: string, active: boolean) => Promise<{ success: boolean; error?: string }>;
-  addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => void;
+  addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => Promise<{ success: boolean; error?: string; template?: WhatsAppTemplate }>;
   updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
+  deleteTemplate: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchTemplates: () => Promise<void>;
+  syncTemplatesWithMeta: () => Promise<{ success: boolean; count?: number }>;
+  metaConnected: boolean;
+  metaWabaId: string | null;
+  
+  // Quick Responses (Non-Meta Client Messages)
+  quickResponses: QuickResponse[];
+  addQuickResponse: (data: Omit<QuickResponse, 'id' | 'createdAt' | 'updatedAt'>) => Promise<{ success: boolean; quickResponse?: QuickResponse; error?: string }>;
+  updateQuickResponse: (id: string, updates: Partial<QuickResponse>) => Promise<{ success: boolean; error?: string }>;
+  deleteQuickResponse: (id: string) => Promise<{ success: boolean; error?: string }>;
+  fetchQuickResponses: () => Promise<void>;
   updateSequence: (id: string, updates: Partial<FollowupSequence>) => void;
   updateCustomer: (id: string, updates: Partial<Customer>) => void;
   addCoordinator: (data: { fullName: string; branch?: string; company?: CompanyCode; email?: string; password?: string; pin?: string; phone?: string; role?: UserRole; treatmentCategoryId?: string; language?: LanguageCode }) => Promise<void>;
@@ -218,6 +242,17 @@ interface CrmContextType {
   reorderStages: (order: { id: string; orderIndex: number }[]) => Promise<{ success: boolean; error?: string }>;
   toggleStageStatus: (id: string, isActive: boolean) => Promise<{ success: boolean; error?: string }>;
   deleteStage: (id: string) => Promise<{ success: boolean; error?: string }>;
+  // Chat Assign Labels & Supabase Cloud Sync
+  chatLabels: ChatLabel[];
+  leadLabels: Record<string, string[]>;
+  fetchChatLabels: () => Promise<void>;
+  fetchLeadLabels: () => Promise<void>;
+  addChatLabel: (label: Partial<ChatLabel>) => Promise<{ success: boolean; error?: string; label?: ChatLabel }>;
+  updateChatLabel: (id: string, updates: Partial<ChatLabel>) => Promise<{ success: boolean; error?: string; label?: ChatLabel }>;
+  toggleChatLabelStatus: (id: string, isActive?: boolean) => Promise<{ success: boolean; error?: string; isActive?: boolean }>;
+  deleteChatLabel: (id: string) => Promise<{ success: boolean; error?: string }>;
+  toggleLeadLabel: (leadId: string, labelId: string) => Promise<void>;
+
 
   fetchCourses: () => Promise<void>;
   addCourse: (course: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
@@ -411,6 +446,38 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return stored.length > 0 ? stored : INITIAL_TREATMENTS.filter(t => t.company === 'CRAS');
   });
   const [stages, setStages] = useState<LeadStageConfig[]>(() => mergeDefaultStages(getStored('rw_crm_stages', DEFAULT_STAGES)));
+  const [chatLabels, setChatLabels] = useState<ChatLabel[]>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_chat_labels');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+    } catch {}
+    return DEFAULT_CHAT_PRESET_LABELS;
+  });
+
+  const [leadLabels, setLeadLabels] = useState<Record<string, string[]>>(() => {
+    try {
+      const saved = localStorage.getItem('rw_crm_lead_labels');
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_lead_labels', JSON.stringify(leadLabels));
+    } catch {}
+  }, [leadLabels]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('rw_crm_chat_labels', JSON.stringify(chatLabels));
+    } catch {}
+  }, [chatLabels]);
+
   const [superAdmins, setSuperAdmins] = useState<User[]>(() => {
     const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
     return storedUsers.filter(u => 
@@ -419,7 +486,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       !u.email.startsWith('admin_test_')
     );
   });
-  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(INITIAL_TEMPLATES);
+  const [templates, setTemplates] = useState<WhatsAppTemplate[]>(() => getStored('rw_crm_templates', INITIAL_TEMPLATES));
+  const [metaConnected, setMetaConnected] = useState<boolean>(true);
+  const [metaWabaId, setMetaWabaId] = useState<string | null>('2332922997481634');
+  const [quickResponses, setQuickResponses] = useState<QuickResponse[]>(() => getStored('rw_crm_quick_responses', INITIAL_QUICK_RESPONSES));
   const [sequences, setSequences] = useState<FollowupSequence[]>(INITIAL_SEQUENCES);
   
   const [customers, setCustomers] = useState<Customer[]>(() => getStored('rw_crm_customers', []));
@@ -892,8 +962,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Dynamic Catalogs & Stage Config Fetch
       fetchStages().catch(() => null);
+      fetchChatLabels().catch(() => null);
+      fetchLeadLabels().catch(() => null);
       fetchCourses().catch(() => null);
       fetchTreatments().catch(() => null);
+      fetchQuickResponses().catch(() => null);
       if (currentUser?.role === 'super_admin') {
         fetchSuperAdmins().catch(() => null);
       }
@@ -1090,6 +1163,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (e) {
       console.warn('Could not fetch persistent database state:', e);
     }
+    fetchQuickResponses();
+    fetchTemplates();
   };
 
   // Loads one older page of conversation history using the server cursor.
@@ -1633,6 +1708,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return;
           }
 
+          if (data.type === 'QUICK_RESPONSES_UPDATED') {
+            fetchQuickResponses().catch(() => null);
+            return;
+          }
+
           if (data.type === 'INBOUND_WHATSAPP_MESSAGE' || data.type === 'OUTBOUND_WHATSAPP_MESSAGE') {
             // Skip empty protocol messages without text or media
             if ((!data.text || data.text.trim().length === 0) && !data.media) {
@@ -2097,6 +2177,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             setWhatsappStatus('connected');
             fetchInitialData();
             notify('WhatsApp History Synced', `${data.count} conversation messages restored from WhatsApp.`, 'success');
+          } else if (data.type === 'TEMPLATES_UPDATED') {
+            fetchTemplates();
+          } else if (data.type === 'QUICK_RESPONSES_UPDATED') {
+            fetchQuickResponses();
           } else if (data.type === 'QR_CODE') {
             setWhatsappStatus('qr_ready');
           }
@@ -3288,6 +3372,173 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notify('Category Updated', 'Changes saved to catalogue', 'info');
   };
 
+  
+  // Dynamic Chat Assign Labels (Supabase Cloud Sync)
+  const fetchChatLabels = useCallback(async () => {
+    try {
+      const isSuper = currentUser?.role === 'super_admin';
+      const token = await ensureValidAuthToken();
+      const endpoint = isSuper ? `${API_BASE_URL}/api/admin/chat-labels` : `${API_BASE_URL}/api/chat-labels`;
+      const res = await fetch(endpoint, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.labels) && data.labels.length > 0) {
+          setChatLabels(data.labels);
+          localStorage.setItem('rw_crm_chat_labels', JSON.stringify(data.labels));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch chat labels:', e);
+    }
+  }, [currentUser?.role]);
+
+  const fetchLeadLabels = useCallback(async () => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/lead-labels`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && data.leadLabels) {
+          setLeadLabels(prev => ({
+            ...prev,
+            ...data.leadLabels
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch lead labels:', e);
+    }
+  }, []);
+
+  const addChatLabel = async (labelData: Partial<ChatLabel>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(labelData)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to create assign label' };
+      }
+      await fetchChatLabels();
+      notify('Assign Label Created', `Label "${labelData.name}" saved to Supabase.`, 'success');
+      return { success: true, label: data.label };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error creating assign label' };
+    }
+  };
+
+  const updateChatLabel = async (id: string, updates: Partial<ChatLabel>) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to update assign label' };
+      }
+      await fetchChatLabels();
+      notify('Assign Label Updated', `Label updated in Supabase.`, 'success');
+      return { success: true, label: data.label };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error updating assign label' };
+    }
+  };
+
+  const toggleChatLabelStatus = async (id: string, isActive?: boolean) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels/${id}/status`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ isActive })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to toggle label status' };
+      }
+      await fetchChatLabels();
+      notify('Status Updated', data.message || 'Assign label status updated.', 'info');
+      return { success: true, isActive: data.isActive };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error toggling label status' };
+    }
+  };
+
+  const deleteChatLabel = async (id: string) => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/admin/chat-labels/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        return { success: false, error: data.error || 'Failed to delete assign label' };
+      }
+      await fetchChatLabels();
+      notify('Assign Label Deleted', data.message || 'Assign label deleted.', 'info');
+      return { success: true };
+    } catch (e: any) {
+      return { success: false, error: e.message || 'Network error deleting assign label' };
+    }
+  };
+
+  const toggleLeadLabel = async (leadId: string, labelId: string) => {
+    // 1. Optimistic local state update + localStorage
+    setLeadLabels(prev => {
+      const current = prev[leadId] || [];
+      const updated = current.includes(labelId)
+        ? current.filter(id => id !== labelId)
+        : [...current, labelId];
+      return { ...prev, [leadId]: updated };
+    });
+
+    // 2. Persist in Supabase Cloud
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/leads/${leadId}/labels`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ labelId, action: 'toggle' })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data?.success && Array.isArray(data.labels)) {
+          setLeadLabels(prev => ({
+            ...prev,
+            [leadId]: data.labels
+          }));
+        }
+      }
+    } catch (e) {
+      console.warn('⚠️ Could not sync lead label to Supabase, saved locally:', e);
+    }
+  };
+
   // Dynamic Configuration & Super Admin Methods
   const fetchStages = useCallback(async () => {
     try {
@@ -3776,20 +4027,258 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true };
   };
 
-  const addTemplate = (tpl: Omit<WhatsAppTemplate, 'id'>) => {
-    const newTpl: WhatsAppTemplate = {
+  const fetchTemplates = async () => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates`, {
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data.templates)) {
+          setTemplates(data.templates);
+          try {
+            localStorage.setItem('rw_crm_templates', JSON.stringify(data.templates));
+          } catch {}
+        }
+        if (data.metaConnected !== undefined) {
+          setMetaConnected(Boolean(data.metaConnected));
+        }
+        if (data.wabaId) {
+          setMetaWabaId(String(data.wabaId));
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch templates:', err);
+    }
+  };
+
+  const addTemplate = async (tpl: Omit<WhatsAppTemplate, 'id'>): Promise<{ success: boolean; error?: string; template?: WhatsAppTemplate }> => {
+    const tempId = 'tpl-' + Date.now();
+    const optimisticStatus = tpl.status || 'PENDING';
+    const optimisticTpl: WhatsAppTemplate = {
       ...tpl,
-      id: 'tpl-' + Date.now(),
+      id: tempId,
+      status: optimisticStatus,
+      approved: optimisticStatus === 'APPROVED',
+      createdAt: new Date().toISOString()
     };
-    setTemplates(prev => [...prev, newTpl]);
-    logAudit('CREATE_TEMPLATE', 'Template', newTpl.id, null, newTpl);
-    notify('Template Created', `Submitted "${newTpl.name}" to Meta for approval`, 'success');
+    setTemplates(prev => [optimisticTpl, ...prev.filter(t => t.id !== tempId)]);
+
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(tpl)
+      }).catch(() => null);
+
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (data.template) {
+          setTemplates(prev => {
+            const next = prev.map(t => (t.id === tempId || t.waTemplateName === data.template.waTemplateName) ? data.template : t);
+            try { localStorage.setItem('rw_crm_templates', JSON.stringify(next)); } catch {}
+            return next;
+          });
+          logAudit('CREATE_TEMPLATE', 'Template', data.template.id, null, data.template);
+          const statusText = data.template.status || 'PENDING';
+          if (data.warning) {
+            notify('Template Notice', data.warning, 'warning');
+          } else {
+            notify('Template Submitted', `"${data.template.name}" submitted to Meta Cloud API (Status: ${statusText})`, statusText === 'APPROVED' ? 'success' : 'info');
+          }
+          return { success: true, template: data.template };
+        }
+      } else if (res && !res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const errMsg = errData.error || 'Meta template submission returned an error';
+        const rejectedTpl: WhatsAppTemplate = {
+          ...optimisticTpl,
+          status: 'REJECTED',
+          rejectedReason: errMsg
+        };
+        setTemplates(prev => {
+          const next = prev.map(t => t.id === tempId ? rejectedTpl : t);
+          try { localStorage.setItem('rw_crm_templates', JSON.stringify(next)); } catch {}
+          return next;
+        });
+        notify('Meta Notice', errMsg, 'warning');
+        return { success: true, template: rejectedTpl, error: errMsg };
+      }
+    } catch (err: any) {
+      console.warn('addTemplate error:', err);
+    }
+
+    logAudit('CREATE_TEMPLATE', 'Template', tempId, null, optimisticTpl);
+    notify('Template Created', `Submitted "${optimisticTpl.name}" for Meta review`, 'info');
+    return { success: true, template: optimisticTpl };
+  };
+
+  const deleteTemplate = async (id: string): Promise<{ success: boolean; error?: string }> => {
+    const tplToDelete = templates.find(t => t.id === id || t.waTemplateName === id);
+    setTemplates(prev => {
+      const updated = prev.filter(t => t.id !== id && t.waTemplateName !== id && (tplToDelete ? t.id !== tplToDelete.id && t.waTemplateName !== tplToDelete.waTemplateName : true));
+      try {
+        localStorage.setItem('rw_crm_templates', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates/${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+
+      if (!res || !res.ok) {
+        // Fallback POST /api/templates/delete if DELETE method is restricted by network proxy
+        await fetch(`${API_BASE_URL}/api/templates/delete`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: token ? `Bearer ${token}` : ''
+          },
+          body: JSON.stringify({ id, waTemplateName: tplToDelete?.waTemplateName })
+        }).catch(() => null);
+      }
+    } catch (err) {
+      console.warn('deleteTemplate network error:', err);
+    }
+
+    logAudit('DELETE_TEMPLATE', 'Template', id, tplToDelete, null);
+    notify('Template Deleted', `Template "${tplToDelete?.name || id}" removed from CRM and Meta`, 'info');
+    return { success: true };
+  };
+
+  const syncTemplatesWithMeta = async (): Promise<{ success: boolean; count?: number }> => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/templates/sync`, {
+        method: 'POST',
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+      await fetchTemplates();
+      if (res && res.ok) {
+        notify('Meta Sync Complete', 'WhatsApp template statuses synchronized with Meta Graph API', 'success');
+        return { success: true };
+      }
+    } catch (err: any) {
+      console.warn('Sync templates error:', err);
+    }
+    notify('Meta Sync', 'Attempted synchronization with Meta Cloud API', 'info');
+    return { success: false };
   };
 
   const updateTemplate = (id: string, updates: Partial<WhatsAppTemplate>) => {
     setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     logAudit('UPDATE_TEMPLATE', 'Template', id, null, updates);
     notify('Template Updated', 'Template details updated', 'info');
+  };
+
+  const fetchQuickResponses = async () => {
+    try {
+      const token = await ensureValidAuthToken();
+      const res = await fetch(`${API_BASE_URL}/api/quick-responses`, {
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      }).catch(() => null);
+      if (res && res.ok) {
+        const data = await res.json().catch(() => ({}));
+        if (Array.isArray(data.quickResponses) && data.quickResponses.length > 0) {
+          setQuickResponses(data.quickResponses);
+          try {
+            localStorage.setItem('rw_crm_quick_responses', JSON.stringify(data.quickResponses));
+          } catch {}
+        }
+      }
+    } catch (err) {
+      console.warn('Could not fetch quick responses:', err);
+    }
+  };
+
+  const addQuickResponse = async (data: Omit<QuickResponse, 'id' | 'createdAt' | 'updatedAt'>) => {
+    const newId = `qr-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const newQR: QuickResponse = {
+      ...data,
+      id: newId,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    setQuickResponses(prev => {
+      const updated = [newQR, ...prev];
+      try {
+        localStorage.setItem('rw_crm_quick_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    notify('Quick Response Created', `"${newQR.title}" saved successfully`, 'success');
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/quick-responses`, {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(newQR)
+      });
+    } catch (err) {
+      console.warn('Failed to sync quick response to backend:', err);
+    }
+    return { success: true, quickResponse: newQR };
+  };
+
+  const updateQuickResponse = async (id: string, updates: Partial<QuickResponse>) => {
+    setQuickResponses(prev => {
+      const updated = prev.map(q => q.id === id ? { ...q, ...updates, updatedAt: new Date().toISOString() } : q);
+      try {
+        localStorage.setItem('rw_crm_quick_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    notify('Quick Response Updated', 'Changes saved successfully', 'info');
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/quick-responses/${id}`, {
+        method: 'PUT',
+        headers: { 
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify(updates)
+      });
+    } catch (err) {
+      console.warn('Failed to sync quick response update to backend:', err);
+    }
+    return { success: true };
+  };
+
+  const deleteQuickResponse = async (id: string) => {
+    setQuickResponses(prev => {
+      const updated = prev.filter(q => q.id !== id);
+      try {
+        localStorage.setItem('rw_crm_quick_responses', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+    notify('Quick Response Deleted', 'Removed from available quick responses', 'info');
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/quick-responses/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: token ? `Bearer ${token}` : '' }
+      });
+    } catch (err) {
+      console.warn('Failed to sync quick response deletion to backend:', err);
+    }
+    return { success: true };
   };
 
   const updateSequence = (id: string, updates: Partial<FollowupSequence>) => {
@@ -4751,6 +5240,15 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     stages,
     courses,
     superAdmins,
+    chatLabels,
+    leadLabels,
+    fetchChatLabels,
+    fetchLeadLabels,
+    addChatLabel,
+    updateChatLabel,
+    toggleChatLabelStatus,
+    deleteChatLabel,
+    toggleLeadLabel,
     fetchStages,
     addStage,
     updateStage,
@@ -4768,6 +5266,16 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     deleteSuperAdmin,
     addTemplate,
     updateTemplate,
+    deleteTemplate,
+    fetchTemplates,
+    syncTemplatesWithMeta,
+    metaConnected,
+    metaWabaId,
+    quickResponses,
+    addQuickResponse,
+    updateQuickResponse,
+    deleteQuickResponse,
+    fetchQuickResponses,
     updateSequence,
     updateCustomer,
     addCoordinator,

@@ -153,6 +153,74 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_broadcasts_created ON public.team_broadcasts(created_at DESC);`,
 
+  // --- quick responses (non-meta client message templates) --------------------
+  `CREATE TABLE IF NOT EXISTS public.quick_responses (
+     id VARCHAR(50) PRIMARY KEY,
+     title VARCHAR(255) NOT NULL,
+     content TEXT NOT NULL,
+     category VARCHAR(100) DEFAULT 'General',
+     language VARCHAR(20) DEFAULT 'en',
+     shortcut VARCHAR(50),
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_quick_responses_created ON public.quick_responses(created_at DESC);`,
+  `INSERT INTO public.quick_responses (id, title, content, category, language, shortcut)
+   VALUES 
+   ('qr-welcome-lang', '🌸 Welcome to Royal Wellness Center (Language Selection)', '🌸 Welcome to Royal Wellness Center!\n\nThank you for contacting us 😊\nWe are happy to assist you with treatment details, pricing, and appointment information.\n\n🌐 Please select your preferred language to continue:\n1️⃣ සිංහල – Sinhala\n2️⃣ தமிழ் – Tamil\n\n👉 Kindly reply with 1 or 2 to continue in your preferred language.\n\nThank you!\nRoyal Wellness Center\nPart of Alpha Health Group', 'Welcome & Greeting', 'multi', 'welcome'),
+   ('qr-gfc-tamil', '💉 Advanced GFC Hair Therapy (Tamil – Scalp Checking)', 'வணக்கம்! 😊🌸\n\n**Royal Wellness Center** ஐத் தொடர்புகொண்டமைக்கு நன்றி!\n\n💉 **Advanced GFC Hair Therapy (Growth Factor Concentrate)**\n\nGFC என்பது உங்கள் சொந்த இரத்தத்திலிருந்து பெறப்படும் வளர்ச்சிக் காரணிகளை (Growth Factors) பயன்படுத்தி மேற்கொள்ளப்படும் நவீன தலைமுடி சிகிச்சை முறையாகும்.\n\n🌿 **GFC சிகிச்சையின் முக்கிய நோக்கங்கள்:**\n✅ முடி உதிர்வைக் குறைக்க உதவுதல்\n✅ மெலிந்த முடிகளின் வளர்ச்சியை மேம்படுத்த உதவுதல்\n✅ முடியின் அடர்த்தியை அதிகரிக்க உதவுதல்\n✅ பலவீனமான முடி வேர்களின் செயல்பாட்டை மேம்படுத்த உதவுதல்\n\nசிகிச்சையின் பலன்கள் ஒவ்வொருவருக்கும் மாறுபடலாம். உங்கள் தலைமுடியின் நிலையைப் பொறுத்து மருத்துவர் பொருத்தமான சிகிச்சையைப் பரிந்துரைப்பார்.\n\n🔬 **இலவச தலைமுடி மற்றும் தலைச்சருமப் பரிசோதனை (Scalp Checking)**\n\n📍 **நீங்கள் எந்தப் பகுதியைச் சேர்ந்தவர்?**\n1️⃣ மருதமுனை / கல்முனை\n2️⃣ கொழும்பு\n\nஉங்களுக்கு அருகிலுள்ள எமது கிளையில் மருத்துவர் ஆலோசனைக்கான நேரத்தை முன்பதிவு செய்து தர முடியும். 😊\n\n**நன்றி!**\nRoyal Wellness Center\n*Part of Alpha Health Group*', 'Hair Treatments', 'ta', 'gfc-ta')
+   ON CONFLICT (id) DO NOTHING;`,
+
+  // --- whatsapp pre-approved templates (meta graph api) -----------------------
+  `CREATE TABLE IF NOT EXISTS public.whatsapp_templates (
+     id VARCHAR(100) PRIMARY KEY,
+     name VARCHAR(255) NOT NULL,
+     category VARCHAR(50) DEFAULT 'UTILITY',
+     content TEXT,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS wa_template_name VARCHAR(255);`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS body TEXT;`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS content TEXT;`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS variables TEXT DEFAULT '[]';`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS meta_id VARCHAR(100);`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS rejected_reason TEXT;`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`,
+  `ALTER TABLE public.whatsapp_templates ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();`,
+  `CREATE INDEX IF NOT EXISTS idx_whatsapp_templates_wa_name ON public.whatsapp_templates(wa_template_name);`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-rwc-en', '🌿 Royal Wellness Center (English - Meta Approved)', 'rwc_welcome_greeting', 'UTILITY', 'en'::"LanguageCode", 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', 'Hello {{1}}, thank you for reaching out to Royal Wellness Center. We are delighted to assist you with our medical and aesthetic treatments. How may our team assist you today?', '["Valued Client"]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-rwc-en');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-cras-en', '🎓 College of Royal Aesthetic - CRAS (English - Meta Approved)', 'cras_welcome_greeting', 'UTILITY', 'en'::"LanguageCode", 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', 'Hello {{1}}, thank you for reaching out to the College of Royal Aesthetic of Sri Lanka CRAS. We are delighted to assist you with our diploma programs and aesthetic training courses. How may our team assist you today?', '["Dr. Perera"]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-cras-en');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-rwc-si', '🌿 Royal Wellness Center (Sinhala – Meta Approved)', 'rwc_welcome_greeting_si', 'MARKETING', 'si'::"LanguageCode", 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', 'ආයුබෝවන් {{1}}, Royal Wellness Center වෙත සම්බන්ධ වීම පිළිබඳව ඔබට ස්තූතියි. අපගේ වෛද්‍ය සහ රූපලාවන්‍ය ප්‍රතිකාර පිළිබඳව ඔබට සහාය වීමට අපි සතුටු වන්නෙමු. අද දින අප කණ්ඩායමෙන් ඔබට අවශ්‍ය සහාය කුමක්ද?', '["Valued Client"]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-rwc-si');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-rwc-ta', '🌿 Royal Wellness Center (Tamil – Meta Approved)', 'rwc_welcome_greeting_ta', 'MARKETING', 'ta'::"LanguageCode", 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', 'வணக்கம் {{1}}, Royal Wellness Center ஐ தொடர்பு கொண்டதற்கு நன்றி. எங்களது மருத்துவ மற்றும் அழகு சிகிச்சை சேவைகளில் உங்களுக்கு உதவ நாங்கள் மகிழ்ச்சியடைகிறோம். இன்று எங்கள் குழுவிடமிருந்து உங்களுக்கு என்ன உதவி தேவை?', '["Valued Client"]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-rwc-ta');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-rwc-followup-si', '🌿 RWC Treatment Discussion Follow-Up (Sinhala – Meta Approved)', 'rwc_followup_discussion_si', 'MARKETING', 'si'::"LanguageCode", 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', 'Royal Wellness Center වෙතින් සුහද සුබ පැතුම්! \n\nඔබගේ ප්රතිකාරය සම්බන්ධයෙන් අප මීට පෙර කළ සාකච්ඡාව පිළිබඳව නැවත ඔබව සම්බන්ධ කරගනිමු.\n\nදැන් ඔබ සමඟ කතා කිරීමට පහසුද? නැතහොත් ඔබව සම්බන්ධ කරගැනීමට වඩාත් සුදුසු වෙනත් වේලාවක් තිබේද?\n\nස්තුතියි!', '[]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-rwc-followup-si');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-cras-course-followup-en', '🎓 CRAS Course Discussion Follow-Up (English – Meta Approved)', 'cras_course_followup_en', 'MARKETING', 'en'::"LanguageCode", 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', 'Greetings from College of Royal Aesthetic Studies! 🎓\n\nWe are following up on our previous discussion regarding your course inquiry.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', '[]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-cras-course-followup-en');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-rwc-followup-ta', '🌿 RWC Treatment Discussion Follow-Up (Tamil – Meta Approved)', 'rwc_followup_discussion_ta', 'MARKETING', 'ta'::"LanguageCode", 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', 'Royal Wellness Center-இலிருந்து அன்பான வணக்கங்கள்! \n\nஉங்களின் சிகிச்சை தொடர்பான எமது முந்தைய உரையாடலைத் தொடர்ந்து உங்களைத் தொடர்புகொள்கிறோம்.\n\nஇப்போது உங்களுடன் பேசுவதற்கு வசதியாக இருக்கிறதா? அல்லது வேறு ஏதேனும் நேரத்தில் உங்களைத் தொடர்புகொள்ளலாமா?\n\nநன்றி!', '[]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-rwc-followup-ta');`,
+  `INSERT INTO public.whatsapp_templates (id, name, wa_template_name, category, language, body, content, variables, status)
+   SELECT
+     'tpl-rwc-followup-en', '🌿 RWC Treatment Discussion Follow-Up (English – Meta Approved)', 'rwc_followup_discussion_en', 'MARKETING', 'en'::"LanguageCode", 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', 'Greetings from Royal Wellness Center! \n\nWe are following up on our previous discussion regarding your treatment.\nWould this be a convenient time to speak, or is there a better time to contact you?\n\nThank you!', '[]', 'APPROVED'::"TemplateStatus"
+   WHERE NOT EXISTS (SELECT 1 FROM public.whatsapp_templates WHERE id = 'tpl-rwc-followup-en');`,
+
   // --- permanent sender audit trail -------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.message_audits (
      id VARCHAR(50) PRIMARY KEY,
@@ -232,6 +300,36 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_lead_stages_order ON public.lead_stages(order_index ASC);`,
   `CREATE INDEX IF NOT EXISTS idx_lead_stages_active ON public.lead_stages(is_active);`,
+  // --- dynamic chat assign labels ----------------------------------------------
+  `CREATE TABLE IF NOT EXISTS public.chat_labels (
+     id VARCHAR(50) PRIMARY KEY,
+     key VARCHAR(50) UNIQUE NOT NULL,
+     name VARCHAR(100) NOT NULL,
+     color VARCHAR(50) NOT NULL DEFAULT '#f59e0b',
+     dot_color VARCHAR(50) DEFAULT 'bg-amber-400',
+     bg_color VARCHAR(100) DEFAULT 'bg-amber-500/20 text-amber-300 border-amber-500/30',
+     description TEXT,
+     company VARCHAR(50) DEFAULT 'ALL',
+     allowed_roles VARCHAR(255) DEFAULT 'ALL',
+     is_active BOOLEAN DEFAULT TRUE,
+     is_system BOOLEAN DEFAULT FALSE,
+     order_index INT DEFAULT 0,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_labels_order ON public.chat_labels(order_index ASC);`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_labels_active ON public.chat_labels(is_active);`,
+  `CREATE INDEX IF NOT EXISTS idx_chat_labels_company ON public.chat_labels(company);`,
+  `CREATE TABLE IF NOT EXISTS public.lead_label_assignments (
+     id VARCHAR(50) PRIMARY KEY,
+     lead_id VARCHAR(50) NOT NULL REFERENCES public.leads(id) ON DELETE CASCADE,
+     label_id VARCHAR(50) NOT NULL,
+     assigned_by VARCHAR(50),
+     assigned_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     CONSTRAINT uq_lead_label_assignment UNIQUE (lead_id, label_id)
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_lead_label_lead ON public.lead_label_assignments(lead_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_lead_label_label ON public.lead_label_assignments(label_id);`,
 
   // --- appointment scheduling --------------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.branches (
@@ -619,6 +717,19 @@ export async function ensureSchema(prisma) {
     await runAll(prisma, SEED_STATEMENTS, failures);
   }
   await runAll(prisma, FORWARDING_STAGE_STATEMENTS, failures);
+  const labelSeedStatements = [
+    `INSERT INTO public.chat_labels (id, key, name, color, dot_color, bg_color, description, company, allowed_roles, is_active, is_system, order_index, created_at, updated_at)
+     VALUES
+       ('vip', 'vip', 'VIP Patient', '#f59e0b', 'bg-amber-400', 'bg-amber-500/20 text-amber-300 border-amber-500/30', 'High-priority VIP customer requiring dedicated attention', 'ALL', 'ALL', TRUE, TRUE, 0, NOW(), NOW()),
+       ('hot', 'hot', 'Hot Lead', '#f43f5e', 'bg-rose-400', 'bg-rose-500/20 text-rose-300 border-rose-500/30', 'Urgent prospective patient or student ready to convert', 'ALL', 'ALL', TRUE, TRUE, 1, NOW(), NOW()),
+       ('booked', 'booked', 'Consultation Booked', '#10b981', 'bg-emerald-400', 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30', 'Clinical consultation or course admission confirmed', 'ALL', 'ALL', TRUE, TRUE, 2, NOW(), NOW()),
+       ('followup', 'followup', 'Follow-up Needed', '#0ea5e9', 'bg-sky-400', 'bg-sky-500/20 text-sky-300 border-sky-500/30', 'Pending client reply or scheduled follow-up outreach', 'ALL', 'ALL', TRUE, TRUE, 3, NOW(), NOW()),
+       ('prescription', 'prescription', 'Prescription Sent', '#8b5cf6', 'bg-purple-400', 'bg-purple-500/20 text-purple-300 border-purple-500/30', 'Medical prescription or academic syllabus forwarded', 'ALL', 'ALL', TRUE, TRUE, 4, NOW(), NOW())
+     ON CONFLICT (key) DO UPDATE SET
+       name = EXCLUDED.name,
+       is_system = EXCLUDED.is_system;`
+  ];
+  await runAll(prisma, labelSeedStatements, failures);
 
   if (failures.length > 0) {
     console.warn(`⚠️ [Schema] ${failures.length} bootstrap statement(s) did not apply:`);

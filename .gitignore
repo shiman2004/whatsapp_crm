@@ -38,6 +38,7 @@ public/uploads/
 backend/public/
 backend/data/
 media_*
+!MEDIA_STORAGE_INVESTIGATION.md
 *.jpg
 *.png
 !frontend/public/logo.png

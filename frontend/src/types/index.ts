@@ -94,6 +94,7 @@ export interface Lead {
   lastCustomerMessageAt: string;
   notesCount?: number;
   unreadCount?: number;
+  labels?: string[];
 }
 
 export interface LeadAssignmentHistory {
@@ -206,6 +207,24 @@ export interface Treatment {
   benefits?: string;
 }
 
+
+export interface ChatLabel {
+  id: string;
+  key: string;
+  name: string;
+  color: string;
+  dotColor?: string;
+  bgColor?: string;
+  description?: string;
+  company?: string;
+  allowedRoles?: string;
+  isActive?: boolean;
+  isSystem?: boolean;
+  orderIndex?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export interface LeadStageConfig {
   id: string;
   key: string;
@@ -279,6 +298,22 @@ export interface WhatsAppTemplate {
   variables: string[];
   approved: boolean;
   category: 'UTILITY' | 'MARKETING';
+  status?: 'APPROVED' | 'PENDING' | 'REJECTED' | 'PAUSED' | 'DISABLED';
+  metaId?: string | null;
+  rejectedReason?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface QuickResponse {
+  id: string;
+  title: string;
+  content: string;
+  category?: string;
+  language?: LanguageCode | 'multi';
+  shortcut?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AuditLog {

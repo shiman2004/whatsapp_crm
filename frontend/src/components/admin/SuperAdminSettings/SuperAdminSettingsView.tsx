@@ -5,6 +5,7 @@ import { TreatmentManagementTab } from './TreatmentManagementTab';
 import { StageManagementTab } from './StageManagementTab';
 import { AdminAccountsTab } from './AdminAccountsTab';
 import { ExamSettingsView } from '../../exam/ExamSettingsView';
+import { LabelManagementTab } from './LabelManagementTab';
 import {
   Sliders,
   GraduationCap,
@@ -13,12 +14,13 @@ import {
   ShieldCheck,
   ShieldAlert,
   Building2,
-  Lock
+  Lock,
+  Tag
 } from 'lucide-react';
 
-type SettingsTab = 'courses' | 'treatments' | 'stages' | 'admins' | 'exam-settings';
+type SettingsTab = 'courses' | 'treatments' | 'stages' | 'labels' | 'admins' | 'exam-settings';
 
-const SETTINGS_TABS: SettingsTab[] = ['courses', 'treatments', 'stages', 'admins', 'exam-settings'];
+const SETTINGS_TABS: SettingsTab[] = ['courses', 'treatments', 'stages', 'labels', 'admins', 'exam-settings'];
 
 /** Cold-load deep links (#/settings/admins) must open the right tab before the
  *  sidebar's settings-subtab-change event can reach this lazy-mounted module. */
@@ -99,6 +101,16 @@ export const SuperAdminSettingsView: React.FC = () => {
       tagColor: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',
     },
     {
+      id: 'labels' as SettingsTab,
+      label: 'Assign Labels',
+      subtitle: 'WhatsApp & Inquiries Tagging',
+      icon: Tag,
+      color: 'text-amber-400',
+      activeBg: 'bg-amber-500/15 border-amber-500/30 text-amber-300',
+      tag: 'LABELS',
+      tagColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40',
+    },
+    {
       id: 'admins' as SettingsTab,
       label: 'Super Admins',
       subtitle: 'Security & Access Control',
@@ -147,7 +159,7 @@ export const SuperAdminSettingsView: React.FC = () => {
       </div>
 
       {/* Modern Segmented Navigation Tabs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800/80">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 bg-slate-100 dark:bg-slate-900/60 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800/80">
         {tabs.map((tab) => {
           const Icon = tab.icon;
           const isActive = activeTab === tab.id;
@@ -192,6 +204,7 @@ export const SuperAdminSettingsView: React.FC = () => {
         {activeTab === 'courses' && <CourseManagementTab />}
         {activeTab === 'treatments' && <TreatmentManagementTab />}
         {activeTab === 'stages' && <StageManagementTab />}
+        {activeTab === 'labels' && <LabelManagementTab />}
         {activeTab === 'admins' && <AdminAccountsTab />}
         {activeTab === 'exam-settings' && <div className="mt-2"><ExamSettingsView /></div>}
       </div>

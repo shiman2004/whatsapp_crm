@@ -19,13 +19,15 @@ import {
   MapPin,
   ChevronRight,
   ChevronLeft,
-  Clock
+  Clock,
+  Zap
 } from 'lucide-react';
 import { Lead, WhatsAppTemplate } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { getLatestCustomerMessageTime } from '../../utils/window24hUtils';
 import { WhatsAppVoiceRecorder } from '../../utils/audioRecorder';
 import { AddContactModal } from './AddContactModal';
+import { QuickResponseModal } from './QuickResponseModal';
 
 interface MessageComposerProps {
   lead: Lead;
@@ -55,6 +57,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
   const [showTemplates, setShowTemplates] = useState(false);
   const [copiedTplId, setCopiedTplId] = useState<string | null>(null);
   const [showAddContactModal, setShowAddContactModal] = useState(false);
+  const [showQuickResponseModal, setShowQuickResponseModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
@@ -361,6 +364,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     sendMessage(lead.id, `${locationName} - ${mapUrl}`, 'coordinator');
   };
 
+  const handleSelectQuickResponse = (content: string, sendDirectly?: boolean) => {
+    if (sendDirectly) {
+      sendMessage(lead.id, content, 'coordinator');
+    } else {
+      setInputVal(prev => prev ? `${prev}\n\n${content}` : content);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
       if (e.shiftKey) {
@@ -501,6 +515,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
                   <span>Location</span>
                 </div>
                 <ChevronRight className="w-4 h-4 text-[#54656f] dark:text-[#8696a0] group-hover:text-[#111b21] dark:group-hover:text-white transition-colors" />
+              </button>
+
+              <button 
+                type="button"
+                onClick={() => {
+                  setShowAttachMenu(false);
+                  setShowQuickResponseModal(true);
+                }}
+                className="w-full flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors cursor-pointer text-left"
+              >
+                <div className="w-7 h-7 rounded-full bg-teal-500/20 text-[#008069] dark:text-[#00a884] flex items-center justify-center shrink-0">
+                  <Zap className="w-4 h-4 fill-current" />
+                </div>
+                <span>Quick Response</span>
               </button>
             </>
           ) : (
@@ -943,6 +971,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
       <AddContactModal
         isOpen={showAddContactModal}
         onClose={() => setShowAddContactModal(false)}
+      />
+
+      {/* Quick Response Modal */}
+      <QuickResponseModal
+        isOpen={showQuickResponseModal}
+        onClose={() => setShowQuickResponseModal(false)}
+        onSelect={handleSelectQuickResponse}
+        leadId={lead.id}
+        leadName={lead.customer?.displayName || 'Client'}
       />
     </div>
   );

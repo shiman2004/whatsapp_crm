@@ -36,6 +36,7 @@ import {
   Layers,
   TrendingUp,
   Award,
+  Tag,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -142,6 +143,7 @@ const settingsChildren: NavChild[] = [
   { id: 'courses', label: 'Courses & Programs', icon: BookOpen, path: '/settings/courses', intentEvent: 'settings-subtab-change', intentValue: 'courses' },
   { id: 'treatments', label: 'Treatments Catalog', icon: Sparkles, path: '/settings/treatments', intentEvent: 'settings-subtab-change', intentValue: 'treatments' },
   { id: 'stages', label: 'Lead Funnel Stages', icon: KanbanSquare, path: '/settings/stages', intentEvent: 'settings-subtab-change', intentValue: 'stages' },
+  { id: 'labels', label: 'Assign Labels', icon: Tag, path: '/settings/labels', intentEvent: 'settings-subtab-change', intentValue: 'labels' },
   { id: 'exam-settings', label: 'Exam Department Settings', icon: GraduationCap, path: '/settings/exam-settings', intentEvent: 'settings-subtab-change', intentValue: 'exam-settings' },
 ];
 

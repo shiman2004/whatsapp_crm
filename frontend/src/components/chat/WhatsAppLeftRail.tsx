@@ -19,7 +19,7 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
   setActiveSection,
   onOpenSettings
 }) => {
-  const { setChatListFilter, totalUnreadCountForUser, theme, toggleTheme } = useCrm();
+  const { openDirectIncomingChat, totalUnreadCountForUser, theme, toggleTheme } = useCrm();
 
   return (
     <aside className="hidden md:flex w-[68px] bg-[#f0f2f5] dark:bg-[#202c33] border-r border-[#d1d7db] dark:border-[#222e35] flex-col justify-between items-center py-2 select-none shrink-0 z-20">
@@ -37,14 +37,14 @@ export const WhatsAppLeftRail: React.FC<WhatsAppLeftRailProps> = ({
         <button
           onClick={() => {
             setActiveSection('chats');
-            setChatListFilter('all');
+            openDirectIncomingChat();
           }}
           className={`relative p-2.5 rounded-full transition-all group cursor-pointer ${
             activeSection === 'chats' 
               ? 'bg-[#e9edef] dark:bg-[#374248] text-[#111b21] dark:text-white shadow-xs' 
               : 'text-[#54656f] dark:text-[#aebac1] hover:bg-slate-200/70 dark:hover:bg-[#374248]/60 hover:text-[#111b21] dark:hover:text-white'
           }`}
-          title="All Chats"
+          title="Direct Incoming Chat"
         >
           <MessageSquare className="w-5 h-5" />
           {totalUnreadCountForUser > 0 && (

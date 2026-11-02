@@ -336,6 +336,7 @@ interface CrmContextType {
   chatListFilter: string;
   setChatListFilter: (filter: string) => void;
   openUnreadChats: () => void;
+  openDirectIncomingChat: () => void;
   activeNavTab: NavTab;
   setActiveNavTab: (tab: NavTab) => void;
 
@@ -2306,6 +2307,56 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setChatListFilter('unread');
     setSelectedLeadId(null);
   }, []);
+
+  // Open direct incoming WhatsApp chat
+  const openDirectIncomingChat = useCallback(() => {
+    setActiveNavTab('chat');
+    setChatListFilter('all');
+
+    const accessible = leads.filter(l => isLeadAccessibleForUser(l, currentUser));
+    if (accessible.length === 0) return;
+
+    // 1. Priority 1: Unread incoming chats
+    const unreadLeads = accessible.filter(l => (l.unreadCount || 0) > 0);
+    if (unreadLeads.length > 0) {
+      unreadLeads.sort((a, b) => {
+        const tA = new Date(a.lastCustomerMessageAt || a.updatedAt || a.createdAt).getTime();
+        const tB = new Date(b.lastCustomerMessageAt || b.updatedAt || b.createdAt).getTime();
+        return tB - tA;
+      });
+      // If currently selected lead is in unread list, cycle to the next unread lead
+      const currentIdx = unreadLeads.findIndex(l => l.id === selectedLeadId);
+      if (currentIdx !== -1 && currentIdx < unreadLeads.length - 1) {
+        setSelectedLeadId(unreadLeads[currentIdx + 1].id);
+        return;
+      }
+      setSelectedLeadId(unreadLeads[0].id);
+      return;
+    }
+
+    // 2. Priority 2: Lead with the most recent inbound message
+    let bestLead = accessible[0];
+    let bestTime = 0;
+    for (const lead of accessible) {
+      let t = lead.lastCustomerMessageAt ? new Date(lead.lastCustomerMessageAt).getTime() : 0;
+      if (!t) {
+        const inMsg = (messages || []).filter(m => 
+          (m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId)) &&
+          (m.direction === 'inbound' || m.senderType === 'customer')
+        );
+        if (inMsg.length > 0) {
+          const lastM = inMsg[inMsg.length - 1];
+          t = new Date(lastM.createdAt || lastM.timestamp || 0).getTime();
+        }
+      }
+      if (t > bestTime) {
+        bestTime = t;
+        bestLead = lead;
+      }
+    }
+
+    setSelectedLeadId(bestLead.id);
+  }, [leads, messages, currentUser, selectedLeadId]);
 
   // Auto-mark active chat as read on load or change
   useEffect(() => {
@@ -5410,6 +5461,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     chatListFilter,
     setChatListFilter,
     openUnreadChats,
+    openDirectIncomingChat,
     activeNavTab,
     setActiveNavTab,
     theme,

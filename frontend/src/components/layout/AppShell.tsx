@@ -31,12 +31,16 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
     setNotificationSettingsOpen,
     totalUnreadCountForUser,
     selectedLeadId,
+    openDirectIncomingChat,
   } = useCrm();
   const [mobileOpen, setMobileOpen] = React.useState(false);
 
   const navigate = (tab: NavTab) => {
     setActiveNavTab(tab);
     navigateToPath(routeForTab(tab));
+    if (tab === 'chat' && !selectedLeadId) {
+      openDirectIncomingChat();
+    }
   };
 
   const unread = totalUnreadCountForUser || 0;

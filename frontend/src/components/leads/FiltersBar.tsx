@@ -2,6 +2,7 @@ import React from 'react';
 import { 
   Search, 
   Filter, 
+  Calendar, 
   Download, 
   LayoutGrid, 
   Table as TableIcon,
@@ -81,7 +82,63 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
     ? "Search by patient name, phone (+94), serial..." 
     : "Search by name, phone (+94), serial...";
 
-  const activeFilterCount = Number(Boolean(dateFrom)) + Number(Boolean(dateTo)) + Number(Boolean(selectedStage));
+  const [datePreset, setDatePreset] = React.useState<string>(() => {
+    if (dateFrom && dateTo && dateFrom === dateTo) return 'today';
+    if (dateFrom || dateTo) return 'custom';
+    return 'all';
+  });
+  const [isCustomDateOpen, setIsCustomDateOpen] = React.useState(false);
+
+  const formatDateYMD = (d: Date) => {
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  };
+
+  const handleDatePresetChange = (preset: string) => {
+    setDatePreset(preset);
+    const now = new Date();
+    if (preset === 'all') {
+      setDateFrom('');
+      setDateTo('');
+      setIsCustomDateOpen(false);
+    } else if (preset === 'today') {
+      const todayStr = formatDateYMD(now);
+      setDateFrom(todayStr);
+      setDateTo(todayStr);
+      setIsCustomDateOpen(false);
+    } else if (preset === 'yesterday') {
+      const y = new Date();
+      y.setDate(y.getDate() - 1);
+      const yesterdayStr = formatDateYMD(y);
+      setDateFrom(yesterdayStr);
+      setDateTo(yesterdayStr);
+      setIsCustomDateOpen(false);
+    } else if (preset === 'last7days') {
+      const d7 = new Date();
+      d7.setDate(d7.getDate() - 6);
+      setDateFrom(formatDateYMD(d7));
+      setDateTo(formatDateYMD(now));
+      setIsCustomDateOpen(false);
+    } else if (preset === 'last30days') {
+      const d30 = new Date();
+      d30.setDate(d30.getDate() - 29);
+      setDateFrom(formatDateYMD(d30));
+      setDateTo(formatDateYMD(now));
+      setIsCustomDateOpen(false);
+    } else if (preset === 'this_month') {
+      const m1 = new Date(now.getFullYear(), now.getMonth(), 1);
+      setDateFrom(formatDateYMD(m1));
+      setDateTo(formatDateYMD(now));
+      setIsCustomDateOpen(false);
+    } else if (preset === 'custom') {
+      setIsCustomDateOpen(true);
+    }
+  };
+
+  const hasDateFilter = Boolean(dateFrom || dateTo || datePreset !== 'all');
+  const activeFilterCount = Number(hasDateFilter) + Number(Boolean(selectedStage));
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -90,8 +147,9 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
     setSelectedCoordinator('all');
     setDateFrom('');
     setDateTo('');
+    setDatePreset('all');
     setSelectedStage('');
-    setIsFilterOpen(false);
+    setIsCustomDateOpen(false);
   };
 
   return (
@@ -117,35 +175,94 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
 
       {/* Middle: Filter Dropdowns */}
       <div className="flex flex-wrap xl:flex-nowrap items-center gap-2 flex-1 min-w-0">
+        {/* Date Filter Dropdown */}
         <div className="relative">
-          <button
-            type="button"
-            onClick={() => setIsFilterOpen((open) => !open)}
-            aria-expanded={isFilterOpen}
-            aria-haspopup="dialog"
-            className={`h-9 px-2.5 rounded-lg border text-[13px] font-medium flex items-center gap-1.5 transition-colors ${
-              activeFilterCount > 0
-                ? 'bg-teal-50 dark:bg-teal-500/15 border-teal-300 dark:border-teal-500/40 text-teal-700 dark:text-teal-300'
-                : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
-            }`}
-          >
-            <Filter className="w-3.5 h-3.5" />
-            <span>Filter</span>
-            {activeFilterCount > 0 && <span className="min-w-4 h-4 px-1 rounded-full bg-teal-600 text-white text-[10px] leading-4 text-center">{activeFilterCount}</span>}
-          </button>
-          {isFilterOpen && (
+          <div className={`h-9 flex items-center gap-1.5 px-2.5 rounded-lg border text-[13px] transition-colors ${
+            hasDateFilter
+              ? 'bg-teal-50 dark:bg-teal-500/15 border-teal-300 dark:border-teal-500/40 text-teal-700 dark:text-teal-300 font-medium'
+              : 'bg-slate-50 dark:bg-slate-950/60 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+          }`}>
+            <Calendar className={`w-3.5 h-3.5 shrink-0 ${hasDateFilter ? 'text-teal-600 dark:text-teal-400' : 'text-slate-400'}`} />
+            <select
+              value={datePreset}
+              onChange={(e) => handleDatePresetChange(e.target.value)}
+              aria-label="Filter leads by date"
+              className="min-w-0 bg-transparent text-slate-700 dark:text-slate-300 text-[13px] outline-none cursor-pointer max-w-[110px] lg:max-w-[125px] truncate"
+            >
+              <option value="all" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Dates</option>
+              <option value="today" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Today</option>
+              <option value="yesterday" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Yesterday</option>
+              <option value="last7days" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Last 7 Days</option>
+              <option value="last30days" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Last 30 Days</option>
+              <option value="this_month" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">This Month</option>
+              <option value="custom" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">Custom Range...</option>
+            </select>
+            {hasDateFilter && (
+              <button
+                type="button"
+                onClick={() => handleDatePresetChange('all')}
+                title="Clear date filter"
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 ml-0.5 text-xs"
+              >
+                ×
+              </button>
+            )}
+          </div>
+
+          {/* Custom Date Range Popover */}
+          {isCustomDateOpen && (
             <div className="absolute left-0 top-full z-30 mt-2 w-64 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-3 shadow-xl">
               <div className="flex items-center justify-between mb-2">
-                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Date range</p>
-                {activeFilterCount > 0 && <button type="button" onClick={clearAllFilters} className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline">Clear filters</button>}
+                <p className="text-xs font-semibold text-slate-800 dark:text-slate-100">Custom Date Range</p>
+                {(dateFrom || dateTo) && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDateFrom('');
+                      setDateTo('');
+                      setDatePreset('all');
+                      setIsCustomDateOpen(false);
+                    }}
+                    className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline"
+                  >
+                    Reset
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <label className="text-[11px] text-slate-500 dark:text-slate-400">From
-                  <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500" />
+                  <input
+                    type="date"
+                    value={dateFrom}
+                    max={dateTo || undefined}
+                    onChange={(e) => {
+                      setDateFrom(e.target.value);
+                      setDatePreset('custom');
+                    }}
+                    className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500"
+                  />
                 </label>
                 <label className="text-[11px] text-slate-500 dark:text-slate-400">To
-                  <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500" />
+                  <input
+                    type="date"
+                    value={dateTo}
+                    min={dateFrom || undefined}
+                    onChange={(e) => {
+                      setDateTo(e.target.value);
+                      setDatePreset('custom');
+                    }}
+                    className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500"
+                  />
                 </label>
+              </div>
+              <div className="mt-2.5 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setIsCustomDateOpen(false)}
+                  className="px-2.5 py-1 rounded-md bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-semibold cursor-pointer"
+                >
+                  Done
+                </button>
               </div>
             </div>
           )}

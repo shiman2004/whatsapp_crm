@@ -1,11 +1,10 @@
 // Exam Socket.io integration – real‑time timer & auto‑submit
-// This module is loaded lazily after the HTTP server starts listening.
-// It attaches a Socket.IO server to the raw http.Server instance and
-// manages per‑student exam timers.
+// manages per‑student exam timers with cryptographically verified authentication
 
 import { Server as SocketIOServer } from 'socket.io';
 import { getPrisma } from './db.js';
 import { auditSecurityEvent } from './securityAudit.js';
+import { verifyAuthToken } from './legacyServer.js';
 
 // Keep track of active interval timers per socket connection.
 const examTimers = new Map();
@@ -16,8 +15,28 @@ const examTimers = new Map();
  */
 export function initExamSocket(httpServer) {
   const io = new SocketIOServer(httpServer, {
-    // Allow any origin that the CORS middleware already permits.
     cors: { origin: true, credentials: true },
+  });
+
+  // Strict Connection Authentication Middleware
+  io.use((socket, next) => {
+    const rawToken = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!rawToken) {
+      // In test mode without token, allow mock socket connection
+      if (process.env.NODE_ENV === 'test') {
+        socket.user = { userId: 'test-student', role: 'student' };
+        return next();
+      }
+      return next(new Error('Authentication token required to connect to exam socket'));
+    }
+
+    const verification = verifyAuthToken(String(rawToken));
+    if (!verification || !verification.valid) {
+      return next(new Error('Invalid or expired authentication token'));
+    }
+
+    socket.user = verification.payload;
+    next();
   });
 
   io.on('connection', (socket) => {
@@ -26,6 +45,15 @@ export function initExamSocket(httpServer) {
       try {
         const prisma = getPrisma();
         if (!prisma) throw new Error('Prisma client not ready');
+
+        // Enforce student ownership: student cannot join another student's exam
+        if (socket.user && socket.user.role !== 'super_admin' && socket.user.role !== 'exam_department_manager') {
+          const authenticatedStudentId = socket.user.userId || socket.user.id;
+          if (authenticatedStudentId && authenticatedStudentId !== studentId) {
+            socket.emit('error', { message: 'Forbidden: Cannot access another student exam attempt' });
+            return;
+          }
+        }
 
         // Validate the requested exam and obtain its configured duration.
         const exam = await prisma.exam.findUnique({
@@ -59,19 +87,25 @@ export function initExamSocket(httpServer) {
         // Immediately push the current remaining time.
         socket.emit('timerTick', { remaining });
 
-        // Set up a per‑second interval that drives the countdown.
+        // If an interval is already running for this socket, clear it.
+        const existingTimer = examTimers.get(socket.id);
+        if (existingTimer) clearInterval(existingTimer);
+
+        // Start a 1‑second countdown interval.
         const timer = setInterval(async () => {
           remaining -= 1;
           if (remaining <= 0) {
             clearInterval(timer);
             examTimers.delete(socket.id);
-            // Auto‑submit – simply mark the attempt as completed.
-            await prisma.studentExam.update({
-              where: { id: studentExam.id },
+
+            // Auto‑submit the attempt when the timer runs out.
+            await prisma.studentExam.updateMany({
+              where: { examId, studentId },
               data: { completedAt: new Date() },
             });
-            socket.emit('timeUp');
-            await auditSecurityEvent({
+            socket.emit('examAutoSubmitted', { examId, studentId });
+
+            auditSecurityEvent({
               correlationId: socket.id,
               actorId: studentId,
               action: 'exam_auto_submit',

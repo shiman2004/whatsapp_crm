@@ -411,14 +411,14 @@ export const LoginScreen: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setPortalView('rwc')}
-                className="w-full p-3.5 rounded-2xl bg-[#F0F2F5] hover:bg-[#E0E5E7] dark:bg-[#2A3942] dark:hover:bg-[#202C33] border border-emerald-900/50 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
+                className="w-full p-3.5 rounded-2xl bg-gradient-to-r from-[#0b2b1d] to-[#14532d] hover:to-[#166534] border border-emerald-800/70 hover:border-emerald-500/70 shadow-lg hover:shadow-emerald-950/40 transition-all text-left flex items-center gap-3.5 group cursor-pointer active:scale-[0.99]"
               >
                 <div className="w-14 h-14 rounded-xl bg-white p-1 flex items-center justify-center shadow-md shrink-0 ring-1 ring-emerald-500/30 group-hover:ring-emerald-400 group-hover:scale-105 transition-all">
                   <img src="/rwc-logo.png" alt="Royal Wellness Center" className="w-full h-full object-contain" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] group-hover:text-[#128C7E] dark:group-hover:text-[#25D366] transition-colors">
+                    <span className="text-sm font-bold text-white group-hover:text-emerald-200 transition-colors">
                       Royal Wellness Center
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/60">
@@ -426,7 +426,7 @@ export const LoginScreen: React.FC = () => {
                     </span>
                   </div>
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-0.5 transition-all shrink-0" />
+                <ChevronRight className="w-5 h-5 text-emerald-200/70 group-hover:text-emerald-300 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
               {/* 2. College of Royal Aesthetic CRAS Card */}
@@ -440,7 +440,7 @@ export const LoginScreen: React.FC = () => {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] group-hover:text-rose-600 dark:group-hover:text-rose-300] transition-colors">
+                    <span className="text-sm font-bold text-white group-hover:text-rose-300 transition-colors">
                       College of Royal Aesthetic
                     </span>
                     <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-rose-950 text-rose-300 border border-rose-800/60">

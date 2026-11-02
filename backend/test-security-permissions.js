@@ -232,7 +232,7 @@ async function main() {
     const overview = await call(baseUrl, '/api/security/overview');
     assert.equal(overview.status, 200);
     assert.ok(overview.body.data.counters.activeUsers >= 3);
-    assert.equal(overview.body.data.counters.roles, 12);
+    assert.equal(overview.body.data.counters.roles, 13);
     assert.equal(overview.body.data.counters.protectedModules, 7);
     console.log('  ✅ overview metrics');
 

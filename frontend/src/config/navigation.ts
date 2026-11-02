@@ -24,6 +24,7 @@ import {
   BriefcaseBusiness,
   MailPlus,
   UserX,
+  UserCheck,
   MonitorSmartphone,
   BarChart3,
   Sliders,
@@ -161,6 +162,7 @@ const securityChildren: NavChild[] = [
   { id: 'roles', label: 'Roles & Permissions', icon: ShieldCheck, path: '/security/roles' },
   { id: 'matrix', label: 'Permission Matrix', icon: KanbanSquare, path: '/security/matrix' },
   { id: 'policies', label: 'Access Policies', icon: Users, path: '/security/policies' },
+  { id: 'requests', label: 'Access Requests', icon: UserCheck, path: '/security/requests' },
   { id: 'sessions', label: 'Login & Session Activity', icon: MonitorSmartphone, path: '/security/sessions' },
   { id: 'events', label: 'Security Events', icon: ScrollText, path: '/security/events' },
 ];

@@ -29,6 +29,7 @@ export const TemplatesManager: React.FC = () => {
     sequences, 
     categories, 
     addTemplate,
+    updateTemplate,
     deleteTemplate,
     syncTemplatesWithMeta,
     metaConnected,
@@ -46,6 +47,7 @@ export const TemplatesManager: React.FC = () => {
   const [tplSearchQuery, setTplSearchQuery] = useState('');
   const [tplStatusFilter, setTplStatusFilter] = useState<'ALL' | 'APPROVED' | 'PENDING' | 'REJECTED'>('ALL');
   const [deletingTpl, setDeletingTpl] = useState<WhatsAppTemplate | null>(null);
+  const [editingTpl, setEditingTpl] = useState<WhatsAppTemplate | null>(null);
 
   // Quick Responses State
   const [showQrModal, setShowQrModal] = useState(false);
@@ -89,6 +91,28 @@ export const TemplatesManager: React.FC = () => {
     setTplSlug(autoSlug);
   };
 
+  const handleOpenAddTpl = () => {
+    setEditingTpl(null);
+    setTplName('');
+    setTplSlug('');
+    setTplLang('en');
+    setTplCategory('UTILITY');
+    setTplBody('');
+    setTplSubmitError(null);
+    setShowAddModal(true);
+  };
+
+  const handleOpenEditTpl = (tpl: WhatsAppTemplate) => {
+    setEditingTpl(tpl);
+    setTplName(tpl.name);
+    setTplSlug(tpl.waTemplateName);
+    setTplLang(tpl.language);
+    setTplCategory((tpl.category as any) || 'UTILITY');
+    setTplBody(tpl.body);
+    setTplSubmitError(null);
+    setShowAddModal(true);
+  };
+
   const handleCreateTemplate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!tplName.trim() || !tplBody.trim()) return;
@@ -102,6 +126,20 @@ export const TemplatesManager: React.FC = () => {
       .replace(/[^a-z0-9_]/g, '_')
       .replace(/_+/g, '_')
       .replace(/^_+|_+$/g, '');
+
+    if (editingTpl) {
+      await updateTemplate(editingTpl.id, {
+        name: tplName.trim(),
+        language: tplLang,
+        waTemplateName: slug || editingTpl.waTemplateName,
+        body: tplBody.trim(),
+        category: tplCategory,
+      });
+      setIsSubmittingTpl(false);
+      setEditingTpl(null);
+      setShowAddModal(false);
+      return;
+    }
 
     const res = await addTemplate({
       name: tplName.trim(),
@@ -298,7 +336,7 @@ export const TemplatesManager: React.FC = () => {
           ) : activeSubTab === 'templates' ? (
             <button
               type="button"
-              onClick={() => setShowAddModal(true)}
+              onClick={handleOpenAddTpl}
               className="px-3.5 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-md cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -667,7 +705,7 @@ export const TemplatesManager: React.FC = () => {
                 </p>
                 <button
                   type="button"
-                  onClick={() => setShowAddModal(true)}
+                  onClick={handleOpenAddTpl}
                   className="px-4 py-2 bg-[#00a884] hover:bg-[#00c298] text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
                 >
                   Create Template
@@ -722,6 +760,16 @@ export const TemplatesManager: React.FC = () => {
                               {curStatus}
                             </span>
                           )}
+
+                          {/* Edit Template Option */}
+                          <button
+                            type="button"
+                            onClick={() => handleOpenEditTpl(tpl)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
+                            title="Edit WhatsApp Template"
+                          >
+                            <Edit2 className="w-3.5 h-3.5" />
+                          </button>
 
                           {/* Delete Template Option */}
                           <button
@@ -867,10 +915,10 @@ export const TemplatesManager: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
-                    Create WhatsApp Template (Meta Graph API)
+                    {editingTpl ? 'Edit WhatsApp Template' : 'Create WhatsApp Template (Meta Graph API)'}
                   </h3>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Submits directly to Meta Cloud API for automated verification & approval.
+                    {editingTpl ? 'Update template content, language, or category in CRM.' : 'Submits directly to Meta Cloud API for automated verification & approval.'}
                   </p>
                 </div>
               </div>
@@ -878,6 +926,7 @@ export const TemplatesManager: React.FC = () => {
                 type="button" 
                 onClick={() => {
                   setShowAddModal(false);
+                  setEditingTpl(null);
                   setTplSubmitError(null);
                 }} 
                 className="text-slate-400 hover:text-slate-600 dark:hover:text-white cursor-pointer"

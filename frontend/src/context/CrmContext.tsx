@@ -213,7 +213,7 @@ interface CrmContextType {
   updateTreatment: (id: string, updates: Partial<Treatment>) => Promise<{ success: boolean; error?: string }>;
   toggleTreatmentStatus: (id: string, active: boolean) => Promise<{ success: boolean; error?: string }>;
   addTemplate: (template: Omit<WhatsAppTemplate, 'id'>) => Promise<{ success: boolean; error?: string; template?: WhatsAppTemplate }>;
-  updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => void;
+  updateTemplate: (id: string, updates: Partial<WhatsAppTemplate>) => Promise<{ success: boolean; error?: string }> | void;
   deleteTemplate: (id: string) => Promise<{ success: boolean; error?: string }>;
   fetchTemplates: () => Promise<void>;
   syncTemplatesWithMeta: () => Promise<{ success: boolean; count?: number }>;
@@ -4244,10 +4244,30 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: false };
   };
 
-  const updateTemplate = (id: string, updates: Partial<WhatsAppTemplate>) => {
-    setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+  const updateTemplate = async (id: string, updates: Partial<WhatsAppTemplate>): Promise<{ success: boolean; error?: string }> => {
+    setTemplates(prev => {
+      const next = prev.map(t => (t.id === id || t.waTemplateName === id) ? { ...t, ...updates } : t);
+      try { localStorage.setItem('rw_crm_templates', JSON.stringify(next)); } catch {}
+      return next;
+    });
+
+    try {
+      const token = await ensureValidAuthToken();
+      await fetch(`${API_BASE_URL}/api/templates/update`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: token ? `Bearer ${token}` : ''
+        },
+        body: JSON.stringify({ id, ...updates })
+      }).catch(() => null);
+    } catch (err) {
+      console.warn('updateTemplate network error:', err);
+    }
+
     logAudit('UPDATE_TEMPLATE', 'Template', id, null, updates);
-    notify('Template Updated', 'Template details updated', 'info');
+    notify('Template Updated', 'Template details updated successfully', 'success');
+    return { success: true };
   };
 
   const fetchQuickResponses = async () => {

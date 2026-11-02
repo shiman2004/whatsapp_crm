@@ -3090,6 +3090,55 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
+    // 2b. POST /api/templates/update or PUT /api/templates/:id
+    if ((req.method === 'PUT' && cleanSubPath) || (req.method === 'POST' && (cleanSubPath === 'update' || pathname.endsWith('/update')))) {
+      let bodyData = '';
+      req.on('data', chunk => { bodyData += chunk; });
+      req.on('end', async () => {
+        try {
+          const payload = JSON.parse(bodyData || '{}');
+          const targetId = payload.id || decodeURIComponent(cleanSubPath);
+          const { name, body, category, language } = payload;
+          if (!targetId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Template ID is required.' }));
+            return;
+          }
+
+          if (prisma && getDbStatus()) {
+            try {
+              await prisma.$queryRawUnsafe(`
+                UPDATE public.whatsapp_templates
+                SET name = COALESCE($2, name),
+                    body = COALESCE($3, body),
+                    content = COALESCE($3, content),
+                    category = COALESCE($4, category),
+                    language = COALESCE($5, language),
+                    updated_at = NOW()
+                WHERE id = $1 OR wa_template_name = $1
+              `, targetId, name || null, body || null, category || null, language || null);
+            } catch (dbErr) {
+              console.warn('⚠️ [DB Template Update Error]:', dbErr.message);
+            }
+          }
+
+          broadcastScopedSSE(null, {
+            type: 'TEMPLATES_UPDATED',
+            action: 'update',
+            templateId: targetId,
+            updates: payload
+          });
+
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true, id: targetId }));
+        } catch (err) {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        }
+      });
+      return;
+    }
+
     // 3. POST /api/templates/sync (Manual sync with Meta Graph API)
     if (req.method === 'POST' && cleanSubPath === 'sync') {
       try {

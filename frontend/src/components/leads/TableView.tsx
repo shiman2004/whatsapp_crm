@@ -784,8 +784,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table thead, .pipeline-table tbody { display: block; }
           .pipeline-table thead tr, .pipeline-table tbody tr {
             display: grid;
-            grid-template-columns: 60px 120px 180px 110px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
-            min-width: 2845px;
+            grid-template-columns: 75px 120px 180px 110px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
+            min-width: 2860px;
           }
           .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
           .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
@@ -818,8 +818,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             background: rgb(2 6 23);
           }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { left: 0; }
-          .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { left: 60px; }
-          .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { left: 180px; }
+          .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { left: 75px; }
+          .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) { left: 195px; }
           .pipeline-table th:nth-child(17), .pipeline-table td:nth-child(17) {
             position: sticky;
             right: 0;
@@ -874,16 +874,18 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         <table className="pipeline-table text-left text-xs">
           <thead className="sticky top-0 z-20 backdrop-blur-md bg-slate-100/95 dark:bg-[#202C33]/95 shadow-sm border-b border-slate-200 dark:border-slate-800">
             <tr className="text-slate-600 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800 uppercase tracking-wider font-semibold text-[11px] whitespace-nowrap">
-              <th className="py-3.5 px-2 text-center w-8">
-                <input
-                  type="checkbox"
-                  checked={selectedRowIds.size === paginatedLeads.length && paginatedLeads.length > 0}
-                  onChange={toggleSelectAll}
-                  className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer h-3.5 w-3.5"
-                  aria-label="Select all"
-                />
+              <th className="py-3.5 px-2 text-center">
+                <div className="flex items-center justify-center gap-1.5">
+                  <input
+                    type="checkbox"
+                    checked={selectedRowIds.size === paginatedLeads.length && paginatedLeads.length > 0}
+                    onChange={toggleSelectAll}
+                    className="rounded border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer h-3.5 w-3.5"
+                    aria-label="Select all"
+                  />
+                  <span>No.</span>
+                </div>
               </th>
-              <th className="py-3.5 px-3 text-center">No.</th>
               <th className="py-3.5 px-3">Serial No.</th>
               <th className="py-3.5 px-4">
                 <button
@@ -917,7 +919,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <span className="text-[9px]">{treatmentSort === 'asc' ? '↑' : treatmentSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
-              <th className="py-3.5 px-4">Assign By</th>
+              <th className="py-3.5 px-3">Assign Status</th>
               <th className="py-3.5 px-3">Current Status</th>
               <th className="py-3.5 px-4">Assign Coordinator</th>
               <th className="py-3.5 px-3">Assign Who</th>
@@ -933,7 +935,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           <tbody className="divide-y divide-slate-200 dark:divide-slate-800/60">
             {leads.length === 0 ? (
               <tr>
-                <td colSpan={20} className="py-16 text-center text-slate-500">
+                <td colSpan={19} className="py-16 text-center text-slate-500">
                   <div className="flex flex-col items-center justify-center gap-2">
                     <SlidersHorizontal className="w-8 h-8 text-slate-600" />
                     <p className="text-sm font-medium">No leads found matching your filters.</p>
@@ -959,19 +961,18 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       isSelected ? 'bg-teal-950/40' : ''
                     } ${selectedRowIds.has(lead.id) ? 'bg-amber-500/5 dark:bg-amber-500/10' : ''}`}
                   >
-                    {/* Checkbox */}
-                    <td className="py-3.5 px-2 text-center" onClick={(e) => e.stopPropagation()}>
-                      <input
-                        type="checkbox"
-                        checked={selectedRowIds.has(lead.id)}
-                        onChange={(e) => toggleSelectRow(lead.id, e as any)}
-                        className="rounded border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer h-3.5 w-3.5"
-                        aria-label={`Select ${lead.customer?.displayName || 'lead'}`}
-                      />
-                    </td>
-                    {/* 1. Sequential row number for the current displayed order */}
-                    <td className="py-3.5 px-3 text-center min-w-[60px] whitespace-nowrap">
-                      <span className="font-mono font-bold text-slate-500 dark:text-slate-400">{String(globalRowNumber).padStart(3, '0')}</span>
+                    {/* 1. Sequential row number with row checkbox */}
+                    <td className="py-3.5 px-2 text-center min-w-[75px] whitespace-nowrap">
+                      <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                        <input
+                          type="checkbox"
+                          checked={selectedRowIds.has(lead.id)}
+                          onChange={(e) => toggleSelectRow(lead.id, e as any)}
+                          className="rounded border-slate-400 dark:border-slate-600 bg-white dark:bg-slate-900 text-teal-600 focus:ring-teal-500 cursor-pointer h-3.5 w-3.5"
+                          aria-label={`Select ${lead.customer?.displayName || 'lead'}`}
+                        />
+                        <span className="font-mono font-bold text-slate-500 dark:text-slate-400">{String(globalRowNumber).padStart(3, '0')}</span>
+                      </div>
                     </td>
 
                     {/* 2. Company-scoped unique lead serial */}

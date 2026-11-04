@@ -27,6 +27,7 @@ const ArchitectureBlueprint = lazy(() => import('./components/admin/Architecture
 const StudentExamPage = lazy(() => import('./components/StudentExamPage').then((m) => ({ default: m.StudentExamPage })));
 const WebhookSimulatorPlayground = lazy(() => import('./components/admin/WebhookSimulatorPlayground').then((m) => ({ default: m.WebhookSimulatorPlayground })));
 const SuperAdminSettingsView = lazy(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then((m) => ({ default: m.SuperAdminSettingsView })));
+const EnterpriseSettingsHub = lazy(() => import('./components/settings/EnterpriseSettingsHub').then((m) => ({ default: m.default || m.EnterpriseSettingsHub })));
 const SecurityAccessView = lazy(() => import('./components/admin/SecurityAccessView').then((m) => ({ default: m.SecurityAccessView })));
 const UserManagementView = lazy(() => import('./components/admin/user-management/UserManagementView').then((m) => ({ default: m.UserManagementView })));
 const TeamBroadcastView = lazy(() => import('./components/broadcast/TeamBroadcastView').then((m) => ({ default: m.TeamBroadcastView })));

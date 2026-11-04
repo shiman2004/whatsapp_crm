@@ -12,7 +12,7 @@ const user = (role, extra = {}) => ({ id: `${role}-user`, role, active: true, ..
 
 test('registry is internally consistent', () => {
   assert.equal(new Set(CAPABILITY_KEYS).size, CAPABILITY_KEYS.length);
-  assert.equal(ROLES.length, 12);
+  assert.equal(ROLES.length, 13);
   for (const role of ROLES) {
     const editable = editableRoleCapabilities(role);
     for (const key of editable) {

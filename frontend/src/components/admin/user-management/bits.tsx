@@ -149,7 +149,7 @@ export const PrimaryButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElemen
     type="button"
     {...rest}
     className={cn(
-      'inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition-all hover:bg-teal-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 dark:ring-offset-[#111B21] shadow-xs cursor-pointer',
+      'inline-flex items-center justify-center gap-1.5 rounded-lg bg-teal-600 px-3 py-1.5 text-xs font-semibold text-white transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-teal-700 enabled:active:scale-96 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-teal-400 focus-visible:ring-offset-2 dark:ring-offset-[#111B21] shadow-xs cursor-pointer',
       className,
     )}
   >
@@ -162,7 +162,7 @@ export const GhostButton: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>
     type="button"
     {...rest}
     className={cn(
-      'inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-all hover:bg-slate-50 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#222D34] dark:bg-[#202C33] dark:text-slate-200 dark:hover:bg-[#2A3942] shadow-xs cursor-pointer',
+      'inline-flex items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition-[background-color,color,border-color,box-shadow,transform] duration-150 ease-out hover:bg-slate-50 enabled:active:scale-96 disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#222D34] dark:bg-[#202C33] dark:text-slate-200 dark:hover:bg-[#2A3942] shadow-xs cursor-pointer',
       className,
     )}
   >

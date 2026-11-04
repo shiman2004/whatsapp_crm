@@ -5,7 +5,7 @@ import {
   moduleRegistry, roleCapabilities, roleMaxScope, roleRegistry, validateOverrides, validateScope,
 } from './securityPolicy.js';
 import {
-  describeRolePolicy, describeUserPolicy, getProfile, getUser,
+  describeRolePolicy, describeUserPolicy, getProfile, getUser, listAccessRequests, createAccessRequest, reviewAccessRequest, getUserMemberships, saveUserMemberships,
   listAuditEvents, listUsers, resetProfile, rolePolicyDetails, saveProfile, securityOverview,
 } from './securityStore.js';
 import { auditSecurityEvent } from './securityAudit.js';
@@ -326,6 +326,71 @@ export async function handleSecurityRoutes(req, res, pathname, user, correlation
         ...summarize(proposal.before, proposal.after),
       });
       return true;
+    }
+
+    
+    // Access Requests Queue & Management
+    if (pathname === '/api/security/access-requests' && req.method === 'GET') {
+      const query = queryOf(req);
+      const list = await listAccessRequests(prisma, {
+        status: query.get('status'),
+        page: query.get('page'),
+        pageSize: query.get('pageSize'),
+      });
+      ok(res, list);
+      return true;
+    }
+
+    if (pathname === '/api/security/access-requests' && req.method === 'POST') {
+      const input = await readJson(req);
+      const created = await createAccessRequest(prisma, { ...input, requesterId: user.id });
+      await auditSecurityEvent({
+        correlationId, actorId: user.id, action: 'security.access_request.create',
+        resource: `request:${created.id}`, outcome: 'succeeded', metadata: { type: created.requestType },
+      });
+      ok(res, created);
+      return true;
+    }
+
+    const reviewMatch = pathname.match(/^\/api\/security\/access-requests\/([a-zA-Z0-9_-]{1,100})\/(approve|reject)$/);
+    if (reviewMatch && req.method === 'POST') {
+      if (user.role !== 'super_admin') {
+        throw new PermissionError(403, 'FORBIDDEN', 'Super Admin approval required.');
+      }
+      const requestId = reviewMatch[1];
+      const decision = reviewMatch[2];
+      const input = await readJson(req).catch(() => ({}));
+      const reviewed = await reviewAccessRequest(prisma, requestId, decision, user.id, input.reviewNotes);
+      await auditSecurityEvent({
+        correlationId, actorId: user.id, action: `security.access_request.${decision}`,
+        resource: `request:${requestId}`, outcome: 'succeeded', metadata: { decision },
+      });
+      ok(res, reviewed);
+      return true;
+    }
+
+    // User Multi-Company & Multi-Department Memberships
+    const membershipsMatch = pathname.match(/^\/api\/security\/users\/([a-zA-Z0-9_-]{1,100})\/memberships$/);
+    if (membershipsMatch) {
+      const targetUserId = membershipsMatch[1];
+      if (req.method === 'GET') {
+        const memberships = await getUserMemberships(prisma, targetUserId);
+        ok(res, memberships);
+        return true;
+      }
+      if (req.method === 'POST') {
+        if (user.role !== 'super_admin') {
+          throw new PermissionError(403, 'FORBIDDEN', 'Super Admin access required to edit memberships.');
+        }
+        const input = await readJson(req);
+        const saved = await saveUserMemberships(prisma, targetUserId, input);
+        await auditSecurityEvent({
+          correlationId, actorId: user.id, action: 'security.memberships.update',
+          resource: `user:${targetUserId}`, outcome: 'succeeded', metadata: { companies: input.companies },
+        });
+        ok(res, saved);
+        return true;
+      }
     }
 
     if (pathname === '/api/security/audit-logs' && req.method === 'GET') {

@@ -525,11 +525,18 @@ setInterval(() => {
  * Guarantees Coordinator A NEVER receives events belonging to Coordinator B
  * Strictly enforces Super Admin ONLY visibility for message sender audit trail
  */
-function broadcastScopedSSE(targetCoordinatorId, data) {
+function broadcastScopedSSE(targetCoordinatorId, data, targetCompany = null) {
   sseClients.forEach(client => {
     try {
       const isSuperAdmin = client.userRole === 'super_admin';
-      // Super Admin and Leads Officer receive all events
+      const eventCompany = (targetCompany || data.company || '').toUpperCase();
+      
+      // Multi-company isolation: non-super-admin can only receive events within their company
+      if (!isSuperAdmin && eventCompany && client.company && client.company !== eventCompany) {
+        return;
+      }
+
+      // Super Admin and Leads Officer receive all events for their company
       const hasFullVisibility = isSuperAdmin || client.userRole === 'leads_officer';
       
       // For message events, Coordinators receive ONLY events for leads specifically assigned to them
@@ -1621,12 +1628,8 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && pathname === '/api/events') {
       if (parsedUrl.query.ticket) {
         authUser = consumeSseTicket(String(parsedUrl.query.ticket));
-      } else if (parsedUrl.query.token) {
-        const verified = verifyAuthToken(String(parsedUrl.query.token));
-        if (verified.valid) {
-          authUser = verified.payload;
-        }
       }
+      // Note: ?token= falls through to authenticateRequest below for full DB verification
     }
     if (!authUser) {
       const authResult = await authenticateRequest(req, parsedUrl);
@@ -1811,6 +1814,7 @@ const server = http.createServer(async (req, res) => {
       res,
       coordinatorId: authUser.id,
       userRole: authUser.role,
+      company: (authUser.company || 'RWC').toUpperCase(),
     };
 
     sseClients.push(clientObj);
@@ -5141,7 +5145,7 @@ const server = http.createServer(async (req, res) => {
         let finalLeads = enrichedLeads;
 
         if (!isSuperOrOfficer) {
-          const isStrictAssignedOnly = authUser?.role === 'coordinator' || authUser?.role === 'clinical_nurse';
+          const isStrictAssignedOnly = authUser?.role === 'coordinator' || authUser?.role === 'sales_coordinator' || authUser?.role === 'clinical_nurse';
           if (isStrictAssignedOnly) {
             finalLeads = finalLeads.filter(l => l.assignedTo && l.assignedTo === authUser.id);
           } else {

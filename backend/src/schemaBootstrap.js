@@ -24,6 +24,7 @@ const STATEMENTS = [
   `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'clinical_nurse';`,
   `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'clinical_doctor';`,
   `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'report_analyst';`,
+  `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'finance_officer';`,
 
   // --- lead workflow forwarding stages ---------------------------------------
   `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'forwarded_to_exam_department';`,
@@ -730,6 +731,26 @@ export async function ensureSchema(prisma) {
        is_system = EXCLUDED.is_system;`
   ];
   await runAll(prisma, labelSeedStatements, failures);
+  // Enterprise RBAC models and backfill
+  try {
+    const fsMod = await import('node:fs');
+    const pathMod = await import('node:path');
+    const rbacSqlPath = pathMod.resolve(process.cwd(), 'backend/prisma/migrations/20261102_enterprise_rbac_models.sql');
+    const altRbacSqlPath = pathMod.resolve(process.cwd(), 'prisma/migrations/20261102_enterprise_rbac_models.sql');
+    const targetPath = fsMod.existsSync(rbacSqlPath) ? rbacSqlPath : (fsMod.existsSync(altRbacSqlPath) ? altRbacSqlPath : null);
+    if (targetPath) {
+      const sqlContent = fsMod.readFileSync(targetPath, 'utf8');
+      const noComments = sqlContent.replace(/--.*$/gm, '');
+      const rbacStatements = noComments
+        .split(';')
+        .map(s => s.trim())
+        .filter(s => s.length > 0);
+      await runAll(prisma, rbacStatements, failures);
+    }
+  } catch (err) {
+    console.warn('⚠️ [Schema Bootstrap] Error loading enterprise RBAC migration:', err.message);
+  }
+
 
   if (failures.length > 0) {
     console.warn(`⚠️ [Schema] ${failures.length} bootstrap statement(s) did not apply:`);

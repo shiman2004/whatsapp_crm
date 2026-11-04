@@ -71,20 +71,33 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
   // 1. GET /api/branches
   // ---------------------------------------------------------------------------
   if (req.method === 'GET' && pathname === '/api/branches') {
+    const scopedCompany = authUser?.role === 'super_admin'
+      ? null
+      : String(authUser?.company || 'RWC').toUpperCase();
     if (dbOk) {
       try {
-        const branches = await prisma.$queryRawUnsafe(`
-          SELECT id, name, code, address, phone, is_active AS "isActive", created_at AS "createdAt"
-          FROM public.branches
-          WHERE is_active = TRUE
-          ORDER BY name ASC;
-        `);
+        const branches = scopedCompany
+          ? await prisma.$queryRawUnsafe(`
+              SELECT id, company, name, code, address, phone, is_active AS "isActive",
+                     created_at AS "createdAt"
+              FROM public.branches
+              WHERE is_active = TRUE AND company = $1
+              ORDER BY name ASC;
+            `, scopedCompany)
+          : await prisma.$queryRawUnsafe(`
+              SELECT id, company, name, code, address, phone, is_active AS "isActive",
+                     created_at AS "createdAt"
+              FROM public.branches
+              WHERE is_active = TRUE
+              ORDER BY name ASC;
+            `);
         return sendJson(res, 200, branches);
       } catch (e) {
         console.warn('DB query branches fallback to memory:', e.message);
       }
     }
-    return sendJson(res, 200, MEMORY_BRANCHES.filter(b => b.isActive));
+    const memory = MEMORY_BRANCHES.filter(b => b.isActive);
+    return sendJson(res, 200, scopedCompany ? memory.filter(b => b.company === scopedCompany) : memory);
   }
 
   // ---------------------------------------------------------------------------

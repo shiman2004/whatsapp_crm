@@ -128,7 +128,7 @@ export const CoordinatorsManager: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [branch, setBranch] = useState('Colombo');
   const [pin, setPin] = useState(generateRandomPin());
-  const [password, setPassword] = useState('staff');
+  const [password, setPassword] = useState('');
   const [isSubmittingAdd, setIsSubmittingAdd] = useState(false);
 
   const staffMembers = users.filter(u => ['coordinator', 'leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst', 'marketing_officer', 'marketing_admin', 'sales_coordinator'].includes(u.role));
@@ -151,7 +151,6 @@ export const CoordinatorsManager: React.FC = () => {
     return true;
   });
 
-  const canViewPins = currentUser?.role === 'super_admin';
   const isStoredPinHash = (value?: string) => Boolean(value && (/^scrypt:/i.test(value) || /^\$2[aby]?\$/i.test(value)));
 
   const handleRoleChange = (choice: StaffRoleChoice) => {
@@ -182,7 +181,7 @@ export const CoordinatorsManager: React.FC = () => {
     setFullName('');
     setBranch('Colombo');
     setPin(generateRandomPin());
-    setPassword('staff');
+    setPassword('');
     setShowAddModal(true);
   };
 
@@ -197,7 +196,7 @@ export const CoordinatorsManager: React.FC = () => {
     // Never copy a persisted PIN hash into an editable field. A new PIN is only
     // sent when the Super Admin explicitly enters one.
     setEditPin('');
-    setEditPassword(staff.password || '');
+    setEditPassword('');
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -259,7 +258,7 @@ export const CoordinatorsManager: React.FC = () => {
         branch: branch || 'Colombo',
         company: assignedCompany,
         pin: pin.trim() || generateRandomPin(),
-        password: password.trim() || 'staff',
+        password: password.trim() || undefined,
         role: systemRole
       });
 
@@ -437,7 +436,6 @@ export const CoordinatorsManager: React.FC = () => {
             const activeLeads = leads.filter(l => l.assignedTo === staff.id && l.stage !== 'converted' && l.stage !== 'lost');
             const convertedLeads = leads.filter(l => l.assignedTo === staff.id && l.stage === 'converted');
             const rawPin = typeof staff.pin === 'string' ? staff.pin.trim() : '';
-            const canRevealStoredPin = canViewPins && Boolean(rawPin) && !isStoredPinHash(rawPin);
 
             const roleDisplay = 
                 staff.role === 'exam_department_manager' ? 'Head of Exam Department'
@@ -563,10 +561,10 @@ export const CoordinatorsManager: React.FC = () => {
 
                     <div className="pt-1 border-t border-slate-200 dark:border-slate-700/60 flex items-center justify-between text-[11px]">
                       <span className="text-slate-500 dark:text-slate-400 flex items-center gap-1">
-                        <KeyRound className="w-3 h-3 text-amber-600 dark:text-amber-400" /> Quick PIN:
+                        <KeyRound className="w-3 h-3 text-slate-500 dark:text-slate-400" /> Security PIN:
                       </span>
                       <div className="flex items-center gap-1.5 font-semibold text-amber-800 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-500/30 px-2 py-0.5 rounded-md">
-                        <span>{canRevealStoredPin ? rawPin : (staff.pinConfigured ?? Boolean(rawPin)) ? 'Configured (reset required)' : 'Not configured'}</span>
+                        <span>{(staff.pinConfigured ?? Boolean(rawPin)) ? '•••• (Configured)' : 'Not configured'}</span>
                       </div>
                     </div>
                   </div>
@@ -761,8 +759,8 @@ export const CoordinatorsManager: React.FC = () => {
                     <span>Web Password</span>
                   </label>
                   <input
-                    type="text"
-                    placeholder="staff"
+                    type="password"
+                    placeholder="Staff initial password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 transition-colors"
@@ -942,8 +940,8 @@ export const CoordinatorsManager: React.FC = () => {
                     <span>Web Password</span>
                   </label>
                   <input
-                    type="text"
-                    placeholder="New password (optional)"
+                    type="password"
+                    placeholder="New password (leave blank to keep current)"
                     value={editPassword}
                     onChange={(e) => setEditPassword(e.target.value)}
                     className="w-full bg-slate-50 dark:bg-[#202c33] border border-slate-300 dark:border-slate-700/80 rounded-xl px-3 py-2 text-xs text-slate-900 dark:text-slate-100 outline-none focus:border-emerald-500 transition-colors"

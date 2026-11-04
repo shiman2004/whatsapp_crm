@@ -278,11 +278,11 @@ export const userManagementApi = {
   invitations: (params: Record<string, string | number | undefined>) =>
     request<Page<Invitation>>(`/api/user-management/invitations${query(params)}`),
   invite: (input: { email: string; fullName: string; role: string; company?: string; branch?: string; departmentId?: string | null }) =>
-    request<Invitation & { inviteUrl: string }>('/api/user-management/invitations', {
+    request<Invitation & { inviteUrl: string; emailDelivered: boolean }>('/api/user-management/invitations', {
       method: 'POST', body: JSON.stringify(input),
     }),
   resendInvite: (id: string) =>
-    request<{ id: string; inviteUrl: string }>(`/api/user-management/invitations/${id}/resend`, { method: 'POST' }),
+    request<{ id: string; inviteUrl: string; emailDelivered: boolean }>(`/api/user-management/invitations/${id}/resend`, { method: 'POST' }),
   revokeInvite: (id: string) =>
     request<{ id: string; revoked: boolean }>(`/api/user-management/invitations/${id}`, { method: 'DELETE' }),
 

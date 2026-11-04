@@ -29,7 +29,11 @@ const readTabFromPath = (): UserTab => {
   return match && match[1] && isTab(match[1]) ? match[1] : 'directory';
 };
 
-export const UserManagementView: React.FC = () => {
+interface UserManagementViewProps {
+  hideHeader?: boolean;
+}
+
+export const UserManagementView: React.FC<UserManagementViewProps> = ({ hideHeader = false }) => {
   const { currentUser, getAuthToken, notify } = useCrm();
   const [tab, setTab] = useState<UserTab>(readTabFromPath);
   const [overview, setOverview] = useState<UserOverview | null>(null);
@@ -111,6 +115,7 @@ export const UserManagementView: React.FC = () => {
 
   return (
     <div className="flex-1 space-y-5 overflow-y-auto pb-10 pr-1">
+      {!hideHeader && (
       <PageHeader
         eyebrow="System & security"
         title="User Management"
@@ -125,10 +130,11 @@ export const UserManagementView: React.FC = () => {
           </button>
         }
       />
+      )}
 
       {error && <ErrorState message={error} onRetry={refresh} />}
 
-      {/* Super Admin Executive Scope & Credentials Reference Banner */}
+      {/* Super Admin Executive Scope & Governance Banner */}
       <div className="rounded-2xl border border-teal-500/30 bg-gradient-to-r from-teal-500/10 via-emerald-500/10 to-purple-500/10 p-4 sm:p-5 shadow-sm">
         <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
           <div className="flex items-start gap-3">
@@ -283,7 +289,8 @@ export const UserManagementView: React.FC = () => {
         <CreateUserTab
           departments={org.departments}
           managers={managers.map((manager) => ({ id: manager.id, fullName: manager.fullName, role: manager.role }))}
-          onCreated={refresh}
+          onCreated={() => { refresh(); select('directory'); }}
+          onCancel={() => select('directory')}
           onNotify={notify}
         />
       )}

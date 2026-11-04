@@ -19,7 +19,7 @@ export const InvitationsTab: React.FC<{
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
-  const [inviteLink, setInviteLink] = useState<{ email: string; url: string } | null>(null);
+  const [inviteLink, setInviteLink] = useState<{ email: string; url: string; emailDelivered: boolean } | null>(null);
   const [confirm, setConfirm] = useState<Invitation | null>(null);
 
   const [form, setForm] = useState({ email: '', fullName: '', role: 'coordinator', company: 'RWC', branch: 'Colombo', departmentId: '' });
@@ -54,9 +54,15 @@ export const InvitationsTab: React.FC<{
         branch: form.branch.trim() || undefined,
         departmentId: form.departmentId || null,
       });
-      setInviteLink({ email: result.email, url: result.inviteUrl });
+      setInviteLink({ email: result.email, url: result.inviteUrl, emailDelivered: Boolean(result.emailDelivered) });
       setForm({ email: '', fullName: '', role: 'coordinator', company: 'RWC', branch: 'Colombo', departmentId: '' });
-      onNotify('Invitation created', `A one-time activation link is ready for ${result.email}.`, 'success');
+      onNotify(
+        result.emailDelivered ? 'Invitation emailed' : 'Invitation created',
+        result.emailDelivered
+          ? `A one-time activation email was sent to ${result.email}.`
+          : `SMTP is not configured or delivery failed. Share the one-time activation link with ${result.email} manually.`,
+        result.emailDelivered ? 'success' : 'warning',
+      );
       setStatus('pending');
       setPage(1);
       await load();
@@ -81,8 +87,14 @@ export const InvitationsTab: React.FC<{
     setBusy(invitation.id);
     try {
       const result = await userManagementApi.resendInvite(invitation.id);
-      setInviteLink({ email: invitation.email, url: result.inviteUrl });
-      onNotify('Invitation renewed', `A fresh one-time link is ready for ${invitation.email}.`, 'success');
+      setInviteLink({ email: invitation.email, url: result.inviteUrl, emailDelivered: Boolean(result.emailDelivered) });
+      onNotify(
+        result.emailDelivered ? 'Invitation emailed' : 'Invitation renewed',
+        result.emailDelivered
+          ? `A fresh activation email was sent to ${invitation.email}.`
+          : `SMTP is not configured or delivery failed. Share the fresh activation link with ${invitation.email} manually.`,
+        result.emailDelivered ? 'success' : 'warning',
+      );
       await load();
       onDataChanged();
     } catch (cause) {
@@ -147,11 +159,38 @@ export const InvitationsTab: React.FC<{
           </div>
         </form>
         {inviteLink && (
-          <div className="mt-3 rounded-xl border border-teal-500/30 bg-teal-500/5 p-3">
-            <p className="text-[11px] font-semibold text-slate-700 dark:text-slate-200">Activation link for {inviteLink.email}</p>
+          <div className={cn(
+            'mt-3 rounded-xl border p-3.5 space-y-2',
+            inviteLink.emailDelivered
+              ? 'border-emerald-500/30 bg-emerald-500/5'
+              : 'border-amber-500/30 bg-amber-500/5'
+          )}>
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                {inviteLink.emailDelivered ? (
+                  <>
+                    <span className="inline-block w-2 h-2 rounded-full bg-emerald-500" />
+                    <span>Invitation emailed to {inviteLink.email}</span>
+                  </>
+                ) : (
+                  <>
+                    <span className="inline-block w-2 h-2 rounded-full bg-amber-500" />
+                    <span>Manual delivery link for {inviteLink.email} (SMTP unconfigured or delivery failed)</span>
+                  </>
+                )}
+              </p>
+              <span className="text-[10px] uppercase tracking-wider font-semibold text-slate-500 dark:text-slate-400">
+                {inviteLink.emailDelivered ? 'Email Delivered' : 'Manual Delivery Required'}
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-600 dark:text-slate-300">
+              {inviteLink.emailDelivered
+                ? 'The recipient has been sent their activation email. You may also provide this backup one-time link:'
+                : 'Share this one-time link directly with the recipient through a verified internal channel:'}
+            </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
               <code className="min-w-0 flex-1 break-all rounded-lg bg-white px-2 py-1.5 text-[11px] text-slate-700 dark:bg-slate-950 dark:text-slate-200">{inviteLink.url}</code>
-              <GhostButton onClick={() => void copy(inviteLink.url)}><Copy className="h-3.5 w-3.5" /> Copy</GhostButton>
+              <GhostButton onClick={() => void copy(inviteLink.url)}><Copy className="h-3.5 w-3.5" /> Copy link</GhostButton>
               <GhostButton onClick={() => setInviteLink(null)}>Dismiss</GhostButton>
             </div>
           </div>

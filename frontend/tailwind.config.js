@@ -108,5 +108,9 @@ export default {
       }
     },
   },
-  plugins: [],
+  plugins: [
+    ({ addVariant }) => {
+      addVariant('hover', '@media (hover: hover) { &:hover }');
+    },
+  ],
 }

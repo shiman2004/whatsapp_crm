@@ -18,8 +18,6 @@ import {
   Upload,
   Contact,
   Users,
-  UsersRound,
-  UserPlus,
   Building2,
   BriefcaseBusiness,
   MailPlus,
@@ -37,7 +35,7 @@ import {
   Layers,
   TrendingUp,
   Award,
-  Tag,
+  Lock,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -316,24 +314,6 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'System & Security',
     items: [
       {
-        id: 'user-management',
-        label: 'User Management',
-        description: 'Accounts, roles, teams, assignments and invitations',
-        icon: UsersRound,
-        path: '/staff',
-        adminOnly: true,
-        children: userManagementChildren,
-      },
-      {
-        id: 'security-access',
-        label: 'Security & Access',
-        description: 'Roles, permission matrix, policies and sessions',
-        icon: ShieldCheck,
-        path: '/security',
-        adminOnly: true,
-        children: securityChildren,
-      },
-      {
         id: 'settings',
         label: 'System Settings',
         description: 'Catalogues, stages and module configuration',
@@ -381,6 +361,10 @@ const LEGACY_ALIASES: Record<string, string> = {
   '/staffs': '/staff',
   '/user-management': '/staff',
   '/settings/admins': '/staff/directory',
+  '/settings/courses': '/settings/academic',
+  '/settings/treatments': '/settings/clinical',
+  '/settings/stages': '/settings/sales',
+  '/settings/labels': '/settings/whatsapp_messaging',
   '/architecture': '/api-specs',
   '/webhook-sandbox': '/webhooks',
   '/leads-kanban': '/leads',
@@ -441,14 +425,34 @@ export function routeForTab(tab: NavTab): string {
 export function isNavItemVisible(item: NavItem, user: User | null | undefined): boolean {
   const role = user?.role;
   if (!role) return false;
-  if (item.adminOnly) return role === 'super_admin';
+  if (role === 'super_admin') return true;
+
+  // 1. Person-Specific Module Overrides (take precedence over role defaults)
+  if (user?.moduleAccess) {
+    if (item.clinicalStaffOnly && user.moduleAccess.clinical !== undefined) {
+      return Boolean(user.moduleAccess.clinical);
+    }
+    if (item.examStaffOnly && user.moduleAccess.exam !== undefined) {
+      return Boolean(user.moduleAccess.exam);
+    }
+    if (item.marketingModule && user.moduleAccess.marketing !== undefined) {
+      return Boolean(user.moduleAccess.marketing);
+    }
+    if (item.path === '/analytics' && user.moduleAccess.reports !== undefined) {
+      return Boolean(user.moduleAccess.reports);
+    }
+    if (item.path === '/settings' && user.moduleAccess.system !== undefined) {
+      return Boolean(user.moduleAccess.system);
+    }
+  }
+
+  // 2. Baseline role defaults
+  if (item.adminOnly) return (role as string) === 'super_admin';
   if (item.studentOnly) return String(role) === 'student';
   if (item.examStaffOnly) return EXAM_STAFF_ROLES.includes(role);
   if (item.clinicalStaffOnly) return CLINICAL_ROLES.includes(role);
   if (item.marketingModule) {
     // Backend remains the authority; this only hides links a role cannot use.
-    // super_admin bypasses the per-user revoke, matching backend marketing/permissions.js.
-    if (role === 'super_admin') return true;
     return MARKETING_ROLES.includes(role) && user?.marketingAccess !== false;
   }
   return true;

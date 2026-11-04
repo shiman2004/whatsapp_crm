@@ -167,6 +167,22 @@ async function main() {
     assert.equal(createdUser.body.data.status, 'active');
     assert.equal(createdUser.body.data.employeeId, `EMP-${suffix}`);
     assert.equal(createdUser.body.data.password, undefined, 'credentials are never returned');
+    const createdCredentials = await prisma.user.findUnique({ where: { id: newId }, select: { password: true } });
+    assert.ok(createdCredentials.password.startsWith('scrypt:'), 'initial password is stored as a salted scrypt hash');
+    assert.ok(!createdCredentials.password.includes(PASSWORD), 'initial password is never reversibly stored');
+
+    const resetPassword = 'ResetPassword2026!';
+    const resetPin = '5821';
+    const resetCredentials = await call(baseUrl, `/api/user-management/users/${newId}/credentials`, {
+      method: 'POST', body: { password: resetPassword, pin: resetPin },
+    });
+    assert.equal(resetCredentials.status, 200, JSON.stringify(resetCredentials.body));
+    const storedCredentials = await prisma.user.findUnique({ where: { id: newId }, select: { password: true, pin: true } });
+    assert.ok(storedCredentials.password.startsWith('scrypt:'), 'reset password is stored as a salted scrypt hash');
+    assert.ok(storedCredentials.pin.startsWith('scrypt:'), 'reset PIN is stored as a salted scrypt hash');
+    assert.ok(!storedCredentials.password.includes(resetPassword), 'password is never reversibly stored');
+    assert.ok(!storedCredentials.pin.includes(resetPin), 'PIN is never reversibly stored');
+    console.log('  ✅ credential resets write one-way password and PIN hashes');
 
     const duplicateEmployee = await call(baseUrl, '/api/user-management/users', {
       method: 'POST', body: { fullName: 'Other', email: `other-${suffix}@test.local`, role: 'coordinator', password: PASSWORD, employeeId: `EMP-${suffix}` },
@@ -178,7 +194,7 @@ async function main() {
     // 7. Login works, then revocation and deactivation both kill the session.
     const login = await fetch(`${baseUrl}/api/auth/login`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identifier: email, password: PASSWORD }),
+      body: JSON.stringify({ identifier: email, password: resetPassword }),
     });
     assert.equal(login.status, 200, 'new account can sign in');
     const loginBody = await login.json();
@@ -258,6 +274,7 @@ async function main() {
     });
     assert.equal(invite.status, 201, JSON.stringify(invite.body));
     created.invitations.push(invite.body.data.id);
+    assert.equal(invite.body.data.emailDelivered, false, 'an unconfigured SMTP provider retains the manual invitation link');
     const inviteToken = new URL(invite.body.data.inviteUrl).hash.split('token=')[1];
     assert.ok(inviteToken, 'invitation returns a one-time activation token');
 

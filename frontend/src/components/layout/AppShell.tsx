@@ -54,7 +54,6 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <Sidebar
-          activeTab={activeTab}
           setActiveTab={(tab) => navigate(tab)}
           isMobileOpen={mobileOpen}
           onCloseMobile={() => setMobileOpen(false)}
@@ -66,6 +65,8 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
             activeTab === 'chat'
               ? 'bg-[#ECE5DD] p-0 dark:bg-[#111B21]'
               : activeTab === 'appointment-rooms'
+              ? 'overflow-hidden bg-[#F5F7F8] p-0 dark:bg-[#111B21]'
+              : activeTab === 'settings'
               ? 'overflow-hidden bg-[#F5F7F8] p-0 dark:bg-[#111B21]'
               : 'overflow-y-auto bg-[#F5F7F8] p-3 sm:p-5 dark:bg-[#111B21]',
           )}

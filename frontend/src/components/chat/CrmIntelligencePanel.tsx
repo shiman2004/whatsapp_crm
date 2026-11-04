@@ -25,8 +25,12 @@ import {
   Building2,
   Lock,
   Tag,
-  ListPlus
+  ListPlus,
+  Share2,
+  GraduationCap,
+  Sparkles
 } from 'lucide-react';
+import { parseCourseMetadata } from '../admin/SuperAdminSettings/CourseManagementTab';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { WhatsApp24hWindowInfo } from './WhatsApp24hWindowInfo';
 import { PRESET_LABELS } from './WhatsAppChatList';
@@ -65,7 +69,8 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     chatLabels,
     leadLabels,
     toggleLeadLabel,
-    currentUser
+    currentUser,
+    notify
   } = useCrm();
 
   const leadMessages = (messages || []).filter(m => m.leadId === lead.id || (lead.customerId && m.customerId === lead.customerId));
@@ -233,6 +238,38 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
     updateLeadTreatment(lead.id, trt.id, nextSerial);
     setTreatmentDropdownOpen(false);
     setTreatmentSearchQuery('');
+  };
+
+
+  const handleShareCourseToChat = (t: Treatment) => {
+    let msg = '';
+    if (isCras) {
+      const meta = parseCourseMetadata(t);
+      msg = [
+        `🎓 *${t.name}* (${t.code || 'CRAS'})`,
+        `📚 *Level:* ${meta.qualificationLevel || 'Professional Program'}`,
+        `⏳ *Duration:* ${t.duration || 'Flexible'}`,
+        `💰 *Tuition Fee:* ${t.startingPrice ? 'LKR ' + Number(t.startingPrice).toLocaleString() : 'Admissions Inquiry'}`,
+        meta.installmentPlan ? `💳 *Payment Options:* ${meta.installmentPlan}` : null,
+        `📅 *Next Intake:* ${meta.intakeDate || 'Rolling Intake'}`,
+        meta.maxSeats ? `👥 *Batch Size:* Strictly capped at ${meta.maxSeats} students` : null,
+        meta.brochureUrl ? `📥 *Syllabus & Brochure:* ${meta.brochureUrl}` : null,
+        t.description ? `\n📖 *Syllabus Overview:* ${t.description}` : null,
+        `\nReply here if you would like to reserve your seat or receive the admission registration form!`
+      ].filter(Boolean).join('\n');
+    } else {
+      msg = [
+        `✨ *${t.name}* (${t.code || 'RWC'})`,
+        `⏱️ *Session Duration:* ${t.duration || '45-60 mins'}`,
+        `💳 *Starting Price:* ${t.startingPrice ? 'LKR ' + Number(t.startingPrice).toLocaleString() : 'Clinical Consultation'}`,
+        t.description ? `\n🩺 *Procedure Overview:* ${t.description}` : null,
+        t.benefits ? `💎 *Key Benefits:* ${t.benefits}` : null,
+        `\nReply here to schedule your clinical appointment with our specialist doctor!`
+      ].filter(Boolean).join('\n');
+    }
+
+    window.dispatchEvent(new CustomEvent('insert-chat-message', { detail: msg }));
+    notify?.('Added to Composer', `Prospectus for ${t.code || t.name} added to WhatsApp chat.`, 'success');
   };
 
   const handleRegenerateSerial = () => {
@@ -844,6 +881,36 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
               </button>
             </div>
           </div>
+
+          {/* Quick Share to WhatsApp Chat button */}
+          {currentTreatment && (
+            <div className="col-span-12 flex items-center gap-1.5 pt-1">
+              <button
+                type="button"
+                onClick={() => handleShareCourseToChat(currentTreatment)}
+                className={`flex-1 flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-all border shadow-sm ${
+                  isCras
+                    ? 'bg-rose-500/15 hover:bg-rose-500/25 border-rose-500/30 text-rose-300 hover:text-white'
+                    : 'bg-teal-500/15 hover:bg-teal-500/25 border-teal-500/30 text-teal-300 hover:text-white'
+                }`}
+                title="Paste course details, syllabus, fees & intake info directly into WhatsApp composer"
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                <span>{isCras ? 'Share Course Details in Chat' : 'Share Treatment Details in Chat'}</span>
+              </button>
+              {currentTreatment.brochureUrl && (
+                <a
+                  href={currentTreatment.brochureUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1.5 rounded-lg bg-[#202c33] hover:bg-[#2a3942] text-slate-300 border border-slate-700 transition-colors"
+                  title="Open Brochure PDF"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+            </div>
+          )}
 
         </div>
 

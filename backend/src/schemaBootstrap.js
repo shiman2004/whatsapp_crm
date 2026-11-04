@@ -343,6 +343,43 @@ const STATEMENTS = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );`,
+  // --- company & branch management delta --------------------------------------
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS company VARCHAR(50) DEFAULT 'RWC';`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS city VARCHAR(120);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS district VARCHAR(120);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS province VARCHAR(120);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS postal_code VARCHAR(30);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS email VARCHAR(255);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS manager_id VARCHAR(36);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS manager_name VARCHAR(255);`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'active';`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS business_hours JSONB;`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS holiday_calendar JSONB;`,
+  `ALTER TABLE public.branches ADD COLUMN IF NOT EXISTS archived_at TIMESTAMP WITH TIME ZONE;`,
+  `UPDATE public.branches SET company = 'RWC' WHERE company IS NULL OR BTRIM(company) = '';`,
+  `UPDATE public.branches SET status = CASE WHEN is_active THEN 'active' ELSE 'inactive' END
+     WHERE status IS NULL OR BTRIM(status) = '';`,
+  `ALTER TABLE public.branches DROP CONSTRAINT IF EXISTS branches_code_key;`,
+  `DROP INDEX IF EXISTS public.branches_code_key;`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS branches_company_code_key ON public.branches(company, code);`,
+  `CREATE INDEX IF NOT EXISTS branches_company_status_idx ON public.branches(company, status);`,
+  `INSERT INTO public.enterprise_system_settings (id, section, scope, scope_id, payload, version, created_at, updated_at)
+   SELECT 'settings-company-' || c.code, 'company', 'company', c.code,
+     jsonb_build_object('code', c.code, 'displayName', c.name, 'legalName', '', 'registrationNumber', '',
+       'email', '', 'phone', '', 'address', '', 'country', '', 'logoUrl', '', 'description', '', 'status', 'active'),
+     1, NOW(), NOW()
+   FROM (VALUES ('RWC', 'Royal Wellness Center'), ('CRAS', 'College of Royal Aesthetic of Sri Lanka'), ('AHC', 'Alpha Health Consultancy')) AS c(code, name)
+   WHERE NOT EXISTS (SELECT 1 FROM public.enterprise_system_settings s
+     WHERE s.section = 'company' AND s.scope = 'company' AND s.scope_id = c.code);`,
+  `INSERT INTO public.enterprise_system_settings (id, section, scope, scope_id, payload, version, created_at, updated_at)
+   SELECT 'settings-company-localization-' || c.code, 'company_localization', 'company', c.code,
+     jsonb_build_object('currency', 'LKR', 'timezone', 'Asia/Colombo', 'dateFormat', 'DD/MM/YYYY',
+       'timeFormat', '24h', 'language', 'en', 'fiscalYearStart', '01-01',
+       'workingWeek', jsonb_build_array(1, 2, 3, 4, 5), 'holidayCalendarRef', 'LK'),
+     1, NOW(), NOW()
+   FROM (VALUES ('RWC'), ('CRAS'), ('AHC')) AS c(code)
+   WHERE NOT EXISTS (SELECT 1 FROM public.enterprise_system_settings s
+     WHERE s.section = 'company_localization' AND s.scope = 'company' AND s.scope_id = c.code);`,
   `CREATE TABLE IF NOT EXISTS public.rooms (
      id VARCHAR(50) PRIMARY KEY,
      branch_id VARCHAR(50) NOT NULL,
@@ -560,6 +597,16 @@ const STATEMENTS = [
      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
    );`,
   `CREATE INDEX IF NOT EXISTS departments_company_idx ON public.departments(company, branch);`,
+  `INSERT INTO public.departments (id, name, company, branch, description, active)
+   VALUES
+     ('dept-admin', 'Administration', NULL, NULL, 'Executive, governance, and administration', TRUE),
+     ('dept-operations', 'Operations', NULL, NULL, 'General operations and coordination', TRUE),
+     ('dept-crm', 'CRM / Patient Care', NULL, NULL, 'Customer relationship, patient coordination and inquiries', TRUE),
+     ('dept-clinical', 'Clinical & Medical', NULL, NULL, 'Medical practitioners, nursing, and clinical staff', TRUE),
+     ('dept-exam', 'Exam Department', NULL, NULL, 'Academic evaluations, exam proctoring, and student certifications', TRUE),
+     ('dept-finance', 'Finance & Billing', NULL, NULL, 'Accounting, invoicing, and financial auditing', TRUE),
+     ('dept-marketing', 'Public Contact Marketing', NULL, NULL, 'Marketing outreach, campaigns, and audience engagement', TRUE)
+   ON CONFLICT (id) DO NOTHING;`,
   `CREATE TABLE IF NOT EXISTS public.teams (
      id VARCHAR(36) PRIMARY KEY,
      department_id VARCHAR(36),
@@ -664,11 +711,11 @@ const SEED_STATEMENTS = [
      ('stage-converted', 'converted', 'Converted (Closed Won)', 'Patient booked appointment or student enrolled', 'teal', 7, TRUE, TRUE, 'ALL', NOW()),
      ('stage-lost', 'lost', 'Lost', 'Lead discontinued, unresponsive, or declined', 'red', 8, TRUE, TRUE, 'ALL', NOW())
    ON CONFLICT (key) DO NOTHING;`,
-  `INSERT INTO public.branches (id, name, code, address, phone, is_active, created_at, updated_at)
+  `INSERT INTO public.branches (id, company, name, code, address, phone, is_active, created_at, updated_at)
    VALUES
-     ('branch-colombo', 'Colombo (Head Office)', 'COLOMBO', 'Colombo, Sri Lanka', '+94 70 639 3353', TRUE, NOW(), NOW()),
-     ('branch-maruthamunai', 'Maruthamunai Branch', 'MARUTHAMUNAI', 'Maruthamunai, Sri Lanka', '+94 70 637 3353', TRUE, NOW(), NOW())
-   ON CONFLICT (code) DO NOTHING;`,
+     ('branch-colombo', 'RWC', 'Colombo (Head Office)', 'COLOMBO', 'Colombo, Sri Lanka', '+94 70 639 3353', TRUE, NOW(), NOW()),
+     ('branch-maruthamunai', 'RWC', 'Maruthamunai Branch', 'MARUTHAMUNAI', 'Maruthamunai, Sri Lanka', '+94 70 637 3353', TRUE, NOW(), NOW())
+   ON CONFLICT (id) DO NOTHING;`,
   `INSERT INTO public.rooms (id, branch_id, name, room_number, description, color, operating_start, operating_end, is_active, created_at, updated_at)
    VALUES
      ('room-col-1', 'branch-colombo', 'Consultation Suite 1', 'R-101', 'General aesthetic consultation & triage', '#0d9488', '08:00', '20:00', TRUE, NOW(), NOW()),

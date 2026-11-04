@@ -268,7 +268,7 @@
   font-size: 13px;
   color: var(--text-primary);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .wa-context-item:hover {
@@ -475,4 +475,131 @@ select option {
 .light .pipeline-table tbody tr:hover td:nth-child(3),
 .light .pipeline-table tbody tr:hover td:nth-child(17) {
   background-color: #F0F2F5 !important;
+}
+
+/* ------------------------------------------------------------------ */
+/* Settings Workspace Theme Normalization                             */
+/* Maps the legacy slate/emerald classes used by the settings         */
+/* section bodies onto the global theme tokens, so every module       */
+/* follows the active light/dark theme instead of staying dark-only.  */
+/* Scoped to .settings-workspace: no other page is affected.          */
+/* ------------------------------------------------------------------ */
+
+.settings-workspace .bg-slate-950,
+.settings-workspace .bg-slate-950\/70,
+.settings-workspace .bg-slate-950\/80,
+.settings-workspace .bg-slate-900,
+.settings-workspace .bg-slate-800 {
+  background-color: var(--surface-elevated);
+}
+
+.settings-workspace .bg-slate-900\/60,
+.settings-workspace .bg-slate-900\/80 {
+  background-color: var(--surface);
+}
+
+.settings-workspace .hover\:bg-slate-700:hover {
+  background-color: var(--hover-bg);
+}
+
+.settings-workspace .border-slate-800,
+.settings-workspace .border-slate-800\/80,
+.settings-workspace .border-slate-700,
+.settings-workspace .border-slate-700\/80,
+.settings-workspace .hover\:border-slate-700:hover {
+  border-color: var(--border);
+}
+
+.settings-workspace .text-white,
+.settings-workspace .text-slate-100,
+.settings-workspace .text-slate-200 {
+  color: var(--text-primary);
+}
+
+.settings-workspace .text-slate-300,
+.settings-workspace .text-slate-400,
+.settings-workspace .text-slate-500,
+.settings-workspace .text-slate-600 {
+  color: var(--text-secondary);
+}
+
+.settings-workspace .placeholder-slate-500::placeholder {
+  color: var(--text-secondary);
+}
+
+.settings-workspace .text-emerald-200,
+.settings-workspace .text-emerald-300,
+.settings-workspace .text-emerald-400,
+.settings-workspace .text-emerald-600,
+.settings-workspace .hover\:text-emerald-400:hover {
+  color: var(--brand-primary);
+}
+
+.settings-workspace .bg-emerald-500\/10,
+.settings-workspace .bg-emerald-500\/15,
+.settings-workspace .bg-emerald-950\/20 {
+  background-color: var(--status-success-bg);
+}
+
+.settings-workspace .bg-emerald-600 {
+  background-color: var(--brand-strong);
+}
+
+/* Solid brand buttons need light text in both themes. */
+.settings-workspace .bg-emerald-600,
+.settings-workspace .bg-emerald-600 * {
+  color: #fff;
+}
+
+.settings-workspace .hover\:bg-emerald-500:hover {
+  background-color: var(--brand-strong);
+  filter: brightness(1.15);
+}
+
+.settings-workspace .border-emerald-500,
+.settings-workspace .border-emerald-500\/20,
+.settings-workspace .border-emerald-500\/30 {
+  border-color: var(--brand-primary);
+}
+
+.settings-workspace .focus\:ring-emerald-500:focus {
+  --tw-ring-color: var(--brand-primary);
+}
+
+.settings-workspace .text-red-300,
+.settings-workspace .text-red-400,
+.settings-workspace .hover\:text-red-400:hover {
+  color: var(--status-danger);
+}
+
+.settings-workspace .bg-red-500\/10,
+.settings-workspace .bg-red-500\/15 {
+  background-color: var(--status-danger-bg);
+}
+
+.settings-workspace .border-red-500\/20,
+.settings-workspace .border-red-500\/30 {
+  border-color: var(--status-danger);
+}
+
+.settings-workspace .text-amber-300,
+.settings-workspace .text-amber-400 {
+  color: var(--status-warning);
+}
+
+.settings-workspace .bg-amber-500\/10 {
+  background-color: var(--status-warning-bg);
+}
+
+.settings-workspace .border-amber-500\/20,
+.settings-workspace .border-amber-500\/30 {
+  border-color: var(--status-warning);
+}
+
+.settings-workspace .text-blue-400 {
+  color: var(--status-info);
+}
+
+.settings-workspace .hover\:text-white:hover {
+  color: var(--text-primary);
 }

@@ -29,7 +29,6 @@ import { cn } from '../ui';
 export type { NavTab } from '../../config/navigation';
 
 interface SidebarProps {
-  activeTab: NavTab;
   setActiveTab: (tab: NavTab) => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
@@ -75,7 +74,7 @@ const Badge: React.FC<{ value?: number | string; tone?: 'teal' | 'amber' | 'rose
   );
 };
 
-export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMobileOpen = false, onCloseMobile }) => {
+export const Sidebar: React.FC<SidebarProps> = ({ setActiveTab, isMobileOpen = false, onCloseMobile }) => {
   const {
     currentUser,
     logout,
@@ -227,7 +226,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
   };
 
   const isChildActive = (item: NavItem, childPath: string) =>
-    activeTab === item.id && (path === childPath || (path === item.path && childPath === item.children?.[0]?.path));
+    route?.item.id === item.id && (path === childPath || (path === item.path && childPath === item.children?.[0]?.path));
 
   return (
     <>
@@ -348,7 +347,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
                   <ul className="space-y-0.5">
                     {section.items.map((item) => {
                       const Icon = item.icon;
-                      const isActive = activeTab === item.id;
+                      const isActive = route?.item.id === item.id;
                       const hasChildren = !!item.children?.length;
                       const isExpanded = !!expanded[item.id];
                       const badge = badgeFor(item.id);
@@ -473,7 +472,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab, isMob
                   role="menuitem"
                   onClick={() => {
                     setUserMenuOpen(false);
-                    goTo('settings', '/settings/courses');
+                    goTo('settings', '/settings');
                   }}
                   className="flex w-full items-center gap-2 rounded-lg px-2.5 py-1.5 text-[11px] text-[#111B21] hover:bg-[#F0F2F5] dark:text-[#E9EDEF] dark:hover:bg-[#2A3942]"
                 >

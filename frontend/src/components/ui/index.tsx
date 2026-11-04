@@ -86,7 +86,7 @@ interface StatCardProps {
 export const StatCard: React.FC<StatCardProps> = ({ label, value, hint, icon: Icon, tone = 'teal', trend }) => {
   const t = statTones[tone];
   return (
-    <div className="group relative overflow-hidden rounded-xl border border-[#E0E5E7] bg-white p-4 shadow-sm transition-all hover:shadow-md dark:border-[#222D34] dark:bg-[#202C33]">
+    <div className="group relative overflow-hidden rounded-xl border border-[#E0E5E7] bg-white p-4 shadow-sm transition-shadow hover:shadow-md dark:border-[#222D34] dark:bg-[#202C33]">
       <span className={cn('absolute inset-x-0 top-0 h-1 opacity-80', t.accent)} aria-hidden />
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
@@ -471,7 +471,7 @@ export const FormDrawer: React.FC<FormDrawerProps> = ({ open, title, description
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-4">{children}</div>
         {footer && <div className="border-t border-[#E0E5E7] px-5 py-3 dark:border-[#222D34]">{footer}</div>}
       </div>
     </div>

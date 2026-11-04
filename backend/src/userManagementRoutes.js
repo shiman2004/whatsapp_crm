@@ -9,8 +9,9 @@ import { getPrisma, getDbStatus } from './db.js';
 import { PermissionError, ROLES, roleLabel } from './securityPolicy.js';
 import { auditSecurityEvent } from './securityAudit.js';
 import { listAuditEvents } from './securityStore.js';
-import { hashSecret, encryptReversible, decryptReversible } from './secretHash.js';
+import { hashSecret } from './secretHash.js';
 import { COMPANIES, resolveLeadCompany } from './companyConfig.js';
+import { invitationMailer } from './services/invitationMailer.js';
 
 const json = (res, status, value) => {
   res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' });
@@ -384,27 +385,26 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
         if (employee?.length) throw new PermissionError(409, 'EMPLOYEE_ID_IN_USE', 'That employee ID is already assigned.');
       }
 
-      const created = await prisma.user.create({
-        data: {
-          fullName, email, role, company, branch,
-          phone: text(input.phone, 50) || null,
-          password: encryptReversible(password),
-          ...(pin ? { pin: encryptReversible(pin) } : {}),
-          active: input.active !== false,
-          marketingAccess: input.marketingAccess === true,
-        },
+      const created = await prisma.$transaction(async (tx) => {
+        return tx.user.create({
+          data: {
+            fullName,
+            email,
+            role,
+            company,
+            branch,
+            phone: text(input.phone, 50) || null,
+            password: hashSecret(password),
+            ...(pin ? { pin: hashSecret(pin) } : {}),
+            active: input.active !== false,
+            marketingAccess: input.marketingAccess === true,
+            employeeId,
+            departmentId,
+            managerId,
+          },
+        });
       });
-      try {
-        await prisma.$executeRawUnsafe(
-          `UPDATE public.users
-              SET employee_id = $2, department_id = $3, manager_id = $4
-            WHERE id = $1`,
-          created.id, employeeId, departmentId, managerId
-        );
-      } catch (error) {
-        // Keep the identity consistent if the additive columns are not deployed yet.
-        if (!/employee_id|department_id|manager_id|does not exist/i.test(error.message)) throw error;
-      }
+
       await audit(user, correlationId, 'user.create', `user:${created.id}`, 'success', {
         role, company, branch, department: department?.name || null, invitation: false,
       });
@@ -475,8 +475,10 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
         id, email, fullName, role, company, branch, departmentId, tokenHash, user.id
       );
       const invite = { id, email, fullName, role, company, branch, departmentId, expiresAt: null };
-      await audit(user, correlationId, 'user.invitation.create', `invitation:${id}`, 'success', { email, role, company });
-      json(res, 201, { success: true, data: { ...invite, inviteUrl: inviteUrlFor(req, token) } });
+      const inviteUrl = inviteUrlFor(req, token);
+      const delivery = await invitationMailer.sendInvitationEmail({ to: email, fullName, inviteUrl });
+      await audit(user, correlationId, 'user.invitation.create', `invitation:${id}`, 'success', { email, role, company, emailDelivered: delivery.delivered });
+      json(res, 201, { success: true, data: { ...invite, inviteUrl, emailDelivered: delivery.delivered } });
       return true;
     }
 
@@ -484,7 +486,7 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
     if (resendMatch && req.method === 'POST') {
       const id = resendMatch[1];
       const rows = await prisma.$queryRawUnsafe(
-        'SELECT id, email, accepted_at, revoked_at FROM public.user_invitations WHERE id = $1 LIMIT 1', id
+        'SELECT id, email, full_name AS "fullName", accepted_at, revoked_at FROM public.user_invitations WHERE id = $1 LIMIT 1', id
       );
       const invite = rows?.[0];
       if (!invite) throw new PermissionError(404, 'UNKNOWN_INVITATION', 'Invitation not found.');
@@ -496,8 +498,10 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
             SET token_hash = $2, expires_at = NOW() + INTERVAL '7 days', revoked_at = NULL
           WHERE id = $1`, id, tokenHash
       );
-      await audit(user, correlationId, 'user.invitation.resend', `invitation:${id}`, 'success', { email: invite.email });
-      ok(res, { id, inviteUrl: inviteUrlFor(req, token) });
+      const inviteUrl = inviteUrlFor(req, token);
+      const delivery = await invitationMailer.sendInvitationEmail({ to: invite.email, fullName: invite.fullName, inviteUrl });
+      await audit(user, correlationId, 'user.invitation.resend', `invitation:${id}`, 'success', { email: invite.email, emailDelivered: delivery.delivered });
+      ok(res, { id, inviteUrl, emailDelivered: delivery.delivered });
       return true;
     }
 
@@ -876,10 +880,10 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
           const rawPin = credsRow.pin;
           const rawPass = credsRow.password;
           credentials = {
-            pin: rawPin?.startsWith('enc:v1:') ? decryptReversible(rawPin) : (!rawPin?.startsWith('scrypt:') ? (rawPin || null) : null),
+            pin: null,
             pinConfigured: Boolean(rawPin),
             pinIsHashed: Boolean(rawPin?.startsWith('scrypt:')),
-            password: rawPass?.startsWith('enc:v1:') ? decryptReversible(rawPass) : (!rawPass?.startsWith('scrypt:') ? (rawPass || null) : null),
+            password: null,
             passwordConfigured: Boolean(rawPass),
             passwordIsHashed: Boolean(rawPass?.startsWith('scrypt:')),
           };
@@ -1016,8 +1020,8 @@ export async function handleUserManagementRoutes(req, res, pathname, user, corre
         if (password && password.length < 12) throw new PermissionError(400, 'WEAK_PASSWORD', 'Password must be at least 12 characters.');
         if (pin && (pin.length < 4 || pin.length > 10)) throw new PermissionError(400, 'INVALID_PIN', 'PIN must be 4-10 characters.');
         const data = {};
-        if (password) data.password = encryptReversible(password);
-        if (pin) data.pin = encryptReversible(pin);
+        if (password) data.password = hashSecret(password);
+        if (pin) data.pin = hashSecret(pin);
         await prisma.user.update({ where: { id }, data });
         await revokeUserSessions(prisma, id, user.id, 'Credentials reset by administrator');
         await audit(user, correlationId, 'user.credentials.reset', `user:${id}`, 'success', { password: Boolean(password), pin: Boolean(pin) });

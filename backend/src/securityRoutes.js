@@ -183,6 +183,10 @@ async function handleUserPatch(req, res, targetId, user, correlationId) {
   });
   const target = await getUser(prisma, targetId);
   const described = await describeUserPolicy(prisma, target, saved);
+  try {
+    const { broadcastScopedSSE } = await import('./legacyServer.js');
+    broadcastScopedSSE(null, { type: 'USER_PERMISSIONS_CHANGED', userId: targetId, actorId: user.id });
+  } catch {}
   ok(res, { ...described, ...diff });
 }
 

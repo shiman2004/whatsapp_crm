@@ -19,7 +19,9 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
-import { hashSecret, verifySecret, encryptReversible, decryptReversible } from './secretHash.js';
+import { handleCompanyRoutes } from './companyRoutes.js';
+import { handleSettingsRoutes } from './settingsRoutes.js';
+import { hashSecret, verifySecret } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -357,8 +359,8 @@ function sharedRateLimitKeys(ip, identifier) {
   return keys;
 }
 
-async function checkSharedLoginRateLimit(ip, identifier) {
-  if (IS_TEST_ENV) return checkLoginRateLimit(ip, identifier);
+async function checkSharedLoginRateLimit(ip, identifier, forceDb = false) {
+  if (IS_TEST_ENV && !forceDb && !process.env.USE_DB_RATE_LIMITER) return checkLoginRateLimit(ip, identifier);
   const prisma = getPrisma();
   // A database outage is not a login lockout. Returning `limited: true` here
   // made every local login attempt look like a brute-force block and prevented
@@ -383,8 +385,8 @@ async function checkSharedLoginRateLimit(ip, identifier) {
   }
 }
 
-async function recordSharedLoginFailure(ip, identifier) {
-  if (IS_TEST_ENV) return recordLoginFailure(ip, identifier);
+async function recordSharedLoginFailure(ip, identifier, forceDb = false) {
+  if (IS_TEST_ENV && !forceDb && !process.env.USE_DB_RATE_LIMITER) return recordLoginFailure(ip, identifier);
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return false;
   try {
@@ -416,8 +418,8 @@ async function recordSharedLoginFailure(ip, identifier) {
   }
 }
 
-async function recordSharedLoginSuccess(ip, identifier) {
-  if (IS_TEST_ENV) return recordLoginSuccess(ip, identifier);
+async function recordSharedLoginSuccess(ip, identifier, forceDb = false) {
+  if (IS_TEST_ENV && !forceDb && !process.env.USE_DB_RATE_LIMITER) return recordLoginSuccess(ip, identifier);
   const prisma = getPrisma();
   if (!prisma || !getDbStatus()) return false;
   try {
@@ -430,6 +432,23 @@ async function recordSharedLoginSuccess(ip, identifier) {
     return false;
   }
 }
+
+async function cleanupExpiredRateLimits(customPrisma) {
+  const prisma = customPrisma || getPrisma();
+  if (!prisma) return 0;
+  try {
+    const deleted = await prisma.$executeRawUnsafe(`
+      DELETE FROM public.auth_rate_limits
+      WHERE (locked_until IS NOT NULL AND locked_until < NOW() - INTERVAL '15 minutes')
+         OR (locked_until IS NULL AND updated_at < NOW() - INTERVAL '15 minutes');
+    `);
+    return deleted;
+  } catch (error) {
+    console.error('[Security] Could not clean up expired auth_rate_limits:', error.message);
+    return 0;
+  }
+}
+
 
 
 // Multi-Client SSE Hub with Coordinator Channel Isolation
@@ -1651,14 +1670,34 @@ const server = http.createServer(async (req, res) => {
   // return token claims here: authenticateRequest has already verified the bearer
   // token and loaded the active user record from the database.
   if (req.method === 'GET' && pathname === '/api/auth/session') {
+    let moduleAccess = { crm: true, exam: true, clinical: true, marketing: true, reports: true, staff: true, system: true };
+    const prisma = getPrisma();
+    if (authUser.role !== 'super_admin' && prisma && getDbStatus()) {
+      try {
+        const { getProfile, describeUserPolicy } = await import('./securityStore.js');
+        const profile = await getProfile(prisma, 'user', authUser.id);
+        const described = await describeUserPolicy(prisma, authUser, profile);
+        moduleAccess = { crm: false, exam: false, clinical: false, marketing: false, reports: false, staff: false, system: false };
+        for (const [key, cap] of Object.entries(described?.policy?.capabilities || {})) {
+          const mod = key.split('.')[0];
+          if (cap.allowed) {
+            moduleAccess[mod] = true;
+          }
+        }
+      } catch (err) {
+        console.warn('[Session] Could not compute user moduleAccess:', err.message);
+      }
+    }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, user: authUser }));
+    res.end(JSON.stringify({ success: true, user: { ...authUser, moduleAccess } }));
     return;
   }
 
   if (await handleExamOperations(req, res, pathname, authUser)) return;
   if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleUserManagementRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleCompanyRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleSettingsRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;
@@ -6827,12 +6866,10 @@ const server = http.createServer(async (req, res) => {
               .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
               .map(u => {
                 const { password, pin, ...safeUser } = u;
-                const revealedPin = isSuperAdmin ? (pin?.startsWith('enc:v1:') ? decryptReversible(pin) : (!pin?.startsWith('scrypt:') ? pin : null)) : undefined;
-                const revealedPassword = isSuperAdmin ? (password?.startsWith('enc:v1:') ? decryptReversible(password) : (!password?.startsWith('scrypt:') ? password : null)) : undefined;
                 return {
                   ...safeUser,
-                  ...(isSuperAdmin ? { pin: revealedPin, password: revealedPassword } : {}),
                   pinConfigured: Boolean(pin),
+                  passwordConfigured: Boolean(password),
                   branch: safeUser.branch || 'Colombo',
                   company: safeUser.company || (['leads_officer'].includes(safeUser.role) ? null : 'RWC'),
                 };
@@ -6896,12 +6933,12 @@ const server = http.createServer(async (req, res) => {
                   id: desiredId,
                   fullName,
                   email: safeEmail,
-                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: encryptReversible(cleanPassword),
+                  password: hashSecret(cleanPassword),
                   active: true
                 }
               });
@@ -6920,12 +6957,12 @@ const server = http.createServer(async (req, res) => {
                 data: {
                   fullName,
                   email: `${safeEmail.split('@')[0]}_${Date.now()}@${safeEmail.split('@')[1] || 'royalwellness.lk'}`,
-                  ...(cleanPin ? { pin: encryptReversible(cleanPin) } : {}),
+                  ...(cleanPin ? { pin: hashSecret(cleanPin) } : {}),
                   phone,
                   role: role,
                   branch: branch,
                   company: company,
-                  password: encryptReversible(cleanPassword),
+                  password: hashSecret(cleanPassword),
                   active: true
                 }
               });
@@ -8263,6 +8300,11 @@ export {
   recordLoginFailure,
   recordLoginSuccess,
   resetLoginRateLimits,
+  checkSharedLoginRateLimit,
+  recordSharedLoginFailure,
+  recordSharedLoginSuccess,
+  cleanupExpiredRateLimits,
+  sharedRateLimitKeys,
   dummyVerify,
   verifyMetaSignature,
   // Bounded in-memory stores (tested for expiry and growth caps)
@@ -8278,5 +8320,6 @@ export {
   signMediaFile,
   timingSafeStringEqual,
   allocateCompanyLeadSerial,
+  broadcastScopedSSE,
   server
 };

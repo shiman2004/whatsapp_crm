@@ -154,7 +154,7 @@ export function StudentPortal() {
         setPassword('');
         if (result.requiresOtp) {
           setChallenge(result.challengeId);
-          if (result.devCode) {
+          if (Boolean(import.meta.env.DEV) && result.devCode) {
             setCode(result.devCode);
             setNotice(`Verification code sent to your email. (Dev Code: ${result.devCode})`);
           } else {

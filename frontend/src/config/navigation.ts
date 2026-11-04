@@ -18,14 +18,7 @@ import {
   Upload,
   Contact,
   Users,
-  UsersRound,
-  UserPlus,
   Building2,
-  BriefcaseBusiness,
-  MailPlus,
-  UserX,
-  UserCheck,
-  MonitorSmartphone,
   BarChart3,
   Sliders,
   ShieldCheck,
@@ -37,7 +30,7 @@ import {
   Layers,
   TrendingUp,
   Award,
-  Tag,
+  Lock,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -141,30 +134,16 @@ const examChildren: NavChild[] = [
 ];
 
 const settingsChildren: NavChild[] = [
-  { id: 'courses', label: 'Courses & Programs', icon: BookOpen, path: '/settings/courses', intentEvent: 'settings-subtab-change', intentValue: 'courses' },
-  { id: 'treatments', label: 'Treatments Catalog', icon: Sparkles, path: '/settings/treatments', intentEvent: 'settings-subtab-change', intentValue: 'treatments' },
-  { id: 'stages', label: 'Lead Funnel Stages', icon: KanbanSquare, path: '/settings/stages', intentEvent: 'settings-subtab-change', intentValue: 'stages' },
-  { id: 'labels', label: 'Assign Labels', icon: Tag, path: '/settings/labels', intentEvent: 'settings-subtab-change', intentValue: 'labels' },
-  { id: 'exam-settings', label: 'Exam Department Settings', icon: GraduationCap, path: '/settings/exam-settings', intentEvent: 'settings-subtab-change', intentValue: 'exam-settings' },
-];
-
-const userManagementChildren: NavChild[] = [
-  { id: 'directory', label: 'User Directory', icon: UsersRound, path: '/staff/directory' },
-  { id: 'create', label: 'Create User', icon: UserPlus, path: '/staff/create' },
-  { id: 'teams', label: 'Teams & Departments', icon: Building2, path: '/staff/teams' },
-  { id: 'assignments', label: 'User Assignments', icon: BriefcaseBusiness, path: '/staff/assignments' },
-  { id: 'invitations', label: 'Pending Invitations', icon: MailPlus, path: '/staff/invitations' },
-  { id: 'deactivated', label: 'Deactivated Accounts', icon: UserX, path: '/staff/deactivated' },
-];
-
-const securityChildren: NavChild[] = [
-  { id: 'overview', label: 'Security Overview', icon: LayoutDashboard, path: '/security/overview' },
-  { id: 'roles', label: 'Roles & Permissions', icon: ShieldCheck, path: '/security/roles' },
-  { id: 'matrix', label: 'Permission Matrix', icon: KanbanSquare, path: '/security/matrix' },
-  { id: 'policies', label: 'Access Policies', icon: Users, path: '/security/policies' },
-  { id: 'requests', label: 'Access Requests', icon: UserCheck, path: '/security/requests' },
-  { id: 'sessions', label: 'Login & Session Activity', icon: MonitorSmartphone, path: '/security/sessions' },
-  { id: 'events', label: 'Security Events', icon: ScrollText, path: '/security/events' },
+  { id: 'company', label: 'Company & Branch Management', icon: Building2, path: '/settings/company' },
+  { id: 'users', label: 'User Management', icon: Users, path: '/settings/users' },
+  { id: 'roles', label: 'Role Access & Monitoring', icon: ShieldCheck, path: '/settings/roles' },
+  { id: 'whatsapp_messaging', label: 'WhatsApp Messaging Configuration', icon: MessageSquare, path: '/settings/whatsapp_messaging' },
+  { id: 'sales', label: 'Leads & Pipeline Settings', icon: KanbanSquare, path: '/settings/sales' },
+  { id: 'marketing', label: 'Contacts & Marketing Settings', icon: Megaphone, path: '/settings/marketing' },
+  { id: 'clinical', label: 'Treatments & Clinical Settings', icon: Sparkles, path: '/settings/clinical' },
+  { id: 'academic', label: 'CRAS Courses & Programs', icon: GraduationCap, path: '/settings/academic' },
+  { id: 'integrations', label: 'Integrations & API Management', icon: Code2, path: '/settings/integrations' },
+  { id: 'security_policy', label: 'Security & Audit Center', icon: Lock, path: '/settings/security_policy' },
 ];
 
 const marketingChildren: NavChild[] = [
@@ -316,24 +295,6 @@ export const NAV_SECTIONS: NavSection[] = [
     title: 'System & Security',
     items: [
       {
-        id: 'user-management',
-        label: 'User Management',
-        description: 'Accounts, roles, teams, assignments and invitations',
-        icon: UsersRound,
-        path: '/staff',
-        adminOnly: true,
-        children: userManagementChildren,
-      },
-      {
-        id: 'security-access',
-        label: 'Security & Access',
-        description: 'Roles, permission matrix, policies and sessions',
-        icon: ShieldCheck,
-        path: '/security',
-        adminOnly: true,
-        children: securityChildren,
-      },
-      {
         id: 'settings',
         label: 'System Settings',
         description: 'Catalogues, stages and module configuration',
@@ -381,6 +342,10 @@ const LEGACY_ALIASES: Record<string, string> = {
   '/staffs': '/staff',
   '/user-management': '/staff',
   '/settings/admins': '/staff/directory',
+  '/settings/courses': '/settings/academic',
+  '/settings/treatments': '/settings/clinical',
+  '/settings/stages': '/settings/sales',
+  '/settings/labels': '/settings/whatsapp_messaging',
   '/architecture': '/api-specs',
   '/webhook-sandbox': '/webhooks',
   '/leads-kanban': '/leads',
@@ -441,14 +406,34 @@ export function routeForTab(tab: NavTab): string {
 export function isNavItemVisible(item: NavItem, user: User | null | undefined): boolean {
   const role = user?.role;
   if (!role) return false;
-  if (item.adminOnly) return role === 'super_admin';
+  if (role === 'super_admin') return true;
+
+  // 1. Person-Specific Module Overrides (take precedence over role defaults)
+  if (user?.moduleAccess) {
+    if (item.clinicalStaffOnly && user.moduleAccess.clinical !== undefined) {
+      return Boolean(user.moduleAccess.clinical);
+    }
+    if (item.examStaffOnly && user.moduleAccess.exam !== undefined) {
+      return Boolean(user.moduleAccess.exam);
+    }
+    if (item.marketingModule && user.moduleAccess.marketing !== undefined) {
+      return Boolean(user.moduleAccess.marketing);
+    }
+    if (item.path === '/analytics' && user.moduleAccess.reports !== undefined) {
+      return Boolean(user.moduleAccess.reports);
+    }
+    if (item.path === '/settings' && user.moduleAccess.system !== undefined) {
+      return Boolean(user.moduleAccess.system);
+    }
+  }
+
+  // 2. Baseline role defaults
+  if (item.adminOnly) return (role as string) === 'super_admin';
   if (item.studentOnly) return String(role) === 'student';
   if (item.examStaffOnly) return EXAM_STAFF_ROLES.includes(role);
   if (item.clinicalStaffOnly) return CLINICAL_ROLES.includes(role);
   if (item.marketingModule) {
     // Backend remains the authority; this only hides links a role cannot use.
-    // super_admin bypasses the per-user revoke, matching backend marketing/permissions.js.
-    if (role === 'super_admin') return true;
     return MARKETING_ROLES.includes(role) && user?.marketingAccess !== false;
   }
   return true;

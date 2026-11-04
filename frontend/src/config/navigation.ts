@@ -13,11 +13,14 @@ import {
   Edit3,
   CheckSquare,
   Target,
+  Tag,
   Inbox,
   FileText,
   Upload,
   Contact,
   Users,
+  UsersRound,
+  UserPlus,
   Building2,
   BarChart3,
   Sliders,
@@ -32,6 +35,9 @@ import {
   TrendingUp,
   Award,
   Lock,
+  Tag,
+  UsersRound,
+  UserPlus,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 

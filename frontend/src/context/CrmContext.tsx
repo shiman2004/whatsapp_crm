@@ -999,47 +999,35 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       if (coordsRes && coordsRes.ok) {
         const dbCoords: any[] = await coordsRes.json().catch(() => []);
-        if (Array.isArray(dbCoords)) {
+        if (Array.isArray(dbCoords) && dbCoords.length > 0) {
           const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const userMap = new Map<string, User>();
-          
-          // Ensure Super Admin is always present
+          dbCoords.forEach(u => {
+            if (deletedUserIds.includes(u.id) || u.active === false) return;
+            userMap.set(u.id, {
+              ...u,
+              branch: u.branch || 'Colombo',
+              company: u.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
+              roleTitle: getStaffRoleTitle(u),
+              password: u.password,
+              pin: u.pin,
+              active: u.active ?? true,
+              activeLeadsCount: u.activeLeadsCount || 0
+            });
+          });
+          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
+          setUsers(updatedUsers);
+          localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
+        } else if (Array.isArray(dbCoords)) {
+          const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
+          const userMap = new Map<string, User>();
           const superAdmin = INITIAL_USERS.find(u => u.role === 'super_admin') || INITIAL_USERS[0];
           userMap.set(superAdmin.id, superAdmin);
-
-          // Add initial users only if they have not been deleted
           INITIAL_USERS.forEach(u => {
             if (!deletedUserIds.includes(u.id)) {
               userMap.set(u.id, u);
             }
           });
-
-          // PRESERVE locally stored staff members across refresh
-          const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
-          storedLocalUsers.forEach(u => {
-            if (!deletedUserIds.includes(u.id) && u.active !== false) {
-              userMap.set(u.id, u);
-            }
-          });
-
-          // Add backend coordinators from Supabase (authoritative cloud sync)
-          dbCoords.forEach(u => {
-            if (deletedUserIds.includes(u.id) || u.active === false) return;
-            const isSuper = u.role === 'super_admin' || u.id === 'user-admin-1';
-            const existingLocal = userMap.get(u.id);
-            userMap.set(u.id, {
-              ...existingLocal,
-              ...u,
-              branch: u.branch || existingLocal?.branch || 'Colombo',
-              company: u.company || existingLocal?.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
-              roleTitle: getStaffRoleTitle(u),
-              password: u.password || existingLocal?.password || (isSuper ? 'admin' : 'staff'),
-              pin: u.pin || existingLocal?.pin || (isSuper ? '1234' : '2026'),
-              active: u.active ?? true,
-              activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
-            });
-          });
-
           const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
           setUsers(updatedUsers);
           localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
@@ -1503,6 +1491,19 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return;
           }
 
+          if (data.type === 'USER_PERMISSIONS_CHANGED') {
+            const token = localStorage.getItem('rw_crm_auth_token');
+            if (token && (data.userId === 'ALL' || currentUser?.id === data.userId)) {
+              verifyServerSession(token).then((refreshed) => {
+                if (refreshed) {
+                  setCurrentUser(refreshed);
+                  notify('Permissions Updated', 'Your security profile and module access were updated.', 'info');
+                }
+              });
+            }
+            return;
+          }
+
           if (data.type === 'META_CONFIG_UPDATED') {
             const hasToken = Boolean(data.hasToken);
             setHasMetaConfig(hasToken);
@@ -1687,8 +1688,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     branch: incomingUser.branch || 'Colombo',
                     company: incomingUser.company || (['leads_officer'].includes(incomingUser.role) ? undefined : 'RWC'),
                     roleTitle,
-                    password: incomingUser.password || (isSuper ? 'admin' : 'staff'),
-                    pin: incomingUser.pin || (isSuper ? '1234' : '2026'),
+                    password: incomingUser.password,
+                    pin: incomingUser.pin,
                     active: incomingUser.active ?? true,
                     activeLeadsCount: incomingUser.activeLeadsCount || 0
                   };
@@ -4470,7 +4471,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       branch: cleanBranch,
       company: cleanCompany,
       email: autoEmail,
-      password: data.password || 'staff',
+      password: data.password,
       pin: cleanPin,
       phone: data.phone,
       role: role,
@@ -4513,7 +4514,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           pin: cleanPin,
           phone: data.phone,
           role: role,
-          password: data.password || 'staff'
+          password: data.password || undefined
         })
       });
 
@@ -4688,8 +4689,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       roleTitle,
       branch: userItem.branch || 'Colombo',
       company: userItem.company || (['leads_officer'].includes(userItem.role) ? undefined : 'RWC'),
-      password: userItem.password || 'staff',
-      pin: userItem.pin || '2026',
+      password: userItem.password,
+      pin: userItem.pin,
       active: userItem.active ?? true,
       activeLeadsCount: userItem.activeLeadsCount || 0,
       createdAt: userItem.createdAt || new Date().toISOString(),
@@ -4735,8 +4736,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               branch: u.branch || existingLocal?.branch || 'Colombo',
               company: u.company || existingLocal?.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
               roleTitle: getStaffRoleTitle(u),
-              password: u.password || existingLocal?.password || (isSuper ? 'admin' : 'staff'),
-              pin: u.pin || existingLocal?.pin || (isSuper ? '1234' : '2026'),
+              password: u.password || existingLocal?.password,
+              pin: u.pin || existingLocal?.pin,
               active: u.active ?? true,
               activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
             });

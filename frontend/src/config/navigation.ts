@@ -19,11 +19,6 @@ import {
   Contact,
   Users,
   Building2,
-  BriefcaseBusiness,
-  MailPlus,
-  UserX,
-  UserCheck,
-  MonitorSmartphone,
   BarChart3,
   Sliders,
   ShieldCheck,
@@ -139,30 +134,16 @@ const examChildren: NavChild[] = [
 ];
 
 const settingsChildren: NavChild[] = [
-  { id: 'courses', label: 'Courses & Programs', icon: BookOpen, path: '/settings/courses', intentEvent: 'settings-subtab-change', intentValue: 'courses' },
-  { id: 'treatments', label: 'Treatments Catalog', icon: Sparkles, path: '/settings/treatments', intentEvent: 'settings-subtab-change', intentValue: 'treatments' },
-  { id: 'stages', label: 'Lead Funnel Stages', icon: KanbanSquare, path: '/settings/stages', intentEvent: 'settings-subtab-change', intentValue: 'stages' },
-  { id: 'labels', label: 'Assign Labels', icon: Tag, path: '/settings/labels', intentEvent: 'settings-subtab-change', intentValue: 'labels' },
-  { id: 'exam-settings', label: 'Exam Department Settings', icon: GraduationCap, path: '/settings/exam-settings', intentEvent: 'settings-subtab-change', intentValue: 'exam-settings' },
-];
-
-const userManagementChildren: NavChild[] = [
-  { id: 'directory', label: 'User Directory', icon: UsersRound, path: '/staff/directory' },
-  { id: 'create', label: 'Create User', icon: UserPlus, path: '/staff/create' },
-  { id: 'teams', label: 'Teams & Departments', icon: Building2, path: '/staff/teams' },
-  { id: 'assignments', label: 'User Assignments', icon: BriefcaseBusiness, path: '/staff/assignments' },
-  { id: 'invitations', label: 'Pending Invitations', icon: MailPlus, path: '/staff/invitations' },
-  { id: 'deactivated', label: 'Deactivated Accounts', icon: UserX, path: '/staff/deactivated' },
-];
-
-const securityChildren: NavChild[] = [
-  { id: 'overview', label: 'Security Overview', icon: LayoutDashboard, path: '/security/overview' },
-  { id: 'roles', label: 'Roles & Permissions', icon: ShieldCheck, path: '/security/roles' },
-  { id: 'matrix', label: 'Permission Matrix', icon: KanbanSquare, path: '/security/matrix' },
-  { id: 'policies', label: 'Access Policies', icon: Users, path: '/security/policies' },
-  { id: 'requests', label: 'Access Requests', icon: UserCheck, path: '/security/requests' },
-  { id: 'sessions', label: 'Login & Session Activity', icon: MonitorSmartphone, path: '/security/sessions' },
-  { id: 'events', label: 'Security Events', icon: ScrollText, path: '/security/events' },
+  { id: 'company', label: 'Company & Branch Management', icon: Building2, path: '/settings/company' },
+  { id: 'users', label: 'User Management', icon: Users, path: '/settings/users' },
+  { id: 'roles', label: 'Role Access & Monitoring', icon: ShieldCheck, path: '/settings/roles' },
+  { id: 'whatsapp_messaging', label: 'WhatsApp Messaging Configuration', icon: MessageSquare, path: '/settings/whatsapp_messaging' },
+  { id: 'sales', label: 'Leads & Pipeline Settings', icon: KanbanSquare, path: '/settings/sales' },
+  { id: 'marketing', label: 'Contacts & Marketing Settings', icon: Megaphone, path: '/settings/marketing' },
+  { id: 'clinical', label: 'Treatments & Clinical Settings', icon: Sparkles, path: '/settings/clinical' },
+  { id: 'academic', label: 'CRAS Courses & Programs', icon: GraduationCap, path: '/settings/academic' },
+  { id: 'integrations', label: 'Integrations & API Management', icon: Code2, path: '/settings/integrations' },
+  { id: 'security_policy', label: 'Security & Audit Center', icon: Lock, path: '/settings/security_policy' },
 ];
 
 const marketingChildren: NavChild[] = [

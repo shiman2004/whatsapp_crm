@@ -16,6 +16,7 @@ import {
 } from './config/navigation';
 import { useHashPath } from './hooks/useHashRoute';
 import { EmptyState, InlineLoader } from './components/ui';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Compass } from 'lucide-react';
 
 // Lazy-loaded secondary & admin modules for code-splitting and small initial chunk sizes
@@ -111,7 +112,7 @@ const MainLayout: React.FC = () => {
       case 'marketing':
         return <MarketingModule />;
       case 'settings':
-        return currentUser?.role === 'super_admin' ? <SuperAdminSettingsView /> : <NotFound />;
+        return currentUser?.role === 'super_admin' ? <EnterpriseSettingsHub /> : <NotFound />;
       case 'security-access':
         return currentUser?.role === 'super_admin' ? <SecurityAccessView /> : <NotFound />;
       case 'user-management':
@@ -152,7 +153,9 @@ const MainLayout: React.FC = () => {
 
   return (
     <AppShell activeTab={activeNavTab} onSelectLead={handleSelectLead}>
-      <Suspense fallback={<InlineLoader label="Loading workspace module…" />}>{renderModule()}</Suspense>
+      <ErrorBoundary fallbackTitle="Module Render Error">
+        <Suspense fallback={<InlineLoader label="Loading workspace module…" />}>{renderModule()}</Suspense>
+      </ErrorBoundary>
     </AppShell>
   );
 };
@@ -162,14 +165,18 @@ const RootApp: React.FC = () => {
 
   if (!isAuthenticated) {
     return (
-      <>
+      <ErrorBoundary fallbackTitle="Authentication Error">
         <LoginScreen />
         <ToastContainer />
-      </>
+      </ErrorBoundary>
     );
   }
 
-  return <MainLayout />;
+  return (
+    <ErrorBoundary fallbackTitle="Application Workspace Error">
+      <MainLayout />
+    </ErrorBoundary>
+  );
 };
 
 export default function App() {

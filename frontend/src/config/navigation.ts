@@ -21,6 +21,7 @@ import {
   Building2,
   BarChart3,
   Sliders,
+  Lock,
   ShieldCheck,
   ScrollText,
   Code2,
@@ -144,6 +145,25 @@ const settingsChildren: NavChild[] = [
   { id: 'academic', label: 'CRAS Courses & Programs', icon: GraduationCap, path: '/settings/academic' },
   { id: 'integrations', label: 'Integrations & API Management', icon: Code2, path: '/settings/integrations' },
   { id: 'security_policy', label: 'Security & Audit Center', icon: Lock, path: '/settings/security_policy' },
+];
+
+const userManagementChildren: NavChild[] = [
+  { id: 'directory', label: 'User Directory', icon: UsersRound, path: '/staff/directory' },
+  { id: 'create', label: 'Create User', icon: UserPlus, path: '/staff/create' },
+  { id: 'teams', label: 'Teams & Departments', icon: Building2, path: '/staff/teams' },
+  { id: 'assignments', label: 'User Assignments', icon: BriefcaseBusiness, path: '/staff/assignments' },
+  { id: 'invitations', label: 'Pending Invitations', icon: MailPlus, path: '/staff/invitations' },
+  { id: 'deactivated', label: 'Deactivated Accounts', icon: UserX, path: '/staff/deactivated' },
+];
+
+const securityChildren: NavChild[] = [
+  { id: 'overview', label: 'Security Overview', icon: LayoutDashboard, path: '/security/overview' },
+  { id: 'roles', label: 'Roles & Permissions', icon: ShieldCheck, path: '/security/roles' },
+  { id: 'matrix', label: 'Permission Matrix', icon: KanbanSquare, path: '/security/matrix' },
+  { id: 'policies', label: 'Access Policies', icon: Users, path: '/security/policies' },
+  { id: 'requests', label: 'Access Requests', icon: UserCheck, path: '/security/requests' },
+  { id: 'sessions', label: 'Login & Session Activity', icon: MonitorSmartphone, path: '/security/sessions' },
+  { id: 'events', label: 'Security Events', icon: ScrollText, path: '/security/events' },
 ];
 
 const marketingChildren: NavChild[] = [

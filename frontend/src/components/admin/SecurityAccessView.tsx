@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LockKeyhole, RefreshCw, ScrollText, ShieldAlert, ShieldCheck, SlidersHorizontal, Users, Boxes, LayoutDashboard, MonitorSmartphone, UserCheck } from 'lucide-react';
+import { RefreshCw, ScrollText, ShieldAlert, ShieldCheck, Users, Boxes, LayoutDashboard, MonitorSmartphone, UserCheck, Building2 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { setSecurityTokenReader } from './security/api';
 import { userManagementApi, type Department } from './user-management/api';
@@ -9,7 +9,8 @@ import { AuditLogsTab } from './security/AuditLogsTab';
 import { SessionsTab } from './security/SessionsTab';
 import { UserPermissionsTab } from './security/UserPermissionsTab';
 import { AccessRequestsTab } from './security/AccessRequestsTab';
-import { cx } from './security/bits';
+import { ModuleAccessTab } from './security/ModuleAccessTab';
+import { UserDetailDrawer } from './user-management/UserDetailDrawer';
 
 type SecurityTab = 'overview' | 'roles' | 'matrix' | 'policies' | 'requests' | 'sessions' | 'events';
 
@@ -26,20 +27,17 @@ const TABS: { id: SecurityTab; label: string; hint: string; icon: React.Componen
 const isTab = (value: string): value is SecurityTab => TABS.some((tab) => tab.id === value);
 
 const LEGACY: Record<string, SecurityTab> = {
-  overview: 'staff',
-  policies: 'staff',
-  users: 'staff',
-  matrix: 'roles',
-  events: 'activity',
-  audit: 'activity',
+  users: 'policies',
+  activity: 'events',
+  audit: 'events',
 };
 
 const readTabFromHash = (): SecurityTab => {
   const match = window.location.hash.match(/^#\/(?:security|security-access)(?:\/([a-z-]+))?/);
   const raw = match?.[1];
-  if (!raw) return 'staff';
+  if (!raw) return 'overview';
   if (isTab(raw)) return raw;
-  return LEGACY[raw] || 'staff';
+  return LEGACY[raw] || 'overview';
 };
 
 interface SecurityAccessViewProps {
@@ -134,7 +132,7 @@ export const SecurityAccessView: React.FC<SecurityAccessViewProps> = ({ hideHead
           <div className="flex flex-wrap items-center gap-2.5 self-start sm:self-auto">
             {/* Scope Pill */}
             <div className="inline-flex items-center gap-1.5 rounded-xl border border-[#2A3942] bg-[#202C33] px-3 py-1.5 text-xs font-semibold text-slate-300">
-              <Building className="h-3.5 w-3.5 text-teal-400" />
+              <Building2 className="h-3.5 w-3.5 text-teal-400" />
               <span className="text-slate-400">Scope:</span>
               <span className="text-slate-200">{currentCompany}</span>
             </div>
@@ -176,7 +174,7 @@ export const SecurityAccessView: React.FC<SecurityAccessViewProps> = ({ hideHead
 
       {/* 3. ACTIVE TAB CONTENT */}
       <div key={`${tab}-${refreshKey}`}>
-        {tab === 'staff' && (
+        {tab === 'overview' && (
           <StaffAccessTab
             departments={departments}
             selectedUserId={drawerUserId}
@@ -193,6 +191,7 @@ export const SecurityAccessView: React.FC<SecurityAccessViewProps> = ({ hideHead
         {tab === 'requests' && <AccessRequestsTab />}
         {tab === 'matrix' && <ModuleAccessTab />}
         {tab === 'sessions' && <SessionsTab />}
+        {tab === 'events' && <AuditLogsTab />}
       </div>
 
       {/* 4. RIGHT-SIDE STAFF DETAIL & SECURITY DRAWER */}

@@ -36,6 +36,9 @@ import {
   TrendingUp,
   Award,
   Lock,
+  Tag,
+  UsersRound,
+  UserPlus,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 

@@ -1694,6 +1694,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleUserManagementRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleCompanyRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleSettingsRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;

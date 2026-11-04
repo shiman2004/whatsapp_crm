@@ -21,6 +21,7 @@ import {
   Building2,
   BarChart3,
   Sliders,
+  Lock,
   ShieldCheck,
   ScrollText,
   Code2,

@@ -27,6 +27,7 @@ const TABS: { id: SecurityTab; label: string; hint: string; icon: React.Componen
 const isTab = (value: string): value is SecurityTab => TABS.some((tab) => tab.id === value);
 
 const LEGACY: Record<string, SecurityTab> = {
+  staff: 'overview',
   users: 'policies',
   activity: 'events',
   audit: 'events',

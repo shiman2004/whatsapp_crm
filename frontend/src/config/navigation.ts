@@ -18,8 +18,15 @@ import {
   Upload,
   Contact,
   Users,
+  UsersRound,
+  UserPlus,
+  UserX,
+  UserCheck,
   Building2,
+  BriefcaseBusiness,
   BarChart3,
+  MailPlus,
+  MonitorSmartphone,
   Sliders,
   Lock,
   ShieldCheck,
@@ -31,7 +38,6 @@ import {
   Layers,
   TrendingUp,
   Award,
-  Lock,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 

@@ -1314,3 +1314,94 @@ model AccessRequest {
   @@index([status, createdAt])
   @@map("access_requests")
 }
+
+
+// 26. Enterprise System Settings with Optimistic Locking
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.VarChar(50)
+  section     String   @db.VarChar(50)
+  scope       String   @default("global") @db.VarChar(30)
+  scopeId     String?  @map("scope_id") @db.VarChar(50)
+  payload     Json     @default("{}")
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  updatedById String?  @map("updated_by_id") @db.VarChar(50)
+
+  @@index([section, scope])
+  @@map("enterprise_system_settings")
+}
+
+// 27. Dynamic Custom Field Definitions
+model CustomFieldDefinition {
+  id         String   @id @default(uuid()) @db.VarChar(50)
+  module     String   @db.VarChar(50)
+  name       String   @db.VarChar(100)
+  fieldKey   String   @map("field_key") @db.VarChar(50)
+  fieldType  String   @map("field_type") @db.VarChar(30)
+  options    Json?
+  isRequired Boolean  @default(false) @map("is_required")
+  orderIndex Int      @default(0) @map("order_index")
+  company    String?  @default("ALL") @db.VarChar(50)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@index([module, orderIndex])
+  @@map("custom_field_definitions")
+}
+
+// 28. Automation Trigger-Condition-Action Rules
+model AutomationRule {
+  id             String    @id @default(uuid()) @db.VarChar(50)
+  name           String    @db.VarChar(150)
+  description    String?   @db.Text
+  event          String    @db.VarChar(100)
+  conditions     Json      @default("[]")
+  actions        Json      @default("[]")
+  isActive       Boolean   @default(true) @map("is_active")
+  priority       Int       @default(0)
+  company        String?   @default("ALL") @db.VarChar(50)
+  executionCount Int       @default(0) @map("execution_count")
+  lastRunAt      DateTime? @map("last_run_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([event, isActive])
+  @@map("automation_rules")
+}
+
+// 29. Secure Scoped API Keys (scrypt hashed)
+model ApiKey {
+  id          String    @id @default(uuid()) @db.VarChar(50)
+  name        String    @db.VarChar(100)
+  keyPrefix   String    @map("key_prefix") @db.VarChar(16)
+  keyHash     String    @map("key_hash") @db.VarChar(255)
+  scopes      String[]  @default([])
+  expiresAt   DateTime? @map("expires_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  revokedAt   DateTime? @map("revoked_at")
+  createdById String?   @map("created_by_id") @db.VarChar(50)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([keyPrefix])
+  @@map("api_keys")
+}
+
+// 30. Outbound Webhook Endpoints
+model WebhookEndpoint {
+  id             String    @id @default(uuid()) @db.VarChar(50)
+  url            String    @db.VarChar(500)
+  description    String?   @db.Text
+  events         String[]  @default([])
+  secret         String    @db.Text
+  isActive       Boolean   @default(true) @map("is_active")
+  failureCount   Int       @default(0) @map("failure_count")
+  lastDeliveryAt DateTime? @map("last_delivery_at")
+  lastStatusCode Int?      @map("last_status_code")
+  company        String?   @default("ALL") @db.VarChar(50)
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@index([isActive])
+  @@map("webhook_endpoints")
+}

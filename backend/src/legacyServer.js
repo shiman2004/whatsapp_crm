@@ -19,6 +19,7 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
+import { handleSettingsRoutes } from './settingsRoutes.js';
 import { hashSecret, verifySecret } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
@@ -1693,6 +1694,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleExamOperations(req, res, pathname, authUser)) return;
   if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleUserManagementRoutes(req, res, pathname, authUser, correlationId)) return;
+  if (await handleSettingsRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;

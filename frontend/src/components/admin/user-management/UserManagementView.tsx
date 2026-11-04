@@ -39,6 +39,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ hideHead
   const [overview, setOverview] = useState<UserOverview | null>(null);
   const [org, setOrg] = useState<{ departments: Department[]; teams: Team[]; members: TeamMember[] }>({ departments: [], teams: [], members: [] });
   const [managers, setManagers] = useState<ManagedUser[]>([]);
+  const superAdmins = useMemo(() => managers.filter(u => u.role === 'super_admin'), [managers]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const tokenRef = useRef(getAuthToken);

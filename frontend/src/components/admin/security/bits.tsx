@@ -192,7 +192,7 @@ export const Drawer: React.FC<{
             <X className="h-4 w-4" />
           </button>
         </header>
-        <div className="flex-1 overflow-y-auto p-4">{children}</div>
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4">{children}</div>
         {footer && <footer className="border-t border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900/80">{footer}</footer>}
       </div>
     </div>
@@ -226,7 +226,7 @@ export const ConfirmDialog: React.FC<{
             <X className="h-4 w-4" />
           </button>
         </header>
-        <div className="max-h-[55vh] overflow-y-auto p-4">
+        <div className="max-h-[55vh] overflow-y-auto overscroll-contain p-4">
           {children}
           {error && <div className="mt-3 rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-xs text-rose-700 dark:text-rose-200">{error}</div>}
         </div>

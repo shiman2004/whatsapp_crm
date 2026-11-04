@@ -83,8 +83,8 @@ export const LoginScreen: React.FC = () => {
     u.company === 'AHC'
   );
 
-  const [identifierInput, setIdentifierInput] = useState<string>('faiha@royalwellness.lk');
-  const [passwordInput, setPasswordInput] = useState<string>('staff');
+  const [identifierInput, setIdentifierInput] = useState<string>('');
+  const [passwordInput, setPasswordInput] = useState<string>('');
   const [showPassword, setShowPassword] = useState(false);
 
   // PIN Mode State
@@ -170,24 +170,24 @@ export const LoginScreen: React.FC = () => {
 
     if (portalView === 'super_admin') {
       const firstAdmin = superAdmins[0];
-      setIdentifierInput(firstAdmin ? firstAdmin.email : 'mnmshiman@gmail.com');
-      setPasswordInput('admin');
+      setIdentifierInput(firstAdmin ? firstAdmin.email : '');
+      setPasswordInput('');
     } else if (portalView === 'rwc') {
       const firstRwc = rwcUsers[0];
-      setIdentifierInput(firstRwc ? firstRwc.email : 'faiha@royalwellness.lk');
-      setPasswordInput('staff');
+      setIdentifierInput(firstRwc ? firstRwc.email : '');
+      setPasswordInput('');
     } else if (portalView === 'cras') {
       const firstCras = crasUsers[0];
-      setIdentifierInput(firstCras ? firstCras.email : 'zeenath@royalwellness.lk');
-      setPasswordInput('staff');
+      setIdentifierInput(firstCras ? firstCras.email : '');
+      setPasswordInput('');
     } else if (portalView === 'ahc') {
       const firstAhc = ahcUsers[0];
-      setIdentifierInput(firstAhc ? firstAhc.email : 'staff@royalwellness.lk');
-      setPasswordInput('staff');
+      setIdentifierInput(firstAhc ? firstAhc.email : '');
+      setPasswordInput('');
     } else if (portalView === 'leads_officer') {
       const firstOfficer = leadsOfficers[0];
-      setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
-      setPasswordInput('staff');
+      setIdentifierInput(firstOfficer ? firstOfficer.email : '');
+      setPasswordInput('');
     }
   }, [portalView, superAdmins.length, rwcUsers.length, crasUsers.length, ahcUsers.length, leadsOfficers.length]);
 

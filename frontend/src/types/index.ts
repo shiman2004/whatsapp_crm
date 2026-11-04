@@ -48,6 +48,8 @@ export interface User {
   active: boolean;
   /** Explicit marketing module grant; role permissions remain server-enforced. */
   marketingAccess?: boolean;
+  /** Resolved module access overrides (e.g. crm, exam, clinical, marketing, reports, system). */
+  moduleAccess?: Record<string, boolean>;
   /** Whether a security PIN exists. The PIN or its hash must never be sent in staff listings. */
   pinConfigured?: boolean;
   createdAt: string;
@@ -205,6 +207,13 @@ export interface Treatment {
   startingPrice?: number;
   description?: string;
   benefits?: string;
+  brochureUrl?: string;
+  intakeDate?: string;
+  intakeDeadline?: string;
+  intakeStatus?: 'open' | 'closing_soon' | 'waitlist' | 'closed';
+  maxSeats?: number;
+  qualificationLevel?: 'Fellowship' | 'Diploma' | 'Certificate' | 'Masterclass' | 'General';
+  currency?: string;
 }
 
 

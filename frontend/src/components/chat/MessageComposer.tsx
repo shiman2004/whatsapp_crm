@@ -117,6 +117,24 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
+  // Listen for 1-click course/treatment/quick-response insertions from side drawers
+  useEffect(() => {
+    const handleInsert = (e: Event) => {
+      const detail = (e as CustomEvent<string>).detail;
+      if (typeof detail === 'string' && detail.trim()) {
+        setInputVal(prev => (prev ? (prev + "\n\n" + detail) : detail));
+        setTimeout(() => {
+          if (textareaRef.current) {
+            textareaRef.current.focus();
+            textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+          }
+        }, 50);
+      }
+    };
+    window.addEventListener('insert-chat-message', handleInsert);
+    return () => window.removeEventListener('insert-chat-message', handleInsert);
+  }, []);
+
   // Voice record timer
   useEffect(() => {
     let interval: any;

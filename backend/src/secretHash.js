@@ -59,7 +59,7 @@ export function verifySecret(providedSecret, storedCredential) {
         const pBuf = Buffer.from(providedStr);
         const sBuf = Buffer.from(decrypted);
         if (pBuf.length === sBuf.length && crypto.timingSafeEqual(pBuf, sBuf)) {
-          return { match: true, needsRehash: false };
+          return { match: true, needsRehash: true };
         }
       }
     } catch {

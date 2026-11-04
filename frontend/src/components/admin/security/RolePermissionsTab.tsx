@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ChevronDown, Lock, RotateCcw, Save, Search, ShieldCheck, SlidersHorizontal } from 'lucide-react';
+import { ChevronDown, Lock, RotateCcw, Save, Search, ShieldCheck, SlidersHorizontal, Users } from 'lucide-react';
+import { StaffPermissionsMode } from './StaffPermissionsMode';
 import { securityApi, SecurityApiError } from './api';
 import {
   Badge, ChangeList, ConfirmDialog, EmptyState, ErrorState, Notice, SCOPE_LABEL, ScopePill,
@@ -103,6 +104,7 @@ const CapabilityRow: React.FC<{
 };
 
 export const RolePermissionsTab: React.FC = () => {
+  const [viewMode, setViewMode] = useState<'role' | 'staff'>('role');
   const [directory, setDirectory] = useState<RoleDirectory | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [detail, setDetail] = useState<RoleDetail | null>(null);
@@ -235,7 +237,40 @@ export const RolePermissionsTab: React.FC = () => {
   if (!directory) return null;
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
+    <div className="space-y-4">
+      {/* Mode Switcher */}
+      <div className="flex items-center gap-2 border-b border-[#222D34] pb-2">
+        <button
+          type="button"
+          onClick={() => setViewMode('role')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            viewMode === 'role'
+              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-xs'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#202C33] border border-transparent'
+          }`}
+        >
+          <ShieldCheck className="w-3.5 h-3.5" />
+          <span>Mode A: By Role</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setViewMode('staff')}
+          className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+            viewMode === 'staff'
+              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/40 shadow-xs'
+              : 'text-slate-400 hover:text-slate-200 hover:bg-[#202C33] border border-transparent'
+          }`}
+        >
+          <Users className="w-3.5 h-3.5" />
+          <span>Mode B: By Staff</span>
+        </button>
+      </div>
+
+      {viewMode === 'staff' ? (
+        <StaffPermissionsMode />
+      ) : (
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(260px,320px)_minmax(0,1fr)]">
       <aside className="space-y-3">
         <div className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm dark:border-slate-800 dark:bg-slate-900/60">
           <div className="relative">
@@ -407,6 +442,8 @@ export const RolePermissionsTab: React.FC = () => {
           </>
         )}
       </div>
+    </div>
+    )}
 
       <ConfirmDialog
         open={Boolean(preview)}

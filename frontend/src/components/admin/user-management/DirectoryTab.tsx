@@ -536,6 +536,7 @@ export const DirectoryTab: React.FC<DirectoryTabProps> = ({
       <UserDetailDrawer
         userId={detailId}
         departments={departments}
+        initialTab="overview"
         onClose={() => setDetailId(null)}
         onChanged={() => { void load(); onDataChanged(); }}
         onNotify={onNotify}

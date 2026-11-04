@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LockKeyhole, RefreshCw, ScrollText, ShieldAlert, ShieldCheck, SlidersHorizontal, Users, Boxes, LayoutDashboard, MonitorSmartphone, UserCheck } from 'lucide-react';
+import {
+  ShieldCheck,
+  Users,
+  Layers,
+  Activity,
+  Monitor,
+  ShieldAlert,
+  RefreshCw,
+  Building,
+  CheckCircle2,
+} from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { setSecurityTokenReader } from './security/api';
 import { userManagementApi, type Department } from './user-management/api';
@@ -7,20 +17,15 @@ import { StaffAccessTab } from './security/StaffAccessTab';
 import { RolePermissionsTab } from './security/RolePermissionsTab';
 import { AuditLogsTab } from './security/AuditLogsTab';
 import { SessionsTab } from './security/SessionsTab';
-import { UserPermissionsTab } from './security/UserPermissionsTab';
-import { AccessRequestsTab } from './security/AccessRequestsTab';
-import { cx } from './security/bits';
+import { UserDetailDrawer } from './user-management/UserDetailDrawer';
 
-type SecurityTab = 'overview' | 'roles' | 'matrix' | 'policies' | 'requests' | 'sessions' | 'events';
+export type SecurityTab = 'staff' | 'roles' | 'activity' | 'sessions';
 
 const TABS: { id: SecurityTab; label: string; hint: string; icon: React.ComponentType<{ className?: string }> }[] = [
-  { id: 'overview', label: 'Security Overview', hint: 'Posture & activity', icon: LayoutDashboard },
-  { id: 'roles', label: 'Roles & Permissions', hint: 'Registry defaults', icon: ShieldCheck },
-  { id: 'matrix', label: 'Permission Matrix', hint: 'Coverage by module', icon: Boxes },
-  { id: 'policies', label: 'Access Policies', hint: 'Per-user overrides', icon: Users },
-  { id: 'requests', label: 'Access Requests', hint: 'Approvals & elevations', icon: UserCheck },
-  { id: 'sessions', label: 'Login & Session Activity', hint: 'Devices and revocations', icon: MonitorSmartphone },
-  { id: 'events', label: 'Security Events', hint: 'Append-only trail', icon: ScrollText },
+  { id: 'staff', label: 'Staff Access', hint: 'Directory & staff drawer', icon: Users },
+  { id: 'roles', label: 'Role Permissions', hint: 'Role matrix & overrides', icon: Layers },
+  { id: 'activity', label: 'Activity Monitor', hint: 'Audit trail & events', icon: Activity },
+  { id: 'sessions', label: 'Login Sessions', hint: 'Active devices & revocations', icon: Monitor },
 ];
 
 const isTab = (value: string): value is SecurityTab => TABS.some((tab) => tab.id === value);
@@ -152,8 +157,9 @@ export const SecurityAccessView: React.FC<SecurityAccessViewProps> = ({ hideHead
         </header>
       )}
 
-      <nav aria-label="Security sections" className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-100 p-1.5 dark:border-slate-800 dark:bg-slate-900/60 md:grid-cols-3 xl:grid-cols-7">
-        {TABS.map(item => {
+      {/* 2. TOP 4 NAVIGATION TABS */}
+      <nav aria-label="Security Sections" className="flex items-center gap-2 border-b border-[#222D34] pb-1 overflow-x-auto">
+        {TABS.map((item) => {
           const Icon = item.icon;
           const active = item.id === tab;
           return (
@@ -189,9 +195,7 @@ export const SecurityAccessView: React.FC<SecurityAccessViewProps> = ({ hideHead
         )}
 
         {tab === 'roles' && <RolePermissionsTab />}
-        {tab === 'policies' && <UserPermissionsTab />}
-        {tab === 'requests' && <AccessRequestsTab />}
-        {tab === 'matrix' && <ModuleAccessTab />}
+        {tab === 'activity' && <AuditLogsTab />}
         {tab === 'sessions' && <SessionsTab />}
       </div>
 

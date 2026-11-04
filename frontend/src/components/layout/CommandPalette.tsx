@@ -1,5 +1,5 @@
 import React from 'react';
-import { CornerDownLeft, Search, X } from 'lucide-react';
+import { CornerDownLeft, Search, Sliders, X } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import {
   NAV_SECTIONS,
@@ -9,6 +9,7 @@ import {
   resolveRoute,
   type NavTab,
 } from '../../config/navigation';
+import { SETTINGS_SECTIONS } from '../settings/types';
 import { cn } from '../ui';
 
 interface Command {
@@ -27,7 +28,7 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   const commands = React.useMemo<Command[]>(() => {
-    return NAV_SECTIONS.flatMap((section) =>
+    const modules = NAV_SECTIONS.flatMap((section) =>
       section.items
         .filter((item) => isNavItemVisible(item, currentUser))
         .flatMap<Command>((item) => [
@@ -42,6 +43,21 @@ export const CommandPalette: React.FC<{ open: boolean; onClose: () => void }> = 
           })),
         ]),
     );
+
+    // Settings modules live only in the Settings workspace sidebar, so surface
+    // them here from the same registry to keep them searchable globally.
+    const settings = SETTINGS_SECTIONS
+      .filter((section) => !section.adminOnly || currentUser?.role === 'super_admin')
+      .map<Command>((section) => ({
+        id: `settings:${section.id}`,
+        label: section.label,
+        group: 'System & Security · System Settings',
+        tab: 'settings',
+        path: section.path,
+        icon: Sliders,
+      }));
+
+    return [...modules, ...settings];
   }, [currentUser]);
 
   const results = React.useMemo(() => {

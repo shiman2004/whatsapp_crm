@@ -143,7 +143,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ hideHead
             </div>
             <div>
               <div className="flex items-center gap-2 flex-wrap">
-                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Executive Governance & Super Admin Accounts</h3>
+                <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Executive Scope & Operational Governance</h3>
                 <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-purple-500/20 text-purple-700 dark:text-purple-300 border border-purple-500/30">
                   ALL Companies · ALL Branches
                 </span>
@@ -172,67 +172,6 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ hideHead
           </div>
         </div>
 
-        {/* Executive Scope & Verified Administrator Cards */}
-        <div className="mt-3.5 pt-3 border-t border-slate-200/70 dark:border-white/10 grid grid-cols-1 sm:grid-cols-3 gap-2.5 text-xs">
-          {superAdmins.length > 0 ? (
-            superAdmins.slice(0, 3).map((admin) => (
-              <div key={admin.id} className="bg-white/90 dark:bg-[#202C33]/90 border border-slate-200 dark:border-[#222D34] p-3 rounded-xl shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-800 dark:text-slate-200 truncate">{admin.fullName}</span>
-                    <span className="inline-flex items-center gap-1 text-[10px] text-emerald-600 dark:text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-                      Active Admin
-                    </span>
-                  </div>
-                  <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-1 truncate">{admin.email}</p>
-                </div>
-                <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px]">
-                  <span className="text-purple-600 dark:text-purple-400 font-bold">ALL Companies</span>
-                  <a href="#/security/policies" className="text-teal-600 dark:text-teal-400 hover:underline font-semibold">
-                    Audit Policies →
-                  </a>
-                </div>
-              </div>
-            ))
-          ) : (
-            <>
-              <div className="bg-white/80 dark:bg-[#202C33]/80 border border-slate-200 dark:border-[#222D34] p-3 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 dark:text-slate-200">Super Admin (Jahan)</span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Active</span>
-                </div>
-                <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">admin@royalwellness.lk</p>
-                <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px]">
-                  <span className="text-purple-600 dark:text-purple-400 font-bold">ALL Companies</span>
-                  <a href="#/security/policies" className="text-teal-600 hover:underline font-semibold">Audit Policies →</a>
-                </div>
-              </div>
-              <div className="bg-white/80 dark:bg-[#202C33]/80 border border-slate-200 dark:border-[#222D34] p-3 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 dark:text-slate-200">Shiman</span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Active</span>
-                </div>
-                <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">mnmshiman@gmail.com</p>
-                <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px]">
-                  <span className="text-purple-600 dark:text-purple-400 font-bold">ALL Companies</span>
-                  <a href="#/security/policies" className="text-teal-600 hover:underline font-semibold">Audit Policies →</a>
-                </div>
-              </div>
-              <div className="bg-white/80 dark:bg-[#202C33]/80 border border-slate-200 dark:border-[#222D34] p-3 rounded-xl shadow-xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-800 dark:text-slate-200">Afrij</span>
-                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">Active</span>
-                </div>
-                <p className="font-mono text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">afrij@royalwellness.lk</p>
-                <div className="mt-2 pt-1.5 border-t border-slate-100 dark:border-white/5 flex items-center justify-between text-[10px]">
-                  <span className="text-purple-600 dark:text-purple-400 font-bold">ALL Companies</span>
-                  <a href="#/security/policies" className="text-teal-600 hover:underline font-semibold">Audit Policies →</a>
-                </div>
-              </div>
-            </>
-          )}
-        </div>
       </div>
 
 

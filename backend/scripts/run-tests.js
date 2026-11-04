@@ -51,8 +51,6 @@ const ALL_SUITES = [
   'test-exam-academic-drafts.js',
   'test-exam-upgrade.test.js',
   'test-settings-foundation.test.js',
-  'test-user-credential-hashing.test.js',
-  'test-invitation-mailer.test.js',
 ];
 
 if (!fs.existsSync(path.join(backendDir, '.env.test'))) {

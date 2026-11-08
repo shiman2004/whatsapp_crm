@@ -126,6 +126,7 @@ export interface Message {
     ta?: string;
   };
   media?: {
+    id?: string;
     type: 'image' | 'document' | 'audio' | 'video' | 'sticker';
     url?: string | null;
     caption?: string;

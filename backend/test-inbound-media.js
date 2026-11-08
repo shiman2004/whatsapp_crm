@@ -17,6 +17,7 @@ import {
   persistInboundMediaMetadata,
   processMediaRecord,
   getMediaRecordById,
+  downloadMediaObject,
   __private
 } from './src/whatsappMedia.js';
 
@@ -93,12 +94,18 @@ function makePrisma(initial) {
       if (sql.includes('SELECT * FROM public.whatsapp_media WHERE id = $1')) {
         return record ? [record] : [];
       }
+      if (sql.includes('FROM public.media_files')) {
+        return [{ mime_type: 'image/jpeg', data: Buffer.from('stored-bytes') }];
+      }
       return [];
     },
     async $executeRawUnsafe(sql, ...args) {
       calls.push({ sql, args });
       if (sql.includes("SET status = 'failed'")) {
         record = { ...record, status: 'failed', last_error: args[1], attempts: record.attempts || 1 };
+      }
+      if (sql.includes('INSERT INTO public.media_files')) {
+        record = { ...record, db_media: true };
       }
       if (sql.includes('UPDATE public.messages')) {
         record = { ...record, message_media_url: args[1] };
@@ -108,15 +115,26 @@ function makePrisma(initial) {
   };
 }
 
-function makeStorage() {
+function makeStorage({ failFirstUpload = false, alwaysFailUpload = false, uploadError = 'Bucket not found' } = {}) {
   const uploads = [];
+  const createdBuckets = [];
+  let attempts = 0;
   return {
     uploads,
+    createdBuckets,
     storage: {
+      async createBucket(bucket, options) {
+        createdBuckets.push({ bucket, options });
+        return { data: {}, error: null };
+      },
       from(bucket) {
         return {
           async upload(key, buffer, options) {
+            attempts += 1;
             uploads.push({ bucket, key, buffer, options });
+            if ((failFirstUpload && attempts === 1) || alwaysFailUpload) {
+              return { error: { message: uploadError } };
+            }
             return { error: null };
           },
           async download(key) {
@@ -383,6 +401,56 @@ await check('5.6 A processing failure is recorded for the retry worker', async (
 await check('5.7 Metadata lookup returns nothing for an unknown id', async () => {
   const prisma = makePrisma(null);
   assert.strictEqual(await getMediaRecordById(prisma, 'missing'), null);
+});
+
+await check('5.8 A missing bucket is created once and the upload retried', async () => {
+  const buffer = Buffer.from('image-bytes');
+  const prisma = makePrisma(baseRecord());
+  const storage = makeStorage({ failFirstUpload: true });
+  const result = await processMediaRecord(prisma, prisma.getRecord(), {
+    metaToken: 'token',
+    storage,
+    bucket: 'whatsapp-media',
+    fetchImpl: makeFetch(buffer, { sha256: sha256Hex(buffer) })
+  });
+
+  assert.strictEqual(result.status, 'ready');
+  assert.strictEqual(storage.createdBuckets.length, 1);
+  assert.strictEqual(storage.createdBuckets[0].bucket, 'whatsapp-media');
+  assert.strictEqual(storage.createdBuckets[0].options.public, false);
+  assert.strictEqual(storage.uploads.length, 2);
+});
+
+await check('5.9 A failed upload falls back to the media_files table and still marks the record ready', async () => {
+  const buffer = Buffer.from('image-bytes');
+  const prisma = makePrisma(baseRecord());
+  const storage = makeStorage({ alwaysFailUpload: true, uploadError: 'storage unavailable' });
+  const result = await processMediaRecord(prisma, prisma.getRecord(), {
+    metaToken: 'token',
+    storage,
+    bucket: 'whatsapp-media',
+    fetchImpl: makeFetch(buffer, { sha256: sha256Hex(buffer) })
+  });
+
+  assert.strictEqual(result.status, 'ready');
+  assert.strictEqual(storage.createdBuckets.length, 0, 'only a bucket-not-found error creates a bucket');
+  const insert = prisma.calls.find(call => call.sql.includes('INSERT INTO public.media_files'));
+  assert(insert, 'binary must be persisted to media_files');
+  assert.strictEqual(insert.args[1], '123456789.jpg');
+  assert.deepStrictEqual(insert.args[3], buffer);
+});
+
+await check('5.10 Downloads fall back to media_files when the bucket is unavailable', async () => {
+  const prisma = makePrisma(baseRecord({ status: 'ready' }));
+  const result = await downloadMediaObject(prisma.getRecord(), {
+    storage: { storage: { from: () => ({ download: async () => ({ data: null, error: { message: 'Bucket not found' } }) }) } },
+    bucket: 'whatsapp-media',
+    prisma
+  });
+
+  assert(result, 'fallback must return the stored binary');
+  assert.strictEqual(result.buffer.toString(), 'stored-bytes');
+  assert.strictEqual(result.mimeType, 'image/jpeg');
 });
 
 console.log('\n📦 SECTION 6: Webhook ordering guard');

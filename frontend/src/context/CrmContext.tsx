@@ -3307,11 +3307,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetLeadIds = Array.isArray(targetLeadId) ? targetLeadId : [targetLeadId];
     if (targetLeadIds.length === 0) return;
 
+    let contentToSend = (sourceMsg.content || '').trim();
+    // If the message contains an image/media and content is a placeholder like "[IMAGE]" or "Photo", clear it so only actual media is sent without placeholder text
+    if (sourceMsg.media && /^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(contentToSend)) {
+      contentToSend = sourceMsg.media?.caption || '';
+    }
+
     let successCount = 0;
     targetLeadIds.forEach(tId => {
       const targetLead = leads.find(l => l.id === tId);
       if (targetLead) {
-        sendMessage(tId, sourceMsg.content, 'coordinator', sourceMsg.media);
+        sendMessage(tId, contentToSend, 'coordinator', sourceMsg.media);
         successCount++;
       }
     });

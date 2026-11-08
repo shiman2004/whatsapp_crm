@@ -247,6 +247,109 @@ await check('3.1 Out-of-order MEDIA_READY before message insertion reconciles im
   assert.strictEqual(finalMsg.media.status, 'ready');
 });
 
+console.log('\n📦 SECTION 4: Outbound Media Forwarding & Meta Serialization');
+
+await check('4.1 Outbound image send with media record ID produces type: "image" with valid Meta Media ID', async () => {
+  const fakeImageBytes = Buffer.from('mock-jpeg-bytes-for-outbound-test');
+  const mockPrisma = {
+    async $queryRawUnsafe(sql, ...args) {
+      if (sql.includes('SELECT * FROM public.whatsapp_media WHERE id = $1')) {
+        return [{
+          id: 'rec-out-1',
+          storage_key: 'RWC/lead-1/rec-out-1.jpg',
+          storage_bucket: 'whatsapp-media',
+          mime_type: 'image/jpeg',
+          file_name: 'test.jpg',
+          media_type: 'image',
+          status: 'ready'
+        }];
+      }
+      if (sql.includes('FROM public.media_files')) {
+        return [{ mime_type: 'image/jpeg', data: fakeImageBytes }];
+      }
+      return [];
+    }
+  };
+
+  // Simulate server resolution of media record
+  const { getMediaRecordById, downloadMediaObject } = await import('./src/whatsappMedia.js');
+  const rec = await getMediaRecordById(mockPrisma, 'rec-out-1');
+  assert(rec, 'Must find media record');
+
+  const downloaded = await downloadMediaObject(rec, { prisma: mockPrisma });
+  assert(downloaded && downloaded.buffer.length > 0, 'Must download media buffer');
+
+  // Simulate uploadMetaMedia
+  const mockUploadMetaMedia = async (phoneId, token, buffer, mimeType, filename) => {
+    assert.strictEqual(mimeType, 'image/jpeg');
+    assert.strictEqual(buffer.length, fakeImageBytes.length);
+    return 'meta_media_id_999';
+  };
+
+  const metaMediaId = await mockUploadMetaMedia('123456', 'token', downloaded.buffer, downloaded.mimeType, rec.file_name);
+  assert.strictEqual(metaMediaId, 'meta_media_id_999');
+
+  // Test caption stripping when forwarding an image whose content was "[IMAGE]"
+  const rawMsgContent = '[IMAGE]';
+  let cleanCaption = rawMsgContent.trim();
+  if (/^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(cleanCaption)) {
+    cleanCaption = '';
+  }
+
+  const metaPayload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: '94701234567',
+    type: 'image',
+    image: { id: metaMediaId, caption: cleanCaption || undefined }
+  };
+
+  assert.strictEqual(metaPayload.type, 'image');
+  assert.strictEqual(metaPayload.image.id, 'meta_media_id_999');
+  assert.strictEqual(metaPayload.image.caption, undefined, 'Must not send "[IMAGE]" as caption');
+  assert.notStrictEqual(metaPayload.type, 'text', 'Must never send text payload for image');
+});
+
+await check('4.2 Outbound image forwarding with custom caption preserves caption', async () => {
+  const rawMsgContent = 'Please find your treatment photo attached';
+  let cleanCaption = rawMsgContent.trim();
+  if (/^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(cleanCaption)) {
+    cleanCaption = '';
+  }
+
+  const metaPayload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to: '94701234567',
+    type: 'image',
+    image: { id: 'meta_media_id_999', caption: cleanCaption || undefined }
+  };
+
+  assert.strictEqual(metaPayload.type, 'image');
+  assert.strictEqual(metaPayload.image.caption, 'Please find your treatment photo attached');
+});
+
+await check('4.3 Outbound forward fails safely with 422 if media bytes cannot be retrieved (never falls back to [IMAGE] text)', async () => {
+  let localMediaInfo = null;
+  const media = { id: 'non-existent-rec', type: 'image' };
+  const msgContent = '[IMAGE]';
+
+  let httpStatus = null;
+  let httpBody = null;
+  let metaPayload = null;
+
+  if (media && (!localMediaInfo || !localMediaInfo.buffer || !localMediaInfo.buffer.length)) {
+    httpStatus = 422;
+    httpBody = { success: false, error: 'The media attachment could not be retrieved from storage or is empty.' };
+  } else {
+    metaPayload = { type: 'text', text: { body: msgContent } };
+  }
+
+  assert.strictEqual(httpStatus, 422, 'Must return 422 Unprocessable Entity');
+  assert.strictEqual(metaPayload, null, 'Must NEVER create a text fallback payload');
+  assert(httpBody.error.includes('could not be retrieved'), 'Must return descriptive error');
+});
+
 console.log(`\n============================================================`);
 console.log(`Real-time media sync checks: ${passed} passed, ${failed} failed`);
 

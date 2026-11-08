@@ -2231,15 +2231,97 @@ const server = http.createServer(async (req, res) => {
         let savedMediaUrl = null;
         let localMediaInfo = null;
 
-        if (media && (media.dataUrl || media.url)) {
-          const rawUrl = media.dataUrl || media.url;
-          if (rawUrl.startsWith('data:')) {
+        if (media) {
+          const rawUrl = media.dataUrl || media.url || '';
+          const candidateRecordId = media.id || (typeof rawUrl === 'string' ? (rawUrl.match(/\/api\/media\/([a-zA-Z0-9_\-\.]+)/) || [])[1] : null);
+
+          // 1. Data URL (Base64)
+          if (typeof rawUrl === 'string' && rawUrl.startsWith('data:')) {
             localMediaInfo = saveBase64MediaLocally(rawUrl, media.type, media.fileName);
             if (localMediaInfo) {
               savedMediaUrl = localMediaInfo.mediaUrl;
             }
-          } else if (rawUrl.startsWith('/uploads/')) {
-            savedMediaUrl = rawUrl;
+          }
+          // 2. Existing Media Record in Database / Storage (/api/media/:id or media.id)
+          else if (candidateRecordId && prisma) {
+            try {
+              const rec = await getMediaRecordById(prisma, candidateRecordId).catch(() => null);
+              if (rec) {
+                const downloaded = await downloadMediaObject(rec, { prisma }).catch(() => null);
+                if (downloaded && downloaded.buffer && downloaded.buffer.length) {
+                  localMediaInfo = {
+                    buffer: downloaded.buffer,
+                    mimeType: downloaded.mimeType || rec.mime_type || (media.type === 'image' ? 'image/jpeg' : 'application/octet-stream'),
+                    fileName: media.fileName || rec.file_name || (media.type === 'image' ? 'photo.jpg' : 'attachment'),
+                    mediaUrl: createSignedMediaApiUrl(rec.id)
+                  };
+                  savedMediaUrl = localMediaInfo.mediaUrl;
+                }
+              }
+            } catch (err) {
+              console.warn('[Outbound media record resolve warning]:', err.message);
+            }
+          }
+          // 3. Local filesystem upload path (/uploads/...)
+          else if (typeof rawUrl === 'string' && rawUrl.startsWith('/uploads/')) {
+            try {
+              const relPath = rawUrl.replace(/^\//, '');
+              const localFile = path.resolve('public', relPath);
+              let buf = null;
+              let mimeType = media.mimeType || (media.type === 'image' ? 'image/jpeg' : 'application/octet-stream');
+              if (fs.existsSync(localFile)) {
+                buf = fs.readFileSync(localFile);
+              } else if (prisma?.$queryRawUnsafe) {
+                const rows = await prisma.$queryRawUnsafe('SELECT mime_type, data FROM public.media_files WHERE file_name = $1 LIMIT 1;', path.basename(localFile)).catch(() => null);
+                if (rows?.[0]?.data) {
+                  buf = Buffer.isBuffer(rows[0].data) ? rows[0].data : Buffer.from(rows[0].data);
+                  if (rows[0].mime_type) mimeType = rows[0].mime_type;
+                }
+              }
+              if (buf && buf.length) {
+                localMediaInfo = {
+                  buffer: buf,
+                  mimeType,
+                  fileName: media.fileName || path.basename(localFile),
+                  mediaUrl: rawUrl
+                };
+                savedMediaUrl = rawUrl;
+              }
+            } catch (err) {
+              console.warn('[Outbound local upload resolve warning]:', err.message);
+            }
+          }
+          // 4. Remote HTTP/HTTPS URL
+          else if (typeof rawUrl === 'string' && (rawUrl.startsWith('http://') || rawUrl.startsWith('https://'))) {
+            try {
+              const fetchRes = await fetch(rawUrl);
+              if (fetchRes.ok) {
+                const buf = Buffer.from(await fetchRes.arrayBuffer());
+                if (buf && buf.length) {
+                  localMediaInfo = {
+                    buffer: buf,
+                    mimeType: fetchRes.headers.get('content-type') || media.mimeType || (media.type === 'image' ? 'image/jpeg' : 'application/octet-stream'),
+                    fileName: media.fileName || (media.type === 'image' ? 'photo.jpg' : 'attachment'),
+                    mediaUrl: rawUrl
+                  };
+                  savedMediaUrl = rawUrl;
+                }
+              }
+            } catch (err) {
+              console.warn('[Outbound remote URL fetch warning]:', err.message);
+            }
+          }
+
+          // Safety Gate: If client provided a media payload but binary bytes could NOT be resolved,
+          // NEVER fall back to sending "[IMAGE]" or text placeholder!
+          if (!localMediaInfo || !localMediaInfo.buffer || !localMediaInfo.buffer.length) {
+            console.error(`❌ [Outbound Media Send Error]: Failed to retrieve binary media bytes for media:`, JSON.stringify(media));
+            res.writeHead(422, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({
+              success: false,
+              error: 'The media attachment could not be retrieved from storage or is empty. Please re-upload or select a valid media file.'
+            }));
+            return;
           }
         }
 
@@ -2250,50 +2332,75 @@ const server = http.createServer(async (req, res) => {
 
           if (media && localMediaInfo) {
             const metaMediaId = await uploadMetaMedia(phoneId, metaToken, localMediaInfo.buffer, localMediaInfo.mimeType, localMediaInfo.fileName);
-            if (metaMediaId) {
-              if (media.type === 'image') {
-                metaPayload = {
-                  messaging_product: 'whatsapp',
-                  recipient_type: 'individual',
-                  to: cleanTo,
-                  type: 'image',
-                  image: { id: metaMediaId, caption: msgContent || undefined }
-                };
-              } else if (media.type === 'audio') {
-                metaPayload = {
-                  messaging_product: 'whatsapp',
-                  recipient_type: 'individual',
-                  to: cleanTo,
-                  type: 'audio',
-                  audio: { id: metaMediaId }
-                };
-              } else if (media.type === 'video') {
-                metaPayload = {
-                  messaging_product: 'whatsapp',
-                  recipient_type: 'individual',
-                  to: cleanTo,
-                  type: 'video',
-                  video: { id: metaMediaId, caption: msgContent || undefined }
-                };
-              } else {
-                metaPayload = {
-                  messaging_product: 'whatsapp',
-                  recipient_type: 'individual',
-                  to: cleanTo,
-                  type: 'document',
-                  document: { id: metaMediaId, filename: media.fileName || 'document.pdf', caption: msgContent || undefined }
-                };
-              }
+            if (!metaMediaId) {
+              console.error(`❌ [Meta Media Upload Failed]: Could not upload ${media.type} to Meta Cloud API`);
+              res.writeHead(502, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                error: 'Failed to upload media attachment to WhatsApp Meta Cloud API. Please try again.'
+              }));
+              return;
+            }
+
+            // Clean caption: never send literal placeholder strings like "[IMAGE]" as a caption
+            let cleanCaption = (msgContent || '').trim();
+            if (/^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(cleanCaption)) {
+              cleanCaption = '';
+            }
+
+            if (media.type === 'image') {
+              metaPayload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanTo,
+                type: 'image',
+                image: { id: metaMediaId, caption: cleanCaption || undefined }
+              };
+            } else if (media.type === 'audio') {
+              metaPayload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanTo,
+                type: 'audio',
+                audio: { id: metaMediaId }
+              };
+            } else if (media.type === 'video') {
+              metaPayload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanTo,
+                type: 'video',
+                video: { id: metaMediaId, caption: cleanCaption || undefined }
+              };
+            } else {
+              metaPayload = {
+                messaging_product: 'whatsapp',
+                recipient_type: 'individual',
+                to: cleanTo,
+                type: 'document',
+                document: { id: metaMediaId, filename: localMediaInfo.fileName || media.fileName || 'document.pdf', caption: cleanCaption || undefined }
+              };
             }
           }
 
           if (!metaPayload) {
+            let cleanBody = (msgContent || '').trim();
+            // Guard: never send literal placeholder strings like [IMAGE] or [PHOTO] as outbound message text
+            if (/^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(cleanBody)) {
+              cleanBody = '';
+            }
+            if (!cleanBody) {
+              res.writeHead(400, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({ success: false, error: 'Cannot send an empty message or media placeholder tag.' }));
+              return;
+            }
+
             metaPayload = {
               messaging_product: 'whatsapp',
               recipient_type: 'individual',
               to: cleanTo,
               type: 'text',
-              text: { body: msgContent || (media ? `[${media.type?.toUpperCase()} Attachment]` : '') }
+              text: { body: cleanBody }
             };
           }
 
@@ -2569,11 +2676,19 @@ const server = http.createServer(async (req, res) => {
                 const actualSource = payload.messageSource || (authUser ? 'CRM User' : 'System');
                 const sentAtUtc = new Date();
 
+                let savedContent = (msgContent || '').trim();
+                if (/^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(savedContent)) {
+                  savedContent = media ? (media.type === 'audio' ? 'Voice note' : 'Photo') : '';
+                }
+                if (!savedContent && media) {
+                  savedContent = media.type === 'audio' ? 'Voice note' : 'Photo';
+                }
+
                 await prisma.message.upsert({
                   where: { id: messageId },
                   update: {
                     status: 'sent',
-                    content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
+                    content: savedContent,
                     senderName: actualSenderName,
                     senderRole: actualSenderRole,
                     messageSource: actualSource,
@@ -2595,7 +2710,7 @@ const server = http.createServer(async (req, res) => {
                     senderRole: actualSenderRole,
                     messageSource: actualSource,
                     sentAt: sentAtUtc,
-                    content: msgContent || (media ? (media.type === 'audio' ? 'Voice note' : `[${media.type.toUpperCase()}]`) : ''),
+                    content: savedContent,
                     status: 'sent',
                     timestamp: sentAtUtc,
                     mediaType: media ? media.type : null,
@@ -2640,11 +2755,11 @@ const server = http.createServer(async (req, res) => {
                   realPhone: formattedTo,
                   whatsappId: cleanTo,
                   name: cust.displayName || 'Client',
-                  text: msgContent,
+                  text: savedContent,
                   media: media ? {
                     type: media.type,
                     url: savedMediaUrl || media.url,
-                    fileName: media.fileName || (media.type === 'audio' ? 'voice_note.mp3' : 'attachment')
+                    fileName: localMediaInfo?.fileName || media.fileName || (media.type === 'audio' ? 'voice_note.mp3' : 'attachment')
                   } : null,
                   status: 'sent',
                   direction: 'outbound',
@@ -7996,7 +8111,7 @@ const server = http.createServer(async (req, res) => {
                       } else if (!text) {
                         text = mediaFileName || (mediaType === 'audio'
                           ? (mediaDescriptor.isVoice ? 'Voice note' : 'Audio')
-                          : `[${mediaType.toUpperCase()}]`);
+                          : (mediaType === 'image' ? 'Photo' : `[${mediaType.toUpperCase()}]`));
                       }
                     }
 

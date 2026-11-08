@@ -8,11 +8,16 @@ import {
   CheckCheck,
   CheckCircle2, 
   UserCheck,
-  Users
+  Users,
+  Image as ImageIcon,
+  FileText,
+  Music,
+  Video as VideoIcon
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { WhatsAppAvatar } from './WhatsAppAvatar';
+import { API_BASE_URL } from '../../config/api';
 
 interface ForwardMessageModalProps {
   isOpen: boolean;
@@ -109,11 +114,67 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
           <p className={`text-[10.5px] mb-1 font-semibold uppercase tracking-wider ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
             Message to forward:
           </p>
-          <div className={`p-2.5 rounded-xl border line-clamp-2 italic text-xs ${
-            isLight ? 'bg-white border-slate-200 text-slate-700 shadow-xs' : 'bg-[#202c33] border-slate-700/50 text-slate-200'
-          }`}>
-            "{message.content}"
-          </div>
+          {message.media ? (() => {
+            const isImg = message.media.type === 'image' || Boolean(message.media.url && message.media.url.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
+            let previewSrc = (message.media as any)?.dataUrl || message.media.url || '';
+            if (previewSrc && previewSrc.startsWith('/') && !previewSrc.startsWith('//')) {
+              previewSrc = `${API_BASE_URL}${previewSrc}`;
+            }
+            const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+            if (previewSrc && previewSrc.includes('/api/media/') && !previewSrc.includes('token=') && token) {
+              previewSrc = `${previewSrc}${previewSrc.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+            }
+            const hasCaption = message.content && !/^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(message.content.trim());
+
+            return (
+              <div className={`p-2.5 rounded-xl border flex items-center gap-3 ${
+                isLight ? 'bg-white border-slate-200 text-slate-700 shadow-xs' : 'bg-[#202c33] border-slate-700/50 text-slate-200'
+              }`}>
+                {isImg ? (
+                  <div className="w-12 h-12 rounded-lg bg-black/20 overflow-hidden shrink-0 border border-white/10 flex items-center justify-center">
+                    {previewSrc ? (
+                      <img src={previewSrc} alt="Preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageIcon className="w-5 h-5 text-[#00a884]" />
+                    )}
+                  </div>
+                ) : message.media.type === 'audio' ? (
+                  <div className="w-10 h-10 rounded-lg bg-[#00a884]/20 text-[#00a884] flex items-center justify-center shrink-0">
+                    <Music className="w-5 h-5" />
+                  </div>
+                ) : message.media.type === 'video' ? (
+                  <div className="w-10 h-10 rounded-lg bg-[#00a884]/20 text-[#00a884] flex items-center justify-center shrink-0">
+                    <VideoIcon className="w-5 h-5" />
+                  </div>
+                ) : (
+                  <div className="w-10 h-10 rounded-lg bg-[#00a884]/20 text-[#00a884] flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-[#00a884]/20 text-[#00a884]">
+                      {message.media.type === 'image' ? 'Photo' : message.media.type || 'Media'}
+                    </span>
+                    <span className="text-xs font-medium truncate">
+                      {message.media.fileName || (message.media.type === 'image' ? 'photo.jpg' : 'attachment')}
+                    </span>
+                  </div>
+                  {hasCaption && (
+                    <p className="text-[11px] text-slate-400 truncate mt-0.5 italic">
+                      "{message.content}"
+                    </p>
+                  )}
+                </div>
+              </div>
+            );
+          })() : (
+            <div className={`p-2.5 rounded-xl border line-clamp-2 italic text-xs ${
+              isLight ? 'bg-white border-slate-200 text-slate-700 shadow-xs' : 'bg-[#202c33] border-slate-700/50 text-slate-200'
+            }`}>
+              "{message.content}"
+            </div>
+          )}
         </div>
 
         {/* Search & Quick Select Bar */}

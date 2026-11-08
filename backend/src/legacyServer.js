@@ -1388,11 +1388,12 @@ const server = http.createServer(async (req, res) => {
     }
 
     const safeDownloadName = String(record.file_name || 'media').replace(/["\\\r\n]/g, '');
+    const isAttachment = parsedUrl.query.download === '1' || parsedUrl.query.download === 'true';
     res.writeHead(200, {
       'Content-Type': mediaObject.mimeType || 'application/octet-stream',
       'Content-Length': mediaObject.buffer.length,
       'Cache-Control': 'private, max-age=900',
-      'Content-Disposition': `inline; filename="${safeDownloadName}"`,
+      'Content-Disposition': `${isAttachment ? 'attachment' : 'inline'}; filename="${safeDownloadName}"`,
       'X-Content-Type-Options': 'nosniff',
       // A patient-supplied document could claim text/html; sandbox prevents any
       // script execution if it is opened directly.
@@ -8491,7 +8492,10 @@ export async function initializeServer() {
   const res = await checkDbConnection();
   if (!res.connected) return res;
   const savedMetaToken = await getSystemSetting('META_ACCESS_TOKEN');
-  if (savedMetaToken && savedMetaToken.trim()) metaConfig.accessToken = savedMetaToken.trim();
+  if (savedMetaToken && savedMetaToken.trim()) {
+    metaConfig.accessToken = savedMetaToken.trim();
+    console.log('🔒 [Security] Meta Graph API access token loaded from database (system_settings).');
+  }
   const savedPhoneId = await getSystemSetting('META_PHONE_NUMBER_ID');
   if (savedPhoneId && savedPhoneId.trim()) metaConfig.phoneNumberId = savedPhoneId.trim();
   const savedWabaId = await getSystemSetting('META_WABA_ID');

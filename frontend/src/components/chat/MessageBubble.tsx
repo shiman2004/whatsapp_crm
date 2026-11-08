@@ -94,6 +94,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   const [retryingMedia, setRetryingMedia] = useState(false);
   const [mediaPatched, setMediaPatched] = useState<{ url: string; sizeBytes?: number | null } | null>(null);
 
+  const handleDownloadMedia = (url: string, fileName?: string) => {
+    if (!url) return;
+    const downloadUrl = url.includes('?') ? `${url}&download=1` : `${url}?download=1`;
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = fileName || `whatsapp-media-${Date.now()}`;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const handleRetryMedia = async (mediaId?: string) => {
     if (retryingMedia || !mediaId) return;
     setRetryingMedia(true);
@@ -488,6 +501,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               || Boolean(mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
 
             if (isImage) {
+              const defaultName = media.type === 'sticker' ? 'sticker.webp' : 'photo.jpg';
               return (
                 <div className="mb-1 rounded-lg overflow-hidden">
                   <div
@@ -499,8 +513,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                       alt={media.fileName || (media.type === 'sticker' ? 'Sticker' : 'Photo')}
                       className={`w-full ${media.type === 'sticker' ? 'max-h-40 object-contain' : 'max-h-80 object-cover'} rounded-lg hover:brightness-95 transition-all`}
                     />
-                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
-                      <Maximize2 className="w-6 h-6 text-white drop-shadow-lg" />
+                    <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadMedia(mediaUrl, media.fileName || defaultName);
+                        }}
+                        className="w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-xs transition-transform hover:scale-110 shadow-lg cursor-pointer"
+                        title="Save / Download Image"
+                      >
+                        <Download className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLightboxUrl(mediaUrl)}
+                        className="w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-xs transition-transform hover:scale-110 shadow-lg cursor-pointer"
+                        title="View Full Size"
+                      >
+                        <Maximize2 className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -509,13 +541,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
             if (media.type === 'video' || mediaUrl.match(/\.(mp4|webm|mov)($|\?)/i)) {
               return (
-                <div className="mb-1 relative rounded-lg overflow-hidden bg-black/40">
+                <div className="mb-1 relative rounded-lg overflow-hidden bg-black/40 group/video">
                   <video
                     src={mediaUrl}
                     controls
                     playsInline
                     className="w-full max-h-80 rounded-lg"
                   />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadMedia(mediaUrl, media.fileName || 'video.mp4');
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-opacity opacity-0 group-hover/video:opacity-100 hover:scale-110 shadow-lg cursor-pointer"
+                    title="Save / Download Video"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
                 </div>
               );
             }
@@ -536,22 +579,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             return (
               <div className="mb-1 rounded-lg overflow-hidden">
                 <a
-                  href={mediaUrl}
+                  href={mediaUrl.includes('?') ? `${mediaUrl}&download=1` : `${mediaUrl}?download=1`}
                   target="_blank"
                   rel="noopener noreferrer"
                   download={media.fileName || 'document'}
-                  className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadMedia(mediaUrl, media.fileName || 'document');
+                  }}
+                  className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors cursor-pointer group/doc"
                 >
                   <div className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate text-[#e9edef]">{media.fileName || 'Document'}</p>
+                    <p className="text-xs font-semibold truncate text-[#e9edef] group-hover/doc:underline">{media.fileName || 'Document'}</p>
                     <p className="text-[10px] text-[#8696a0]">
-                      {fileSize ? `${fileSize} · ` : ''}Click to view / download
+                      {fileSize ? `${fileSize} · ` : ''}Click to download
                     </p>
                   </div>
-                  <Download className="w-4 h-4 text-[#8696a0] hover:text-white shrink-0" />
+                  <Download className="w-4 h-4 text-[#8696a0] group-hover/doc:text-white shrink-0" />
                 </a>
               </div>
             );
@@ -892,21 +939,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           </button>
 
           {/* 7. Download (For media messages) */}
-          {message.media && message.media.url && (
+          {message.media && (message.media.url || mediaPatched?.url) && (
             <button
               onClick={() => {
-                if (!message.media?.url) return;
-                const link = document.createElement('a');
-                link.href = message.media.url;
-                link.download = message.media.fileName || 'media';
-                link.target = '_blank';
-                link.click();
+                const targetUrl = mediaPatched?.url || (message.media?.url ? (message.media.url.startsWith('/') && !message.media.url.startsWith('//') ? `${API_BASE_URL}${message.media.url}` : message.media.url) : '');
+                if (targetUrl) {
+                  handleDownloadMedia(targetUrl, message.media?.fileName || `media-${message.id.slice(0, 8)}`);
+                }
                 setMenuOpen(false);
               }}
               className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
             >
               <Download className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
-              <span>Download</span>
+              <span>Save / Download</span>
             </button>
           )}
 
@@ -1017,13 +1062,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setLightboxUrl(null)}
         >
-          <button 
-            onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all z-10"
-            title="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-10" onClick={(e) => e.stopPropagation()}>
+            <button 
+              type="button"
+              onClick={() => handleDownloadMedia(lightboxUrl, message.media?.fileName || 'whatsapp-image.jpg')}
+              className="px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center gap-2 transition-all font-medium text-xs backdrop-blur-md cursor-pointer border border-white/20 shadow-lg"
+              title="Save image to computer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Save / Download</span>
+            </button>
+            <button 
+              onClick={() => setLightboxUrl(null)}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
           <img 
             src={lightboxUrl} 
             alt="Full size preview" 

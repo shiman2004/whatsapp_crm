@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Play, Pause, Mic, Pin, Star, Check, CheckCheck, Clock, AlertCircle } from 'lucide-react';
+import { Play, Pause, Mic, Pin, Star, Check, CheckCheck, Clock, AlertCircle, Download } from 'lucide-react';
 import { WhatsAppAvatar } from './WhatsAppAvatar';
 import { Message } from '../../types';
 
@@ -193,6 +193,29 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
                   className="px-1.5 py-0.5 rounded-full bg-[#111b21]/10 dark:bg-[#111b21]/60 hover:bg-[#111b21]/20 dark:hover:bg-[#111b21] text-[#00a884] font-semibold text-[10px] border border-black/10 dark:border-white/10 transition-colors"
                 >
                   {playbackRate}x
+                </button>
+              )}
+
+              {/* Download Voice Note Button */}
+              {audioUrl && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const link = document.createElement('a');
+                    const downloadUrl = audioUrl.includes('?') ? `${audioUrl}&download=1` : `${audioUrl}?download=1`;
+                    link.href = downloadUrl;
+                    link.download = message.media?.fileName || `voice-note-${message.id.slice(0, 10)}.ogg`;
+                    link.target = '_blank';
+                    link.rel = 'noopener noreferrer';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                  }}
+                  className="p-1 rounded-full text-[#667781] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] hover:bg-black/5 dark:hover:bg-white/10 transition-colors cursor-pointer"
+                  title="Save / Download voice note"
+                >
+                  <Download className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>

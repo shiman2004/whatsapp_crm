@@ -22,7 +22,10 @@ import {
   Check,
   Tag,
   Clock,
-  AlertCircle
+  AlertCircle,
+  FileText,
+  Video,
+  Smile
 } from 'lucide-react';
 import { Lead, Message } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
@@ -873,6 +876,18 @@ const menuRef = useRef<HTMLDivElement>(null);
                       {lastMsg?.content?.includes('[Media') || lastMsg?.media?.type === 'image' ? (
                         <span className="flex items-center gap-1 text-[#8696a0]">
                           <Camera className="w-3 h-3" /> Photo
+                        </span>
+                      ) : lastMsg?.media?.type === 'sticker' || lastMsg?.content === '[STICKER]' ? (
+                        <span className="flex items-center gap-1 text-[#8696a0]">
+                          <Smile className="w-3 h-3" /> Sticker
+                        </span>
+                      ) : lastMsg?.media?.type === 'video' || lastMsg?.content === '[VIDEO]' ? (
+                        <span className="flex items-center gap-1 text-[#8696a0]">
+                          <Video className="w-3 h-3" /> Video
+                        </span>
+                      ) : lastMsg?.media?.type === 'document' || lastMsg?.content === '[DOCUMENT]' ? (
+                        <span className="flex items-center gap-1 text-[#8696a0] truncate">
+                          <FileText className="w-3 h-3 shrink-0" /> {lastMsg.media?.fileName || 'Document'}
                         </span>
                       ) : lastMsg?.media?.type === 'audio' || lastMsg?.content === 'Voice note' || lastMsg?.media?.url?.match(/\.(ogg|mp3|wav|m4a)($|\?)/i) ? (
                         <span className="flex items-center gap-1 text-[#00a884]">

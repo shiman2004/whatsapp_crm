@@ -14,6 +14,18 @@ import dotenv from 'dotenv';
 import { getPrisma, checkDbConnection, getDbStatus, getSystemSetting, setSystemSetting, allocateCompanyLeadSerial as allocatePersistedCompanyLeadSerial, waitForSchemaBootstrap } from './db.js';
 import { resolveCompany, resolveLeadCompany, COMPANIES } from './companyConfig.js';
 import { saveMediaToSupabase, getMediaFromSupabase, deleteMediaFromSupabase, deleteMediaBatchFromSupabase } from './supabaseMedia.js';
+import {
+  extractMediaDescriptor,
+  persistInboundMediaMetadata,
+  processMediaRecord,
+  createSignedMediaApiUrl,
+  verifySignedMediaApiUrl,
+  canAccessMediaRecord,
+  getMediaRecordById,
+  listMediaRecordsForMessages,
+  downloadMediaObject,
+  startInboundMediaRetryWorker
+} from './whatsappMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
@@ -1228,6 +1240,86 @@ const server = http.createServer(async (req, res) => {
 
     res.writeHead(404, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ error: 'File not found' }));
+    return;
+  }
+
+  // 0a. Authorized inbound WhatsApp media streaming.
+  // A fresh short-lived signature is issued by GET /api/messages; browsers load
+  // <img>/<audio>/<video> without an Authorization header, so the signature is the
+  // primary credential. Bearer auth remains valid with the same role/company rules.
+  const mediaRouteMatch = pathname.match(/^\/api\/media\/([^/]+)$/);
+  if (req.method === 'GET' && mediaRouteMatch) {
+    const mediaRecordId = decodeURIComponent(mediaRouteMatch[1]);
+    const signedAccess = verifySignedMediaApiUrl(mediaRecordId, parsedUrl.query.exp, parsedUrl.query.sig);
+    const prisma = getPrisma();
+
+    if (!prisma || !getDbStatus()) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Media storage is temporarily unavailable.' }));
+      return;
+    }
+
+    let record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
+    if (!record) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Media not found.' }));
+      return;
+    }
+
+    if (!signedAccess) {
+      const mediaAuth = await authenticateRequest(req, parsedUrl);
+      if (!mediaAuth.user) {
+        await auditSecurityEvent({ correlationId, actorId: null, action: 'media.access', resource: `whatsapp-media:${mediaRecordId}`, outcome: 'denied' });
+        res.writeHead(401, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'A valid signed media URL or Bearer authentication is required.' }));
+        return;
+      }
+      const user = mediaAuth.user;
+      const lead = record.lead_id
+        ? await prisma.lead.findUnique({ where: { id: record.lead_id }, select: { assignedTo: true, company: true } }).catch(() => null)
+        : null;
+      if (!canAccessMediaRecord(user, record, lead)) {
+        await auditSecurityEvent({ correlationId, actorId: user.id, action: 'media.access', resource: `whatsapp-media:${mediaRecordId}`, outcome: 'denied' });
+        res.writeHead(403, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: 'You are not authorized to access this media.' }));
+        return;
+      }
+      await auditSecurityEvent({ correlationId, actorId: user.id, action: 'media.access', resource: `whatsapp-media:${mediaRecordId}`, outcome: 'success' });
+    }
+
+    // Lazy recovery: a viewer waiting on an upload is a better retry trigger than
+    // the next scheduled sweep.
+    if (record.status !== 'ready') {
+      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+      await processMediaRecord(prisma, record, { metaToken }).catch(() => null);
+      record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
+    }
+
+    if (!record || record.status !== 'ready') {
+      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, status: record?.status || 'missing', error: 'Media is still being retrieved.' }));
+      return;
+    }
+
+    const mediaObject = await downloadMediaObject(record).catch(() => null);
+    if (!mediaObject?.buffer?.length) {
+      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Media could not be read from storage.' }));
+      return;
+    }
+
+    const safeDownloadName = String(record.file_name || 'media').replace(/["\\\r\n]/g, '');
+    res.writeHead(200, {
+      'Content-Type': mediaObject.mimeType || 'application/octet-stream',
+      'Content-Length': mediaObject.buffer.length,
+      'Cache-Control': 'private, max-age=900',
+      'Content-Disposition': `inline; filename="${safeDownloadName}"`,
+      'X-Content-Type-Options': 'nosniff',
+      // A patient-supplied document could claim text/html; sandbox prevents any
+      // script execution if it is opened directly.
+      'Content-Security-Policy': 'default-src \'none\'; sandbox'
+    });
+    res.end(mediaObject.buffer);
     return;
   }
 
@@ -5036,12 +5128,49 @@ const server = http.createServer(async (req, res) => {
         const messages = pageRows.reverse();
 
         // Backend RBAC: Never expose audit metadata through normal staff API responses
-        const sanitizedMessages = isSuperAdmin
+        const visibleMessages = isSuperAdmin
           ? messages
           : messages.map(m => {
               const { senderName, senderRole, messageSource, sentAt, ...clean } = m;
               return clean;
             });
+
+        // Attach durable media metadata and replace the canonical pointer with a
+        // freshly signed short-lived URL. The bucket itself stays private.
+        const mediaByMessage = new Map();
+        try {
+          const mediaRows = await listMediaRecordsForMessages(prisma, messages.map(m => m.id));
+          for (const row of mediaRows) mediaByMessage.set(row.message_id, row);
+        } catch (mediaError) {
+          console.warn('[Messages] Media metadata unavailable:', mediaError.message);
+        }
+        const sanitizedMessages = visibleMessages.map(m => {
+          const record = mediaByMessage.get(m.id);
+          if (!record) return m;
+          const ready = record.status === 'ready';
+          const signedUrl = ready ? createSignedMediaApiUrl(record.id) : null;
+          const sizeBytes = record.size_bytes != null ? Number(record.size_bytes) : null;
+          return {
+            ...m,
+            mediaType: record.media_type || m.mediaType,
+            mediaUrl: signedUrl,
+            mediaStatus: record.status,
+            mediaFileName: record.file_name || null,
+            mediaMimeType: record.mime_type || null,
+            mediaSizeBytes: sizeBytes,
+            mediaCaption: record.caption || null,
+            media: {
+              id: record.id,
+              type: record.media_type || m.mediaType || 'document',
+              url: signedUrl,
+              status: record.status,
+              fileName: record.file_name || null,
+              mimeType: record.mime_type || null,
+              sizeBytes,
+              caption: record.caption || null
+            }
+          };
+        });
 
         res.writeHead(200, { 'Content-Type': 'application/json' });
         if (paginate) {
@@ -7704,32 +7833,24 @@ const server = http.createServer(async (req, res) => {
 
                     console.log(`📩 [Meta Webhook Event] Inbound on Phone ID: ${incomingPhoneId || 'none'} (${incomingDisplayPhone || 'none'}) -> Company: ${companyInfo.code} (${companyInfo.tag}) | MsgId: ${messageId}`);
 
-                    let mediaType = null;
-                    let mediaUrl = null;
-                    let mediaFileName = null;
+                    // Media descriptor is extracted and persisted before any binary is
+                    // fetched, so a Meta outage or restart can never lose the message.
+                    const mediaDescriptor = extractMediaDescriptor(message);
+                    const mediaType = mediaDescriptor?.mediaType || null;
+                    const mediaFileName = mediaDescriptor?.fileName || null;
                     let text = message.text?.body || 
                       message.button?.text || 
                       message.interactive?.button_reply?.title || 
                       message.interactive?.list_reply?.title || 
                       '';
 
-                    const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
-
-                    if (['image', 'audio', 'voice', 'video', 'document'].includes(msgType)) {
-                      mediaType = msgType === 'voice' ? 'audio' : msgType;
-                      const mediaObj = message.image || message.audio || message.voice || message.video || message.document;
-                      const mediaId = mediaObj?.id;
-                      const mimeType = mediaObj?.mime_type || '';
-                      mediaFileName = mediaObj?.filename || null;
-
-                      if (mediaObj?.caption) {
-                        text = mediaObj.caption;
+                    if (mediaDescriptor) {
+                      if (mediaDescriptor.caption) {
+                        text = mediaDescriptor.caption;
                       } else if (!text) {
-                        text = mediaFileName || (mediaType === 'audio' ? 'Voice note' : `[${mediaType.toUpperCase()}]`);
-                      }
-
-                      if (mediaId && metaToken) {
-                        mediaUrl = await downloadMetaMedia(mediaId, metaToken, mimeType, mediaFileName);
+                        text = mediaFileName || (mediaType === 'audio'
+                          ? (mediaDescriptor.isVoice ? 'Voice note' : 'Audio')
+                          : `[${mediaType.toUpperCase()}]`);
                       }
                     }
 
@@ -7739,12 +7860,15 @@ const server = http.createServer(async (req, res) => {
 
                     let savedLeadId = null;
                     let savedCustomerId = null;
+                    let mediaUrl = null;
+                    let mediaStatus = null;
+                    let mediaSizeBytes = null;
                     let cust = null;
                     let lead = null;
 
                     // Persist to Supabase / PostgreSQL database
                     const prisma = getPrisma();
-                    const marketingInbound = prisma && getDbStatus() && phone
+                    const marketingInbound = !mediaDescriptor && prisma && getDbStatus() && phone
                       ? await processMarketingInboundMessage({ prisma, company: companyInfo.code, phone, text, messageId, receivedAt: new Date() }).catch(error => {
                           console.error('[Marketing inbound automation]', error.message);
                           return null;
@@ -7849,13 +7973,13 @@ const server = http.createServer(async (req, res) => {
 
                         savedLeadId = lead?.id || null;
 
-                        // 3. Save Message to DB with Media Details & Company
+                        // 3. Save Message to DB before any media binary is fetched. The
+                        // canonical media pointer is written once the upload succeeds.
                         await prisma.message.upsert({
                           where: { id: messageId },
                           update: {
                             content: text,
                             mediaType: mediaType || undefined,
-                            mediaUrl: mediaUrl || undefined,
                             status: 'delivered'
                           },
                           create: {
@@ -7867,11 +7991,41 @@ const server = http.createServer(async (req, res) => {
                             content: text,
                             status: 'delivered',
                             mediaType: mediaType || null,
-                            mediaUrl: mediaUrl || null,
+                            mediaUrl: null,
                             timestamp: new Date()
                           }
                         });
                         console.log(`✅ [Meta Webhook] Inbound message saved to DB [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Customer ${cust.id}`);
+
+                        // 4. Persist durable media metadata, then download/upload. A failed
+                        // download is retried by the worker, never lost with the webhook.
+                        if (mediaDescriptor) {
+                          try {
+                            const pendingMedia = await persistInboundMediaMetadata(prisma, {
+                              messageId,
+                              company: companyInfo.code,
+                              leadId: lead.id,
+                              customerId: cust.id,
+                              descriptor: mediaDescriptor
+                            });
+                            if (pendingMedia) {
+                              mediaStatus = pendingMedia.status;
+                              const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+                              const processed = pendingMedia.status === 'ready'
+                                ? pendingMedia
+                                : await processMediaRecord(prisma, pendingMedia, { metaToken });
+                              mediaStatus = processed?.status || mediaStatus;
+                              mediaSizeBytes = processed?.size_bytes ? Number(processed.size_bytes) : null;
+                              if (processed?.status === 'ready') {
+                                // Browsers load media without a Bearer header, so the SSE
+                                // carries a fresh short-lived signed URL.
+                                mediaUrl = createSignedMediaApiUrl(processed.id);
+                              }
+                            }
+                          } catch (mediaError) {
+                            console.error('[Inbound media] Persistence failed:', mediaError.message);
+                          }
+                        }
                       } catch (e) {
                         console.error('❌ [DB Error saving inbound Meta message]:', e);
                       }
@@ -7888,7 +8042,11 @@ const server = http.createServer(async (req, res) => {
                       media: mediaType ? {
                         type: mediaType,
                         url: mediaUrl,
-                        fileName: mediaFileName || (mediaType === 'audio' ? 'Voice Note' : 'Attachment')
+                        fileName: mediaFileName || (mediaType === 'audio' ? 'Voice Note' : 'Attachment'),
+                        caption: mediaDescriptor?.caption || '',
+                        mimeType: mediaDescriptor?.mimeType || '',
+                        sizeBytes: mediaSizeBytes,
+                        status: mediaStatus || 'pending'
                       } : null,
                       messageId,
                       leadId: savedLeadId,
@@ -8280,6 +8438,7 @@ export async function startServer() {
       // Initialize Socket.io after server starts listening
       // Legacy exam socket disabled: it trusted client-supplied student identity.
       startExamMonitor();
+      if (getDbStatus()) startInboundMediaRetryWorker();
       resolve(server);
     });
   });

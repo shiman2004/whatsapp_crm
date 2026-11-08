@@ -42,6 +42,23 @@ interface MessageBubbleProps {
 const QUICK_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
 const EXTENDED_EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🔥', '👏', '🎉', '💯', '✨', '🤝'];
 
+const formatMediaSize = (bytes?: number | null): string => {
+  if (!bytes || bytes <= 0) return '';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+};
+
+const mediaTypeLabel = (type?: string): string => {
+  switch (type) {
+    case 'image': return 'Photo';
+    case 'video': return 'Video';
+    case 'audio': return 'Audio';
+    case 'sticker': return 'Sticker';
+    default: return 'Document';
+  }
+};
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) => {
   const { 
     currentUser,
@@ -384,60 +401,105 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             </div>
           )}
 
-          {/* Rich Media Attachment (Image, Video, Audio, Document) */}
-          {message.media && message.media.url && (() => {
-            const rawUrl = message.media.url;
+          {/* Rich Media Attachment (Image, Video, Audio, Document, Sticker) */}
+          {message.media && (() => {
+            const media = message.media!;
+            const rawUrl = media.url || '';
             const mediaUrl = rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl;
-            return (
-              <div className="mb-1 rounded-lg overflow-hidden">
-                {message.media.type === 'image' || mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i) ? (
-                  <div 
+            const fileSize = formatMediaSize(media.sizeBytes);
+
+            // Media metadata arrives with the message; the binary is uploaded and
+            // signed asynchronously, so show an honest placeholder instead of a
+            // broken image while it is still pending or failed.
+            if (!mediaUrl) {
+              const failed = media.status === 'failed';
+              return (
+                <div className={`mb-1 rounded-lg border p-2.5 flex items-center gap-3 ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#8696a0]'}`}>
+                    {failed ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5 animate-pulse" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate text-[#e9edef]">
+                      {media.fileName || mediaTypeLabel(media.type)}
+                    </p>
+                    <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
+                      {failed ? 'Media could not be retrieved. It will be retried.' : 'Retrieving media…'}
+                    </p>
+                  </div>
+                </div>
+              );
+            }
+
+            const isImage = media.type === 'image'
+              || media.type === 'sticker'
+              || Boolean(mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
+
+            if (isImage) {
+              return (
+                <div className="mb-1 rounded-lg overflow-hidden">
+                  <div
                     className="relative group/media cursor-pointer rounded-lg overflow-hidden bg-black/20"
                     onClick={() => setLightboxUrl(mediaUrl)}
                   >
-                    <img 
-                      src={mediaUrl} 
-                      alt={message.media.fileName || 'Photo'} 
-                      className="w-full max-h-80 object-cover rounded-lg hover:brightness-95 transition-all"
+                    <img
+                      src={mediaUrl}
+                      alt={media.fileName || (media.type === 'sticker' ? 'Sticker' : 'Photo')}
+                      className={`w-full ${media.type === 'sticker' ? 'max-h-40 object-contain' : 'max-h-80 object-cover'} rounded-lg hover:brightness-95 transition-all`}
                     />
                     <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
                       <Maximize2 className="w-6 h-6 text-white drop-shadow-lg" />
                     </div>
                   </div>
-                ) : message.media.type === 'video' || mediaUrl.match(/\.(mp4|webm|mov)($|\?)/i) ? (
-                  <div className="relative rounded-lg overflow-hidden bg-black/40">
-                    <video 
-                      src={mediaUrl} 
-                      controls 
-                      playsInline 
-                      className="w-full max-h-80 rounded-lg"
-                    />
-                  </div>
-                ) : (message.media.type === 'audio' || mediaUrl.match(/\.(ogg|opus|mp3|wav|m4a|aac|webm)($|\?)/i)) ? (
-                  <WhatsAppVoiceNotePlayer 
-                    message={{ ...message, media: { ...message.media, url: mediaUrl } }}
+                </div>
+              );
+            }
+
+            if (media.type === 'video' || mediaUrl.match(/\.(mp4|webm|mov)($|\?)/i)) {
+              return (
+                <div className="mb-1 relative rounded-lg overflow-hidden bg-black/40">
+                  <video
+                    src={mediaUrl}
+                    controls
+                    playsInline
+                    className="w-full max-h-80 rounded-lg"
+                  />
+                </div>
+              );
+            }
+
+            if (media.type === 'audio' || mediaUrl.match(/\.(ogg|opus|mp3|wav|m4a|aac|webm)($|\?)/i)) {
+              return (
+                <div className="mb-1 rounded-lg overflow-hidden">
+                  <WhatsAppVoiceNotePlayer
+                    message={{ ...message, media: { ...media, url: mediaUrl } }}
                     senderName={isOutbound ? currentUser.fullName : (lead?.customer?.displayName || 'Customer')}
                     senderAvatar={isOutbound ? currentUser.avatar : lead?.customer?.avatarUrl}
                     isOutbound={isOutbound}
                   />
-                ) : (
-                  <a 
-                    href={mediaUrl} 
-                    target="_blank" 
-                    rel="noopener noreferrer" 
-                    download={message.media.fileName || 'document'}
-                    className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors"
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-xs font-semibold truncate text-[#e9edef]">{message.media.fileName || 'Document'}</p>
-                      <p className="text-[10px] text-[#8696a0]">Click to view / download</p>
-                    </div>
-                    <Download className="w-4 h-4 text-[#8696a0] hover:text-white shrink-0" />
-                  </a>
-                )}
+                </div>
+              );
+            }
+
+            return (
+              <div className="mb-1 rounded-lg overflow-hidden">
+                <a
+                  href={mediaUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={media.fileName || 'document'}
+                  className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors"
+                >
+                  <div className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
+                    <FileText className="w-5 h-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate text-[#e9edef]">{media.fileName || 'Document'}</p>
+                    <p className="text-[10px] text-[#8696a0]">
+                      {fileSize ? `${fileSize} · ` : ''}Click to view / download
+                    </p>
+                  </div>
+                  <Download className="w-4 h-4 text-[#8696a0] hover:text-white shrink-0" />
+                </a>
               </div>
             );
           })()}

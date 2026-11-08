@@ -126,10 +126,13 @@ export interface Message {
     ta?: string;
   };
   media?: {
-    type: 'image' | 'document' | 'audio' | 'video';
-    url: string;
+    type: 'image' | 'document' | 'audio' | 'video' | 'sticker';
+    url?: string | null;
     caption?: string;
     fileName?: string;
+    mimeType?: string;
+    sizeBytes?: number | null;
+    status?: 'pending' | 'processing' | 'ready' | 'failed';
   };
   waMessageId?: string;
   status: MessageStatus;

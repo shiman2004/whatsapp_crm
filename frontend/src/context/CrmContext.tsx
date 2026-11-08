@@ -377,9 +377,14 @@ const toClientMessage = (m: any): Message => ({
   deliveredAt: m.deliveredAt || m.delivered_at,
   readAt: m.readAt || m.read_at,
   createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
-  media: m.mediaUrl ? {
-    type: m.mediaType || 'image',
-    url: m.mediaUrl
+  media: (m.media?.url || m.mediaUrl || m.media) ? {
+    type: m.media?.type || m.mediaType || 'image',
+    url: m.media?.url || m.mediaUrl || null,
+    caption: m.media?.caption || m.mediaCaption || undefined,
+    fileName: m.media?.fileName || m.mediaFileName || undefined,
+    mimeType: m.media?.mimeType || m.mediaMimeType || undefined,
+    sizeBytes: m.media?.sizeBytes ?? m.mediaSizeBytes ?? null,
+    status: m.media?.status || m.mediaStatus
   } : undefined,
   reactions: m.reaction ? [m.reaction] : [],
   starred: m.starred || false,
@@ -2042,8 +2047,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     media: data.media ? {
                       type: data.media.type || 'image',
                       url: data.media.url,
-                      caption: cleanContent,
-                      fileName: data.media.fileName
+                      caption: data.media.caption || cleanContent,
+                      fileName: data.media.fileName,
+                      mimeType: data.media.mimeType,
+                      sizeBytes: data.media.sizeBytes ?? null,
+                      status: data.media.status
                     } : updated[optIndex].media
                   };
                   return updated;
@@ -2075,8 +2083,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 media: data.media ? {
                   type: data.media.type || 'image',
                   url: data.media.url,
-                  caption: cleanContent,
-                  fileName: data.media.fileName
+                  caption: data.media.caption || cleanContent,
+                  fileName: data.media.fileName,
+                  mimeType: data.media.mimeType,
+                  sizeBytes: data.media.sizeBytes ?? null,
+                  status: data.media.status
                 } : undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
                 status: isOutbound ? 'sent' : 'delivered',

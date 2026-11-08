@@ -187,7 +187,16 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
         content: m.content || '',
         status: m.status || 'delivered',
         createdAt: m.createdAt || m.timestamp || new Date().toISOString(),
-        media: m.mediaUrl ? { type: m.mediaType || 'image', url: m.mediaUrl } : m.media,
+        media: (m.media?.url || m.mediaUrl || m.media) ? {
+          ...(m.media || {}),
+          type: m.media?.type || m.mediaType || 'image',
+          url: m.media?.url || m.mediaUrl || null,
+          caption: m.media?.caption || m.mediaCaption || undefined,
+          fileName: m.media?.fileName || m.mediaFileName || undefined,
+          mimeType: m.media?.mimeType || m.mediaMimeType || undefined,
+          sizeBytes: m.media?.sizeBytes ?? m.mediaSizeBytes ?? null,
+          status: m.media?.status || m.mediaStatus
+        } : m.media,
         reactions: m.reaction ? [m.reaction] : (m.reactions || []),
         starred: m.starred || false,
         pinned: m.pinned || false,

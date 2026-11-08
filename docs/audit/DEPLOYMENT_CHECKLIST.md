@@ -12,6 +12,9 @@
   - [ ] `META_PHONE_NUMBER_ID_CRAS`: `1378201582041705`
   - [ ] `META_VERIFY_TOKEN`: Webhook verification string matching Meta Developer portal configuration.
   - [ ] `FRONTEND_URL`: Production domain URL for CORS whitelist (e.g. `https://royal-wellness-crm.onrender.com`).
+  - [ ] `SUPABASE_URL`: Supabase project URL used to store WhatsApp media in the private bucket.
+  - [ ] `SUPABASE_SERVICE_ROLE_KEY`: Service role key (not anon) so the backend can create/read the private `whatsapp-media` bucket. Without these two, inbound media is stored in the `media_files` table instead.
+  - [ ] `SUPABASE_MEDIA_BUCKET`: Optional, defaults to `whatsapp-media`.
   - [ ] `NODE_ENV`: Set to `production`.
 
 - [ ] **Database Pre-Flight Checks:**

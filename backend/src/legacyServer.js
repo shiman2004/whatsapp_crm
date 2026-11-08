@@ -485,6 +485,21 @@ if (metaConfig.accessToken) {
 }
 
 /**
+ * Dynamically resolve Meta Graph API access token from memory, DB system_settings, or env.
+ */
+export async function getMetaAccessToken() {
+  if (metaConfig.accessToken && metaConfig.accessToken.trim()) {
+    return metaConfig.accessToken.trim();
+  }
+  const tokenFromDb = await getSystemSetting('META_ACCESS_TOKEN').catch(() => null);
+  if (tokenFromDb && tokenFromDb.trim()) {
+    metaConfig.accessToken = tokenFromDb.trim();
+    return metaConfig.accessToken;
+  }
+  return (process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+}
+
+/**
  * Validate & normalize phone numbers to international E.164 standard
  */
 function normalizeE164(phone) {
@@ -1243,7 +1258,71 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 0a. Authorized inbound WhatsApp media streaming.
+  // 0a. Authorized inbound WhatsApp media retry endpoint.
+  const mediaRetryMatch = pathname.match(/^\/api\/media\/([^/]+)\/retry$/);
+  if (req.method === 'POST' && mediaRetryMatch) {
+    const mediaRecordId = decodeURIComponent(mediaRetryMatch[1]);
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Database is unavailable' }));
+      return;
+    }
+    const mediaAuth = await authenticateRequest(req, parsedUrl);
+    if (!mediaAuth.user) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Unauthorized' }));
+      return;
+    }
+    let record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
+    if (!record) {
+      const fallbackRows = await prisma.$queryRawUnsafe(`SELECT * FROM public.whatsapp_media WHERE message_id = $1 LIMIT 1;`, mediaRecordId).catch(() => null);
+      record = fallbackRows?.[0] || null;
+    }
+    if (!record) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Media not found' }));
+      return;
+    }
+    const lead = record.lead_id
+      ? await prisma.lead.findUnique({ where: { id: record.lead_id }, select: { assignedTo: true, company: true } }).catch(() => null)
+      : null;
+    if (!canAccessMediaRecord(mediaAuth.user, record, lead)) {
+      res.writeHead(403, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: 'Forbidden' }));
+      return;
+    }
+    // Unlock and reset retry counters
+    await prisma.$executeRawUnsafe(`
+      UPDATE public.whatsapp_media
+      SET status = 'pending',
+          attempts = 0,
+          locked_at = NULL,
+          next_retry_at = NOW(),
+          last_error = NULL
+      WHERE id = $1;
+    `, record.id).catch(() => null);
+    record = await getMediaRecordById(prisma, record.id).catch(() => null);
+    const metaToken = await getMetaAccessToken();
+    const processed = await processMediaRecord(prisma, record, { metaToken });
+    const finalRecord = processed || await getMediaRecordById(prisma, record?.id).catch(() => null);
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({
+      success: Boolean(finalRecord && finalRecord.status === 'ready'),
+      status: finalRecord?.status || 'failed',
+      media: finalRecord ? {
+        id: finalRecord.id,
+        status: finalRecord.status,
+        type: finalRecord.media_type,
+        fileName: finalRecord.file_name,
+        sizeBytes: finalRecord.size_bytes ? Number(finalRecord.size_bytes) : null,
+        url: finalRecord.status === 'ready' ? signMediaApiUrl(finalRecord.id) : null
+      } : null
+    }));
+    return;
+  }
+
+  // 0b. Authorized inbound WhatsApp media streaming.
   // A fresh short-lived signature is issued by GET /api/messages; browsers load
   // <img>/<audio>/<video> without an Authorization header, so the signature is the
   // primary credential. Bearer auth remains valid with the same role/company rules.
@@ -1290,7 +1369,7 @@ const server = http.createServer(async (req, res) => {
     // Lazy recovery: a viewer waiting on an upload is a better retry trigger than
     // the next scheduled sweep.
     if (record.status !== 'ready') {
-      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+      const metaToken = await getMetaAccessToken();
       await processMediaRecord(prisma, record, { metaToken }).catch(() => null);
       record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
     }
@@ -7863,6 +7942,7 @@ const server = http.createServer(async (req, res) => {
                     let mediaUrl = null;
                     let mediaStatus = null;
                     let mediaSizeBytes = null;
+                    let mediaRecordId = null;
                     let cust = null;
                     let lead = null;
 
@@ -8009,8 +8089,9 @@ const server = http.createServer(async (req, res) => {
                               descriptor: mediaDescriptor
                             });
                             if (pendingMedia) {
+                              mediaRecordId = pendingMedia.id;
                               mediaStatus = pendingMedia.status;
-                              const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
+                              const metaToken = await getMetaAccessToken();
                               const processed = pendingMedia.status === 'ready'
                                 ? pendingMedia
                                 : await processMediaRecord(prisma, pendingMedia, { metaToken });
@@ -8040,6 +8121,7 @@ const server = http.createServer(async (req, res) => {
                       name,
                       text,
                       media: mediaType ? {
+                        id: mediaRecordId,
                         type: mediaType,
                         url: mediaUrl,
                         fileName: mediaFileName || (mediaType === 'audio' ? 'Voice Note' : 'Attachment'),
@@ -8438,7 +8520,7 @@ export async function startServer() {
       // Initialize Socket.io after server starts listening
       // Legacy exam socket disabled: it trusted client-supplied student identity.
       startExamMonitor();
-      if (getDbStatus()) startInboundMediaRetryWorker();
+      if (getDbStatus()) startInboundMediaRetryWorker({ getMetaToken: getMetaAccessToken });
       resolve(server);
     });
   });

@@ -1323,6 +1323,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // 0b. Authorized inbound WhatsApp media streaming.
+  // 0a. Authorized inbound WhatsApp media streaming.
   // A fresh short-lived signature is issued by GET /api/messages; browsers load
   // <img>/<audio>/<video> without an Authorization header, so the signature is the
   // primary credential. Bearer auth remains valid with the same role/company rules.
@@ -1370,6 +1371,7 @@ const server = http.createServer(async (req, res) => {
     // the next scheduled sweep.
     if (record.status !== 'ready') {
       const metaToken = await getMetaAccessToken();
+      const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
       await processMediaRecord(prisma, record, { metaToken }).catch(() => null);
       record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
     }
@@ -8092,6 +8094,8 @@ const server = http.createServer(async (req, res) => {
                               mediaRecordId = pendingMedia.id;
                               mediaStatus = pendingMedia.status;
                               const metaToken = await getMetaAccessToken();
+                              mediaStatus = pendingMedia.status;
+                              const metaToken = (metaConfig.accessToken || process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '').trim();
                               const processed = pendingMedia.status === 'ready'
                                 ? pendingMedia
                                 : await processMediaRecord(prisma, pendingMedia, { metaToken });
@@ -8521,6 +8525,7 @@ export async function startServer() {
       // Legacy exam socket disabled: it trusted client-supplied student identity.
       startExamMonitor();
       if (getDbStatus()) startInboundMediaRetryWorker({ getMetaToken: getMetaAccessToken });
+      if (getDbStatus()) startInboundMediaRetryWorker();
       resolve(server);
     });
   });

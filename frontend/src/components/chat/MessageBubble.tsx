@@ -443,6 +443,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             const mediaUrl = mediaPatched?.url
               || (rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl);
             const fileSize = formatMediaSize(mediaPatched?.sizeBytes ?? media.sizeBytes);
+            const mediaUrl = rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl;
+            const fileSize = formatMediaSize(media.sizeBytes);
 
             // Media metadata arrives with the message; the binary is uploaded and
             // signed asynchronously, so show an honest placeholder instead of a
@@ -479,6 +481,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                       <span>{retryingMedia ? 'Retrying…' : 'Retry'}</span>
                     </button>
                   )}
+                <div className={`mb-1 rounded-lg border p-2.5 flex items-center gap-3 ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}>
+                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#8696a0]'}`}>
+                    {failed ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5 animate-pulse" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-semibold truncate text-[#e9edef]">
+                      {media.fileName || mediaTypeLabel(media.type)}
+                    </p>
+                    <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
+                      {failed ? 'Media could not be retrieved. It will be retried.' : 'Retrieving media…'}
+                    </p>
+                  </div>
                 </div>
               );
             }

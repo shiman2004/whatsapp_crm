@@ -59,6 +59,15 @@ const mediaTypeLabel = (type?: string): string => {
   }
 };
 
+const isMediaPlaceholder = (content?: string, media?: MessageBubbleProps['message']['media']): boolean => {
+  if (!content || !content.trim()) return true;
+  const trimmed = content.trim();
+  if (/^\[(image|photo|video|audio|voice|voice note|document|sticker|message)\]$/i.test(trimmed)) return true;
+  if (/^(photo|video|audio|document|sticker|voice note|message)$/i.test(trimmed)) return true;
+  if (media?.fileName && trimmed === media.fileName.trim()) return true;
+  return false;
+};
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) => {
   const { 
     currentUser,
@@ -82,6 +91,32 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   const [forwardModalOpen, setForwardModalOpen] = useState(false);
   const [metaAiModalOpen, setMetaAiModalOpen] = useState(false);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [retryingMedia, setRetryingMedia] = useState(false);
+  const [mediaPatched, setMediaPatched] = useState<{ url: string; sizeBytes?: number | null } | null>(null);
+
+  const handleRetryMedia = async (mediaId?: string) => {
+    if (retryingMedia || !mediaId) return;
+    setRetryingMedia(true);
+    try {
+      const token = localStorage.getItem('token') || '';
+      const res = await fetch(`${API_BASE_URL}/api/media/${encodeURIComponent(mediaId)}/retry`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.success && data.media?.url) {
+        // Local state, not a prop mutation, so the image renders on this retry.
+        setMediaPatched({ url: data.media.url, sizeBytes: data.media.sizeBytes ?? null });
+      }
+    } catch (err) {
+      console.error('Failed to retry media download:', err);
+    } finally {
+      setRetryingMedia(false);
+    }
+  };
 
   // Inline edit state
   const [isEditing, setIsEditing] = useState(false);
@@ -405,8 +440,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           {message.media && (() => {
             const media = message.media!;
             const rawUrl = media.url || '';
-            const mediaUrl = rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl;
-            const fileSize = formatMediaSize(media.sizeBytes);
+            const mediaUrl = mediaPatched?.url
+              || (rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl);
+            const fileSize = formatMediaSize(mediaPatched?.sizeBytes ?? media.sizeBytes);
 
             // Media metadata arrives with the message; the binary is uploaded and
             // signed asynchronously, so show an honest placeholder instead of a
@@ -414,18 +450,35 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             if (!mediaUrl) {
               const failed = media.status === 'failed';
               return (
-                <div className={`mb-1 rounded-lg border p-2.5 flex items-center gap-3 ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}>
-                  <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#8696a0]'}`}>
-                    {failed ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5 animate-pulse" />}
+                <div className={`mb-1 rounded-lg border p-2.5 flex items-center justify-between gap-3 ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}>
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#8696a0]'}`}>
+                      {failed ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5 animate-pulse" />}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate text-[#e9edef]">
+                        {media.fileName || mediaTypeLabel(media.type)}
+                      </p>
+                      <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
+                        {failed ? 'Media could not be retrieved. It will be retried.' : 'Retrieving media…'}
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate text-[#e9edef]">
-                      {media.fileName || mediaTypeLabel(media.type)}
-                    </p>
-                    <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
-                      {failed ? 'Media could not be retrieved. It will be retried.' : 'Retrieving media…'}
-                    </p>
-                  </div>
+                  {failed && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRetryMedia(media.id || message.id);
+                      }}
+                      disabled={retryingMedia}
+                      className="px-2 py-1 rounded text-[11px] font-medium bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
+                      title="Retry downloading this media now"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${retryingMedia ? 'animate-spin' : ''}`} />
+                      <span>{retryingMedia ? 'Retrying…' : 'Retry'}</span>
+                    </button>
+                  )}
                 </div>
               );
             }
@@ -505,8 +558,14 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           })()}
 
           {/* Message Content / Inline Editing & Inline Timestamp */}
-          {(!message.media || message.media.type !== 'audio' || (message.content && message.content !== 'Voice note' && message.content.trim().length > 0)) && (
-            isEditing ? (
+          {(() => {
+            const hasUserCaption = Boolean(
+              message.content &&
+              !isMediaPlaceholder(message.content, message.media) &&
+              (!message.media || message.media.type !== 'audio' || (message.content !== 'Voice note' && message.content.trim().length > 0))
+            );
+
+            return isEditing ? (
               <div className="pt-0.5 pb-1 min-w-[220px]">
                 <textarea
                   value={editContent}
@@ -552,7 +611,9 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               </div>
             ) : (
               <div className="text-[14.2px] leading-[19px] text-[#111b21] dark:text-[#e9edef] break-words select-text font-normal">
-                <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
+                {hasUserCaption && (
+                  <span className="whitespace-pre-wrap">{renderFormattedText(message.content)}</span>
+                )}
 
                 {/* Location card preview if Google Maps link is present */}
                 {message.content && (message.content.includes('maps.app.goo.gl') || message.content.includes('maps.google.com') || message.content.includes('goo.gl/maps')) && (() => {
@@ -584,7 +645,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                 })()}
                 
                 {/* Inline float-right timestamp container */}
-                <span className="inline-flex items-center gap-1 float-right ml-2.5 mt-1 -mb-0.5 select-none align-bottom text-[11px] text-[#667781] dark:text-[#8696a0] font-normal">
+                <span className={`inline-flex items-center gap-1 ${hasUserCaption ? 'float-right ml-2.5 mt-1 -mb-0.5' : 'float-right ml-auto mt-0.5'} select-none align-bottom text-[11px] text-[#667781] dark:text-[#8696a0] font-normal`}>
                   {message.pinned && (
                     <Pin className="w-3 h-3 fill-[#8696a0] text-[#8696a0] -rotate-45" />
                   )}
@@ -654,8 +715,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                   </div>
                 )}
               </div>
-            )
-          )}
+            );
+          })()}
         </div>
 
         {/* Inbound Hover Emoji Trigger (Appears to the RIGHT of inbound bubble) */}

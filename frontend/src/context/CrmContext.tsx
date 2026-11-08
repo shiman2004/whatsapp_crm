@@ -2045,6 +2045,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     messageSource: data.messageSource || updated[optIndex].messageSource,
                     sentAt: data.sentAt || updated[optIndex].sentAt,
                     media: data.media ? {
+                      id: data.media.id,
                       type: data.media.type || 'image',
                       url: data.media.url,
                       caption: data.media.caption || cleanContent,
@@ -2081,6 +2082,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 sentAt: data.sentAt || (isOutbound ? (timestamp || new Date().toISOString()) : undefined),
                 content: cleanContent,
                 media: data.media ? {
+                  id: data.media.id,
                   type: data.media.type || 'image',
                   url: data.media.url,
                   caption: data.media.caption || cleanContent,

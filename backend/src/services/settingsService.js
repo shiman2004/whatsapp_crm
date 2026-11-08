@@ -1,3 +1,4 @@
+import crypto from 'node:crypto';
 import { getPrisma } from '../db.js';
 import { encryptReversible, decryptReversible } from '../secretHash.js';
 
@@ -264,6 +265,7 @@ export class SettingsService {
       } else {
         savedRecord = await tx.systemSetting.create({
           data: {
+            id: crypto.randomUUID(),
             section,
             scope,
             scopeId: scopeId || null,

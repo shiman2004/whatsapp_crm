@@ -16,6 +16,33 @@ async function runTests() {
     process.exit(1);
   }
 
+  // Ensure test users exist in test DB
+  await prisma.user.upsert({
+    where: { id: 'jahan-admin-id' },
+    update: { role: 'super_admin', active: true },
+    create: {
+      id: 'jahan-admin-id',
+      email: 'jahan@alphatsm.com',
+      fullName: 'Mohamed Jahankeer',
+      role: 'super_admin',
+      active: true,
+      company: 'RWC'
+    }
+  }).catch(() => {});
+
+  await prisma.user.upsert({
+    where: { id: 'test-coord-1' },
+    update: { role: 'coordinator', active: true },
+    create: {
+      id: 'test-coord-1',
+      email: 'coord1@test.com',
+      fullName: 'Coordinator One',
+      role: 'coordinator',
+      active: true,
+      company: 'RWC'
+    }
+  }).catch(() => {});
+
   // Tokens using real existing database user IDs
   const adminToken = signAuthToken({
     userId: 'jahan-admin-id',

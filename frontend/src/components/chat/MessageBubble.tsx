@@ -144,6 +144,67 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     setEditContent(message.content || '');
   }, [message.content]);
 
+  // Auto-retrieve pending, processing, or unlinked media so previews load quickly
+  useEffect(() => {
+    const media = message.media;
+    if (!media) return;
+    const hasReadyUrl = Boolean(mediaPatched?.url || (media.url && media.status === 'ready'));
+    if (hasReadyUrl) return;
+
+    const mediaId = media.id || message.id;
+    if (!mediaId) return;
+
+    let cancelled = false;
+
+    const attemptFetch = async () => {
+      if (cancelled || retryingMedia) return false;
+      try {
+        const token = localStorage.getItem('token') || '';
+        const res = await fetch(`${API_BASE_URL}/api/media/${encodeURIComponent(mediaId)}/retry`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && data.success && data.media?.url) {
+          setMediaPatched({ url: data.media.url, sizeBytes: data.media.sizeBytes ?? null });
+          return true;
+        }
+      } catch (err) {
+        // silent
+      }
+      return false;
+    };
+
+    // First quick attempt after 800ms (covers typical ~1.5s server download time)
+    const timer1 = setTimeout(async () => {
+      const ok = await attemptFetch();
+      if (ok || cancelled) return;
+
+      // Second attempt after 2.5s
+      const timer2 = setTimeout(async () => {
+        const ok2 = await attemptFetch();
+        if (ok2 || cancelled) return;
+
+        // Third attempt after 5s
+        const timer3 = setTimeout(async () => {
+          await attemptFetch();
+        }, 5000);
+
+        return () => clearTimeout(timer3);
+      }, 2500);
+
+      return () => clearTimeout(timer2);
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer1);
+    };
+  }, [message.media?.id, message.media?.url, message.media?.status, message.id, mediaPatched?.url]);
+
   // Open context menu with viewport-clamped fixed positioning (prevents clipping behind header)
   const handleOpenMenu = (e?: React.MouseEvent) => {
     if (e) {
@@ -452,9 +513,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           {/* Rich Media Attachment (Image, Video, Audio, Document, Sticker) */}
           {message.media && (() => {
             const media = message.media!;
-            const rawUrl = media.url || '';
-            const mediaUrl = mediaPatched?.url
-              || (rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl);
+            const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+            const rawUrl = mediaPatched?.url || media.url || '';
+            let mediaUrl = rawUrl;
+            if (mediaUrl) {
+              if (mediaUrl.startsWith('/') && !mediaUrl.startsWith('//')) {
+                mediaUrl = `${API_BASE_URL}${mediaUrl}`;
+              }
+              // If it's an internal /api/media/ link and lacks both sig and token, attach token so img/audio/video authenticate
+              if (mediaUrl.includes('/api/media/') && !mediaUrl.includes('sig=') && !mediaUrl.includes('token=') && token) {
+                mediaUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+              }
+            }
             const fileSize = formatMediaSize(mediaPatched?.sizeBytes ?? media.sizeBytes);
 
             // Media metadata arrives with the message; the binary is uploaded and
@@ -463,35 +533,47 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             if (!mediaUrl) {
               const failed = media.status === 'failed';
               return (
-                <div className={`mb-1 rounded-lg border p-2.5 flex items-center justify-between gap-3 ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}>
+                <div 
+                  onClick={() => handleRetryMedia(media.id || message.id)}
+                  className={`mb-1 rounded-lg border p-2.5 flex items-center justify-between gap-3 cursor-pointer hover:opacity-90 transition-opacity ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}
+                  title="Click to fetch media preview now"
+                >
                   <div className="flex items-center gap-3 min-w-0 flex-1">
-                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#8696a0]'}`}>
-                      {failed ? <AlertCircle className="w-5 h-5" /> : <Clock className="w-5 h-5 animate-pulse" />}
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#00a884]'}`}>
+                      {retryingMedia ? (
+                        <RefreshCw className="w-5 h-5 animate-spin text-[#00a884]" />
+                      ) : failed ? (
+                        <AlertCircle className="w-5 h-5 text-rose-400" />
+                      ) : (
+                        <Clock className="w-5 h-5 animate-pulse text-[#00a884]" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="text-xs font-semibold truncate text-[#e9edef]">
                         {media.fileName || mediaTypeLabel(media.type)}
                       </p>
                       <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
-                        {failed ? 'Media could not be retrieved. It will be retried.' : 'Retrieving media…'}
+                        {retryingMedia ? 'Retrieving media…' : failed ? 'Media retrieval pending. Click to retry.' : 'Retrieving media… Click to fetch now.'}
                       </p>
                     </div>
                   </div>
-                  {failed && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRetryMedia(media.id || message.id);
-                      }}
-                      disabled={retryingMedia}
-                      className="px-2 py-1 rounded text-[11px] font-medium bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
-                      title="Retry downloading this media now"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${retryingMedia ? 'animate-spin' : ''}`} />
-                      <span>{retryingMedia ? 'Retrying…' : 'Retry'}</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRetryMedia(media.id || message.id);
+                    }}
+                    disabled={retryingMedia}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium border flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
+                      failed 
+                        ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-500/30' 
+                        : 'bg-[#00a884]/20 hover:bg-[#00a884]/30 text-[#00a884] border-[#00a884]/40'
+                    }`}
+                    title="Retrieve this media now"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${retryingMedia ? 'animate-spin' : ''}`} />
+                    <span>{retryingMedia ? 'Fetching…' : failed ? 'Retry' : 'Fetch'}</span>
+                  </button>
                 </div>
               );
             }

@@ -2097,6 +2097,27 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               };
               return [...prevMsgs, newMsg].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
             });
+          } else if (data.type === 'MEDIA_READY') {
+            const { messageId, mediaId, url, sizeBytes, fileName, mediaType } = data;
+            console.log('🖼️ [CRM SSE] Media ready event received for message:', messageId, 'media:', mediaId);
+            setMessages(prevMsgs => prevMsgs.map(m => {
+              const isTarget = m.id === messageId || m.waMessageId === messageId || (m.media && m.media.id === mediaId);
+              if (!isTarget) return m;
+              return {
+                ...m,
+                mediaUrl: url,
+                mediaStatus: 'ready',
+                media: {
+                  ...(m.media || {}),
+                  id: mediaId || m.media?.id,
+                  type: mediaType || m.media?.type || 'image',
+                  url: url,
+                  status: 'ready',
+                  sizeBytes: sizeBytes ?? m.media?.sizeBytes,
+                  fileName: fileName || m.media?.fileName
+                }
+              };
+            }));
           } else if (data.type === 'INBOUND_REACTION') {
             const { targetMessageId, emoji } = data;
             setMessages(prevMsgs => {

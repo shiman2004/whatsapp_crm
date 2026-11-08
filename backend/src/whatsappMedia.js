@@ -131,6 +131,8 @@ export function createSignedMediaApiUrl(mediaRecordId, ttlMs = MEDIA_API_TTL_MS)
   return `/api/media/${encodeURIComponent(mediaRecordId)}?exp=${expires}&sig=${signature}`;
 }
 
+export const signMediaApiUrl = createSignedMediaApiUrl;
+
 export function verifySignedMediaApiUrl(mediaRecordId, expires, signature) {
   const expiry = Number(expires);
   if (!mediaRecordId || !Number.isSafeInteger(expiry) || expiry < Date.now()) return false;
@@ -516,7 +518,8 @@ export async function retryDueMedia({
 export function startInboundMediaRetryWorker({
   getMetaToken = () => process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '',
   intervalMs = 60_000,
-  logger = console
+  logger = console,
+  onMediaReady = null
 } = {}) {
   if (retryWorker) return retryWorker;
 
@@ -526,6 +529,11 @@ export function startInboundMediaRetryWorker({
       const processed = await retryDueMedia({ metaToken: resolvedToken });
       if (processed.length > 0) {
         logger.log(`[Inbound media] Recovered ${processed.length} media record(s).`);
+        if (typeof onMediaReady === 'function') {
+          for (const item of processed) {
+            try { onMediaReady(item); } catch {}
+          }
+        }
       }
     } catch (error) {
       logger.warn(`[Inbound media] Retry worker error: ${error.message}`);

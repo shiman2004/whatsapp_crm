@@ -1292,7 +1292,26 @@ const server = http.createServer(async (req, res) => {
       res.end(JSON.stringify({ success: false, error: 'Forbidden' }));
       return;
     }
-    // Unlock and reset retry counters
+
+    // Fast-path: if the media record is already ready, return fresh signed URL immediately without re-processing!
+    if (record.status === 'ready') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        success: true,
+        status: 'ready',
+        media: {
+          id: record.id,
+          status: 'ready',
+          type: record.media_type,
+          fileName: record.file_name,
+          sizeBytes: record.size_bytes ? Number(record.size_bytes) : null,
+          url: createSignedMediaApiUrl(record.id)
+        }
+      }));
+      return;
+    }
+
+    // Unlock and reset retry counters for non-ready media
     await prisma.$executeRawUnsafe(`
       UPDATE public.whatsapp_media
       SET status = 'pending',
@@ -1306,6 +1325,21 @@ const server = http.createServer(async (req, res) => {
     const metaToken = await getMetaAccessToken();
     const processed = await processMediaRecord(prisma, record, { metaToken });
     const finalRecord = processed || await getMediaRecordById(prisma, record?.id).catch(() => null);
+
+    if (finalRecord && finalRecord.status === 'ready') {
+      // Notify connected clients via SSE
+      broadcastScopedSSE(lead?.assignedTo || null, {
+        type: 'MEDIA_READY',
+        messageId: finalRecord.message_id,
+        mediaId: finalRecord.id,
+        url: createSignedMediaApiUrl(finalRecord.id),
+        mediaType: finalRecord.media_type,
+        fileName: finalRecord.file_name,
+        sizeBytes: finalRecord.size_bytes ? Number(finalRecord.size_bytes) : null,
+        company: finalRecord.company
+      });
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({
       success: Boolean(finalRecord && finalRecord.status === 'ready'),
@@ -1316,7 +1350,7 @@ const server = http.createServer(async (req, res) => {
         type: finalRecord.media_type,
         fileName: finalRecord.file_name,
         sizeBytes: finalRecord.size_bytes ? Number(finalRecord.size_bytes) : null,
-        url: finalRecord.status === 'ready' ? signMediaApiUrl(finalRecord.id) : null
+        url: finalRecord.status === 'ready' ? createSignedMediaApiUrl(finalRecord.id) : null
       } : null
     }));
     return;
@@ -8524,7 +8558,25 @@ export async function startServer() {
       // Initialize Socket.io after server starts listening
       // Legacy exam socket disabled: it trusted client-supplied student identity.
       startExamMonitor();
-      if (getDbStatus()) startInboundMediaRetryWorker({ getMetaToken: getMetaAccessToken });
+      if (getDbStatus()) {
+        startInboundMediaRetryWorker({
+          getMetaToken: getMetaAccessToken,
+          onMediaReady: (rec) => {
+            if (rec && rec.status === 'ready') {
+              broadcastScopedSSE(null, {
+                type: 'MEDIA_READY',
+                messageId: rec.message_id,
+                mediaId: rec.id,
+                url: createSignedMediaApiUrl(rec.id),
+                mediaType: rec.media_type,
+                fileName: rec.file_name,
+                sizeBytes: rec.size_bytes ? Number(rec.size_bytes) : null,
+                company: rec.company
+              });
+            }
+          }
+        });
+      }
       resolve(server);
     });
   });

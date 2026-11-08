@@ -224,6 +224,9 @@ const menuRef = useRef<HTMLDivElement>(null);
 
   // Stage counts for quick badges based on role accessibility
   const accessibleLeads = leads.filter(l => isLeadAccessibleForUser(l, currentUser));
+  // Dynamic labels with role & company access filtering. Declared before the
+  // search filter below, which reads it (avoids a temporal-dead-zone crash).
+  const allAvailableLabels = chatLabels && chatLabels.length > 0 ? chatLabels : PRESET_LABELS;
   const totalUnreadCount = accessibleLeads.filter(l => (l.unreadCount || 0) > 0).length;
   const newCount = accessibleLeads.filter(l => (l.stage || 'new') === 'new').length;
   const assignedCount = accessibleLeads.filter(l => l.stage === 'assigned').length;
@@ -393,8 +396,6 @@ const menuRef = useRef<HTMLDivElement>(null);
 
   const activeContextMenuLead = leads.find(l => l.id === contextMenuLeadId);
 
-  // Dynamic labels with role & company access filtering
-  const allAvailableLabels = chatLabels && chatLabels.length > 0 ? chatLabels : PRESET_LABELS;
   const availableLabels = allAvailableLabels.filter((lbl: any) => {
     if (lbl.isActive === false) return false;
     // Check company scope

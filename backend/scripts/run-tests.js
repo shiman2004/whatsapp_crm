@@ -35,6 +35,7 @@ const ALL_SUITES = [
   'test-company-pipelines.js',
   'test-lead-assignment.js',
   'test-media-and-memory-security.js',
+  'test-inbound-media.js',
   'test-marketing-foundation.js',
   'test-pagination.js',
   'test-message-cursor.js',

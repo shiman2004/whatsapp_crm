@@ -89,6 +89,36 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_media_files_name ON public.media_files(file_name);`,
 
+  // --- inbound WhatsApp media metadata (binary lives in the private bucket) -----
+  `CREATE TABLE IF NOT EXISTS public.whatsapp_media (
+     id VARCHAR(36) PRIMARY KEY,
+     message_id TEXT UNIQUE NOT NULL,
+     media_id TEXT NOT NULL,
+     company VARCHAR(50) NOT NULL DEFAULT 'RWC',
+     lead_id VARCHAR(50),
+     customer_id VARCHAR(50),
+     direction VARCHAR(20) NOT NULL DEFAULT 'inbound',
+     media_type VARCHAR(40) NOT NULL,
+     mime_type VARCHAR(100),
+     file_name VARCHAR(255),
+     caption TEXT,
+     checksum_sha256 VARCHAR(64),
+     storage_bucket VARCHAR(100) NOT NULL,
+     storage_key TEXT NOT NULL,
+     size_bytes BIGINT,
+     status VARCHAR(20) NOT NULL DEFAULT 'pending',
+     attempts INTEGER NOT NULL DEFAULT 0,
+     last_error TEXT,
+     next_retry_at TIMESTAMPTZ,
+     locked_at TIMESTAMPTZ,
+     downloaded_at TIMESTAMPTZ,
+     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_whatsapp_media_status ON public.whatsapp_media(status, next_retry_at);`,
+  `CREATE INDEX IF NOT EXISTS idx_whatsapp_media_company ON public.whatsapp_media(company, created_at DESC);`,
+  `CREATE INDEX IF NOT EXISTS idx_whatsapp_media_media_id ON public.whatsapp_media(media_id);`,
+
   // --- shared login throttling -------------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.auth_rate_limits (
      rate_key VARCHAR(512) PRIMARY KEY,

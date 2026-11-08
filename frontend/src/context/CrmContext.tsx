@@ -1295,6 +1295,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     messagesRef.current = messages;
   }, [messages]);
 
+  // Out-of-order buffer for MEDIA_READY events that arrive before or during message insertion
+  const pendingMediaReadyRef = useRef<Map<string, { url: string; sizeBytes?: number | null; fileName?: string; mediaType?: string }>>(new Map());
+
   // Robust Message Sync (Active Polling & SSE Reconnection Fallback)
   const isSyncingMessagesRef = useRef(false);
   const syncLatestMessages = useCallback(async (targetLeadId?: string) => {
@@ -2069,6 +2072,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return prevMsgs;
               }
 
+              // Check if a buffered MEDIA_READY event already arrived for this message
+              const bufferedReady = (messageId && pendingMediaReadyRef.current.get(String(messageId)))
+                || (data.media?.id && pendingMediaReadyRef.current.get(String(data.media.id)));
+
+              const effectiveMediaUrl = bufferedReady?.url || data.media?.url || null;
+              const effectiveMediaStatus: 'pending' | 'processing' | 'ready' | 'failed' = bufferedReady ? 'ready' : (data.media?.status || 'pending');
+              const effectiveSizeBytes = bufferedReady?.sizeBytes ?? data.media?.sizeBytes ?? null;
+
               const newMsg: Message = {
                 id: messageId || 'msg-' + Date.now(),
                 leadId: resolvedLeadId,
@@ -2083,13 +2094,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 content: cleanContent,
                 media: data.media ? {
                   id: data.media.id,
-                  type: data.media.type || 'image',
-                  url: data.media.url,
+                  type: (bufferedReady?.mediaType as any) || data.media.type || 'image',
+                  url: effectiveMediaUrl,
                   caption: data.media.caption || cleanContent,
-                  fileName: data.media.fileName,
+                  fileName: bufferedReady?.fileName || data.media.fileName,
                   mimeType: data.media.mimeType,
-                  sizeBytes: data.media.sizeBytes ?? null,
-                  status: data.media.status
+                  sizeBytes: effectiveSizeBytes,
+                  status: effectiveMediaStatus
                 } : undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
                 status: isOutbound ? 'sent' : 'delivered',
@@ -2100,24 +2111,38 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           } else if (data.type === 'MEDIA_READY') {
             const { messageId, mediaId, url, sizeBytes, fileName, mediaType } = data;
             console.log('🖼️ [CRM SSE] Media ready event received for message:', messageId, 'media:', mediaId);
-            setMessages(prevMsgs => prevMsgs.map(m => {
-              const isTarget = m.id === messageId || m.waMessageId === messageId || (m.media && m.media.id === mediaId);
-              if (!isTarget) return m;
-              return {
-                ...m,
-                mediaUrl: url,
-                mediaStatus: 'ready',
-                media: {
-                  ...(m.media || {}),
-                  id: mediaId || m.media?.id,
-                  type: mediaType || m.media?.type || 'image',
-                  url: url,
-                  status: 'ready',
-                  sizeBytes: sizeBytes ?? m.media?.sizeBytes,
-                  fileName: fileName || m.media?.fileName
-                }
-              };
-            }));
+
+            // Buffer ready event in case message enters state out-of-order
+            if (messageId) {
+              pendingMediaReadyRef.current.set(String(messageId), { url, sizeBytes, fileName, mediaType });
+            }
+            if (mediaId) {
+              pendingMediaReadyRef.current.set(String(mediaId), { url, sizeBytes, fileName, mediaType });
+            }
+
+            setMessages(prevMsgs => {
+              let updatedAny = false;
+              const next = prevMsgs.map(m => {
+                const isTarget = m.id === messageId || m.waMessageId === messageId || (m.media && m.media.id === mediaId);
+                if (!isTarget) return m;
+                // If already ready with same url, avoid dirty update
+                if (m.media?.status === 'ready' && m.media?.url === url) return m;
+                updatedAny = true;
+                return {
+                  ...m,
+                  media: {
+                    ...(m.media || {}),
+                    id: mediaId || m.media?.id,
+                    type: (mediaType as any) || m.media?.type || 'image',
+                    url: url,
+                    status: 'ready' as const,
+                    sizeBytes: sizeBytes ?? m.media?.sizeBytes,
+                    fileName: fileName || m.media?.fileName
+                  }
+                };
+              });
+              return updatedAny ? next : prevMsgs;
+            });
           } else if (data.type === 'INBOUND_REACTION') {
             const { targetMessageId, emoji } = data;
             setMessages(prevMsgs => {

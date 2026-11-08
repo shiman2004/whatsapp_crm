@@ -5,7 +5,7 @@ import { createClient } from '@supabase/supabase-js';
 import { getPrisma } from './db.js';
 import { JWT_SECRET } from './runtimeConfig.js';
 
-export const MEDIA_API_TTL_MS = 15 * 60 * 1000;
+export const MEDIA_API_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const DEFAULT_MEDIA_BUCKET = 'whatsapp-media';
 const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
 const PROCESSING_LOCK_MS = 15 * 60 * 1000;
@@ -315,15 +315,34 @@ async function uploadMediaObject(storage, bucket, storageKey, buffer, contentTyp
 
 /**
  * Binary fallback when the private bucket is not configured or rejects the
- * upload. The message still renders, at the cost of PostgreSQL egress.
+ * upload. Persists to both local disk cache (public/uploads) and PostgreSQL media_files table.
  */
 async function saveMediaToDatabase(prisma, storageKey, mimeType, buffer) {
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO public.media_files (id, file_name, mime_type, data, size, created_at)
-    VALUES ($1, $2, $3, $4, $5, NOW())
-    ON CONFLICT (file_name)
-    DO UPDATE SET data = EXCLUDED.data, size = EXCLUDED.size, mime_type = EXCLUDED.mime_type;
-  `, crypto.randomUUID(), path.basename(storageKey), mimeType, buffer, buffer.length);
+  const fileName = path.basename(storageKey);
+  // Persist to local disk cache (public/uploads)
+  try {
+    const uploadDir = path.resolve('public', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(uploadDir, fileName), buffer);
+  } catch (diskErr) {
+    // Disk write error non-fatal, fallback to PostgreSQL
+  }
+
+  // Persist to PostgreSQL public.media_files
+  if (prisma?.$executeRawUnsafe) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public.media_files (id, file_name, mime_type, data, size, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (file_name)
+        DO UPDATE SET data = EXCLUDED.data, size = EXCLUDED.size, mime_type = EXCLUDED.mime_type;
+      `, crypto.randomUUID(), fileName, mimeType, buffer, buffer.length);
+    } catch (dbErr) {
+      console.warn('⚠️ [whatsappMedia] Failed to persist media binary to media_files table:', dbErr.message);
+    }
+  }
 }
 
 /**
@@ -386,32 +405,52 @@ export async function processMediaRecord(prisma, mediaRecord, {
     const meta = await metaRes.json().catch(() => ({}));
     if (!meta?.url) throw new Error('Meta media metadata did not include a download URL');
 
-    // Download binary from Meta CDN. Some Meta CDN hosts require User-Agent and Authorization.
-    let downloadUrl = meta.url;
+    // Download binary from Meta CDN.
+    // lookaside.fbsbx.com requires Authorization: Bearer <token>.
+    // It then 302-redirects to fbcdn.net edge hosts which authenticate via pre-signed URL query parameters.
     let binRes = null;
 
-    // Follow manual redirect if provided so headers are never stripped across domains
-    for (let r = 0; r < 3; r++) {
-      binRes = await fetchImpl(downloadUrl, {
+    // Strategy 1: Natural redirect follow (WHATWG fetch automatically strips Authorization on cross-origin redirects)
+    try {
+      binRes = await fetchImpl(meta.url, {
         headers: downloadHeaders,
-        redirect: 'manual'
-      }).catch(() => null);
-
-      if (binRes && binRes.status >= 300 && binRes.status < 400 && binRes.headers?.get?.('location')) {
-        downloadUrl = binRes.headers.get('location');
-        continue;
-      }
-      break;
-    }
-
-    // Direct fallback if manual redirect was not handled or failed
-    if (!binRes || !binRes.ok) {
-      binRes = await fetchImpl(downloadUrl, {
-        headers: downloadHeaders
+        redirect: 'follow'
       });
+    } catch (e) {
+      binRes = null;
     }
 
-    if (!binRes.ok) throw new Error(`Meta media download failed (${binRes.status})`);
+    // Strategy 2: If natural follow was not successful, handle redirect explicitly
+    if (!binRes || !binRes.ok) {
+      try {
+        const redirectCheck = await fetchImpl(meta.url, {
+          headers: downloadHeaders,
+          redirect: 'manual'
+        });
+        if (redirectCheck && redirectCheck.status >= 300 && redirectCheck.status < 400) {
+          const location = redirectCheck.headers?.get?.('location');
+          if (location) {
+            // Fetch CDN location WITHOUT Authorization header so fbcdn.net edge cache does not reject it
+            binRes = await fetchImpl(location, {
+              headers: { 'User-Agent': downloadHeaders['User-Agent'] }
+            });
+            // If CDN required Authorization, attempt once with headers
+            if (!binRes || !binRes.ok) {
+              binRes = await fetchImpl(location, { headers: downloadHeaders });
+            }
+          }
+        }
+      } catch (manualErr) {}
+    }
+
+    // Strategy 3: Fallback direct attempt with headers
+    if (!binRes || !binRes.ok) {
+      binRes = await fetchImpl(meta.url, {
+        headers: downloadHeaders
+      }).catch(() => null);
+    }
+
+    if (!binRes || !binRes.ok) throw new Error(`Meta media download failed (${binRes?.status || 'unknown'})`);
     const declaredSize = Number(binRes.headers?.get?.('content-length') || 0);
     if (declaredSize > MAX_MEDIA_BYTES) throw new Error('Media exceeds the maximum allowed size');
 

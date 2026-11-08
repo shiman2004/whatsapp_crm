@@ -1328,17 +1328,20 @@ const server = http.createServer(async (req, res) => {
     const finalRecord = processed || await getMediaRecordById(prisma, record?.id).catch(() => null);
 
     if (finalRecord && finalRecord.status === 'ready') {
-      // Notify connected clients via SSE
+      // Notify connected clients via SSE with company & conversation scope
       broadcastScopedSSE(lead?.assignedTo || null, {
         type: 'MEDIA_READY',
+        leadId: finalRecord.lead_id,
+        conversationId: finalRecord.lead_id,
         messageId: finalRecord.message_id,
         mediaId: finalRecord.id,
         url: createSignedMediaApiUrl(finalRecord.id),
         mediaType: finalRecord.media_type,
         fileName: finalRecord.file_name,
         sizeBytes: finalRecord.size_bytes ? Number(finalRecord.size_bytes) : null,
+        status: 'ready',
         company: finalRecord.company
-      });
+      }, finalRecord.company);
     }
 
     res.writeHead(200, { 'Content-Type': 'application/json' });
@@ -1405,19 +1408,42 @@ const server = http.createServer(async (req, res) => {
     // the next scheduled sweep.
     if (record.status !== 'ready') {
       const metaToken = await getMetaAccessToken();
-      await processMediaRecord(prisma, record, { metaToken }).catch(() => null);
-      record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
+      const processed = await processMediaRecord(prisma, record, { metaToken }).catch(() => null);
+      if (processed && processed.status === 'ready') {
+        record = processed;
+        broadcastScopedSSE(null, {
+          type: 'MEDIA_READY',
+          leadId: record.lead_id,
+          conversationId: record.lead_id,
+          messageId: record.message_id,
+          mediaId: record.id,
+          url: createSignedMediaApiUrl(record.id),
+          mediaType: record.media_type,
+          fileName: record.file_name,
+          sizeBytes: record.size_bytes ? Number(record.size_bytes) : null,
+          status: 'ready',
+          company: record.company
+        }, record.company);
+      } else {
+        record = await getMediaRecordById(prisma, mediaRecordId).catch(() => null);
+      }
     }
 
     if (!record || record.status !== 'ready') {
-      res.writeHead(409, { 'Content-Type': 'application/json' });
+      res.writeHead(409, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      });
       res.end(JSON.stringify({ success: false, status: record?.status || 'missing', error: 'Media is still being retrieved.' }));
       return;
     }
 
     const mediaObject = await downloadMediaObject(record).catch(() => null);
     if (!mediaObject?.buffer?.length) {
-      res.writeHead(502, { 'Content-Type': 'application/json' });
+      res.writeHead(502, {
+        'Content-Type': 'application/json',
+        'Cache-Control': 'no-store, no-cache, must-revalidate'
+      });
       res.end(JSON.stringify({ success: false, error: 'Media could not be read from storage.' }));
       return;
     }
@@ -8118,7 +8144,7 @@ const server = http.createServer(async (req, res) => {
                         });
                         console.log(`✅ [Meta Webhook] Inbound message saved to DB [${companyInfo.code}]: ID ${messageId}, Lead ${lead.id}, Customer ${cust.id}`);
 
-                        // 4. Persist durable media metadata, then download/upload. A failed
+                        // 4. Persist durable media metadata, then download/upload asynchronously. A failed
                         // download is retried by the worker, never lost with the webhook.
                         if (mediaDescriptor) {
                           try {
@@ -8133,15 +8159,46 @@ const server = http.createServer(async (req, res) => {
                               mediaRecordId = pendingMedia.id;
                               mediaStatus = pendingMedia.status;
                               const metaToken = await getMetaAccessToken();
-                              const processed = pendingMedia.status === 'ready'
-                                ? pendingMedia
-                                : await processMediaRecord(prisma, pendingMedia, { metaToken });
-                              mediaStatus = processed?.status || mediaStatus;
-                              mediaSizeBytes = processed?.size_bytes ? Number(processed.size_bytes) : null;
-                              if (processed?.status === 'ready') {
-                                // Browsers load media without a Bearer header, so the SSE
-                                // carries a fresh short-lived signed URL.
-                                mediaUrl = createSignedMediaApiUrl(processed.id);
+
+                              // Background download & durable persistence worker
+                              const processPromise = (async () => {
+                                try {
+                                  const processed = pendingMedia.status === 'ready'
+                                    ? pendingMedia
+                                    : await processMediaRecord(prisma, pendingMedia, { metaToken });
+                                  if (processed && processed.status === 'ready') {
+                                    // Immediate real-time update broadcast
+                                    broadcastScopedSSE(lead?.assignedTo || null, {
+                                      type: 'MEDIA_READY',
+                                      leadId: savedLeadId,
+                                      conversationId: savedLeadId,
+                                      messageId,
+                                      mediaId: processed.id,
+                                      url: createSignedMediaApiUrl(processed.id),
+                                      mediaType: processed.media_type,
+                                      fileName: processed.file_name,
+                                      sizeBytes: processed.size_bytes ? Number(processed.size_bytes) : null,
+                                      status: 'ready',
+                                      company: companyInfo.code
+                                    }, companyInfo.code);
+                                  }
+                                  return processed;
+                                } catch (pErr) {
+                                  console.error('[Inbound media async error]:', pErr.message);
+                                  return null;
+                                }
+                              })();
+
+                              // Allow fast downloads up to 600ms to attach ready URL immediately to initial SSE
+                              const fastResult = await Promise.race([
+                                processPromise,
+                                new Promise(res => setTimeout(() => res(null), 600))
+                              ]);
+
+                              if (fastResult?.status === 'ready') {
+                                mediaStatus = 'ready';
+                                mediaSizeBytes = fastResult.size_bytes ? Number(fastResult.size_bytes) : null;
+                                mediaUrl = createSignedMediaApiUrl(fastResult.id);
                               }
                             }
                           } catch (mediaError) {
@@ -8571,14 +8628,17 @@ export async function startServer() {
             if (rec && rec.status === 'ready') {
               broadcastScopedSSE(null, {
                 type: 'MEDIA_READY',
+                leadId: rec.lead_id,
+                conversationId: rec.lead_id,
                 messageId: rec.message_id,
                 mediaId: rec.id,
                 url: createSignedMediaApiUrl(rec.id),
                 mediaType: rec.media_type,
                 fileName: rec.file_name,
                 sizeBytes: rec.size_bytes ? Number(rec.size_bytes) : null,
+                status: 'ready',
                 company: rec.company
-              });
+              }, rec.company);
             }
           }
         });

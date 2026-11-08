@@ -325,7 +325,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
         if (mediaUrl.startsWith('/') && !mediaUrl.startsWith('//')) {
           mediaUrl = `${API_BASE_URL}${mediaUrl}`;
         }
-        if (mediaUrl.includes('/api/media/') && !mediaUrl.includes('sig=') && !mediaUrl.includes('token=') && token) {
+        if (mediaUrl.includes('/api/media/') && !mediaUrl.includes('token=') && token) {
           mediaUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
         }
         const downloadUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}download=1`;

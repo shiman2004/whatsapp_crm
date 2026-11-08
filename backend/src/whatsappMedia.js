@@ -24,8 +24,6 @@ export function getMediaStorageClient() {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_KEY || process.env.SUPABASE_KEY;
   if (!url || !key) return null;
   storageClient = createClient(url, key, {
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null;
-  storageClient = createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY, {
     auth: { persistSession: false }
   });
   return storageClient;
@@ -280,7 +278,6 @@ async function markMediaReady(prisma, mediaRecordId, { sizeBytes, checksumSha256
         `/api/media/${record.id}`
       ).catch(() => null);
     });
-    ).catch(() => null);
   }
   return record;
 }
@@ -334,14 +331,6 @@ async function saveMediaToDatabase(prisma, storageKey, mimeType, buffer) {
 export async function processMediaRecord(prisma, mediaRecord, {
   metaToken = '',
   storage = null,
-/**
- * Meta's two-step media retrieval: resolve the media ID to a short-lived CDN
- * URL, then download the binary. The binary is uploaded to the private bucket
- * and never written to Render's local filesystem or PostgreSQL BYTEA.
- */
-export async function processMediaRecord(prisma, mediaRecord, {
-  metaToken = '',
-  storage = getMediaStorageClient(),
   bucket = getMediaBucket(),
   fetchImpl = fetch
 } = {}) {
@@ -374,7 +363,6 @@ export async function processMediaRecord(prisma, mediaRecord, {
     } catch {}
   }
 
-  const token = String(metaToken || '').trim();
   const claimed = await claimMediaRecordForProcessing(prisma, mediaRecord.id);
   if (!claimed) {
     return getMediaRecordById(prisma, mediaRecord.id).catch(() => null);
@@ -390,10 +378,6 @@ export async function processMediaRecord(prisma, mediaRecord, {
 
     const metaRes = await fetchImpl(`https://graph.facebook.com/v20.0/${encodeURIComponent(claimed.media_id)}`, {
       headers: downloadHeaders
-    if (!storage) throw new Error('Supabase Storage is not configured');
-
-    const metaRes = await fetchImpl(`https://graph.facebook.com/v20.0/${encodeURIComponent(claimed.media_id)}`, {
-      headers: { Authorization: `Bearer ${token}` }
     });
     if (!metaRes.ok) throw new Error(`Meta media metadata request failed (${metaRes.status})`);
     const meta = await metaRes.json().catch(() => ({}));
@@ -424,9 +408,6 @@ export async function processMediaRecord(prisma, mediaRecord, {
       });
     }
 
-    const binRes = await fetchImpl(meta.url, {
-      headers: { Authorization: `Bearer ${token}` }
-    });
     if (!binRes.ok) throw new Error(`Meta media download failed (${binRes.status})`);
     const declaredSize = Number(binRes.headers?.get?.('content-length') || 0);
     if (declaredSize > MAX_MEDIA_BYTES) throw new Error('Media exceeds the maximum allowed size');
@@ -456,12 +437,6 @@ export async function processMediaRecord(prisma, mediaRecord, {
       // goes to the legacy media_files table so the image still previews.
       await saveMediaToDatabase(prisma, storageKey, mimeType, buffer);
     }
-    const { error } = await storage.storage.from(bucket).upload(storageKey, buffer, {
-      contentType: mimeType,
-      upsert: true,
-      cacheControl: '3600'
-    });
-    if (error) throw new Error(`Supabase Storage upload failed: ${error.message}`);
 
     return await markMediaReady(prisma, claimed.id, {
       sizeBytes: Number(meta.file_size) || buffer.length,
@@ -509,17 +484,6 @@ export async function downloadMediaObject(mediaRecord, {
   return {
     buffer,
     mimeType: mediaRecord.mime_type || row.mime_type || 'application/octet-stream'
-  bucket = mediaRecord?.storage_bucket || getMediaBucket()
-} = {}) {
-  if (!mediaRecord || mediaRecord.status !== 'ready' || !mediaRecord.storage_key) return null;
-  if (!storage) return null;
-  const { data, error } = await storage.storage.from(bucket).download(mediaRecord.storage_key);
-  if (error || !data) return null;
-  const buffer = Buffer.from(await data.arrayBuffer());
-  if (!buffer.length) return null;
-  return {
-    buffer,
-    mimeType: mediaRecord.mime_type || data.type || 'application/octet-stream'
   };
 }
 
@@ -560,7 +524,6 @@ export function startInboundMediaRetryWorker({
     try {
       const resolvedToken = typeof getMetaToken === 'function' ? await getMetaToken() : getMetaToken;
       const processed = await retryDueMedia({ metaToken: resolvedToken });
-      const processed = await retryDueMedia({ metaToken: getMetaToken() });
       if (processed.length > 0) {
         logger.log(`[Inbound media] Recovered ${processed.length} media record(s).`);
       }

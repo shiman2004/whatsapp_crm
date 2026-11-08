@@ -135,15 +135,6 @@ function makeStorage({ failFirstUpload = false, alwaysFailUpload = false, upload
             if ((failFirstUpload && attempts === 1) || alwaysFailUpload) {
               return { error: { message: uploadError } };
             }
-function makeStorage() {
-  const uploads = [];
-  return {
-    uploads,
-    storage: {
-      from(bucket) {
-        return {
-          async upload(key, buffer, options) {
-            uploads.push({ bucket, key, buffer, options });
             return { error: null };
           },
           async download(key) {

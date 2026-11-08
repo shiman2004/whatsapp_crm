@@ -24,7 +24,8 @@ import {
   getMediaRecordById,
   listMediaRecordsForMessages,
   downloadMediaObject,
-  startInboundMediaRetryWorker
+  startInboundMediaRetryWorker,
+  extensionForMedia
 } from './whatsappMedia.js';
 import { convertAudioToWhatsAppOggOpus } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
@@ -1421,7 +1422,12 @@ const server = http.createServer(async (req, res) => {
       return;
     }
 
-    const safeDownloadName = String(record.file_name || 'media').replace(/["\\\r\n]/g, '');
+    let downloadFileName = record.file_name;
+    if (!downloadFileName || !downloadFileName.includes('.')) {
+      const ext = extensionForMedia(mediaObject.mimeType || record.mime_type, record.file_name) || (record.media_type === 'image' ? 'jpg' : record.media_type === 'audio' ? 'ogg' : 'bin');
+      downloadFileName = `${record.media_type || 'media'}_${record.media_id || record.id}.${ext}`;
+    }
+    const safeDownloadName = String(downloadFileName).replace(/["\\\r\n]/g, '');
     const isAttachment = parsedUrl.query.download === '1' || parsedUrl.query.download === 'true';
     res.writeHead(200, {
       'Content-Type': mediaObject.mimeType || 'application/octet-stream',

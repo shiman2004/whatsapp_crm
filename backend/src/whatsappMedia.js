@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import { getPrisma } from './db.js';
 import { JWT_SECRET } from './runtimeConfig.js';
@@ -454,14 +455,27 @@ export async function processMediaRecord(prisma, mediaRecord, {
 }
 
 export async function downloadMediaObject(mediaRecord, {
-  storage = getMediaStorageClient(),
+  storage = null,
   bucket = mediaRecord?.storage_bucket || getMediaBucket(),
   prisma = getPrisma()
 } = {}) {
-  if (!mediaRecord || mediaRecord.status !== 'ready' || !mediaRecord.storage_key) return null;
+  if (!mediaRecord || !mediaRecord.storage_key) return null;
 
-  if (storage) {
-    const { data, error } = await storage.storage.from(bucket).download(mediaRecord.storage_key);
+  // Tier 1: Supabase Storage Bucket
+  let activeStorage = storage || getMediaStorageClient();
+  if (!activeStorage && prisma?.$queryRawUnsafe) {
+    try {
+      const urlRow = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = 'SUPABASE_URL' LIMIT 1;`);
+      const keyRow = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = 'SUPABASE_SERVICE_ROLE_KEY' LIMIT 1;`);
+      if (urlRow?.[0]?.value && keyRow?.[0]?.value) {
+        activeStorage = createClient(urlRow[0].value.trim(), keyRow[0].value.trim(), { auth: { persistSession: false } });
+        storageClient = activeStorage;
+      }
+    } catch {}
+  }
+
+  if (activeStorage) {
+    const { data, error } = await activeStorage.storage.from(bucket).download(mediaRecord.storage_key).catch(e => ({ error: e }));
     if (!error && data) {
       const buffer = Buffer.from(await data.arrayBuffer());
       if (buffer.length) {
@@ -473,20 +487,85 @@ export async function downloadMediaObject(mediaRecord, {
     }
   }
 
-  // Fallback for binaries saved to public.media_files when the bucket was unavailable.
-  if (!prisma) return null;
-  const rows = await prisma.$queryRawUnsafe(
-    'SELECT mime_type, data FROM public.media_files WHERE file_name = $1 LIMIT 1;',
-    path.basename(mediaRecord.storage_key)
-  ).catch(() => null);
-  const row = rows?.[0];
-  if (!row?.data) return null;
-  const buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
-  if (!buffer.length) return null;
-  return {
-    buffer,
-    mimeType: mediaRecord.mime_type || row.mime_type || 'application/octet-stream'
-  };
+  // Tier 2: PostgreSQL public.media_files table
+  if (prisma?.$queryRawUnsafe) {
+    const rows = await prisma.$queryRawUnsafe(
+      'SELECT mime_type, data FROM public.media_files WHERE file_name = $1 LIMIT 1;',
+      path.basename(mediaRecord.storage_key)
+    ).catch(() => null);
+    const row = rows?.[0];
+    if (row?.data) {
+      const buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+      if (buffer.length) {
+        return {
+          buffer,
+          mimeType: mediaRecord.mime_type || row.mime_type || 'application/octet-stream'
+        };
+      }
+    }
+  }
+
+  // Tier 3: Local Server Filesystem (backend/public/uploads)
+  try {
+    const localUploadsDir = path.resolve('public', 'uploads');
+    const localFile = path.join(localUploadsDir, path.basename(mediaRecord.storage_key));
+    if (fs.existsSync(localFile)) {
+      const buffer = fs.readFileSync(localFile);
+      if (buffer.length) {
+        return {
+          buffer,
+          mimeType: mediaRecord.mime_type || 'application/octet-stream'
+        };
+      }
+    }
+  } catch {}
+
+  // Tier 4: On-demand live re-fetch from Meta CDN using Media ID (self-healing failover)
+  if (mediaRecord.media_id) {
+    try {
+      let token = process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '';
+      if (!token && prisma?.$queryRawUnsafe) {
+        const row = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = 'META_ACCESS_TOKEN' LIMIT 1;`).catch(() => null);
+        if (row?.[0]?.value) token = String(row[0].value).trim();
+      }
+      if (token) {
+        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(mediaRecord.media_id)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        if (metaRes.ok) {
+          const meta = await metaRes.json().catch(() => ({}));
+          if (meta?.url) {
+            const binRes = await fetch(meta.url, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              }
+            });
+            if (binRes.ok) {
+              const buffer = Buffer.from(await binRes.arrayBuffer());
+              if (buffer.length) {
+                // Self-healing: persist to public.media_files so subsequent requests are instant
+                if (prisma?.$executeRawUnsafe) {
+                  await saveMediaToDatabase(prisma, mediaRecord.storage_key, meta.mime_type || mediaRecord.mime_type, buffer).catch(() => null);
+                }
+                return {
+                  buffer,
+                  mimeType: meta.mime_type || mediaRecord.mime_type || 'application/octet-stream'
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (metaErr) {
+      console.warn('[downloadMediaObject] Meta on-demand recovery failed:', metaErr.message);
+    }
+  }
+
+  return null;
 }
 
 export async function retryDueMedia({

@@ -94,17 +94,55 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   const [retryingMedia, setRetryingMedia] = useState(false);
   const [mediaPatched, setMediaPatched] = useState<{ url: string; sizeBytes?: number | null } | null>(null);
 
-  const handleDownloadMedia = (url: string, fileName?: string) => {
+  const handleDownloadMedia = async (url: string, fileName?: string) => {
     if (!url) return;
-    const downloadUrl = url.includes('?') ? `${url}&download=1` : `${url}?download=1`;
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = fileName || `whatsapp-media-${Date.now()}`;
-    link.target = '_blank';
-    link.rel = 'noopener noreferrer';
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    try {
+      const token = localStorage.getItem('token') || '';
+      let fetchUrl = url;
+      if (fetchUrl.startsWith('/') && !fetchUrl.startsWith('//')) {
+        fetchUrl = `${API_BASE_URL}${fetchUrl}`;
+      }
+      if (fetchUrl.includes('/api/media/') && !fetchUrl.includes('sig=') && !fetchUrl.includes('token=') && token) {
+        fetchUrl = `${fetchUrl}${fetchUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      }
+      fetchUrl = `${fetchUrl}${fetchUrl.includes('?') ? '&' : '?'}download=1`;
+
+      const res = await fetch(fetchUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || `whatsapp_media_${Date.now()}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      console.warn('[Download fallback direct link]', err);
+      const token = localStorage.getItem('token') || '';
+      let directUrl = url;
+      if (directUrl.startsWith('/') && !directUrl.startsWith('//')) {
+        directUrl = `${API_BASE_URL}${directUrl}`;
+      }
+      if (directUrl.includes('/api/media/') && !directUrl.includes('sig=') && !directUrl.includes('token=') && token) {
+        directUrl = `${directUrl}${directUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      }
+      const link = document.createElement('a');
+      link.href = `${directUrl}${directUrl.includes('?') ? '&' : '?'}download=1`;
+      link.download = fileName || `whatsapp_media_${Date.now()}`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   const handleRetryMedia = async (mediaId?: string) => {

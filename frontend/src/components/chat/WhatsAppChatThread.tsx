@@ -312,22 +312,53 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
       return;
     }
 
-    mediaList.forEach((m, idx) => {
-      setTimeout(() => {
-        const mediaUrl = m.media?.id
-          ? `${API_BASE_URL}/api/media/${m.media.id}?download=1`
-          : (m.media?.url ? (m.media.url.includes('?') ? `${m.media.url}&download=1` : `${m.media.url}?download=1`) : null);
+    const token = localStorage.getItem('token') || '';
 
-        if (mediaUrl) {
-          const a = document.createElement('a');
-          a.href = mediaUrl;
-          a.download = m.media?.fileName || `whatsapp_${m.media?.type || 'media'}_${m.id || idx}`;
-          a.target = '_blank';
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
+    mediaList.forEach((m, idx) => {
+      setTimeout(async () => {
+        let mediaUrl = m.media?.id
+          ? `${API_BASE_URL}/api/media/${m.media.id}`
+          : (m.media?.url || '');
+
+        if (!mediaUrl) return;
+
+        if (mediaUrl.startsWith('/') && !mediaUrl.startsWith('//')) {
+          mediaUrl = `${API_BASE_URL}${mediaUrl}`;
         }
-      }, idx * 350);
+        if (mediaUrl.includes('/api/media/') && !mediaUrl.includes('sig=') && !mediaUrl.includes('token=') && token) {
+          mediaUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+        }
+        const downloadUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}download=1`;
+        const fileName = m.media?.fileName || `whatsapp_${m.media?.type || 'media'}_${m.id || idx}`;
+
+        try {
+          const res = await fetch(downloadUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            return;
+          }
+        } catch (err) {
+          // fallback
+        }
+
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 400);
     });
   };
 

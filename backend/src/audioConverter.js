@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 
 let cachedFfmpegPath = null;
@@ -11,18 +11,31 @@ let cachedFfmpegPath = null;
 export function getFfmpegPath() {
   if (cachedFfmpegPath) return cachedFfmpegPath;
 
+  // 1. Check system PATH for ffmpeg
   try {
-    execSync('ffmpeg -version', { stdio: 'pipe' });
+    execFileSync('ffmpeg', ['-version'], { stdio: 'pipe' });
     cachedFfmpegPath = 'ffmpeg';
     return cachedFfmpegPath;
   } catch (e) {
-    if (ffmpegInstaller && ffmpegInstaller.path && fs.existsSync(ffmpegInstaller.path)) {
-      cachedFfmpegPath = ffmpegInstaller.path;
+    // System ffmpeg not available on PATH
+  }
+
+  // 2. Check bundled @ffmpeg-installer binary
+  if (ffmpegInstaller && ffmpegInstaller.path && fs.existsSync(ffmpegInstaller.path)) {
+    cachedFfmpegPath = ffmpegInstaller.path;
+    try {
+      // Ensure executable permissions on Linux / macOS
+      fs.chmodSync(cachedFfmpegPath, 0o755);
+    } catch {}
+    try {
+      execFileSync(cachedFfmpegPath, ['-version'], { stdio: 'pipe' });
       return cachedFfmpegPath;
+    } catch (e) {
+      console.warn('[AudioConverter] Bundled ffmpeg failed to execute:', e.message);
     }
   }
 
-  return ffmpegInstaller?.path || 'ffmpeg';
+  return cachedFfmpegPath || ffmpegInstaller?.path || 'ffmpeg';
 }
 
 /**
@@ -36,6 +49,33 @@ export function isOggOpus(buffer) {
 }
 
 /**
+ * Quick probe: Check if a buffer is MP3 audio (ID3 header or MPEG sync word)
+ */
+export function isMp3(buffer) {
+  if (!buffer || buffer.length < 4) return false;
+  if (buffer.slice(0, 3).toString() === 'ID3') return true;
+  return buffer[0] === 0xFF && (buffer[1] & 0xE0) === 0xE0;
+}
+
+/**
+ * Quick probe: Check if a buffer is MP4 / M4A / AAC audio
+ */
+export function isMp4OrAac(buffer) {
+  if (!buffer || buffer.length < 12) return false;
+  const boxType = buffer.slice(4, 8).toString('latin1');
+  if (boxType === 'ftyp') return true;
+  return buffer[0] === 0xFF && (buffer[1] & 0xF6) === 0xF0;
+}
+
+/**
+ * Quick probe: Check if a buffer is WebM (EBML header)
+ */
+export function isWebm(buffer) {
+  if (!buffer || buffer.length < 4) return false;
+  return buffer[0] === 0x1A && buffer[1] === 0x45 && buffer[2] === 0xDF && buffer[3] === 0xA3;
+}
+
+/**
  * Convert any audio buffer (WebM, WAV, MP4, AAC, MP3) into WhatsApp-compliant OGG Opus
  * WhatsApp Voice Notes (PTT) strictly require:
  * - Container: OGG
@@ -45,12 +85,8 @@ export function isOggOpus(buffer) {
  * - MIME: audio/ogg; codecs=opus
  */
 export function convertAudioToWhatsAppOggOpus(inputBuffer, inputExt = 'webm') {
-  if (!inputBuffer || inputBuffer.length === 0) return inputBuffer;
-
-  // Skip conversion if already valid OGG Opus
-  if (isOggOpus(inputBuffer)) {
-    console.log('🎵 [AudioConverter] Audio is already verified Ogg Opus. Skipping re-encode.');
-    return inputBuffer;
+  if (!inputBuffer || inputBuffer.length === 0) {
+    return { success: false, buffer: inputBuffer, mimeType: 'audio/webm', isOggOpus: false };
   }
 
   const ffmpegBin = getFfmpegPath();
@@ -67,19 +103,62 @@ export function convertAudioToWhatsAppOggOpus(inputBuffer, inputExt = 'webm') {
     fs.writeFileSync(tmpIn, inputBuffer);
     console.log(`🎙️ [AudioConverter] Transcoding audio (${cleanExt}, ${(inputBuffer.length / 1024).toFixed(1)} KB) to WhatsApp OGG Opus via ${path.basename(ffmpegBin)}...`);
     
-    execSync(`"${ffmpegBin}" -y -i "${tmpIn}" -c:a libopus -b:a 32k -ar 48000 -ac 1 "${tmpOut}"`, { stdio: 'pipe' });
+    // Strict WhatsApp Cloud API audio specification:
+    // 1. -vn -sn -dn: Strip any video, subtitle, or data streams from container
+    // 2. -map 0:a:0: Explicitly map only the primary audio stream
+    // 3. -map_metadata -1: Wipe all corrupt/incompatible container metadata & ID3 tags
+    // 4. -af asetpts=N/SR/TB: Reset PTS timestamps to start strictly at 0.000000 (prevents negative timestamp decoder crashes)
+    // 5. -c:a libopus: Opus encoder
+    // 6. -b:a 64k: 64 kbps standard voice note bitrate
+    // 7. -vbr on: Variable bitrate for speech clarity
+    // 8. -compression_level 10: Maximum compression efficiency
+    // 9. -application voip: Speech/VOIP profile optimized for voice messages
+    // 10. -ar 48000: 48 kHz sampling rate strictly required by Opus
+    // 11. -ac 1: Mono channel strictly required by WhatsApp mobile decoders
+    // 12. -f ogg: Enforce standard OGG container
+    execFileSync(ffmpegBin, [
+      '-y',
+      '-i', tmpIn,
+      '-vn',
+      '-sn',
+      '-dn',
+      '-map', '0:a:0',
+      '-map_metadata', '-1',
+      '-af', 'asetpts=N/SR/TB',
+      '-c:a', 'libopus',
+      '-b:a', '64k',
+      '-vbr', 'on',
+      '-compression_level', '10',
+      '-application', 'voip',
+      '-ar', '48000',
+      '-ac', '1',
+      '-f', 'ogg',
+      tmpOut
+    ], { stdio: 'pipe' });
 
     if (fs.existsSync(tmpOut)) {
       const converted = fs.readFileSync(tmpOut);
-      console.log(`✅ [AudioConverter] Successfully generated WhatsApp OGG Opus (${(converted.length / 1024).toFixed(1)} KB)`);
-      return converted;
+      if (isOggOpus(converted)) {
+        console.log(`✅ [AudioConverter] Successfully generated WhatsApp OGG Opus (${(converted.length / 1024).toFixed(1)} KB, 48kHz mono voip, PTS normalized, clean metadata)`);
+        return { success: true, buffer: converted, mimeType: 'audio/ogg; codecs=opus', isOggOpus: true };
+      }
     }
   } catch (err) {
-    console.warn(`⚠️ [AudioConverter Warning] FFmpeg transcoding failed: ${err.message}. Preserving original buffer.`);
+    console.warn(`⚠️ [AudioConverter Warning] FFmpeg transcoding failed: ${err.message}.`);
   } finally {
     try { if (fs.existsSync(tmpIn)) fs.unlinkSync(tmpIn); } catch (e) {}
     try { if (fs.existsSync(tmpOut)) fs.unlinkSync(tmpOut); } catch (e) {}
   }
 
-  return inputBuffer;
+  // Fallback if FFmpeg failed: check if already Ogg Opus
+  if (isOggOpus(inputBuffer)) {
+    return { success: true, buffer: inputBuffer, mimeType: 'audio/ogg; codecs=opus', isOggOpus: true };
+  }
+
+  // If conversion failed, determine fallback mime
+  let fallbackMime = 'audio/webm';
+  if (isMp3(inputBuffer)) fallbackMime = 'audio/mpeg';
+  else if (isMp4OrAac(inputBuffer)) fallbackMime = 'audio/mp4';
+
+  return { success: false, buffer: inputBuffer, mimeType: fallbackMime, isOggOpus: false };
 }

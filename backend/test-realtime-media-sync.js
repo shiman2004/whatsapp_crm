@@ -350,6 +350,66 @@ await check('4.3 Outbound forward fails safely with 422 if media bytes cannot be
   assert(httpBody.error.includes('could not be retrieved'), 'Must return descriptive error');
 });
 
+console.log('\n📦 SECTION 5: WhatsApp Audio Format & Ogg Opus Transcoding');
+
+await check('5.1 isOggOpus strictly validates OGG container and OpusHead signature', async () => {
+  const { isOggOpus, isMp3, isMp4OrAac, isWebm } = await import('./src/audioConverter.js');
+
+  // 1. Invalid / WebM buffer
+  const fakeWebm = Buffer.from([0x1A, 0x45, 0xDF, 0xA3, 0x9F, 0x42, 0x86, 0x81]);
+  assert.strictEqual(isOggOpus(fakeWebm), false, 'WebM must NOT be identified as Ogg Opus');
+  assert.strictEqual(isWebm(fakeWebm), true, 'Must identify WebM');
+
+  // 2. MP3 buffer with ID3 header
+  const fakeMp3 = Buffer.from([0x49, 0x44, 0x33, 0x03, 0x00, 0x00]);
+  assert.strictEqual(isOggOpus(fakeMp3), false, 'MP3 must NOT be identified as Ogg Opus');
+  assert.strictEqual(isMp3(fakeMp3), true, 'Must identify MP3');
+
+  // 3. Valid Ogg Opus structure
+  const fakeOggOpus = Buffer.alloc(100);
+  fakeOggOpus.write('OggS', 0);
+  fakeOggOpus.write('OpusHead', 28);
+  assert.strictEqual(isOggOpus(fakeOggOpus), true, 'Must identify valid Ogg Opus');
+});
+
+await check('5.2 Audio transcoding produces verified OGG Opus and prevents corrupted WhatsApp playback', async () => {
+  const { convertAudioToWhatsAppOggOpus, isOggOpus } = await import('./src/audioConverter.js');
+  const { execFileSync } = await import('node:child_process');
+  const { getFfmpegPath } = await import('./src/audioConverter.js');
+  const fs = await import('node:fs');
+  const path = await import('node:path');
+
+  const ffmpegBin = getFfmpegPath();
+  const tmpWav = path.resolve('public/uploads/test_audio_sample.wav');
+
+  try {
+    fs.mkdirSync(path.resolve('public/uploads'), { recursive: true });
+    // Generate 1-second sample WAV
+    execFileSync(ffmpegBin, ['-y', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=1', '-ar', '48000', '-ac', '1', tmpWav], { stdio: 'pipe' });
+    const wavBytes = fs.readFileSync(tmpWav);
+
+    const result = convertAudioToWhatsAppOggOpus(wavBytes, 'wav');
+    assert(result.isOggOpus, 'Transcoded audio must be verified Ogg Opus');
+    assert.strictEqual(result.mimeType, 'audio/ogg; codecs=opus');
+    assert(isOggOpus(result.buffer), 'Buffer must pass Ogg Opus verification');
+
+    // 5.3 Verify PTS presentation timestamps start strictly at 0.000000 (no negative start time)
+    const tmpCheck = path.resolve('public/uploads/test_check_pts.ogg');
+    fs.writeFileSync(tmpCheck, result.buffer);
+    try {
+      execFileSync(ffmpegBin, ['-i', tmpCheck], { stdio: 'pipe' });
+    } catch (probeErr) {
+      const match = probeErr.stderr.toString().match(/Duration: [^,]+, start: ([^,]+)/);
+      assert(match, 'Must report stream duration and start time');
+      assert.strictEqual(match[1], '0.000000', `Start time must be strictly 0.000000, got ${match[1]}`);
+    } finally {
+      try { if (fs.existsSync(tmpCheck)) fs.unlinkSync(tmpCheck); } catch {}
+    }
+  } finally {
+    try { if (fs.existsSync(tmpWav)) fs.unlinkSync(tmpWav); } catch {}
+  }
+});
+
 console.log(`\n============================================================`);
 console.log(`Real-time media sync checks: ${passed} passed, ${failed} failed`);
 

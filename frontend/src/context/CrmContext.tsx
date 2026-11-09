@@ -1007,17 +1007,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(dbCoords) && dbCoords.length > 0) {
           const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const userMap = new Map<string, User>();
+          INITIAL_USERS.forEach(u => {
+            if (!deletedUserIds.includes(u.id)) userMap.set(u.id, u);
+          });
+          const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
+          storedLocalUsers.forEach(u => {
+            if (!deletedUserIds.includes(u.id) && u.active !== false) userMap.set(u.id, u);
+          });
           dbCoords.forEach(u => {
             if (deletedUserIds.includes(u.id) || u.active === false) return;
+            const existingLocal = userMap.get(u.id);
             userMap.set(u.id, {
+              ...existingLocal,
               ...u,
-              branch: u.branch || 'Colombo',
-              company: u.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
+              branch: u.branch || existingLocal?.branch || 'Colombo',
+              company: u.company || existingLocal?.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
               roleTitle: getStaffRoleTitle(u),
-              password: u.password,
-              pin: u.pin,
+              password: u.password || existingLocal?.password,
+              pin: u.pin || existingLocal?.pin,
               active: u.active ?? true,
-              activeLeadsCount: u.activeLeadsCount || 0
+              activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
             });
           });
           const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));

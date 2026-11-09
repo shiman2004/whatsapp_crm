@@ -624,8 +624,30 @@ const STATEMENTS = [
      comments TEXT,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );`,
-  `CREATE INDEX IF NOT EXISTS idx_exam_academic_audit_entity ON public.exam_academic_audit(entity_type, entity_id);`
-,
+  `CREATE INDEX IF NOT EXISTS idx_exam_academic_audit_entity ON public.exam_academic_audit(entity_type, entity_id);`,
+
+  // --- exam operations records & audit -----------------------------------------
+  `CREATE TABLE IF NOT EXISTS public.exam_ops_records (
+     kind text NOT NULL,
+     id text NOT NULL,
+     data jsonb NOT NULL,
+     revision integer NOT NULL DEFAULT 1,
+     created_at timestamptz NOT NULL DEFAULT now(),
+     updated_at timestamptz NOT NULL DEFAULT now(),
+     PRIMARY KEY (kind, id),
+     CHECK (jsonb_typeof(data) = 'object')
+   );`,
+  `CREATE INDEX IF NOT EXISTS exam_ops_owner_idx ON public.exam_ops_records(kind, (data->>'ownerId'));`,
+  `CREATE INDEX IF NOT EXISTS exam_ops_email_idx ON public.exam_ops_records(kind, (data->>'email'));`,
+  `CREATE INDEX IF NOT EXISTS exam_ops_status_idx ON public.exam_ops_records(kind, (data->>'status'));`,
+  `CREATE TABLE IF NOT EXISTS public.exam_ops_audit (
+     id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+     actor_id text NOT NULL,
+     action text NOT NULL,
+     target text NOT NULL,
+     details jsonb NOT NULL DEFAULT '{}',
+     created_at timestamptz NOT NULL DEFAULT now()
+   );`,
   `CREATE OR REPLACE FUNCTION public.next_marketing_contact_serial() RETURNS VARCHAR LANGUAGE plpgsql AS $mkt$
    DECLARE allocated_value BIGINT;
    BEGIN

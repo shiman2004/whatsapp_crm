@@ -52,6 +52,17 @@ export const INITIAL_USERS: User[] = [
     activeLeadsCount: 0,
   },
   {
+    id: 'user-officer-1',
+    fullName: 'Sarah Fernando',
+    email: 'sarah@royalwellness.lk',
+    branch: 'Colombo',
+    role: 'leads_officer',
+    roleTitle: 'Leads Officer',
+    active: true,
+    createdAt: '2026-01-02T08:00:00Z',
+    activeLeadsCount: 0,
+  },
+  {
     id: 'ba780507-8847-4de4-979d-57bef49d7b4a',
     fullName: 'Baasith',
     email: 'basith@royalwellness.lk',

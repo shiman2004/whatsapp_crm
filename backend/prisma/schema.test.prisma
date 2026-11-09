@@ -1039,3 +1039,16 @@ model SecurityPermissionProfile {
   @@index([subjectType, updatedAt])
   @@map("security_permission_profiles")
 }
+
+// 26. Enterprise System Settings with Optimistic Locking
+// 26. Enterprise System Settings with Optimistic Locking
+model SystemSetting {
+  id          String   @id @default(uuid()) @db.VarChar(36)
+  section     String   @db.VarChar(100)
+  scope       String   @db.VarChar(50)
+  scope_id    String   @db.VarChar(100)
+  payload     String   @db.Text
+  version     Int      @default(1)
+
+  @@map("enterprise_system_settings")
+}

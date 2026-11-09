@@ -65,7 +65,12 @@ export class ExamStore {
       return await this.prisma.$transaction(tx => work(new ExamTransaction(tx)), { timeout: 15000 });
     } catch (error) {
       if (error instanceof ExamError) throw error;
-      console.error('[ExamStore] Transaction failure root cause:', error);
+      const isMissingTable = (error?.code === 'P2010' || String(error?.message || '').includes('42P01')) && String(error?.message || '').includes('exam_ops');
+      if (isMissingTable) {
+        console.warn('⚠️ [ExamStore] Table public.exam_ops_records does not exist or migration is pending.');
+      } else {
+        console.error('[ExamStore] Transaction failure root cause:', error);
+      }
       if (process.env.EXAM_ALLOW_MEMORY_FIXTURES === 'true' || process.env.NODE_ENV === 'test') {
         return getSharedMemoryExamStore().transaction(work);
       }

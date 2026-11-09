@@ -185,7 +185,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
             dataUrl: result.dataUrl,
             fileName: `voice_note_${Date.now()}.${ext}`,
             mimeType: result.mimeType,
-            caption: ''
+            caption: '',
+            isVoice: true
           }
         );
       }

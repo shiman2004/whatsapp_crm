@@ -156,10 +156,11 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
         u.email.toLowerCase().includes(searchQuery.toLowerCase());
       
       const matchesRole = roleFilter === 'ALL' || u.role === roleFilter;
+      const isEnterpriseRole = u.role === 'super_admin' || u.role === 'leads_officer' || u.company === 'ALL';
       const matchesCompany = 
         companyFilter === 'ALL' 
-          ? (selectedCompanyId === 'ALL' || u.company === selectedCompanyId || (!u.company && selectedCompanyId === 'RWC'))
-          : (u.company === companyFilter || (!u.company && companyFilter === 'RWC'));
+          ? true
+          : (u.company === companyFilter || isEnterpriseRole);
       
       const matchesStatus = 
         statusFilter === 'ALL' 
@@ -170,7 +171,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
 
       return matchesSearch && matchesRole && matchesCompany && matchesStatus;
     });
-  }, [users, searchQuery, roleFilter, companyFilter, statusFilter, selectedCompanyId]);
+  }, [users, searchQuery, roleFilter, companyFilter, statusFilter]);
 
   // Metrics
   const activeStaffCount = users.filter(u => u.active !== false).length;
@@ -452,7 +453,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
                             {/* Company */}
                             <td className="py-3 px-4">
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[#111B21] dark:text-[#E9EDEF]">
-                                {user.company || 'RWC'}
+                                {user.role === 'leads_officer' ? 'ALL (Gateway)' : (user.company || (user.role === 'super_admin' ? 'ALL' : 'RWC'))}
                               </span>
                             </td>
 

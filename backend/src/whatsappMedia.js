@@ -1,10 +1,11 @@
 import crypto from 'crypto';
 import path from 'path';
+import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import { getPrisma } from './db.js';
 import { JWT_SECRET } from './runtimeConfig.js';
 
-export const MEDIA_API_TTL_MS = 15 * 60 * 1000;
+export const MEDIA_API_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
 export const DEFAULT_MEDIA_BUCKET = 'whatsapp-media';
 const MAX_MEDIA_BYTES = 100 * 1024 * 1024;
 const PROCESSING_LOCK_MS = 15 * 60 * 1000;
@@ -130,6 +131,8 @@ export function createSignedMediaApiUrl(mediaRecordId, ttlMs = MEDIA_API_TTL_MS)
   const signature = signMediaApiToken(mediaRecordId, expires);
   return `/api/media/${encodeURIComponent(mediaRecordId)}?exp=${expires}&sig=${signature}`;
 }
+
+export const signMediaApiUrl = createSignedMediaApiUrl;
 
 export function verifySignedMediaApiUrl(mediaRecordId, expires, signature) {
   const expiry = Number(expires);
@@ -312,15 +315,34 @@ async function uploadMediaObject(storage, bucket, storageKey, buffer, contentTyp
 
 /**
  * Binary fallback when the private bucket is not configured or rejects the
- * upload. The message still renders, at the cost of PostgreSQL egress.
+ * upload. Persists to both local disk cache (public/uploads) and PostgreSQL media_files table.
  */
 async function saveMediaToDatabase(prisma, storageKey, mimeType, buffer) {
-  await prisma.$executeRawUnsafe(`
-    INSERT INTO public.media_files (id, file_name, mime_type, data, size, created_at)
-    VALUES ($1, $2, $3, $4, $5, NOW())
-    ON CONFLICT (file_name)
-    DO UPDATE SET data = EXCLUDED.data, size = EXCLUDED.size, mime_type = EXCLUDED.mime_type;
-  `, crypto.randomUUID(), path.basename(storageKey), mimeType, buffer, buffer.length);
+  const fileName = path.basename(storageKey);
+  // Persist to local disk cache (public/uploads)
+  try {
+    const uploadDir = path.resolve('public', 'uploads');
+    if (!fs.existsSync(uploadDir)) {
+      fs.mkdirSync(uploadDir, { recursive: true });
+    }
+    fs.writeFileSync(path.join(uploadDir, fileName), buffer);
+  } catch (diskErr) {
+    // Disk write error non-fatal, fallback to PostgreSQL
+  }
+
+  // Persist to PostgreSQL public.media_files
+  if (prisma?.$executeRawUnsafe) {
+    try {
+      await prisma.$executeRawUnsafe(`
+        INSERT INTO public.media_files (id, file_name, mime_type, data, size, created_at)
+        VALUES ($1, $2, $3, $4, $5, NOW())
+        ON CONFLICT (file_name)
+        DO UPDATE SET data = EXCLUDED.data, size = EXCLUDED.size, mime_type = EXCLUDED.mime_type;
+      `, crypto.randomUUID(), fileName, mimeType, buffer, buffer.length);
+    } catch (dbErr) {
+      console.warn('⚠️ [whatsappMedia] Failed to persist media binary to media_files table:', dbErr.message);
+    }
+  }
 }
 
 /**
@@ -383,32 +405,52 @@ export async function processMediaRecord(prisma, mediaRecord, {
     const meta = await metaRes.json().catch(() => ({}));
     if (!meta?.url) throw new Error('Meta media metadata did not include a download URL');
 
-    // Download binary from Meta CDN. Some Meta CDN hosts require User-Agent and Authorization.
-    let downloadUrl = meta.url;
+    // Download binary from Meta CDN.
+    // lookaside.fbsbx.com requires Authorization: Bearer <token>.
+    // It then 302-redirects to fbcdn.net edge hosts which authenticate via pre-signed URL query parameters.
     let binRes = null;
 
-    // Follow manual redirect if provided so headers are never stripped across domains
-    for (let r = 0; r < 3; r++) {
-      binRes = await fetchImpl(downloadUrl, {
+    // Strategy 1: Natural redirect follow (WHATWG fetch automatically strips Authorization on cross-origin redirects)
+    try {
+      binRes = await fetchImpl(meta.url, {
         headers: downloadHeaders,
-        redirect: 'manual'
-      }).catch(() => null);
-
-      if (binRes && binRes.status >= 300 && binRes.status < 400 && binRes.headers?.get?.('location')) {
-        downloadUrl = binRes.headers.get('location');
-        continue;
-      }
-      break;
-    }
-
-    // Direct fallback if manual redirect was not handled or failed
-    if (!binRes || !binRes.ok) {
-      binRes = await fetchImpl(downloadUrl, {
-        headers: downloadHeaders
+        redirect: 'follow'
       });
+    } catch (e) {
+      binRes = null;
     }
 
-    if (!binRes.ok) throw new Error(`Meta media download failed (${binRes.status})`);
+    // Strategy 2: If natural follow was not successful, handle redirect explicitly
+    if (!binRes || !binRes.ok) {
+      try {
+        const redirectCheck = await fetchImpl(meta.url, {
+          headers: downloadHeaders,
+          redirect: 'manual'
+        });
+        if (redirectCheck && redirectCheck.status >= 300 && redirectCheck.status < 400) {
+          const location = redirectCheck.headers?.get?.('location');
+          if (location) {
+            // Fetch CDN location WITHOUT Authorization header so fbcdn.net edge cache does not reject it
+            binRes = await fetchImpl(location, {
+              headers: { 'User-Agent': downloadHeaders['User-Agent'] }
+            });
+            // If CDN required Authorization, attempt once with headers
+            if (!binRes || !binRes.ok) {
+              binRes = await fetchImpl(location, { headers: downloadHeaders });
+            }
+          }
+        }
+      } catch (manualErr) {}
+    }
+
+    // Strategy 3: Fallback direct attempt with headers
+    if (!binRes || !binRes.ok) {
+      binRes = await fetchImpl(meta.url, {
+        headers: downloadHeaders
+      }).catch(() => null);
+    }
+
+    if (!binRes || !binRes.ok) throw new Error(`Meta media download failed (${binRes?.status || 'unknown'})`);
     const declaredSize = Number(binRes.headers?.get?.('content-length') || 0);
     if (declaredSize > MAX_MEDIA_BYTES) throw new Error('Media exceeds the maximum allowed size');
 
@@ -452,14 +494,27 @@ export async function processMediaRecord(prisma, mediaRecord, {
 }
 
 export async function downloadMediaObject(mediaRecord, {
-  storage = getMediaStorageClient(),
+  storage = null,
   bucket = mediaRecord?.storage_bucket || getMediaBucket(),
   prisma = getPrisma()
 } = {}) {
-  if (!mediaRecord || mediaRecord.status !== 'ready' || !mediaRecord.storage_key) return null;
+  if (!mediaRecord || !mediaRecord.storage_key) return null;
 
-  if (storage) {
-    const { data, error } = await storage.storage.from(bucket).download(mediaRecord.storage_key);
+  // Tier 1: Supabase Storage Bucket
+  let activeStorage = storage || getMediaStorageClient();
+  if (!activeStorage && prisma?.$queryRawUnsafe) {
+    try {
+      const urlRow = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = 'SUPABASE_URL' LIMIT 1;`);
+      const keyRow = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = 'SUPABASE_SERVICE_ROLE_KEY' LIMIT 1;`);
+      if (urlRow?.[0]?.value && keyRow?.[0]?.value) {
+        activeStorage = createClient(urlRow[0].value.trim(), keyRow[0].value.trim(), { auth: { persistSession: false } });
+        storageClient = activeStorage;
+      }
+    } catch {}
+  }
+
+  if (activeStorage) {
+    const { data, error } = await activeStorage.storage.from(bucket).download(mediaRecord.storage_key).catch(e => ({ error: e }));
     if (!error && data) {
       const buffer = Buffer.from(await data.arrayBuffer());
       if (buffer.length) {
@@ -471,20 +526,85 @@ export async function downloadMediaObject(mediaRecord, {
     }
   }
 
-  // Fallback for binaries saved to public.media_files when the bucket was unavailable.
-  if (!prisma) return null;
-  const rows = await prisma.$queryRawUnsafe(
-    'SELECT mime_type, data FROM public.media_files WHERE file_name = $1 LIMIT 1;',
-    path.basename(mediaRecord.storage_key)
-  ).catch(() => null);
-  const row = rows?.[0];
-  if (!row?.data) return null;
-  const buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
-  if (!buffer.length) return null;
-  return {
-    buffer,
-    mimeType: mediaRecord.mime_type || row.mime_type || 'application/octet-stream'
-  };
+  // Tier 2: PostgreSQL public.media_files table
+  if (prisma?.$queryRawUnsafe) {
+    const rows = await prisma.$queryRawUnsafe(
+      'SELECT mime_type, data FROM public.media_files WHERE file_name = $1 LIMIT 1;',
+      path.basename(mediaRecord.storage_key)
+    ).catch(() => null);
+    const row = rows?.[0];
+    if (row?.data) {
+      const buffer = Buffer.isBuffer(row.data) ? row.data : Buffer.from(row.data);
+      if (buffer.length) {
+        return {
+          buffer,
+          mimeType: mediaRecord.mime_type || row.mime_type || 'application/octet-stream'
+        };
+      }
+    }
+  }
+
+  // Tier 3: Local Server Filesystem (backend/public/uploads)
+  try {
+    const localUploadsDir = path.resolve('public', 'uploads');
+    const localFile = path.join(localUploadsDir, path.basename(mediaRecord.storage_key));
+    if (fs.existsSync(localFile)) {
+      const buffer = fs.readFileSync(localFile);
+      if (buffer.length) {
+        return {
+          buffer,
+          mimeType: mediaRecord.mime_type || 'application/octet-stream'
+        };
+      }
+    }
+  } catch {}
+
+  // Tier 4: On-demand live re-fetch from Meta CDN using Media ID (self-healing failover)
+  if (mediaRecord.media_id) {
+    try {
+      let token = process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '';
+      if (!token && prisma?.$queryRawUnsafe) {
+        const row = await prisma.$queryRawUnsafe(`SELECT value FROM public.system_settings WHERE key = 'META_ACCESS_TOKEN' LIMIT 1;`).catch(() => null);
+        if (row?.[0]?.value) token = String(row[0].value).trim();
+      }
+      if (token) {
+        const metaRes = await fetch(`https://graph.facebook.com/v20.0/${encodeURIComponent(mediaRecord.media_id)}`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          }
+        });
+        if (metaRes.ok) {
+          const meta = await metaRes.json().catch(() => ({}));
+          if (meta?.url) {
+            const binRes = await fetch(meta.url, {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              }
+            });
+            if (binRes.ok) {
+              const buffer = Buffer.from(await binRes.arrayBuffer());
+              if (buffer.length) {
+                // Self-healing: persist to public.media_files so subsequent requests are instant
+                if (prisma?.$executeRawUnsafe) {
+                  await saveMediaToDatabase(prisma, mediaRecord.storage_key, meta.mime_type || mediaRecord.mime_type, buffer).catch(() => null);
+                }
+                return {
+                  buffer,
+                  mimeType: meta.mime_type || mediaRecord.mime_type || 'application/octet-stream'
+                };
+              }
+            }
+          }
+        }
+      }
+    } catch (metaErr) {
+      console.warn('[downloadMediaObject] Meta on-demand recovery failed:', metaErr.message);
+    }
+  }
+
+  return null;
 }
 
 export async function retryDueMedia({
@@ -516,7 +636,8 @@ export async function retryDueMedia({
 export function startInboundMediaRetryWorker({
   getMetaToken = () => process.env.META_ACCESS_TOKEN || process.env.META_TOKEN || '',
   intervalMs = 60_000,
-  logger = console
+  logger = console,
+  onMediaReady = null
 } = {}) {
   if (retryWorker) return retryWorker;
 
@@ -526,6 +647,11 @@ export function startInboundMediaRetryWorker({
       const processed = await retryDueMedia({ metaToken: resolvedToken });
       if (processed.length > 0) {
         logger.log(`[Inbound media] Recovered ${processed.length} media record(s).`);
+        if (typeof onMediaReady === 'function') {
+          for (const item of processed) {
+            try { onMediaReady(item); } catch {}
+          }
+        }
       }
     } catch (error) {
       logger.warn(`[Inbound media] Retry worker error: ${error.message}`);

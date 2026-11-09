@@ -36,6 +36,7 @@ const ALL_SUITES = [
   'test-lead-assignment.js',
   'test-media-and-memory-security.js',
   'test-inbound-media.js',
+  'test-realtime-media-sync.js',
   'test-marketing-foundation.js',
   'test-pagination.js',
   'test-message-cursor.js',
@@ -51,6 +52,8 @@ const ALL_SUITES = [
   'test-user-management.js',
   'test-exam-academic-drafts.js',
   'test-exam-upgrade.test.js',
+  'test-exam-ops-database.test.js',
+  'test-shiman-login.js',
   'test-settings-foundation.test.js',
 ];
 

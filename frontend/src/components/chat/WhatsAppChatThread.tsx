@@ -27,8 +27,11 @@ import {
   Link,
   PhoneCall,
   Flag,
-  Ban
+  Ban,
+  Download,
+  FileDown
 } from 'lucide-react';
+import { API_BASE_URL } from '../../config/api';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { getDayKey, formatChatDateDivider } from '../../utils/dateUtils';
@@ -239,6 +242,129 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     const timer = setInterval(() => setWindowNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // Export full chat conversation as a clean text file (.txt)
+  const handleExportChat = () => {
+    setThreadMenuOpen(false);
+    setBgMenuOpen(false);
+
+    if (!leadMessages || leadMessages.length === 0) {
+      alert('No messages to export for this chat.');
+      return;
+    }
+
+    const contactName = lead.customer?.displayName || lead.customer?.whatsappNumber || 'Customer';
+    const safeContactName = contactName.replace(/[/\\?%*:|"<>]/g, '-').trim();
+    const chatDate = new Date().toISOString().slice(0, 10);
+    const fileName = `WhatsApp Chat - ${safeContactName} - ${chatDate}.txt`;
+
+    let transcript = `=====================================================\n`;
+    transcript += ` WHATSAPP CHAT EXPORT\n`;
+    transcript += ` Contact: ${contactName}\n`;
+    transcript += ` Phone: ${lead.customer?.whatsappNumber || lead.customer?.phoneNumber || 'N/A'}\n`;
+    transcript += ` Brand: ${lead.companyTag || lead.company || 'Royal Wellness Center'}\n`;
+    transcript += ` Exported: ${new Date().toLocaleString()}\n`;
+    transcript += ` Total Messages: ${leadMessages.length}\n`;
+    transcript += `=====================================================\n\n`;
+
+    leadMessages.forEach((msg) => {
+      const dt = msg.createdAt ? new Date(msg.createdAt) : new Date();
+      const timeStr = dt.toLocaleString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      });
+      const sender = msg.direction === 'outbound'
+        ? (msg.senderName || 'Staff (CRM)')
+        : (lead.customer?.displayName || lead.customer?.whatsappNumber || 'Client');
+
+      let body = msg.content || '';
+      if (msg.media) {
+        const mediaType = (msg.media.type || 'file').toUpperCase();
+        const mediaName = msg.media.fileName || `${mediaType.toLowerCase()}_media`;
+        const mediaUrl = msg.media.url || (msg.media.id ? `${API_BASE_URL}/api/media/${msg.media.id}` : '');
+        const mediaAnnotation = `[Attachment: ${mediaType} - ${mediaName}${mediaUrl ? ` (${mediaUrl})` : ''}]`;
+        body = body ? `${body}\n${mediaAnnotation}` : mediaAnnotation;
+      }
+
+      transcript += `[${timeStr}] ${sender}: ${body}\n\n`;
+    });
+
+    const blob = new Blob([transcript], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  // Download all media in this chat (photos, voice notes, documents, videos)
+  const handleDownloadAllMedia = () => {
+    setThreadMenuOpen(false);
+    setBgMenuOpen(false);
+
+    const mediaList = leadMessages.filter(m => m.media && (m.media.url || m.media.id));
+    if (mediaList.length === 0) {
+      alert('No media files (photos, voice notes, documents) found in this chat.');
+      return;
+    }
+
+    const token = localStorage.getItem('token') || '';
+
+    mediaList.forEach((m, idx) => {
+      setTimeout(async () => {
+        let mediaUrl = m.media?.id
+          ? `${API_BASE_URL}/api/media/${m.media.id}`
+          : (m.media?.url || '');
+
+        if (!mediaUrl) return;
+
+        if (mediaUrl.startsWith('/') && !mediaUrl.startsWith('//')) {
+          mediaUrl = `${API_BASE_URL}${mediaUrl}`;
+        }
+        if (mediaUrl.includes('/api/media/') && !mediaUrl.includes('token=') && token) {
+          mediaUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+        }
+        const downloadUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}download=1`;
+        const fileName = m.media?.fileName || `whatsapp_${m.media?.type || 'media'}_${m.id || idx}`;
+
+        try {
+          const res = await fetch(downloadUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {}
+          });
+          if (res.ok) {
+            const blob = await res.blob();
+            const blobUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = blobUrl;
+            a.download = fileName;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+            return;
+          }
+        } catch (err) {
+          // fallback
+        }
+
+        const a = document.createElement('a');
+        a.href = downloadUrl;
+        a.download = fileName;
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, idx * 400);
+    });
+  };
 
   // The 24h customer window strictly opens ONLY when an inbound message from the customer exists (staff replies never reset this)
   const lastCustomerMessageTime = getLatestCustomerMessageTime(lead, leadMessages);
@@ -549,14 +675,24 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
             {threadMenuOpen && (
               <div 
                 ref={threadMenuRef}
-                className="absolute right-0 top-10 w-52 bg-white dark:bg-[#233138] border border-slate-200 dark:border-[#2a3942] rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#111b21] dark:text-[#d1d7db]"
+                className="absolute right-0 top-10 w-56 max-h-[calc(100vh-80px)] overflow-y-auto bg-white dark:bg-[#233138] border border-slate-200 dark:border-[#2a3942] rounded-xl shadow-2xl py-1.5 z-50 animate-in fade-in zoom-in-95 duration-100 text-xs text-[#111b21] dark:text-[#d1d7db] custom-scrollbar"
               >
                 <button 
                   onClick={() => {
                     setThreadMenuOpen(false);
                     setCrmPanelOpen(true);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Add to contacts</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    setCrmPanelOpen(true);
+                  }} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
                   <User className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Contact info</span>
@@ -564,53 +700,116 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                 <button 
                   onClick={() => {
                     setThreadMenuOpen(false);
-                    setCrmPanelOpen(true);
-                  }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
-                >
-                  <ListPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
-                  <span>Add to list (Assign Labels)</span>
-                </button>
-                <button 
-                  onClick={() => {
-                    setThreadMenuOpen(false);
                     setSearchInChat(true);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
                   <Search className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Search</span>
                 </button>
                 <button 
                   onClick={() => setThreadMenuOpen(false)} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
                   <CheckSquare className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Select messages</span>
                 </button>
                 <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center justify-between transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <BellOff className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                    <span>Mute notifications</span>
+                  </div>
+                  <ChevronDown className="w-3.5 h-3.5 -rotate-90 text-[#54656f] dark:text-[#8696a0]" />
+                </button>
+                <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Heart className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Add to favourites</span>
+                </button>
+                <button 
+                  onClick={() => {
+                    setThreadMenuOpen(false);
+                    setCrmPanelOpen(true);
+                  }} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <ListPlus className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Add to list (Assign Labels)</span>
+                </button>
+                <button 
                   onClick={handleCloseChat} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#111b21] dark:text-[#e9edef] font-medium transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#111b21] dark:text-[#e9edef] font-medium transition-colors cursor-pointer"
                 >
                   <XCircle className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Close chat</span>
                 </button>
+
+                <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
+
+                {/* Download and Save Options */}
+                <button 
+                  onClick={handleExportChat} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#008069] dark:text-[#00a884] font-medium transition-colors cursor-pointer"
+                  title="Export full chat transcript and save as a .txt file"
+                >
+                  <FileDown className="w-4 h-4 text-[#008069] dark:text-[#00a884]" />
+                  <span>Export chat (Save file)</span>
+                </button>
+                <button 
+                  onClick={handleDownloadAllMedia} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#008069] dark:text-[#00a884] font-medium transition-colors cursor-pointer"
+                  title="Download all photos, voice notes, and documents in this chat"
+                >
+                  <Download className="w-4 h-4 text-[#008069] dark:text-[#00a884]" />
+                  <span>Download chat media</span>
+                </button>
+
+                <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
+
                 <button 
                   onClick={() => setThreadMenuOpen(false)} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
                 >
-                  <BellOff className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
-                  <span>Mute notifications</span>
+                  <Link className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Send call link</span>
                 </button>
+                <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <PhoneCall className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>New group call</span>
+                </button>
+                <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Flag className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Report</span>
+                </button>
+                <button 
+                  onClick={() => setThreadMenuOpen(false)} 
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors cursor-pointer"
+                >
+                  <Ban className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <span>Block</span>
+                </button>
+
                 <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
+
                 <button 
                   onClick={() => {
                     clearChat(lead.id);
                     setThreadMenuOpen(false);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#111b21] dark:text-[#d1d7db] cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-[#111b21] dark:text-[#d1d7db] cursor-pointer"
                 >
-                  <Trash2 className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
+                  <Trash className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
                   <span>Clear chat</span>
                 </button>
                 <button 
@@ -618,7 +817,7 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
                     deleteChat(lead.id);
                     setThreadMenuOpen(false);
                   }} 
-                  className="w-full text-left px-4 py-2.5 hover:bg-rose-50 dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-600 dark:text-rose-400 font-medium cursor-pointer"
+                  className="w-full text-left px-4 py-2 hover:bg-rose-50 dark:hover:bg-[#182229] flex items-center gap-3 transition-colors text-rose-600 dark:text-rose-400 font-medium cursor-pointer"
                 >
                   <Trash2 className="w-4 h-4 text-rose-600 dark:text-rose-400" />
                   <span>Delete chat</span>
@@ -829,6 +1028,26 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
           >
             <XCircle className="w-4 h-4 text-[#54656f] dark:text-[#8696a0]" />
             <span>Close chat</span>
+          </button>
+
+          <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />
+
+          {/* Download and Save Options */}
+          <button 
+            onClick={handleExportChat} 
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#008069] dark:text-[#00a884] font-medium transition-colors cursor-pointer"
+            title="Export full chat transcript and save as a .txt file"
+          >
+            <FileDown className="w-4 h-4 text-[#008069] dark:text-[#00a884]" />
+            <span>Export chat (Save file)</span>
+          </button>
+          <button 
+            onClick={handleDownloadAllMedia} 
+            className="w-full text-left px-4 py-2 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] flex items-center gap-3 text-[#008069] dark:text-[#00a884] font-medium transition-colors cursor-pointer"
+            title="Download all photos, voice notes, and documents in this chat"
+          >
+            <Download className="w-4 h-4 text-[#008069] dark:text-[#00a884]" />
+            <span>Download chat media</span>
           </button>
 
           <div className="h-px bg-slate-200 dark:bg-[#2a3942] my-1" />

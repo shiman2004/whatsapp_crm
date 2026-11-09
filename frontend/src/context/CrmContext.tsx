@@ -1007,17 +1007,26 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(dbCoords) && dbCoords.length > 0) {
           const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const userMap = new Map<string, User>();
+          INITIAL_USERS.forEach(u => {
+            if (!deletedUserIds.includes(u.id)) userMap.set(u.id, u);
+          });
+          const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
+          storedLocalUsers.forEach(u => {
+            if (!deletedUserIds.includes(u.id) && u.active !== false) userMap.set(u.id, u);
+          });
           dbCoords.forEach(u => {
             if (deletedUserIds.includes(u.id) || u.active === false) return;
+            const existingLocal = userMap.get(u.id);
             userMap.set(u.id, {
+              ...existingLocal,
               ...u,
-              branch: u.branch || 'Colombo',
-              company: u.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
+              branch: u.branch || existingLocal?.branch || 'Colombo',
+              company: u.company || existingLocal?.company || (['leads_officer'].includes(u.role) ? undefined : 'RWC'),
               roleTitle: getStaffRoleTitle(u),
-              password: u.password,
-              pin: u.pin,
+              password: u.password || existingLocal?.password,
+              pin: u.pin || existingLocal?.pin,
               active: u.active ?? true,
-              activeLeadsCount: u.activeLeadsCount || 0
+              activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
             });
           });
           const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
@@ -1294,6 +1303,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     messagesRef.current = messages;
   }, [messages]);
+
+  // Out-of-order buffer for MEDIA_READY events that arrive before or during message insertion
+  const pendingMediaReadyRef = useRef<Map<string, { url: string; sizeBytes?: number | null; fileName?: string; mediaType?: string }>>(new Map());
 
   // Robust Message Sync (Active Polling & SSE Reconnection Fallback)
   const isSyncingMessagesRef = useRef(false);
@@ -2069,6 +2081,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 return prevMsgs;
               }
 
+              // Check if a buffered MEDIA_READY event already arrived for this message
+              const bufferedReady = (messageId && pendingMediaReadyRef.current.get(String(messageId)))
+                || (data.media?.id && pendingMediaReadyRef.current.get(String(data.media.id)));
+
+              const effectiveMediaUrl = bufferedReady?.url || data.media?.url || null;
+              const effectiveMediaStatus: 'pending' | 'processing' | 'ready' | 'failed' = bufferedReady ? 'ready' : (data.media?.status || 'pending');
+              const effectiveSizeBytes = bufferedReady?.sizeBytes ?? data.media?.sizeBytes ?? null;
+
               const newMsg: Message = {
                 id: messageId || 'msg-' + Date.now(),
                 leadId: resolvedLeadId,
@@ -2083,19 +2103,54 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                 content: cleanContent,
                 media: data.media ? {
                   id: data.media.id,
-                  type: data.media.type || 'image',
-                  url: data.media.url,
+                  type: (bufferedReady?.mediaType as any) || data.media.type || 'image',
+                  url: effectiveMediaUrl,
                   caption: data.media.caption || cleanContent,
-                  fileName: data.media.fileName,
+                  fileName: bufferedReady?.fileName || data.media.fileName,
                   mimeType: data.media.mimeType,
-                  sizeBytes: data.media.sizeBytes ?? null,
-                  status: data.media.status
+                  sizeBytes: effectiveSizeBytes,
+                  status: effectiveMediaStatus
                 } : undefined,
                 waMessageId: messageId || 'wamid.' + Date.now(),
                 status: isOutbound ? 'sent' : 'delivered',
                 createdAt: timestamp || new Date().toISOString(),
               };
               return [...prevMsgs, newMsg].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+            });
+          } else if (data.type === 'MEDIA_READY') {
+            const { messageId, mediaId, url, sizeBytes, fileName, mediaType } = data;
+            console.log('🖼️ [CRM SSE] Media ready event received for message:', messageId, 'media:', mediaId);
+
+            // Buffer ready event in case message enters state out-of-order
+            if (messageId) {
+              pendingMediaReadyRef.current.set(String(messageId), { url, sizeBytes, fileName, mediaType });
+            }
+            if (mediaId) {
+              pendingMediaReadyRef.current.set(String(mediaId), { url, sizeBytes, fileName, mediaType });
+            }
+
+            setMessages(prevMsgs => {
+              let updatedAny = false;
+              const next = prevMsgs.map(m => {
+                const isTarget = m.id === messageId || m.waMessageId === messageId || (m.media && m.media.id === mediaId);
+                if (!isTarget) return m;
+                // If already ready with same url, avoid dirty update
+                if (m.media?.status === 'ready' && m.media?.url === url) return m;
+                updatedAny = true;
+                return {
+                  ...m,
+                  media: {
+                    ...(m.media || {}),
+                    id: mediaId || m.media?.id,
+                    type: (mediaType as any) || m.media?.type || 'image',
+                    url: url,
+                    status: 'ready' as const,
+                    sizeBytes: sizeBytes ?? m.media?.sizeBytes,
+                    fileName: fileName || m.media?.fileName
+                  }
+                };
+              });
+              return updatedAny ? next : prevMsgs;
             });
           } else if (data.type === 'INBOUND_REACTION') {
             const { targetMessageId, emoji } = data;
@@ -3261,11 +3316,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const targetLeadIds = Array.isArray(targetLeadId) ? targetLeadId : [targetLeadId];
     if (targetLeadIds.length === 0) return;
 
+    let contentToSend = (sourceMsg.content || '').trim();
+    // If the message contains an image/media and content is a placeholder like "[IMAGE]" or "Photo", clear it so only actual media is sent without placeholder text
+    if (sourceMsg.media && /^\[?(image|photo|attachment|voice note|audio|video|document)\]?$/i.test(contentToSend)) {
+      contentToSend = sourceMsg.media?.caption || '';
+    }
+
     let successCount = 0;
     targetLeadIds.forEach(tId => {
       const targetLead = leads.find(l => l.id === tId);
       if (targetLead) {
-        sendMessage(tId, sourceMsg.content, 'coordinator', sourceMsg.media);
+        sendMessage(tId, contentToSend, 'coordinator', sourceMsg.media);
         successCount++;
       }
     });

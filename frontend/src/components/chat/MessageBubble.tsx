@@ -93,6 +93,58 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   const [retryingMedia, setRetryingMedia] = useState(false);
   const [mediaPatched, setMediaPatched] = useState<{ url: string; sizeBytes?: number | null } | null>(null);
+  const [imageLoadError, setImageLoadError] = useState(false);
+
+  const handleDownloadMedia = async (url: string, fileName?: string) => {
+    if (!url) return;
+    try {
+      const token = localStorage.getItem('token') || '';
+      let fetchUrl = url;
+      if (fetchUrl.startsWith('/') && !fetchUrl.startsWith('//')) {
+        fetchUrl = `${API_BASE_URL}${fetchUrl}`;
+      }
+      if (fetchUrl.includes('/api/media/') && !fetchUrl.includes('sig=') && !fetchUrl.includes('token=') && token) {
+        fetchUrl = `${fetchUrl}${fetchUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      }
+      fetchUrl = `${fetchUrl}${fetchUrl.includes('?') ? '&' : '?'}download=1`;
+
+      const res = await fetch(fetchUrl, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {}
+      });
+
+      if (!res.ok) {
+        throw new Error(`Server returned HTTP ${res.status}`);
+      }
+
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName || `whatsapp_media_${Date.now()}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
+    } catch (err) {
+      console.warn('[Download fallback direct link]', err);
+      const token = localStorage.getItem('token') || '';
+      let directUrl = url;
+      if (directUrl.startsWith('/') && !directUrl.startsWith('//')) {
+        directUrl = `${API_BASE_URL}${directUrl}`;
+      }
+      if (directUrl.includes('/api/media/') && !directUrl.includes('sig=') && !directUrl.includes('token=') && token) {
+        directUrl = `${directUrl}${directUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+      }
+      const link = document.createElement('a');
+      link.href = `${directUrl}${directUrl.includes('?') ? '&' : '?'}download=1`;
+      link.download = fileName || `whatsapp_media_${Date.now()}`;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
 
   const handleRetryMedia = async (mediaId?: string) => {
     if (retryingMedia || !mediaId) return;
@@ -130,6 +182,77 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   useEffect(() => {
     setEditContent(message.content || '');
   }, [message.content]);
+
+  // Auto-retrieve pending, processing, or unlinked media so previews load quickly
+  useEffect(() => {
+    const media = message.media;
+    if (!media) return;
+    const hasReadyUrl = Boolean(mediaPatched?.url || (media.url && media.status === 'ready'));
+    if (hasReadyUrl) {
+      setImageLoadError(false);
+      return;
+    }
+
+    const mediaId = media.id || message.id;
+    if (!mediaId) return;
+
+    let cancelled = false;
+
+    const attemptFetch = async () => {
+      if (cancelled || retryingMedia) return false;
+      try {
+        const token = localStorage.getItem('token') || '';
+        const res = await fetch(`${API_BASE_URL}/api/media/${encodeURIComponent(mediaId)}/retry`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${token}`
+          }
+        });
+        const data = await res.json().catch(() => ({}));
+        if (!cancelled && data.success && data.media?.url) {
+          setMediaPatched({ url: data.media.url, sizeBytes: data.media.sizeBytes ?? null });
+          setImageLoadError(false);
+          return true;
+        }
+      } catch (err) {
+        // silent
+      }
+      return false;
+    };
+
+    // Bounded fallback status poll: attempt 1 at 800ms, then 2.5s, 5s, 8s (max 4 attempts)
+    let timer2: ReturnType<typeof setTimeout>;
+    let timer3: ReturnType<typeof setTimeout>;
+    let timer4: ReturnType<typeof setTimeout>;
+
+    const timer1 = setTimeout(async () => {
+      const ok = await attemptFetch();
+      if (ok || cancelled) return;
+
+      timer2 = setTimeout(async () => {
+        const ok2 = await attemptFetch();
+        if (ok2 || cancelled) return;
+
+        timer3 = setTimeout(async () => {
+          const ok3 = await attemptFetch();
+          if (ok3 || cancelled) return;
+
+          timer4 = setTimeout(async () => {
+            await attemptFetch();
+          }, 3000);
+        }, 2500);
+      }, 2000);
+    }, 800);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer1);
+      if (timer2) clearTimeout(timer2);
+      if (timer3) clearTimeout(timer3);
+      if (timer4) clearTimeout(timer4);
+    };
+  }, [message.media?.id, message.media?.url, message.media?.status, message.id, mediaPatched?.url]);
 
   // Open context menu with viewport-clamped fixed positioning (prevents clipping behind header)
   const handleOpenMenu = (e?: React.MouseEvent) => {
@@ -439,9 +562,18 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           {/* Rich Media Attachment (Image, Video, Audio, Document, Sticker) */}
           {message.media && (() => {
             const media = message.media!;
-            const rawUrl = media.url || '';
-            const mediaUrl = mediaPatched?.url
-              || (rawUrl.startsWith('/') && !rawUrl.startsWith('//') ? `${API_BASE_URL}${rawUrl}` : rawUrl);
+            const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+            const rawUrl = mediaPatched?.url || media.url || '';
+            let mediaUrl = rawUrl;
+            if (mediaUrl) {
+              if (mediaUrl.startsWith('/') && !mediaUrl.startsWith('//')) {
+                mediaUrl = `${API_BASE_URL}${mediaUrl}`;
+              }
+              // If it's an internal /api/media/ link and lacks token, attach token so img/audio/video authenticate
+              if (mediaUrl.includes('/api/media/') && !mediaUrl.includes('token=') && token) {
+                mediaUrl = `${mediaUrl}${mediaUrl.includes('?') ? '&' : '?'}token=${encodeURIComponent(token)}`;
+              }
+            }
             const fileSize = formatMediaSize(mediaPatched?.sizeBytes ?? media.sizeBytes);
 
             // Media metadata arrives with the message; the binary is uploaded and
@@ -485,11 +617,75 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
             const isImage = media.type === 'image'
               || media.type === 'sticker'
-              || Boolean(mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
+              || Boolean(mediaUrl && mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
+
+            const isPending = !mediaUrl || media.status === 'pending' || media.status === 'processing';
+            const isFailed = (media.status === 'failed' || imageLoadError) && !isPending;
 
             if (isImage) {
+              const defaultName = media.type === 'sticker' ? 'sticker.webp' : 'photo.jpg';
+
+              // 1. Loading / Retrieving Placeholder (WhatsApp-style compact fixed-dimension container)
+              if (isPending && !isFailed) {
+                return (
+                  <div
+                    onClick={() => handleRetryMedia(media.id || message.id)}
+                    className="mb-1 w-[240px] h-[180px] max-w-[260px] max-h-[300px] rounded-lg bg-black/25 dark:bg-black/35 border border-white/10 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:bg-black/30"
+                    title="Retrieving photo from WhatsApp servers. Click to fetch immediately."
+                  >
+                    <div className="w-10 h-10 rounded-full bg-black/50 border border-white/15 flex items-center justify-center shadow-inner">
+                      <RefreshCw className="w-5 h-5 text-[#00a884] animate-spin" />
+                    </div>
+                    <div className="text-center px-2">
+                      <p className="text-xs font-medium text-[#e9edef]">
+                        {retryingMedia ? 'Retrieving photo…' : 'Retrieving photo'}
+                      </p>
+                      <p className="text-[10px] text-[#8696a0] mt-0.5">
+                        {retryingMedia ? 'Connecting to servers…' : 'Syncing in real-time…'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              }
+
+              // 2. Failed / Error Placeholder with explicit Retry
+              if (isFailed) {
+                return (
+                  <div
+                    onClick={() => {
+                      setImageLoadError(false);
+                      handleRetryMedia(media.id || message.id);
+                    }}
+                    className="mb-1 w-[240px] h-[180px] max-w-[260px] max-h-[300px] rounded-lg bg-rose-500/10 border border-rose-500/30 flex flex-col items-center justify-center gap-2.5 p-3 cursor-pointer hover:bg-rose-500/15 transition-all"
+                    title="Failed to load photo. Click to retry."
+                  >
+                    <div className="w-10 h-10 rounded-full bg-rose-500/20 text-rose-300 flex items-center justify-center">
+                      <AlertCircle className="w-5 h-5" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-xs font-semibold text-rose-200">Failed to load photo</p>
+                      <p className="text-[10px] text-rose-300/80 mt-0.5">Tap to retry download</p>
+                    </div>
+                    <button
+                      type="button"
+                      disabled={retryingMedia}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImageLoadError(false);
+                        handleRetryMedia(media.id || message.id);
+                      }}
+                      className="px-3 py-1 rounded text-xs font-medium bg-rose-500/20 hover:bg-rose-500/30 text-rose-100 border border-rose-500/40 flex items-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 ${retryingMedia ? 'animate-spin' : ''}`} />
+                      <span>{retryingMedia ? 'Retrying…' : 'Retry'}</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              // 3. Ready Photo Preview (Compact max 260px x 300px, preserves aspect ratio)
               return (
-                <div className="mb-1 rounded-lg overflow-hidden">
+                <div className="mb-1 rounded-lg overflow-hidden max-w-[260px]">
                   <div
                     className="relative group/media cursor-pointer rounded-lg overflow-hidden bg-black/20"
                     onClick={() => setLightboxUrl(mediaUrl)}
@@ -497,25 +693,105 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                     <img
                       src={mediaUrl}
                       alt={media.fileName || (media.type === 'sticker' ? 'Sticker' : 'Photo')}
-                      className={`w-full ${media.type === 'sticker' ? 'max-h-40 object-contain' : 'max-h-80 object-cover'} rounded-lg hover:brightness-95 transition-all`}
+                      onError={() => setImageLoadError(true)}
+                      onLoad={() => setImageLoadError(false)}
+                      className={`max-w-[260px] max-h-[300px] w-auto h-auto object-cover rounded-lg hover:brightness-95 transition-all`}
                     />
-                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center">
-                      <Maximize2 className="w-6 h-6 text-white drop-shadow-lg" />
+                    <div className="absolute inset-0 bg-black/35 opacity-0 group-hover/media:opacity-100 transition-opacity flex items-center justify-center gap-3">
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDownloadMedia(mediaUrl, media.fileName || defaultName);
+                        }}
+                        className="w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-xs transition-transform hover:scale-110 shadow-lg cursor-pointer"
+                        title="Save / Download Image"
+                      >
+                        <Download className="w-5 h-5" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setLightboxUrl(mediaUrl)}
+                        className="w-10 h-10 rounded-full bg-black/70 hover:bg-black/90 text-white flex items-center justify-center backdrop-blur-xs transition-transform hover:scale-110 shadow-lg cursor-pointer"
+                        title="View Full Size"
+                      >
+                        <Maximize2 className="w-5 h-5" />
+                      </button>
                     </div>
                   </div>
                 </div>
               );
             }
 
+            // Fallback for non-image media that is pending or failed
+            if (!mediaUrl) {
+              const failed = media.status === 'failed';
+              return (
+                <div 
+                  onClick={() => handleRetryMedia(media.id || message.id)}
+                  className={`mb-1 rounded-lg border p-2.5 flex items-center justify-between gap-3 cursor-pointer hover:opacity-90 transition-opacity ${failed ? 'bg-rose-500/10 border-rose-500/30' : 'bg-black/20 border-white/10'}`}
+                  title="Click to fetch media preview now"
+                >
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${failed ? 'bg-rose-500/20 text-rose-400' : 'bg-white/10 text-[#00a884]'}`}>
+                      {retryingMedia ? (
+                        <RefreshCw className="w-5 h-5 animate-spin text-[#00a884]" />
+                      ) : failed ? (
+                        <AlertCircle className="w-5 h-5 text-rose-400" />
+                      ) : (
+                        <Clock className="w-5 h-5 animate-pulse text-[#00a884]" />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-semibold truncate text-[#e9edef]">
+                        {media.fileName || mediaTypeLabel(media.type)}
+                      </p>
+                      <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
+                        {retryingMedia ? 'Retrieving media…' : failed ? 'Media retrieval pending. Click to retry.' : 'Retrieving media… Click to fetch now.'}
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRetryMedia(media.id || message.id);
+                    }}
+                    disabled={retryingMedia}
+                    className={`px-2.5 py-1 rounded text-[11px] font-medium border flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
+                      failed 
+                        ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-500/30' 
+                        : 'bg-[#00a884]/20 hover:bg-[#00a884]/30 text-[#00a884] border-[#00a884]/40'
+                    }`}
+                    title="Retrieve this media now"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${retryingMedia ? 'animate-spin' : ''}`} />
+                    <span>{retryingMedia ? 'Fetching…' : failed ? 'Retry' : 'Fetch'}</span>
+                  </button>
+                </div>
+              );
+            }
+
             if (media.type === 'video' || mediaUrl.match(/\.(mp4|webm|mov)($|\?)/i)) {
               return (
-                <div className="mb-1 relative rounded-lg overflow-hidden bg-black/40">
+                <div className="mb-1 relative rounded-lg overflow-hidden bg-black/40 group/video">
                   <video
                     src={mediaUrl}
                     controls
                     playsInline
                     className="w-full max-h-80 rounded-lg"
                   />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadMedia(mediaUrl, media.fileName || 'video.mp4');
+                    }}
+                    className="absolute top-2 right-2 w-8 h-8 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center backdrop-blur-xs transition-opacity opacity-0 group-hover/video:opacity-100 hover:scale-110 shadow-lg cursor-pointer"
+                    title="Save / Download Video"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
                 </div>
               );
             }
@@ -536,22 +812,26 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
             return (
               <div className="mb-1 rounded-lg overflow-hidden">
                 <a
-                  href={mediaUrl}
+                  href={mediaUrl.includes('?') ? `${mediaUrl}&download=1` : `${mediaUrl}?download=1`}
                   target="_blank"
                   rel="noopener noreferrer"
                   download={media.fileName || 'document'}
-                  className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleDownloadMedia(mediaUrl, media.fileName || 'document');
+                  }}
+                  className="p-2.5 rounded-lg bg-black/25 border border-white/10 flex items-center gap-3 hover:bg-black/40 transition-colors cursor-pointer group/doc"
                 >
                   <div className="w-9 h-9 rounded-lg bg-red-500/20 text-red-400 flex items-center justify-center shrink-0">
                     <FileText className="w-5 h-5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="text-xs font-semibold truncate text-[#e9edef]">{media.fileName || 'Document'}</p>
+                    <p className="text-xs font-semibold truncate text-[#e9edef] group-hover/doc:underline">{media.fileName || 'Document'}</p>
                     <p className="text-[10px] text-[#8696a0]">
-                      {fileSize ? `${fileSize} · ` : ''}Click to view / download
+                      {fileSize ? `${fileSize} · ` : ''}Click to download
                     </p>
                   </div>
-                  <Download className="w-4 h-4 text-[#8696a0] hover:text-white shrink-0" />
+                  <Download className="w-4 h-4 text-[#8696a0] group-hover/doc:text-white shrink-0" />
                 </a>
               </div>
             );
@@ -892,21 +1172,19 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           </button>
 
           {/* 7. Download (For media messages) */}
-          {message.media && message.media.url && (
+          {message.media && (message.media.url || mediaPatched?.url) && (
             <button
               onClick={() => {
-                if (!message.media?.url) return;
-                const link = document.createElement('a');
-                link.href = message.media.url;
-                link.download = message.media.fileName || 'media';
-                link.target = '_blank';
-                link.click();
+                const targetUrl = mediaPatched?.url || (message.media?.url ? (message.media.url.startsWith('/') && !message.media.url.startsWith('//') ? `${API_BASE_URL}${message.media.url}` : message.media.url) : '');
+                if (targetUrl) {
+                  handleDownloadMedia(targetUrl, message.media?.fileName || `media-${message.id.slice(0, 8)}`);
+                }
                 setMenuOpen(false);
               }}
               className="w-full px-4 py-2 text-left flex items-center gap-3 hover:bg-[#f5f6f6] dark:hover:bg-[#182229] transition-colors"
             >
               <Download className="w-4 h-4 text-[#54656f] dark:text-slate-400 shrink-0" />
-              <span>Download</span>
+              <span>Save / Download</span>
             </button>
           )}
 
@@ -1017,13 +1295,24 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           className="fixed inset-0 z-[110] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-200"
           onClick={() => setLightboxUrl(null)}
         >
-          <button 
-            onClick={() => setLightboxUrl(null)}
-            className="absolute top-4 right-4 w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all z-10"
-            title="Close"
-          >
-            <X className="w-6 h-6" />
-          </button>
+          <div className="absolute top-4 right-4 flex items-center gap-2 z-10" onClick={(e) => e.stopPropagation()}>
+            <button 
+              type="button"
+              onClick={() => handleDownloadMedia(lightboxUrl, message.media?.fileName || 'whatsapp-image.jpg')}
+              className="px-3.5 py-1.5 rounded-full bg-white/15 hover:bg-white/25 text-white flex items-center gap-2 transition-all font-medium text-xs backdrop-blur-md cursor-pointer border border-white/20 shadow-lg"
+              title="Save image to computer"
+            >
+              <Download className="w-4 h-4" />
+              <span>Save / Download</span>
+            </button>
+            <button 
+              onClick={() => setLightboxUrl(null)}
+              className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center transition-all cursor-pointer"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
           <img 
             src={lightboxUrl} 
             alt="Full size preview" 

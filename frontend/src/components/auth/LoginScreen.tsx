@@ -1,6 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Crown, 
   Lock, 
   Mail, 
   KeyRound, 
@@ -67,6 +66,13 @@ export const LoginScreen: React.FC = () => {
   const EXCLUDED_PORTAL_ROLES = ['super_admin', 'leads_officer', 'marketing_officer', 'marketing_admin'];
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
+  const DEFAULT_LEADS_OFFICERS = [
+    { id: 'user-officer-1', fullName: 'Sarah Fernando', email: 'sarah@royalwellness.lk', role: 'leads_officer', branch: 'Colombo' },
+    { id: 'ba780507-8847-4de4-979d-57bef49d7b4a', fullName: 'Baasith', email: 'basith@royalwellness.lk', role: 'leads_officer', branch: 'Maruthamunai' },
+    { id: '30205238-2be6-4187-a8c4-aba2cd67b8f7', fullName: 'Mohamed', email: 'mohamed@royalwellness.lk', role: 'leads_officer', branch: 'Maruthamunai' },
+    { id: '6420da82-208c-4f25-b6ca-7130fdce6765', fullName: 'Ameer', email: 'ameer@royalwellness.lk', role: 'leads_officer', branch: 'Colombo' },
+  ];
+  const effectiveLeadsOfficers = leadsOfficers.length > 0 ? leadsOfficers : DEFAULT_LEADS_OFFICERS;
   const rwcUsers = users.filter((u: any) => 
     _activeStaff(u) && 
     !EXCLUDED_PORTAL_ROLES.includes(u.role) && 
@@ -185,13 +191,17 @@ export const LoginScreen: React.FC = () => {
       setIdentifierInput(firstAhc ? firstAhc.email : '');
       setPasswordInput('');
     } else if (portalView === 'leads_officer') {
-      const firstOfficer = leadsOfficers[0];
-      setIdentifierInput(firstOfficer ? firstOfficer.email : '');
+      const firstOfficer = effectiveLeadsOfficers[0];
+      setIdentifierInput(firstOfficer ? firstOfficer.email : 'sarah@royalwellness.lk');
       setPasswordInput('');
     }
-  }, [portalView, superAdmins.length, rwcUsers.length, crasUsers.length, ahcUsers.length, leadsOfficers.length]);
+  }, [portalView, superAdmins.length, rwcUsers.length, crasUsers.length, ahcUsers.length, effectiveLeadsOfficers.length]);
 
   const activeUser = users.find((u: any) => 
+    u.email.toLowerCase() === identifierInput.toLowerCase() ||
+    u.fullName.toLowerCase() === identifierInput.toLowerCase() ||
+    u.id.toLowerCase() === identifierInput.toLowerCase()
+  ) || effectiveLeadsOfficers.find((u: any) =>
     u.email.toLowerCase() === identifierInput.toLowerCase() ||
     u.fullName.toLowerCase() === identifierInput.toLowerCase() ||
     u.id.toLowerCase() === identifierInput.toLowerCase()
@@ -495,27 +505,6 @@ export const LoginScreen: React.FC = () => {
                 <ChevronRight className="w-5 h-5 text-slate-500 group-hover:text-blue-400 group-hover:translate-x-0.5 transition-all shrink-0" />
               </button>
 
-              {/* 4. Super Admin (Discreetly rendered when unlocked via ?admin=true or shortcut) */}
-              {isAdminUnlocked && (
-                <button
-                  type="button"
-                  onClick={() => setPortalView('super_admin')}
-                  className="w-full p-3 rounded-2xl bg-gradient-to-r from-amber-950/40 to-[#111b21] hover:to-amber-950/60 border border-amber-600/50 hover:border-amber-400 shadow-md transition-all text-left flex items-center gap-3 group cursor-pointer"
-                >
-                  <div className="w-10 h-10 rounded-xl bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 shrink-0">
-                    <Crown className="w-5 h-5 text-amber-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <span className="text-xs font-bold text-amber-300 block">
-                      Super Admin Gateway
-                    </span>
-                    <span className="text-[10px] text-[#8696a0] block truncate">
-                      Executive access & system administration
-                    </span>
-                  </div>
-                  <ChevronRight className="w-4 h-4 text-amber-400 group-hover:translate-x-0.5 transition-transform shrink-0" />
-                </button>
-              )}
 
             </div>
           </div>
@@ -640,9 +629,9 @@ export const LoginScreen: React.FC = () => {
                     </option>
                   )}
                 </select>
-              ) : portalView === 'leads_officer' && leadsOfficers.length > 0 ? (
+              ) : portalView === 'leads_officer' ? (
                 <select
-                  value={identifierInput}
+                  value={identifierInput || effectiveLeadsOfficers[0]?.email || 'sarah@royalwellness.lk'}
                   onChange={(e) => {
                     setIdentifierInput(e.target.value);
                     setPinDigits([]);
@@ -650,9 +639,9 @@ export const LoginScreen: React.FC = () => {
                   }}
                   className="w-full bg-[#202c33] border border-slate-700/80 rounded-xl px-3 py-2.5 text-xs font-semibold text-white outline-none focus:border-indigo-500 transition-colors cursor-pointer"
                 >
-                  {leadsOfficers.map((o: any) => (
+                  {effectiveLeadsOfficers.map((o: any) => (
                     <option key={o.id} value={o.email} className="bg-[#111b21] text-white">
-                      {o.fullName} — Inquiries & Leads Officer (Common Gateway)
+                      {o.fullName} — Inquiries & Leads Officer ({o.branch || 'Common Gateway'})
                     </option>
                   ))}
                 </select>

@@ -105,10 +105,30 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   }, [getAuthToken]);
 
   useEffect(() => {
-    Promise.all([userManagementApi.org(), userManagementApi.users({ pageSize: 100 })])
-      .then(([org, directory]) => {
+    Promise.all([
+      userManagementApi.org(),
+      userManagementApi.users({ pageSize: 100 }),
+      userManagementApi.overview(),
+      userManagementApi.sessions({ pageSize: 100 }),
+    ])
+      .then(([org, directory, overview, sessionPage]) => {
         setDepartments(org.departments);
         setStaffUsers(directory.items);
+        setActivityEvents(overview.recentActivity.map((event) => ({
+          id: event.id,
+          type: event.action.startsWith('session.') ? 'session_revoke' : event.action.startsWith('login') ? 'login' : 'role_update',
+          title: `${event.action} — ${event.resource}`,
+          timestamp: new Date(event.createdAt).toLocaleString(),
+        })));
+        setSessions(sessionPage.items.map((session) => ({
+          id: session.id,
+          user: session.userName || session.email || 'Unknown user',
+          device: session.device,
+          ip: session.ip || '—',
+          location: '',
+          activeSince: new Date(session.createdAt).toLocaleString(),
+          status: session.status,
+        })));
       })
       .catch(() => {});
   }, []);
@@ -131,25 +151,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
     'Reports Viewer': { crm: false, clinical: false, reports: true, userManagement: false, exams: false, whatsapp: false },
   });
 
-  // Security Activity Events
-  const [activityEvents] = useState<ActivityEvent[]>([
-    { id: '1', type: 'login', title: 'Login success — Afrij', timestamp: 'Nov 3, 2026, 1:12 PM' },
-    { id: '2', type: 'role_update', title: 'Role updated — Clinical Admin (permissions changed)', timestamp: 'Nov 3, 2026, 12:48 PM' },
-    { id: '3', type: 'session_revoke', title: 'Session revoked — Kavindu Amarasinghe', timestamp: 'Nov 3, 2026, 12:20 PM' },
-    { id: '4', type: 'whatsapp', title: 'Whatsapp operation — Messages sent (CRM)', timestamp: 'Nov 3, 2026, 11:11 PM' },
-  ]);
-
-  // Login Sessions list
-  const [sessions, setSessions] = useState<SessionItem[]>([
-    { id: 's-1', user: 'Afrij (Super Admin)', device: 'Chrome on macOS', ip: '192.168.1.104', location: 'Colombo Flagship', activeSince: 'Today, 1:12 PM', status: 'active' },
-    { id: 's-2', user: 'Shiman (Super Admin)', device: 'Edge on Windows 11', ip: '192.168.1.112', location: 'Colombo Flagship', activeSince: 'Today, 1:11 PM', status: 'active' },
-    { id: 's-3', user: 'Mohamed Jahankeer (Super Admin)', device: 'Safari on iPhone', ip: '112.134.82.19', location: 'Kandy Suite', activeSince: 'Today, 1:12 PM', status: 'active' },
-    { id: 's-4', user: 'Rizwan Thahir (Admin)', device: 'Chrome on Windows 10', ip: '192.168.1.155', location: 'Colombo Flagship', activeSince: 'Today, 12:58 PM', status: 'active' },
-    { id: 's-5', user: 'Fathima Naseeha (Clinical Admin)', device: 'Chrome on iPad', ip: '192.168.1.189', location: 'Colombo Flagship', activeSince: 'Today, 12:46 PM', status: 'active' },
-    { id: 's-6', user: 'Kavindu Amarasinghe', device: 'Firefox on Android', ip: '175.157.34.12', location: 'Remote', activeSince: 'Oct 30, 2026', status: 'revoked' },
-  ]);
-
-  // Add staff modal state
+  // Security activity and sessions are loaded from the database-backed API.\r\n  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);\r\n  const [sessions, setSessions] = useState<SessionItem[]>([]);\r\n\r\n  // Add staff modal state
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
@@ -969,3 +971,4 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
     </SettingsLayout>
   );
 };
+

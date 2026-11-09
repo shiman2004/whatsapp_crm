@@ -532,7 +532,7 @@ const STATEMENTS = [
   `CREATE TABLE IF NOT EXISTS public.appointments (
      id VARCHAR(50) PRIMARY KEY,
      branch_id VARCHAR(50) NOT NULL,
-     room_id VARCHAR(50) NOT NULL,
+     room_id VARCHAR(50),
      patient_id VARCHAR(50) NOT NULL,
      doctor_id VARCHAR(50) NOT NULL,
      treatment_id VARCHAR(50) NOT NULL,
@@ -540,6 +540,10 @@ const STATEMENTS = [
      end_time TIMESTAMP WITH TIME ZONE NOT NULL,
      status VARCHAR(50) DEFAULT 'confirmed',
      notes TEXT,
+     lead_id VARCHAR(50),
+     coordinator_id VARCHAR(50),
+     appointment_type VARCHAR(50) DEFAULT 'consultation',
+     idempotency_key VARCHAR(120),
      created_by_id VARCHAR(50),
      updated_by_id VARCHAR(50),
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
@@ -547,6 +551,17 @@ const STATEMENTS = [
      cancelled_at TIMESTAMP WITH TIME ZONE,
      cancellation_reason TEXT
    );`,
+  // Doctor-based appointments no longer require a physical room. Historical room
+  // links are preserved; new records may leave room_id empty.
+  `ALTER TABLE public.appointments ALTER COLUMN room_id DROP NOT NULL;`,
+  `ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS lead_id VARCHAR(50);`,
+  `ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS coordinator_id VARCHAR(50);`,
+  `ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS appointment_type VARCHAR(50) DEFAULT 'consultation';`,
+  `ALTER TABLE public.appointments ADD COLUMN IF NOT EXISTS idempotency_key VARCHAR(120);`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_appointments_idempotency_key
+     ON public.appointments(idempotency_key) WHERE idempotency_key IS NOT NULL;`,
+  `CREATE INDEX IF NOT EXISTS idx_appointments_lead ON public.appointments(lead_id);`,
+  `CREATE INDEX IF NOT EXISTS idx_appointments_coordinator ON public.appointments(coordinator_id);`,
   `CREATE INDEX IF NOT EXISTS idx_appointments_branch_time ON public.appointments(branch_id, start_time);`,
   `CREATE INDEX IF NOT EXISTS idx_appointments_room_time ON public.appointments(room_id, start_time, end_time);`,
   `CREATE INDEX IF NOT EXISTS idx_appointments_doctor_time ON public.appointments(doctor_id, start_time, end_time);`,
@@ -575,6 +590,38 @@ const STATEMENTS = [
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );`,
   `CREATE INDEX IF NOT EXISTS idx_avail_blocks_branch ON public.availability_blocks(branch_id, start_time, end_time);`,
+
+  // Doctor-centric scheduling: recurring working windows and dated exceptions.
+  `CREATE TABLE IF NOT EXISTS public.doctor_weekly_schedules (
+     id VARCHAR(50) PRIMARY KEY,
+     doctor_id VARCHAR(50) NOT NULL,
+     branch_id VARCHAR(50) NOT NULL,
+     day_of_week INTEGER NOT NULL CHECK (day_of_week BETWEEN 0 AND 6),
+     start_time VARCHAR(5) NOT NULL,
+     end_time VARCHAR(5) NOT NULL,
+     is_active BOOLEAN DEFAULT TRUE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_doctor_weekly_doctor_day
+     ON public.doctor_weekly_schedules(doctor_id, day_of_week, is_active);`,
+  `CREATE INDEX IF NOT EXISTS idx_doctor_weekly_branch
+     ON public.doctor_weekly_schedules(branch_id);`,
+  `CREATE TABLE IF NOT EXISTS public.doctor_schedule_exceptions (
+     id VARCHAR(50) PRIMARY KEY,
+     doctor_id VARCHAR(50) NOT NULL,
+     branch_id VARCHAR(50) NOT NULL,
+     exception_type VARCHAR(20) NOT NULL DEFAULT 'leave',
+     start_date DATE NOT NULL,
+     end_date DATE NOT NULL,
+     start_time VARCHAR(5),
+     end_time VARCHAR(5),
+     reason VARCHAR(255),
+     created_by_id VARCHAR(50),
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_doctor_exceptions_range
+     ON public.doctor_schedule_exceptions(doctor_id, start_date, end_date);`,
 
   // --- marketing module foundations & serials ----------------------------------
   `CREATE TABLE IF NOT EXISTS public.marketing_contact_serials (

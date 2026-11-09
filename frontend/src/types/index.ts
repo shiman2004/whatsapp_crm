@@ -435,7 +435,9 @@ export interface Appointment {
   id: string;
   branchId: string;
   branchName?: string;
-  roomId: string;
+  company?: string;
+  /** Optional; doctor, branch and time are the scheduling source of truth. */
+  roomId?: string;
   roomName?: string;
   roomNumber?: string;
   roomColor?: string;
@@ -443,6 +445,11 @@ export interface Appointment {
   patientName?: string;
   patientPhone?: string;
   patientAvatar?: string;
+  leadId?: string;
+  leadSerialNumber?: string;
+  leadStage?: string;
+  coordinatorId?: string;
+  appointmentType?: string;
   doctorId: string;
   doctorName?: string;
   doctorTitle?: string;
@@ -459,6 +466,103 @@ export interface Appointment {
   cancellationReason?: string;
   statusHistory?: AppointmentStatusHistory[];
   createdAt: string;
+}
+
+export interface Doctor {
+  id: string;
+  fullName: string;
+  title?: string;
+  role?: string;
+  roleTitle?: string;
+  branch?: string;
+  phone?: string;
+  avatar?: string;
+  branchIds?: string[];
+  scheduleConfigured?: boolean;
+}
+
+export interface DoctorWeeklySchedule {
+  id: string;
+  doctorId: string;
+  branchId: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  isActive: boolean;
+  doctorName?: string;
+  doctorTitle?: string;
+  branchName?: string;
+}
+
+export type DoctorExceptionType = 'leave' | 'break' | 'unavailable';
+
+export interface DoctorScheduleException {
+  id: string;
+  doctorId: string;
+  branchId: string;
+  exceptionType: DoctorExceptionType | string;
+  startDate: string;
+  endDate: string;
+  startTime?: string | null;
+  endTime?: string | null;
+  reason?: string | null;
+  doctorName?: string;
+  branchName?: string;
+}
+
+export interface DoctorAvailabilitySlot {
+  startTime: string;
+  endTime: string;
+  status: 'available' | 'booked' | 'blocked' | 'outside_hours';
+  appointmentId?: string | null;
+}
+
+export interface DoctorAvailabilityDay {
+  doctorId: string;
+  doctorName: string;
+  doctorTitle?: string | null;
+  doctorBranch?: string | null;
+  branchName: string;
+  date: string;
+  dayOfWeek: number;
+  scheduleConfigured: boolean;
+  workingWindows: Array<{ startTime: string; endTime: string; source: string }>;
+  exceptions: DoctorScheduleException[];
+  appointments: Appointment[];
+  slots: DoctorAvailabilitySlot[];
+}
+
+export interface DoctorAvailabilityResponse {
+  branchId: string;
+  branchName: string;
+  date: string;
+  doctors: DoctorAvailabilityDay[];
+}
+
+export interface AppointmentStats {
+  total: number;
+  pending: number;
+  confirmed: number;
+  rescheduled: number;
+  cancelled: number;
+  completed: number;
+  noShow: number;
+  active: number;
+  cancellationRate: number;
+}
+
+export interface PatientSearchResult {
+  patientId: string;
+  id?: string;
+  displayName: string;
+  whatsappNumber?: string;
+  phoneNumber?: string;
+  avatarUrl?: string;
+  leadId?: string;
+  serialNumber?: string;
+  stage?: string;
+  source?: string;
+  company?: string;
 }
 
 export interface AvailabilityBlock {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, DoorOpen, Palette, Clock, FileText, AlertCircle, Check, Trash2, Edit3, ShieldAlert } from 'lucide-react';
 import { Room, Branch } from '../../types';
 import { appointmentService } from '../../services/appointmentService';
+import { AppTimePicker } from '../common';
 
 interface RoomManagerModalProps {
   isOpen: boolean;
@@ -311,11 +312,11 @@ export const RoomManagerModal: React.FC<RoomManagerModalProps> = ({
                     <Clock className="w-3.5 h-3.5 text-teal-400" />
                     <span>Operating Start</span>
                   </label>
-                  <input
-                    type="time"
+                  <AppTimePicker
                     value={operatingStart}
-                    onChange={(e) => setOperatingStart(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                    onChange={(val) => setOperatingStart(val)}
+                    inputClassName="font-mono"
+                    clearable={false}
                   />
                 </div>
                 <div>
@@ -323,11 +324,11 @@ export const RoomManagerModal: React.FC<RoomManagerModalProps> = ({
                     <Clock className="w-3.5 h-3.5 text-teal-400" />
                     <span>Operating End</span>
                   </label>
-                  <input
-                    type="time"
+                  <AppTimePicker
                     value={operatingEnd}
-                    onChange={(e) => setOperatingEnd(e.target.value)}
-                    className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-teal-500 font-mono"
+                    onChange={(val) => setOperatingEnd(val)}
+                    inputClassName="font-mono"
+                    clearable={false}
                   />
                 </div>
               </div>

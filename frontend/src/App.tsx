@@ -32,7 +32,9 @@ const EnterpriseSettingsHub = lazy(() => import('./components/settings/Enterpris
 const SecurityAccessView = lazy(() => import('./components/admin/SecurityAccessView').then((m) => ({ default: m.SecurityAccessView })));
 const UserManagementView = lazy(() => import('./components/admin/user-management/UserManagementView').then((m) => ({ default: m.UserManagementView })));
 const TeamBroadcastView = lazy(() => import('./components/broadcast/TeamBroadcastView').then((m) => ({ default: m.TeamBroadcastView })));
-const AppointmentSchedulerView = lazy(() => import('./components/appointments/AppointmentSchedulerView').then((m) => ({ default: m.AppointmentSchedulerView })));
+const AppointmentBookingsView = lazy(() => import('./components/appointments/AppointmentBookingsView').then((m) => ({ default: m.AppointmentBookingsView })));
+const DoctorAvailabilityView = lazy(() => import('./components/appointments/DoctorAvailabilityView').then((m) => ({ default: m.DoctorAvailabilityView })));
+const DoctorScheduleView = lazy(() => import('./components/appointments/DoctorScheduleView').then((m) => ({ default: m.DoctorScheduleView })));
 const MarketingModule = lazy(() => import('./components/marketing/MarketingModule').then((m) => ({ default: m.MarketingModule })));
 const ExamDepartmentWorkspace = lazy(() => import('./components/exam/ExamDepartmentWorkspace').then((m) => ({ default: m.ExamDepartmentWorkspace })));
 const StudentPortal = lazy(() => import('./components/exam/StudentPortal').then((m) => ({ default: m.StudentPortal })));
@@ -108,7 +110,9 @@ const MainLayout: React.FC = () => {
       case 'chat':
         return <LeadDetailWorkspace onBackToKanban={() => navigateToPath('/leads/all')} />;
       case 'appointment-rooms':
-        return <AppointmentSchedulerView />;
+        if (route.child?.id === 'availability') return <DoctorAvailabilityView />;
+        if (route.child?.id === 'doctors') return <DoctorScheduleView />;
+        return <AppointmentBookingsView />;
       case 'marketing':
         return <MarketingModule />;
       case 'settings':

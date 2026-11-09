@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { API_BASE_URL } from '../../config/api';
 import { useCrm } from '../../context/CrmContext';
+import { AppDateTimePicker } from '../common';
 
 export type DiscussionNote = {
   id: string;
@@ -1065,6 +1066,8 @@ export function ExamOperationsView() {
   const [health, setHealth] = useState<any>(null);
   const [healthError, setHealthError] = useState('');
   const [search, setSearch] = useState('');
+  const [purchasedAt, setPurchasedAt] = useState('');
+  const [fixedStart, setFixedStart] = useState('');
 
   const request = useCallback(async (path: string, method = 'GET', body?: unknown) => {
     const token = localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('crm_auth_token') || '';
@@ -1157,6 +1160,10 @@ export function ExamOperationsView() {
     body.durationDays = Number(body.durationDays);
     body.attemptAllowance = Number(body.attemptAllowance);
     body.amountMinor = Number(body.amountMinor);
+    if (purchasedAt) body.purchasedAt = purchasedAt;
+    else delete body.purchasedAt;
+    if (fixedStart) body.fixedStart = fixedStart;
+    else delete body.fixedStart;
     body.services = String(body.services)
       .split('\n')
       .map(x => x.trim())
@@ -1165,6 +1172,8 @@ export function ExamOperationsView() {
     try {
       await request('/requirements', 'POST', body);
       setShowForm(false);
+      setPurchasedAt('');
+      setFixedStart('');
       await refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Unable to submit.');
@@ -1289,14 +1298,26 @@ export function ExamOperationsView() {
             </select>
           </label>
           <div className="grid sm:grid-cols-2 gap-3">
-            <label className="text-xs">
-              Purchase timestamp (if applicable)
-              <input name="purchasedAt" type="datetime-local" className={inputStyle} />
-            </label>
-            <label className="text-xs">
-              Fixed start (if applicable)
-              <input name="fixedStart" type="datetime-local" className={inputStyle} />
-            </label>
+            <div className="text-xs space-y-1">
+              <span>Purchase timestamp (if applicable)</span>
+              <AppDateTimePicker
+                name="purchasedAt"
+                value={purchasedAt}
+                onChange={setPurchasedAt}
+                placeholder="Select purchase date & time"
+                clearable={true}
+              />
+            </div>
+            <div className="text-xs space-y-1">
+              <span>Fixed start (if applicable)</span>
+              <AppDateTimePicker
+                name="fixedStart"
+                value={fixedStart}
+                onChange={setFixedStart}
+                placeholder="Select fixed start date & time"
+                clearable={true}
+              />
+            </div>
           </div>
           <label className="block text-xs">
             Included services (one per line)

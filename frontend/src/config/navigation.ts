@@ -193,9 +193,8 @@ const leadChildren: NavChild[] = [
 ];
 
 const appointmentChildren: NavChild[] = [
-  { id: 'calendar', label: 'Calendar', icon: CalendarDays, path: '/appointments/calendar' },
-  { id: 'bookings', label: 'All Bookings', icon: ClipboardList, path: '/appointments/bookings' },
-  { id: 'rooms', label: 'Rooms & Availability', icon: Database, path: '/appointments/rooms' },
+  { id: 'bookings', label: 'All Appointments', icon: ClipboardList, path: '/appointments/bookings' },
+  { id: 'availability', label: 'Doctor Availability', icon: CalendarDays, path: '/appointments/availability' },
   { id: 'doctors', label: 'Doctor Scheduling', icon: GraduationCap, path: '/appointments/doctors' },
 ];
 
@@ -228,8 +227,8 @@ export const NAV_SECTIONS: NavSection[] = [
       },
       {
         id: 'appointment-rooms',
-        label: 'Appointment Room',
-        description: 'Room calendar, bookings and doctor scheduling',
+        label: 'Appointments',
+        description: 'All appointments, doctor availability and scheduling',
         icon: CalendarDays,
         path: '/appointments',
         children: appointmentChildren,
@@ -377,6 +376,8 @@ const LEGACY_ALIASES: Record<string, string> = {
   '/webhook-sandbox': '/webhooks',
   '/leads-kanban': '/leads',
   '/appointment-rooms': '/appointments',
+  '/appointments/calendar': '/appointments/bookings',
+  '/appointments/rooms': '/appointments/availability',
   '/chat': '/inbox',
 };
 

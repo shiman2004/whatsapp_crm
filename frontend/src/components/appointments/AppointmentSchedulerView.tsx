@@ -21,6 +21,7 @@ import { Branch, Room, Appointment, AvailabilityBlock } from '../../types';
 import { appointmentService } from '../../services/appointmentService';
 import { BookUpdateAppointmentModal } from './BookUpdateAppointmentModal';
 import { RoomManagerModal } from './RoomManagerModal';
+import { AppDatePicker } from '../common/AppDatePicker';
 import { useCrm } from '../../context/CrmContext';
 import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
 
@@ -260,11 +261,12 @@ export const AppointmentSchedulerView: React.FC = () => {
               <ChevronRight className="w-4 h-4" />
             </button>
 
-            <input
-              type="date"
+            <AppDatePicker
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="bg-transparent border-0 text-slate-200 text-xs font-semibold px-2 py-1 outline-none cursor-pointer font-mono"
+              onChange={(val) => { if (val) setSelectedDate(val); }}
+              clearable={false}
+              className="w-36"
+              inputClassName="bg-transparent border-0 text-slate-200 text-xs font-semibold px-2 py-1 outline-none cursor-pointer font-mono"
             />
           </div>
 

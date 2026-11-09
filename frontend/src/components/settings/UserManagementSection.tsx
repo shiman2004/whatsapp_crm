@@ -33,7 +33,7 @@ import {
 } from 'lucide-react';
 import { SettingsLayout } from './SettingsLayout';
 import { useCrm } from '../../context/CrmContext';
-import { userManagementApi, type Department } from '../admin/user-management/api';
+import { userManagementApi, type Department, type UserStatus } from '../admin/user-management/api';
 import { UserDetailDrawer } from '../admin/user-management/UserDetailDrawer';
 import { CreateUserTab } from '../admin/user-management/CreateUserTab';
 
@@ -51,13 +51,13 @@ interface UserDirectoryItem {
   name: string;
   email: string;
   phone: string;
-  role: 'super_admin' | 'admin' | 'coordinator' | 'counsellor' | 'doctor' | 'leads_officer';
+  role: string;
   roleLabel: string;
   companyCode: string;
   companyName: string;
   branch: string;
   department: string;
-  status: 'active' | 'inactive';
+  status: UserStatus;
   lastLogin: string;
   lastActivity: string;
   avatarBg: string;
@@ -246,32 +246,34 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
       if (orgRes && Array.isArray((orgRes as any).departments)) {
         setDepartments((orgRes as any).departments);
       }
-      if (res && res.items && res.items.length > 0) {
+      if (res && Array.isArray(res.items)) {
         const mapped: UserDirectoryItem[] = res.items.map((u, idx) => ({
           id: u.id,
           name: u.fullName,
           email: u.email,
-          phone: u.phone || '+94 11 234 5678',
-          role: (u.role as any) || 'coordinator',
-          roleLabel: u.roleLabel || u.role,
-          companyCode: (u.company || 'RWC').toUpperCase(),
+          phone: u.phone || '—',
+          role: u.role,
+          roleLabel: u.roleLabel,
+          companyCode: u.company || '—',
           companyName:
-            (u.company || 'RWC').toUpperCase() === 'CRAS'
+            u.company === 'CRAS'
               ? 'CRAS College'
-              : (u.company || 'RWC').toUpperCase() === 'AHC'
+              : u.company === 'AHC'
               ? 'Alpha Health Consultancy'
-              : 'Royal Wellness Center',
-          branch: u.branch || 'Colombo (Head Office)',
-          department: u.departmentName || 'Administration',
-          status: u.active ? 'active' : 'inactive',
-          lastLogin: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Jan 15, 2026, 09:24 AM',
-          lastActivity: 'Viewed dashboard 2 min ago',
+              : u.company === 'RWC'
+              ? 'Royal Wellness Center'
+              : u.company || '—',
+          branch: u.branch || '—',
+          department: u.departmentName || '—',
+          status: u.status,
+          lastLogin: u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'Never logged in',
+          lastActivity: '—',
           avatarBg: ['bg-teal-600', 'bg-blue-600', 'bg-indigo-600', 'bg-emerald-600', 'bg-purple-600'][idx % 5]
         }));
         setUsersList(mapped);
       }
     } catch {
-      // Keep rich fallback mock data
+      setUsersList([]);
     }
   }, []);
 
@@ -455,7 +457,7 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
       CRAS: 'CRAS College',
       AHC: 'Alpha Health Consultancy',
     };
-    const roleLabelMap: Record<UserDirectoryItem['role'], string> = {
+    const roleLabelMap: Record<string, string> = {
       super_admin: 'Super Admin', admin: 'Admin', coordinator: 'Coordinator',
       counsellor: 'Counsellor', doctor: 'Doctor', leads_officer: 'Leads Officer',
     };
@@ -500,7 +502,7 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
   };
 
   // Role Badge Renderer
-  const renderRoleBadge = (role: UserDirectoryItem['role'], label: string) => {
+  const renderRoleBadge = (role: string, label: string) => {
     switch (role) {
       case 'super_admin':
         return (
@@ -853,12 +855,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                 className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
               >
                 <option value="ALL">All Roles</option>
-                <option value="super_admin">Super Admin</option>
-                <option value="admin">Admin</option>
-                <option value="coordinator">Coordinator</option>
-                <option value="counsellor">Counsellor</option>
-                <option value="doctor">Doctor</option>
-                <option value="leads_officer">Leads Officer</option>
+                {[...new Map(usersList.map((user) => [user.role, user.roleLabel])).entries()].map(([role, label]) => (
+                  <option key={role} value={role}>{label}</option>
+                ))}
               </select>
 
               {/* Companies Dropdown */}
@@ -871,9 +870,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                 className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
               >
                 <option value="ALL">All Companies</option>
-                <option value="RWC">Royal Wellness Center</option>
-                <option value="CRAS">CRAS College</option>
-                <option value="AHC">Alpha Health</option>
+                {[...new Map(usersList.map((user) => [user.companyCode, user.companyName])).entries()].map(([code, name]) => (
+                  <option key={code} value={code}>{name}</option>
+                ))}
               </select>
 
               {/* Branches Dropdown */}
@@ -886,10 +885,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                 className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
               >
                 <option value="ALL">All Branches</option>
-                <option value="Colombo (Head Office)">Colombo (Head Office)</option>
-                <option value="Colombo">Colombo</option>
-                <option value="Negombo">Negombo</option>
-                <option value="Kandy">Kandy</option>
+                {[...new Set(usersList.map((user) => user.branch))].map((branch) => (
+                  <option key={branch} value={branch}>{branch}</option>
+                ))}
               </select>
 
               {/* Departments Dropdown */}
@@ -902,11 +900,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                 className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
               >
                 <option value="ALL">All Departments</option>
-                <option value="Administration">Administration</option>
-                <option value="Operations">Operations</option>
-                <option value="Education">Education</option>
-                <option value="Counseling">Counseling</option>
-                <option value="Medical">Medical</option>
+                {[...new Set(usersList.map((user) => user.department))].map((department) => (
+                  <option key={department} value={department}>{department}</option>
+                ))}
               </select>
 
               {/* Statuses Dropdown */}
@@ -921,6 +917,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                 <option value="ALL">All Statuses</option>
                 <option value="ACTIVE">Active Only</option>
                 <option value="INACTIVE">Inactive Only</option>
+                <option value="SUSPENDED">Suspended</option>
+                <option value="LOCKED">Locked</option>
+                <option value="INVITED">Invited</option>
               </select>
 
               <div className="flex items-center space-x-1 shrink-0">
@@ -943,7 +942,7 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
 
             {/* Table */}
             <div className="overflow-x-auto custom-scrollbar">
-              <table className="w-full text-left text-xs">
+              <table className="w-full min-w-[1120px] text-left text-xs">
                 <thead>
                   <tr className="border-b border-[#E0E5E7] dark:border-[#222D34] text-[11px] font-semibold text-[#667781] dark:text-[#8696A0]">
                     <th className="pb-3 pr-2 w-8">
@@ -1052,7 +1051,7 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                                 user.status === 'active' ? 'bg-emerald-500' : 'bg-slate-400'
                               }`}
                             />
-                            {user.status === 'active' ? 'Active' : 'Inactive'}
+                            {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                           </span>
                         </td>
 

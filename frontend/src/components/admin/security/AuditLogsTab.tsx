@@ -4,6 +4,7 @@ import { securityApi } from './api';
 import {
   Badge, ChangeList, Drawer, EmptyState, ErrorState, Notice, Pagination, SCOPE_LABEL, SkeletonBlock, formatDate,
 } from './bits';
+import { AppDatePicker } from '../../common';
 import type { AuditEvent, AuditPage, ModuleInfo } from './types';
 
 const PAGE_SIZE = 25;
@@ -107,9 +108,25 @@ export const AuditLogsTab: React.FC = () => {
             {OUTCOMES.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
           </select>
           <div className="flex items-center gap-1">
-            <input type="date" value={filters.from} onChange={event => update('from', event.target.value)} aria-label="From date" className="w-full rounded-xl border border-slate-300 bg-white px-2 py-2 text-[11px] text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+            <AppDatePicker
+              value={filters.from}
+              maxDate={filters.to || undefined}
+              onChange={val => update('from', val)}
+              placeholder="From"
+              aria-label="From date"
+              inputClassName="py-2 text-[11px]"
+              clearable={true}
+            />
             <span className="text-slate-400">–</span>
-            <input type="date" value={filters.to} onChange={event => update('to', event.target.value)} aria-label="To date" className="w-full rounded-xl border border-slate-300 bg-white px-2 py-2 text-[11px] text-slate-700 outline-none focus:border-indigo-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200" />
+            <AppDatePicker
+              value={filters.to}
+              minDate={filters.from || undefined}
+              onChange={val => update('to', val)}
+              placeholder="To"
+              aria-label="To date"
+              inputClassName="py-2 text-[11px]"
+              clearable={true}
+            />
           </div>
         </div>
         <p className="mt-2 inline-flex items-center gap-1.5 text-[11px] text-slate-500 dark:text-slate-400"><Filter className="h-3.5 w-3.5" />Filters apply on the server; results are newest first.</p>

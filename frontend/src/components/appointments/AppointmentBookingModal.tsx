@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { Room, Branch } from '../../types';
 import { appointmentService } from '../../services/appointmentService';
+import { AppDatePicker } from '../common/AppDatePicker';
 
 interface AppointmentBookingModalProps {
   isOpen: boolean;
@@ -277,11 +278,11 @@ export const AppointmentBookingModal: React.FC<AppointmentBookingModalProps> = (
                 <Calendar className="w-3.5 h-3.5 text-teal-400" />
                 <span>Appointment Date</span>
               </label>
-              <input
-                type="date"
+              <AppDatePicker
                 value={date}
-                onChange={(e) => setDate(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
+                onChange={(val) => setDate(val)}
+                className="w-full"
+                inputClassName="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-teal-500"
               />
             </div>
           </div>

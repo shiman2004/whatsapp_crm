@@ -14,6 +14,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
+import { AppDatePicker } from '../common';
 
 interface FiltersBarProps {
   searchQuery: string;
@@ -231,30 +232,38 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
                 )}
               </div>
               <div className="grid grid-cols-2 gap-2">
-                <label className="text-[11px] text-slate-500 dark:text-slate-400">From
-                  <input
-                    type="date"
-                    value={dateFrom}
-                    max={dateTo || undefined}
-                    onChange={(e) => {
-                      setDateFrom(e.target.value);
-                      setDatePreset('custom');
-                    }}
-                    className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500"
-                  />
-                </label>
-                <label className="text-[11px] text-slate-500 dark:text-slate-400">To
-                  <input
-                    type="date"
-                    value={dateTo}
-                    min={dateFrom || undefined}
-                    onChange={(e) => {
-                      setDateTo(e.target.value);
-                      setDatePreset('custom');
-                    }}
-                    className="mt-1 w-full rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 px-2 py-1.5 text-xs text-slate-700 dark:text-slate-200 outline-none focus:border-teal-500"
-                  />
-                </label>
+                <div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">From</span>
+                  <div className="mt-1">
+                    <AppDatePicker
+                      value={dateFrom}
+                      maxDate={dateTo || undefined}
+                      onChange={(val) => {
+                        setDateFrom(val);
+                        setDatePreset('custom');
+                      }}
+                      placeholder="Start date"
+                      inputClassName="py-1.5 text-xs"
+                      clearable={true}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">To</span>
+                  <div className="mt-1">
+                    <AppDatePicker
+                      value={dateTo}
+                      minDate={dateFrom || undefined}
+                      onChange={(val) => {
+                        setDateTo(val);
+                        setDatePreset('custom');
+                      }}
+                      placeholder="End date"
+                      inputClassName="py-1.5 text-xs"
+                      clearable={true}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="mt-2.5 flex justify-end">
                 <button

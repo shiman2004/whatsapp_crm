@@ -25,7 +25,7 @@ import {
 import { SettingsLayout } from './SettingsLayout';
 import { useCrm } from '../../context/CrmContext';
 import { UserDetailDrawer } from '../admin/user-management/UserDetailDrawer';
-import { setUserManagementTokenReader, userManagementApi, type Department } from '../admin/user-management/api';
+import { setUserManagementTokenReader, userManagementApi, type Department, type ManagedUser } from '../admin/user-management/api';
 
 interface RolesPermissionsSectionProps {
   currentSectionId: string;
@@ -87,7 +87,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   selectedCompanyId,
   onSelectCompany
 }) => {
-  const { users, currentUser, getAuthToken, notify } = useCrm();
+  const { currentUser, getAuthToken, notify } = useCrm();
 
   const [activeTab, setActiveTab] = useState<TabType>('staff');
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,6 +96,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [detailUserId, setDetailUserId] = useState<string | null>(null);
   const [departments, setDepartments] = useState<Department[]>([]);
+  const [staffUsers, setStaffUsers] = useState<ManagedUser[]>([]);
   const tokenRef = useRef(getAuthToken);
 
   useEffect(() => {
@@ -104,10 +105,17 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   }, [getAuthToken]);
 
   useEffect(() => {
-    userManagementApi.org()
-      .then((result) => setDepartments(result.departments))
+    Promise.all([userManagementApi.org(), userManagementApi.users({ pageSize: 100 })])
+      .then(([org, directory]) => {
+        setDepartments(org.departments);
+        setStaffUsers(directory.items);
+      })
       .catch(() => {});
   }, []);
+
+  useEffect(() => {
+    setCompanyFilter(selectedCompanyId || 'ALL');
+  }, [selectedCompanyId]);
 
   // Quick Role Access Selected Role
   const [selectedRole, setSelectedRole] = useState<string>('Clinical Admin');
@@ -150,7 +158,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
 
   // Filtered users
   const staffList = useMemo(() => {
-    return users.filter(u => {
+    return staffUsers.filter(u => {
       const matchesSearch = 
         u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
         u.email.toLowerCase().includes(searchQuery.toLowerCase());
@@ -162,19 +170,14 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
           ? true
           : (u.company === companyFilter || isEnterpriseRole);
       
-      const matchesStatus = 
-        statusFilter === 'ALL' 
-          ? true 
-          : statusFilter === 'ACTIVE' 
-          ? u.active !== false 
-          : u.active === false;
+      const matchesStatus = statusFilter === 'ALL' || u.status === statusFilter.toLowerCase();
 
       return matchesSearch && matchesRole && matchesCompany && matchesStatus;
     });
-  }, [users, searchQuery, roleFilter, companyFilter, statusFilter]);
+  }, [staffUsers, searchQuery, roleFilter, companyFilter, statusFilter]);
 
   // Metrics
-  const activeStaffCount = users.filter(u => u.active !== false).length;
+  const activeStaffCount = staffUsers.filter(u => u.active).length;
   const rolesCount = 13;
   const protectedModulesCount = 7;
   const activeSessionsCount = sessions.filter(s => s.status === 'active').length;
@@ -382,11 +385,9 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
                     className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
                   >
                     <option value="ALL">Role: All</option>
-                    <option value="super_admin">Super Admin</option>
-                    <option value="coordinator">Patient Coordinator</option>
-                    <option value="leads_officer">Leads Officer</option>
-                    <option value="clinical_doctor">Clinical Doctor</option>
-                    <option value="clinical_nurse">Clinical Nurse</option>
+                    {[...new Map(staffUsers.map((user) => [user.role, user.roleLabel])).entries()].map(([role, label]) => (
+                      <option key={role} value={role}>{label}</option>
+                    ))}
                   </select>
 
                   <select
@@ -408,12 +409,15 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
                     <option value="ALL">Status: All</option>
                     <option value="ACTIVE">Active Only</option>
                     <option value="INACTIVE">Inactive Only</option>
+                    <option value="SUSPENDED">Suspended</option>
+                    <option value="LOCKED">Locked</option>
+                    <option value="INVITED">Invited</option>
                   </select>
                 </div>
 
                 {/* Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs">
+                  <table className="w-full min-w-[720px] text-left text-xs">
                     <thead>
                       <tr className="border-b border-[#E0E5E7] dark:border-[#222D34] text-[11px] font-semibold text-[#667781] dark:text-[#8696A0]">
                         <th className="pb-2.5 pr-4">Staff Name</th>
@@ -447,27 +451,27 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
 
                             {/* Role */}
                             <td className="py-3 px-4 font-medium text-[#111B21] dark:text-[#E9EDEF]">
-                              {formatRoleLabel(user.role)}
+                              {user.roleLabel || formatRoleLabel(user.role)}
                             </td>
 
                             {/* Company */}
                             <td className="py-3 px-4">
                               <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[#111B21] dark:text-[#E9EDEF]">
-                                {user.role === 'leads_officer' ? 'ALL (Gateway)' : (user.company || (user.role === 'super_admin' ? 'ALL' : 'RWC'))}
+                                {user.company || '—'}
                               </span>
                             </td>
 
                             {/* Status */}
                             <td className="py-3 px-4">
                               <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#111B21] dark:text-[#E9EDEF]">
-                                <span className={`h-2 w-2 rounded-full ${user.active !== false ? 'bg-[#128C7E] dark:bg-[#25D366]' : 'bg-gray-400'}`} />
-                                {user.active !== false ? 'Active' : 'Inactive'}
+                                <span className={`h-2 w-2 rounded-full ${user.status === 'active' ? 'bg-[#128C7E] dark:bg-[#25D366]' : 'bg-gray-400'}`} />
+                                {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                               </span>
                             </td>
 
                             {/* Last Login */}
                             <td className="py-3 px-4 text-[11px] text-[#667781] dark:text-[#8696A0] whitespace-nowrap">
-                              Nov 3, 2026, 1:12 PM
+                              {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never logged in'}
                             </td>
 
                             {/* Actions */}

@@ -12,11 +12,13 @@
   "dependencies": {
     "axios": "^1.21.0",
     "canvas-confetti": "^1.9.4",
+    "flatpickr": "^4.6.13",
     "lamejs": "^1.2.1",
     "lucide-react": "^1.47.0",
     "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
+    "react-flatpickr": "^4.0.11",
     "react-is": "^19.2.8",
     "recharts": "^3.10.1",
     "socket.io-client": "^4.8.4"
@@ -27,6 +29,7 @@
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
+    "@types/react-flatpickr": "^3.8.11",
     "@vitejs/plugin-react": "^6.1.1",
     "autoprefixer": "^10.6.1",
     "oxlint": "^1.81.0",

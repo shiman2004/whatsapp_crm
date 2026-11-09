@@ -33,7 +33,7 @@ import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
 import { handleSettingsRoutes } from './settingsRoutes.js';
-import { hashSecret, verifySecret, encryptReversible, decryptReversible } from './secretHash.js';
+import { hashSecret, verifySecret, encryptReversible, decryptReversible, isValidCredentialHash } from './secretHash.js';
 import { createCorrelationId, auditSecurityEvent, sendApiError } from './securityAudit.js';
 import { canSendWhatsApp } from './modules/marketing/services/consent.service.js';
 import { processMarketingInboundMessage } from './modules/marketing/services/marketingConsentAutomation.service.js';
@@ -1036,8 +1036,8 @@ async function authenticateRequest(req, parsedUrl) {
     }
   }
 
-  // Test fixtures and unseeded environments may use canonical users
-  if (!dbUser) {
+  // Isolated test environment fallback for unit tests and unseeded test fixtures
+  if (!dbUser && IS_TEST_ENV) {
     dbUser = CANONICAL_USERS.find(u => u.id === payload.userId);
   }
 
@@ -1597,7 +1597,7 @@ const server = http.createServer(async (req, res) => {
         const prisma = getPrisma();
         const used = await getSystemSetting('INITIAL_ADMIN_SETUP_USED').catch(() => '');
         const existingAdmin = prisma && getDbStatus() ? await prisma.user.findFirst({ where: { role: 'super_admin', active: true } }).catch(() => null) : null;
-        if (!configuredSetupToken || used === 'true' || existingAdmin || setupToken !== configuredSetupToken) {
+        if (!configuredSetupToken || used === 'true' || existingAdmin || !timingSafeStringEqual(setupToken, configuredSetupToken)) {
           res.writeHead(403, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: false, error: 'Initial administrator setup is unavailable.' }));
           return;
@@ -1672,29 +1672,18 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        // Authoritative user resolution
+        // Authoritative user resolution: query database strictly by id or email
         const prisma = getPrisma();
         let user = null;
         let isDbUser = false;
-        const adminAliases = ['admin', 'superadmin', 'super_admin'];
-        const shimanAliases = ['shiman', 'mnmshiman@gmail.com', 'mmshiman@gmail.com'];
-        const afrijAliases = ['afrij', 'afrij@royalwellness.lk'];
-        
-        let targetIdentifier = identifier;
-        if (shimanAliases.includes(identifier)) targetIdentifier = 'mnmshiman@gmail.com';
-        else if (afrijAliases.includes(identifier)) targetIdentifier = 'afrij@royalwellness.lk';
 
         if (prisma && getDbStatus()) {
           try {
-            const targetIds = adminAliases.includes(identifier) ? [identifier, 'user-admin-1'] : [targetIdentifier, identifier];
-            const targetEmails = adminAliases.includes(identifier)
-              ? [identifier, 'admin@royalwellness.lk']
-              : (shimanAliases.includes(identifier) ? ['mnmshiman@gmail.com', 'mmshiman@gmail.com'] : [targetIdentifier, identifier]);
             user = await prisma.user.findFirst({
               where: {
                 OR: [
-                  { id: { in: targetIds } },
-                  { email: { in: targetEmails, mode: 'insensitive' } }
+                  { id: identifier },
+                  { email: { equals: identifier, mode: 'insensitive' } }
                 ]
               }
             });
@@ -1702,47 +1691,13 @@ const server = http.createServer(async (req, res) => {
           } catch (e) {}
         }
 
-        // Canonical users fallback:
-        // System super admins and core staff exist in CANONICAL_USERS so authentication
-        // remains reliable across dev and production even prior to full database seeding.
-        if (!user) {
+        // Isolated test fixture fallback ONLY in test environment (never in production).
+        // Never auto-provisions or seeds database rows at login time.
+        if (!user && IS_TEST_ENV) {
           user = CANONICAL_USERS.find(u => 
-            u.id.toLowerCase() === targetIdentifier || 
-            u.email.toLowerCase() === targetIdentifier ||
             u.id.toLowerCase() === identifier || 
-            u.email.toLowerCase() === identifier ||
-            (adminAliases.includes(identifier) && u.role === 'super_admin') ||
-            (shimanAliases.includes(identifier) && u.fullName.toLowerCase() === 'shiman') ||
-            (afrijAliases.includes(identifier) && u.fullName.toLowerCase() === 'afrij')
+            u.email.toLowerCase() === identifier
           );
-          if (user && prisma && getDbStatus()) {
-            try {
-              const existingInDb = await prisma.user.findFirst({
-                where: { OR: [{ id: user.id }, { email: { equals: user.email, mode: 'insensitive' } }] }
-              });
-              if (!existingInDb) {
-                user = await prisma.user.create({
-                  data: {
-                    id: user.id,
-                    fullName: user.fullName,
-                    email: user.email,
-                    branch: user.branch || 'Colombo',
-                    company: user.company || (user.role === 'coordinator' ? 'RWC' : 'ALL'),
-                    role: user.role,
-                    password: user.password,
-                    pin: user.pin,
-                    active: user.active ?? true
-                  }
-                });
-                isDbUser = true;
-              } else {
-                user = existingInDb;
-                isDbUser = true;
-              }
-            } catch (healErr) {
-              console.warn('[Auth] Canonical user self-heal note:', healErr.message);
-            }
-          }
         }
 
         // Generic authentication failure helper (constant response & status to prevent account enumeration)
@@ -1759,8 +1714,8 @@ const server = http.createServer(async (req, res) => {
           return await sendAuthFailure();
         }
 
-        // Deactivated account -> generic failure (do not disclose account existence or status)
-        if (user.active === false) {
+        // Deactivated or deleted account -> generic failure (do not disclose account existence or status)
+        if (user.active === false || DELETED_USER_IDS.has(user.id)) {
           return await sendAuthFailure();
         }
 
@@ -1782,58 +1737,40 @@ const server = http.createServer(async (req, res) => {
           return await sendAuthFailure();
         }
 
-        // Credential resolution with default fallbacks
-        const expectedPassword = user.password || (user.role === 'super_admin' ? DEFAULT_ADMIN_PASSWORD_HASH : DEFAULT_STAFF_PASSWORD_HASH);
-        const expectedPin = user.pin || (user.role === 'super_admin' ? (user.fullName === 'Shiman' ? SHIMAN_PIN_HASH : DEFAULT_ADMIN_PIN_HASH) : DEFAULT_STAFF_PIN_HASH);
+        // Strict account credential verification:
+        // Stored password or PIN must be a valid cryptographic hash (scrypt or enc:v1:).
+        // Missing, empty, or invalid hashes are strictly rejected; no default or fallback verifiers.
+        const hasValidPassword = isValidCredentialHash(user.password);
+        const hasValidPin = isValidCredentialHash(user.pin);
 
-        // Verify candidates
+        if (!hasValidPassword && !hasValidPin) {
+          return await sendAuthFailure();
+        }
+
         let matched = false;
         let matchedField = null;
         let needsMigration = false;
         let plainSecretUsed = '';
 
         for (const candidate of candidates) {
-          // Check against password
-          const passResult = verifySecret(candidate, expectedPassword);
-          if (passResult.match) {
-            matched = true;
-            matchedField = 'password';
-            needsMigration = passResult.needsRehash;
-            plainSecretUsed = candidate;
-            break;
-          }
-          // Check against PIN
-          const pinResult = verifySecret(candidate, expectedPin);
-          if (pinResult.match) {
-            matched = true;
-            matchedField = 'pin';
-            needsMigration = pinResult.needsRehash;
-            plainSecretUsed = candidate;
-            break;
-          }
-
-          // Backward-compatibility: if Super Admin with pre-migration cached pin '2026', '1234', '7777', or 'staff'
-          if (user.role === 'super_admin' || user.id === 'user-admin-1') {
-            const adminFallbackPass = verifySecret(candidate, DEFAULT_STAFF_PASSWORD_HASH);
-            const adminFallbackPin = verifySecret(candidate, DEFAULT_STAFF_PIN_HASH);
-            const shimanPinMatch = verifySecret(candidate, SHIMAN_PIN_HASH);
-            const adminPinMatch = verifySecret(candidate, DEFAULT_ADMIN_PIN_HASH);
-            if (adminFallbackPass.match || adminFallbackPin.match || shimanPinMatch.match || adminPinMatch.match || ['admin', '1234', 'staff', '2026', '7777'].includes(candidate)) {
+          // Check against account password hash
+          if (hasValidPassword) {
+            const passResult = verifySecret(candidate, user.password);
+            if (passResult.match) {
               matched = true;
-              matchedField = 'pin';
-              needsMigration = true;
+              matchedField = 'password';
+              needsMigration = passResult.needsRehash;
               plainSecretUsed = candidate;
               break;
             }
-          } else {
-            // Coordinator / Leads Officer fallback
-            const staffFallbackPass = verifySecret(candidate, DEFAULT_STAFF_PASSWORD_HASH);
-            const staffFallbackPin = verifySecret(candidate, DEFAULT_STAFF_PIN_HASH);
-            const knownStaffPins = ['staff', '2026', '1234', 'admin', '5226', '8722', '3488', '9312'];
-            if (staffFallbackPass.match || staffFallbackPin.match || knownStaffPins.includes(candidate)) {
+          }
+          // Check against account PIN hash
+          if (hasValidPin) {
+            const pinResult = verifySecret(candidate, user.pin);
+            if (pinResult.match) {
               matched = true;
               matchedField = 'pin';
-              needsMigration = true;
+              needsMigration = pinResult.needsRehash;
               plainSecretUsed = candidate;
               break;
             }
@@ -1845,7 +1782,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         // Safe Transparent Migration:
-        // If legacy plaintext was matched, seamlessly upgrade stored hash in database to scrypt
+        // If legacy reversible encrypted format (enc:v1:) was matched, upgrade stored hash to scrypt
         if (needsMigration && plainSecretUsed) {
           const newHash = hashSecret(plainSecretUsed);
           if (isDbUser && prisma && getDbStatus()) {
@@ -8845,43 +8782,39 @@ async function autoSeedDbIfEmpty() {
       console.log('✅ Treatments & CRAS courses seeding completed.');
     }
 
-    // Ensure canonical users (super admins, coordinators) are seeded into PostgreSQL
-    for (const u of CANONICAL_USERS) {
-      try {
-        const existing = await prisma.user.findFirst({
-          where: {
-            OR: [
-              { id: u.id },
-              { email: { equals: u.email, mode: 'insensitive' } }
-            ]
+    // Canonical user seeding is restricted strictly to isolated testing environments (IS_TEST_ENV).
+    // In production, automatic admin/user seeding is completely disabled to eliminate unsafe
+    // privileged account provisioning. Existing credentials are never silently overwritten.
+    if (IS_TEST_ENV) {
+      for (const u of CANONICAL_USERS) {
+        try {
+          const existing = await prisma.user.findFirst({
+            where: {
+              OR: [
+                { id: u.id },
+                { email: { equals: u.email, mode: 'insensitive' } }
+              ]
+            }
+          });
+          if (!existing) {
+            await prisma.user.create({
+              data: {
+                id: u.id,
+                fullName: u.fullName,
+                email: u.email,
+                branch: u.branch || 'Colombo',
+                company: u.company || (u.role === 'coordinator' ? 'RWC' : 'ALL'),
+                role: u.role,
+                password: u.password,
+                pin: u.pin,
+                active: u.active ?? true
+              }
+            });
+            console.log(`🌱 [TestFixture] Seeded test user: ${u.fullName} (${u.email})`);
           }
-        });
-        if (!existing) {
-          await prisma.user.create({
-            data: {
-              id: u.id,
-              fullName: u.fullName,
-              email: u.email,
-              branch: u.branch || 'Colombo',
-              company: u.company || (u.role === 'coordinator' ? 'RWC' : 'ALL'),
-              role: u.role,
-              password: u.password,
-              pin: u.pin,
-              active: u.active ?? true
-            }
-          });
-          console.log(`🌱 [AutoSeed] Seeded canonical user: ${u.fullName} (${u.email})`);
-        } else if (!existing.pin || !existing.password) {
-          await prisma.user.update({
-            where: { id: existing.id },
-            data: {
-              pin: existing.pin || u.pin,
-              password: existing.password || u.password
-            }
-          });
+        } catch (userSeedErr) {
+          console.warn(`⚠️ [TestFixture] User check/seed for ${u.email}:`, userSeedErr.message);
         }
-      } catch (userSeedErr) {
-        console.warn(`⚠️ [AutoSeed] User check/seed for ${u.email}:`, userSeedErr.message);
       }
     }
   } catch (e) {
@@ -8997,6 +8930,7 @@ export {
   CANONICAL_USERS,
   hashSecret,
   verifySecret,
+  isValidCredentialHash,
   checkLoginRateLimit,
   recordLoginFailure,
   recordLoginSuccess,

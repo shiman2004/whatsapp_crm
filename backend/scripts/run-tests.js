@@ -29,6 +29,7 @@ const ALL_SUITES = [
   'test-sender-audit.js',
   'test-auth-security.js',
   'test-login-security.js',
+  'test-auth-bypass-remediation.test.js',
   'test-24h-window.js',
   'test-company-switching.js',
   'test-cras-contact-creation.js',

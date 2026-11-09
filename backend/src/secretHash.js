@@ -44,6 +44,25 @@ export function hashSecret(secret) {
   return `scrypt:${salt}:${hash}`;
 }
 
+/**
+ * Validates whether a stored credential string is a recognized, valid cryptographic hash format.
+ * Returns true for scrypt hashes (`scrypt:<salt>:<hash>`) and legacy reversible (`enc:v1:`) hashes.
+ * Returns false for empty, null, plaintext, or malformed strings.
+ */
+export function isValidCredentialHash(storedCredential) {
+  if (!storedCredential || typeof storedCredential !== 'string') return false;
+  const trimmed = storedCredential.trim();
+  if (trimmed.startsWith('scrypt:')) {
+    const parts = trimmed.split(':');
+    return parts.length === 3 && parts[1].length >= 16 && parts[2].length >= 32;
+  }
+  if (trimmed.startsWith('enc:v1:')) {
+    const parts = trimmed.split(':');
+    return parts.length === 5;
+  }
+  return false;
+}
+
 /** Timing-safe verification with transparent support for reversible encryption, scrypt, and plaintext. */
 export function verifySecret(providedSecret, storedCredential) {
   if (!providedSecret || !storedCredential) {

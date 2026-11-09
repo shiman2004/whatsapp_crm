@@ -19,7 +19,7 @@ export function initExamSocket(httpServer) {
   });
 
   // Strict Connection Authentication Middleware
-  io.use((socket, next) => {
+  io.use(async (socket, next) => {
     const rawToken = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!rawToken) {
       // In test mode without token, allow mock socket connection
@@ -35,7 +35,44 @@ export function initExamSocket(httpServer) {
       return next(new Error('Invalid or expired authentication token'));
     }
 
-    socket.user = verification.payload;
+    const payload = verification.payload;
+    if (!payload || !payload.userId) {
+      return next(new Error('Invalid token claims'));
+    }
+
+    // Verify session revocation against database
+    const prisma = getPrisma();
+    if (prisma) {
+      try {
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT active, session_version, locked_until FROM public.users WHERE id = $1 LIMIT 1`,
+          payload.userId
+        );
+        const dbUser = rows?.[0];
+        if (dbUser) {
+          if (dbUser.active === false) {
+            return next(new Error('Account has been deactivated'));
+          }
+          if (dbUser.locked_until && new Date(dbUser.locked_until).getTime() > Date.now()) {
+            return next(new Error('Account is temporarily locked'));
+          }
+          if (Number(payload.sv ?? 0) !== Number(dbUser.session_version || 0)) {
+            return next(new Error('This session was revoked. Please sign in again.'));
+          }
+        }
+        if (payload.sid) {
+          const sessions = await prisma.$queryRawUnsafe(
+            `SELECT id, revoked_at FROM public.user_sessions WHERE id = $1 AND user_id = $2 LIMIT 1`,
+            String(payload.sid), payload.userId
+          );
+          if (!sessions?.length || sessions[0].revoked_at) {
+            return next(new Error('This session was revoked. Please sign in again.'));
+          }
+        }
+      } catch (err) {}
+    }
+
+    socket.user = payload;
     next();
   });
 

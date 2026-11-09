@@ -54,6 +54,7 @@ export const AppointmentBookingsView: React.FC = () => {
   const [detailMode, setDetailMode] = useState<'view' | 'reschedule'>('view');
   const [bookingOpen, setBookingOpen] = useState(false);
   const [bookingAppointmentId, setBookingAppointmentId] = useState<string | null>(null);
+  const [bookingDate, setBookingDate] = useState('');
 
   useEffect(() => {
     Promise.all([appointmentService.getBranches(), appointmentService.getDoctors()])
@@ -99,8 +100,9 @@ export const AppointmentBookingsView: React.FC = () => {
     setSearch('');
   };
 
-  const openBooking = (appointmentId: string | null = null) => {
+  const openBooking = (appointmentId: string | null = null, date = '') => {
     setBookingAppointmentId(appointmentId);
+    setBookingDate(date);
     setBookingOpen(true);
   };
 
@@ -307,21 +309,41 @@ export const AppointmentBookingsView: React.FC = () => {
               const inMonth = day.slice(0, 7) === monthCursor.slice(0, 7);
               const isToday = day === colomboDateKey();
               return (
-                <button
-                  type="button"
+                <div
                   key={day}
-                  onClick={() => { setStartDate(day); setEndDate(day); setView('table'); }}
-                  className={`min-h-[76px] rounded-lg border p-1 text-left transition-colors ${inMonth ? 'border-[#E0E5E7] dark:border-[#222D34]' : 'border-transparent opacity-40'} ${isToday ? 'ring-1 ring-teal-500' : ''} hover:bg-[#F0F2F5] dark:hover:bg-[#2A3942]`}
+                  className={`relative min-h-[76px] rounded-lg border p-1 text-left transition-colors ${inMonth ? 'border-[#E0E5E7] hover:bg-[#F0F2F5] dark:border-[#222D34] dark:hover:bg-[#2A3942]' : 'border-transparent opacity-40'} ${isToday ? 'ring-1 ring-teal-500' : ''}`}
                 >
-                  <span className={`text-[10px] font-bold ${isToday ? 'text-teal-500' : ''}`}>{Number(day.slice(-2))}</span>
-                  <div className="mt-1 space-y-0.5">
+                  {inMonth && (
+                    <button
+                      type="button"
+                      aria-label={`Book appointment on ${formatDateKey(day, { weekday: 'long', month: 'long', day: 'numeric' })}`}
+                      onClick={() => openBooking(null, day)}
+                      className="absolute inset-0 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-teal-500"
+                    />
+                  )}
+                  <span className={`relative z-10 pointer-events-none text-[10px] font-bold ${isToday ? 'text-teal-500' : ''}`}>{Number(day.slice(-2))}</span>
+                  <div className="relative z-10 mt-1 space-y-0.5">
                     {dayAppointments.slice(0, 2).map((appointment) => {
                       const config = getAppointmentStatusConfig(appointment.status);
-                      return <span key={appointment.id} className={`block truncate rounded px-1 py-0.5 text-[9px] font-semibold ${config.badgeClass}`}>{colomboTimeKey(appointment.startTime)} {appointment.patientName || 'Patient'}</span>;
+                      return (
+                        <button
+                          type="button"
+                          key={appointment.id}
+                          onClick={(event) => { event.stopPropagation(); openDetails(appointment.id); }}
+                          className={`block w-full truncate rounded px-1 py-0.5 text-left text-[9px] font-semibold transition-colors hover:brightness-110 ${config.badgeClass}`}
+                          title={`View ${appointment.patientName || 'patient'} appointment details`}
+                        >
+                          {colomboTimeKey(appointment.startTime)} {appointment.patientName || 'Patient'}
+                        </button>
+                      );
                     })}
-                    {dayAppointments.length > 2 && <span className="block text-[9px] font-bold text-teal-500">+{dayAppointments.length - 2} more</span>}
+                    {dayAppointments.length > 2 && (
+                      <button type="button" onClick={(event) => { event.stopPropagation(); openDetails(dayAppointments[0].id); }} className="block text-[9px] font-bold text-teal-500 hover:underline">
+                        +{dayAppointments.length - 2} more
+                      </button>
+                    )}
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
@@ -342,13 +364,13 @@ export const AppointmentBookingsView: React.FC = () => {
         isOpen={bookingOpen}
         appointmentId={bookingAppointmentId}
         onClose={() => setBookingOpen(false)}
-        onSuccess={() => { setBookingOpen(false); setBookingAppointmentId(null); load(); }}
+        onSuccess={() => { setBookingOpen(false); setBookingAppointmentId(null); setBookingDate(''); load(); }}
         branches={branches}
         treatments={treatments}
         doctors={doctors}
         users={users}
         defaultBranchId={branchId}
-        defaultDate={startDate || colomboDateKey()}
+        defaultDate={bookingDate || startDate || colomboDateKey()}
       />
     </div>
   );

@@ -16,6 +16,8 @@ import { DataManagementSection } from './DataManagementSection';
 import { SystemMonitoringSection } from './SystemMonitoringSection';
 import { ReportingSettingsSection } from './ReportingSettingsSection';
 import { AppearanceSection } from './AppearanceSection';
+import { SettingsLayout } from './SettingsLayout';
+import { LabelManagementTab } from '../admin/SuperAdminSettings/LabelManagementTab';
 
 export const EnterpriseSettingsHub: React.FC = () => {
   const getHashSection = () => {
@@ -25,6 +27,8 @@ export const EnterpriseSettingsHub: React.FC = () => {
       const section = parts[1] || 'company';
       if (section === 'courses') return 'academic';
       if (section === 'treatments') return 'clinical';
+      if (section === 'stages') return 'sales';
+      if (section === 'labels') return 'labels';
       return section;
     }
     return 'company';
@@ -60,6 +64,14 @@ export const EnterpriseSettingsHub: React.FC = () => {
       return <UserManagementSection {...commonProps} />;
     case 'roles':
       return <RolesPermissionsSection {...commonProps} />;
+    case 'labels':
+      return (
+        <SettingsLayout {...commonProps}>
+          <div className="p-6 overflow-y-auto max-w-6xl mx-auto flex-1">
+            <LabelManagementTab />
+          </div>
+        </SettingsLayout>
+      );
     case 'whatsapp_messaging':
       return <WhatsAppMessagingSection {...commonProps} />;
     case 'sales':

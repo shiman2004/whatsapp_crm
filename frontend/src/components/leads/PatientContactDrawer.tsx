@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Check, Clock3, Copy, ListPlus, MessageCircle, Phone, ShieldCheck, Tag, User, X } from 'lucide-react';
+import { Check, Clock3, Copy, ListPlus, MessageCircle, Phone, ShieldCheck, Tag, User, X, Plus } from 'lucide-react';
 import { PRESET_LABELS } from '../chat/WhatsAppChatList';
+import { CreateAssignLabelModal } from '../chat/CreateAssignLabelModal';
 import { Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
@@ -19,6 +20,7 @@ export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead
   const assignedBy = lead.assignedByName || users.find(user => user.id === lead.assignedById)?.fullName || 'System';
   // Assign Labels & Lists state
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [isCreateLabelModalOpen, setIsCreateLabelModalOpen] = useState(false);
   const labelPickerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -235,6 +237,21 @@ export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead
                   );
                 })}
               </div>
+
+              {/* Add New Assign Label Option */}
+              <div className="pt-1 mt-1 border-t border-slate-200 dark:border-slate-700/80">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLabelPickerOpen(false);
+                    setIsCreateLabelModalOpen(true);
+                  }}
+                  className="w-full flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold text-teal-600 dark:text-teal-400 hover:bg-teal-50 dark:hover:bg-[#00a884]/15 transition-colors cursor-pointer text-left"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>+ Add New Assign Label</span>
+                </button>
+              </div>
             </div>
           )}
         </section>
@@ -265,6 +282,13 @@ export const PatientContactDrawer: React.FC<PatientContactDrawerProps> = ({ lead
         </section>
       </div>
     </aside>
+
+    {/* Add New Assign Label Modal */}
+    <CreateAssignLabelModal
+      isOpen={isCreateLabelModalOpen}
+      onClose={() => setIsCreateLabelModalOpen(false)}
+      targetLeadId={lead.id}
+    />
   </div>;
 };
 

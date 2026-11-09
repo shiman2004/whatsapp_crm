@@ -28,12 +28,14 @@ import {
   ListPlus,
   Share2,
   GraduationCap,
-  Sparkles
+  Sparkles,
+  Plus
 } from 'lucide-react';
 import { parseCourseMetadata } from '../admin/SuperAdminSettings/CourseManagementTab';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { WhatsApp24hWindowInfo } from './WhatsApp24hWindowInfo';
 import { PRESET_LABELS } from './WhatsAppChatList';
+import { CreateAssignLabelModal } from './CreateAssignLabelModal';
 
 import { 
   formatWhatsAppDisplay, 
@@ -143,6 +145,7 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
 
   // Assign Labels & Lists state
   const [labelPickerOpen, setLabelPickerOpen] = useState(false);
+  const [isCreateLabelModalOpen, setIsCreateLabelModalOpen] = useState(false);
   const [labelSearchQuery, setLabelSearchQuery] = useState('');
   const labelPickerRef = useRef<HTMLDivElement>(null);
 
@@ -1033,6 +1036,21 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
                   );
                 })}
               </div>
+
+              {/* Add New Assign Label Option */}
+              <div className="pt-1 mt-1 border-t border-slate-700/80">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setLabelPickerOpen(false);
+                    setIsCreateLabelModalOpen(true);
+                  }}
+                  className="w-full flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold text-teal-400 hover:text-teal-300 hover:bg-[#00a884]/15 transition-colors cursor-pointer text-left"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Add New Assign Label</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
@@ -1091,6 +1109,14 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
         </div>
 
       </div>
+
+      {lead && (
+        <CreateAssignLabelModal
+          isOpen={isCreateLabelModalOpen}
+          onClose={() => setIsCreateLabelModalOpen(false)}
+          targetLeadId={lead.id}
+        />
+      )}
     </div>
   );
 };

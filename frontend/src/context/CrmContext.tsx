@@ -5355,22 +5355,24 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   // Join leads with customer & coordinator objects
-  const hydratedLeads: Lead[] = leads.map(lead => {
-    const cust = customers.find(c => c.id === lead.customerId);
-    const rawCust = cust || lead.customer;
-    const finalCust: Customer | undefined = rawCust ? {
-      ...rawCust,
-      whatsappNumber: rawCust.whatsappNumber || '',
-      phoneNumber: rawCust.phoneNumber || formatWhatsAppDisplay(rawCust.whatsappNumber),
-      whatsappId: rawCust.whatsappId || getCleanWhatsAppDigits(rawCust.whatsappNumber)
-    } : undefined;
+  const hydratedLeads: Lead[] = useMemo(() => {
+    return leads.map(lead => {
+      const cust = customers.find(c => c.id === lead.customerId);
+      const rawCust = cust || lead.customer;
+      const finalCust: Customer | undefined = rawCust ? {
+        ...rawCust,
+        whatsappNumber: rawCust.whatsappNumber || '',
+        phoneNumber: rawCust.phoneNumber || formatWhatsAppDisplay(rawCust.whatsappNumber),
+        whatsappId: rawCust.whatsappId || getCleanWhatsAppDigits(rawCust.whatsappNumber)
+      } : undefined;
 
-    return {
-      ...lead,
-      customer: finalCust,
-      assignedCoordinator: users.find(u => u.id === lead.assignedTo),
-    };
-  });
+      return {
+        ...lead,
+        customer: finalCust,
+        assignedCoordinator: users.find(u => u.id === lead.assignedTo),
+      };
+    });
+  }, [leads, customers, users]);
 
   // Strict Role-Based Lead Isolation:
   // Coordinators can ONLY view leads assigned to their account.

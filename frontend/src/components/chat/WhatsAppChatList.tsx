@@ -25,11 +25,14 @@ import {
   AlertCircle,
   FileText,
   Video,
-  Smile
+  Smile,
+  Plus,
+  Sliders
 } from 'lucide-react';
 import { Lead, Message } from '../../types';
 import { formatWhatsAppDisplay } from '../../utils/phoneUtils';
 import { AddContactModal } from './AddContactModal';
+import { CreateAssignLabelModal } from './CreateAssignLabelModal';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
 import { formatChatListTimestamp } from '../../utils/dateUtils';
 import { isLeadAccessibleForUser } from '../../utils/permissionUtils';
@@ -95,6 +98,8 @@ export const WhatsAppChatList: React.FC<WhatsAppChatListProps> = ({ onSelectLead
   const [search, setSearch] = useState('');
   const [activeFilter, setActiveFilter] = useState<string>(() => chatListFilter || 'all');
   const [isAddContactOpen, setIsAddContactOpen] = useState(false);
+  const [isCreateLabelModalOpen, setIsCreateLabelModalOpen] = useState(false);
+  const [createLabelTargetLeadId, setCreateLabelTargetLeadId] = useState<string | null>(null);
 
   // Sync activeFilter with global chatListFilter from context (e.g. when bell is clicked)
   useEffect(() => {
@@ -349,9 +354,11 @@ const menuRef = useRef<HTMLDivElement>(null);
     setIsLabelSubmenuOpen(false);
     const clientX = e.clientX || 150;
     const clientY = e.clientY || 200;
+    const screenWidth = typeof window !== 'undefined' ? window.innerWidth : 1200;
+    const screenHeight = typeof window !== 'undefined' ? window.innerHeight : 800;
     setContextMenuPos({ 
-      x: Math.min(clientX, window.innerWidth - 240), 
-      y: Math.min(clientY, window.innerHeight - 340) 
+      x: Math.max(10, Math.min(clientX, screenWidth - 260)), 
+      y: Math.max(10, Math.min(clientY, screenHeight - 440)) 
     });
   };
 
@@ -1024,39 +1031,94 @@ const menuRef = useRef<HTMLDivElement>(null);
             <ChevronRight className="w-3.5 h-3.5 text-[#8696a0]" />
 
             {/* Nested Submenu */}
-            {isLabelSubmenuOpen && (
-              <div 
-                className="absolute left-full top-0 ml-1.5 w-56 wa-context-menu rounded-xl py-1.5 shadow-2xl z-50 text-xs animate-in fade-in zoom-in-95 duration-75"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#222e35]/60 flex items-center gap-1">
-                  <Tag className="w-3 h-3" />
-                  <span>Assign Labels</span>
-                </div>
-                {availableLabels.map((lbl: any) => {
-                  const isActive = (leadLabels[contextMenuLeadId] || []).includes(lbl.id) || (leadLabels[contextMenuLeadId] || []).includes(lbl.key);
-                  const isCustom = !lbl.dotColor && !lbl.dot && lbl.color;
-                  return (
-                    <div
-                      key={lbl.id || lbl.key}
-                      onClick={() => toggleLeadLabel(contextMenuLeadId, lbl.id || lbl.key)}
-                      className="wa-context-item justify-between py-2 cursor-pointer"
-                    >
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span
-                          className={`w-2 h-2 rounded-full shrink-0 ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
-                          style={isCustom ? { backgroundColor: lbl.color } : undefined}
-                        />
-                        <span className={`truncate ${isActive ? 'text-white font-semibold' : 'text-[#d1d7db]'}`}>
-                          {lbl.name}
-                        </span>
-                      </div>
-                      {isActive && <Check className="w-3.5 h-3.5 text-[#00a884] stroke-[2.5] shrink-0" />}
+            {isLabelSubmenuOpen && (() => {
+              const isBottomHalf = (contextMenuPos?.y || 0) > (typeof window !== 'undefined' ? window.innerHeight / 2 : 400);
+              const isRightEdge = (contextMenuPos?.x || 0) > (typeof window !== 'undefined' ? window.innerWidth - 480 : 800);
+              return (
+                <div 
+                  className={`absolute w-60 wa-context-menu rounded-xl py-1.5 shadow-2xl z-50 text-xs animate-in fade-in zoom-in-95 duration-75 ${
+                    isRightEdge ? 'right-full mr-1.5' : 'left-full ml-1.5'
+                  } ${
+                    isBottomHalf ? 'bottom-0' : 'top-0'
+                  }`}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#222e35]/60 flex items-center justify-between">
+                    <div className="flex items-center gap-1">
+                      <Tag className="w-3 h-3 text-teal-400" />
+                      <span>Assign Labels</span>
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                    <span className="text-[9px] text-slate-500 font-mono">
+                      {availableLabels.length}
+                    </span>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto">
+                    {availableLabels.length === 0 ? (
+                      <div className="px-3 py-3 text-center text-slate-500 text-[11px]">
+                        No assign labels available
+                      </div>
+                    ) : (
+                      availableLabels.map((lbl: any) => {
+                        const isActive = (leadLabels[contextMenuLeadId] || []).includes(lbl.id) || (leadLabels[contextMenuLeadId] || []).includes(lbl.key);
+                        const isCustom = !lbl.dotColor && !lbl.dot && lbl.color;
+                        return (
+                          <div
+                            key={lbl.id || lbl.key}
+                            onClick={() => toggleLeadLabel(contextMenuLeadId, lbl.id || lbl.key)}
+                            className="wa-context-item justify-between py-2 cursor-pointer"
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span
+                                className={`w-2 h-2 rounded-full shrink-0 ${lbl.dotColor || lbl.dot || 'bg-amber-400'}`}
+                                style={isCustom ? { backgroundColor: lbl.color } : undefined}
+                              />
+                              <span className={`truncate ${isActive ? 'text-white font-semibold' : 'text-[#d1d7db]'}`}>
+                                {lbl.name}
+                              </span>
+                            </div>
+                            {isActive && <Check className="w-3.5 h-3.5 text-[#00a884] stroke-[2.5] shrink-0" />}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Add New Assign Label Option */}
+                  <div className="border-t border-[#222e35]/60 pt-1 mt-1 px-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setCreateLabelTargetLeadId(contextMenuLeadId);
+                        setIsCreateLabelModalOpen(true);
+                        setContextMenuLeadId(null);
+                        setIsLabelSubmenuOpen(false);
+                      }}
+                      className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs font-semibold text-teal-400 hover:text-teal-300 hover:bg-[#00a884]/15 rounded-lg transition-colors cursor-pointer text-left"
+                    >
+                      <Plus className="w-3.5 h-3.5 shrink-0" />
+                      <span>+ Add New Assign Label</span>
+                    </button>
+                    {isSuperAdmin && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setContextMenuLeadId(null);
+                          setIsLabelSubmenuOpen(false);
+                          window.location.hash = '#/settings/labels';
+                        }}
+                        className="w-full flex items-center gap-2 px-2.5 py-1 text-[11px] font-medium text-[#8696a0] hover:text-white hover:bg-[#202c33] rounded-lg transition-colors cursor-pointer text-left"
+                      >
+                        <Sliders className="w-3 h-3 shrink-0" />
+                        <span>Manage All Labels</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           <div className="h-px bg-slate-700/60 my-1" />
@@ -1142,6 +1204,16 @@ const menuRef = useRef<HTMLDivElement>(null);
       <AddContactModal
         isOpen={isAddContactOpen}
         onClose={() => setIsAddContactOpen(false)}
+      />
+
+      {/* Add New Assign Label Modal */}
+      <CreateAssignLabelModal
+        isOpen={isCreateLabelModalOpen}
+        onClose={() => {
+          setIsCreateLabelModalOpen(false);
+          setCreateLabelTargetLeadId(null);
+        }}
+        targetLeadId={createLabelTargetLeadId}
       />
     </div>
   );

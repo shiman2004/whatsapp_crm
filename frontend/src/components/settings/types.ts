@@ -90,8 +90,19 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
 
   // 2. Communication
   {
-    id: 'whatsapp_messaging',
+    id: 'labels',
     num: 4,
+    label: 'Assign Labels & Chat Tags',
+    shortDesc: 'Configure dynamic contact assign labels, colors, and role permissions with Supabase sync',
+    category: 'communication',
+    scope: 'global',
+    path: '/settings/labels',
+    iconName: 'Tag',
+    adminOnly: true
+  },
+  {
+    id: 'whatsapp_messaging',
+    num: 4.5,
     label: 'WhatsApp Messaging Configuration',
     shortDesc: 'Inbox routing, business hours auto-replies, templates, and opt-outs',
     category: 'communication',

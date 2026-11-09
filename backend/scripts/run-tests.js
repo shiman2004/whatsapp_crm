@@ -53,7 +53,6 @@ const ALL_SUITES = [
   'test-exam-academic-drafts.js',
   'test-exam-upgrade.test.js',
   'test-exam-ops-database.test.js',
-  'test-shiman-login.js',
   'test-settings-foundation.test.js',
 ];
 

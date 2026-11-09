@@ -94,6 +94,36 @@ export const APPOINTMENT_STATUS_CONFIG: Record<string, AppointmentStatusConfigIt
     dotClass: 'bg-slate-400',
     iconEmoji: '⚫',
     description: 'Customer did not respond'
+  },
+  pending: {
+    key: 'pending',
+    label: 'Pending',
+    colorName: 'Amber',
+    badgeClass: 'bg-amber-500/15 text-amber-500 border border-amber-500/30',
+    schedulerCardClass: 'bg-amber-950/70 border-amber-500/70 text-amber-100 hover:border-amber-400',
+    dotClass: 'bg-amber-400',
+    iconEmoji: '⏳',
+    description: 'Appointment pending confirmation'
+  },
+  completed: {
+    key: 'completed',
+    label: 'Completed',
+    colorName: 'Teal',
+    badgeClass: 'bg-teal-500/15 text-teal-400 border border-teal-500/30',
+    schedulerCardClass: 'bg-teal-950/70 border-teal-500/70 text-teal-100 hover:border-teal-400',
+    dotClass: 'bg-teal-400',
+    iconEmoji: '✅',
+    description: 'Treatment completed'
+  },
+  no_show: {
+    key: 'no_show',
+    label: 'No-show',
+    colorName: 'Gray',
+    badgeClass: 'bg-slate-700/50 text-slate-300 border border-slate-600/40',
+    schedulerCardClass: 'bg-slate-900 border-slate-700 text-slate-400 line-through opacity-75',
+    dotClass: 'bg-slate-400',
+    iconEmoji: '🚫',
+    description: 'Customer did not attend appointment'
   }
 };
 

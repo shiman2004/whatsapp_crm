@@ -26,7 +26,7 @@ interface AppointmentDetailModalProps {
   onClose: () => void;
   onUpdated: () => void;
   rooms?: any[];
-  initialMode?: 'view' | 'reschedule';
+  initialMode?: 'view' | 'reschedule' | 'cancel';
   onOpenWhatsAppChat?: (patientPhone: string) => void;
   onReschedule?: (appointmentId: string) => void;
 }
@@ -73,7 +73,7 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
     if (!isOpen || !appointmentId) return;
     setActionError(null);
     setIsRescheduling(initialMode === 'reschedule');
-    setIsCancelling(false);
+    setIsCancelling(initialMode === 'cancel');
     setTab('details');
     fetchDetails();
     // eslint-disable-next-line react-hooks/exhaustive-deps

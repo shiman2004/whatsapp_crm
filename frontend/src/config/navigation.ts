@@ -38,6 +38,7 @@ import {
   Layers,
   TrendingUp,
   Award,
+  Tag,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -144,6 +145,7 @@ const settingsChildren: NavChild[] = [
   { id: 'company', label: 'Company & Branch Management', icon: Building2, path: '/settings/company' },
   { id: 'users', label: 'User Management', icon: Users, path: '/settings/users' },
   { id: 'roles', label: 'Role Access & Monitoring', icon: ShieldCheck, path: '/settings/roles' },
+  { id: 'labels', label: 'Assign Labels', icon: Tag, path: '/settings/labels', adminOnly: true },
   { id: 'whatsapp_messaging', label: 'WhatsApp Messaging Configuration', icon: MessageSquare, path: '/settings/whatsapp_messaging' },
   { id: 'sales', label: 'Leads & Pipeline Settings', icon: KanbanSquare, path: '/settings/sales' },
   { id: 'marketing', label: 'Contacts & Marketing Settings', icon: Megaphone, path: '/settings/marketing' },
@@ -371,7 +373,6 @@ const LEGACY_ALIASES: Record<string, string> = {
   '/settings/courses': '/settings/academic',
   '/settings/treatments': '/settings/clinical',
   '/settings/stages': '/settings/sales',
-  '/settings/labels': '/settings/whatsapp_messaging',
   '/architecture': '/api-specs',
   '/webhook-sandbox': '/webhooks',
   '/leads-kanban': '/leads',

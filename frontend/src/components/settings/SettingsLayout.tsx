@@ -21,7 +21,8 @@ import {
   RotateCw,
   Save,
   Undo2,
-  ShieldAlert
+  ShieldAlert,
+  Tag
 } from 'lucide-react';
 import {
   SETTINGS_SECTIONS,
@@ -65,7 +66,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   HardDrive,
   Activity,
   BarChart3,
-  Palette
+  Palette,
+  Tag
 };
 
 export const SettingsLayout: React.FC<SettingsLayoutProps> = ({

@@ -141,17 +141,13 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   const [selectedRole, setSelectedRole] = useState<string>('Clinical Admin');
   
   // Role Access Matrix map
-  const [roleAccessMap, setRoleAccessMap] = useState<Record<string, RoleModuleAccess>>({
-    'Super Admin': { crm: true, clinical: true, reports: true, userManagement: true, exams: true, whatsapp: true },
-    'Admin': { crm: true, clinical: true, reports: true, userManagement: true, exams: true, whatsapp: true },
-    'Clinical Admin': { crm: true, clinical: true, reports: false, userManagement: false, exams: false, whatsapp: true },
-    'Clinical Doctor': { crm: true, clinical: true, reports: true, userManagement: false, exams: false, whatsapp: false },
-    'Marketing Admin': { crm: true, clinical: false, reports: true, userManagement: false, exams: false, whatsapp: true },
-    'Patient Coordinator': { crm: true, clinical: true, reports: false, userManagement: false, exams: false, whatsapp: true },
-    'Reports Viewer': { crm: false, clinical: false, reports: true, userManagement: false, exams: false, whatsapp: false },
-  });
+  const [roleAccessMap, setRoleAccessMap] = useState<Record<string, RoleModuleAccess>>({});
 
-  // Security activity and sessions are loaded from the database-backed API.\r\n  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);\r\n  const [sessions, setSessions] = useState<SessionItem[]>([]);\r\n\r\n  // Add staff modal state
+  // Security activity and sessions are loaded from the database-backed API.
+  const [activityEvents, setActivityEvents] = useState<ActivityEvent[]>([]);
+  const [sessions, setSessions] = useState<SessionItem[]>([]);
+
+  // Add staff modal state
   const [isAddStaffOpen, setIsAddStaffOpen] = useState(false);
   const [newStaffName, setNewStaffName] = useState('');
   const [newStaffEmail, setNewStaffEmail] = useState('');
@@ -185,7 +181,7 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   const activeSessionsCount = sessions.filter(s => s.status === 'active').length;
 
   const currentRoleAccess = roleAccessMap[selectedRole] || {
-    crm: true,
+    crm: false,
     clinical: false,
     reports: false,
     userManagement: false,
@@ -194,29 +190,21 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
   };
 
   const handleToggleModule = (moduleKey: keyof RoleModuleAccess) => {
-    setRoleAccessMap(prev => ({
-      ...prev,
-      [selectedRole]: {
-        ...currentRoleAccess,
-        [moduleKey]: !currentRoleAccess[moduleKey]
-      }
-    }));
-    notify?.('Permission Updated', `${selectedRole}: ${String(moduleKey).toUpperCase()} access toggled`, 'success');
+    notify?.('Read-only policy view', 'Role permissions are enforced by the server and cannot be changed from this screen.', 'info');
   };
 
-  const handleToggleRoleModule = (role: string, moduleKey: keyof RoleModuleAccess) => {
-    const access = roleAccessMap[role];
-    if (!access) return;
-    setRoleAccessMap(prev => ({
-      ...prev,
-      [role]: { ...access, [moduleKey]: !access[moduleKey] }
-    }));
-    notify?.('Permission Updated', `${role}: ${PERMISSION_MODULES.find(item => item.key === moduleKey)?.label} access updated`, 'success');
+  const handleToggleRoleModule = (_role: string, _moduleKey: keyof RoleModuleAccess) => {
+    notify?.('Read-only policy view', 'Role permissions are enforced by the server and cannot be changed from this screen.', 'info');
   };
 
-  const handleRevokeSession = (sessionId: string) => {
-    setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status: 'revoked' } : s));
-    notify?.('Session Revoked', 'Selected user device session has been terminated.', 'success');
+  const handleRevokeSession = async (sessionId: string) => {
+    try {
+      await userManagementApi.revokeSession(sessionId);
+      setSessions(prev => prev.map(s => s.id === sessionId ? { ...s, status: 'revoked' } : s));
+      notify?.('Session Revoked', 'Selected user device session has been terminated.', 'success');
+    } catch (error) {
+      notify?.('Session was not revoked', error instanceof Error ? error.message : 'Unable to reach the server.', 'warning');
+    }
   };
 
   const getInitials = (name: string) => {

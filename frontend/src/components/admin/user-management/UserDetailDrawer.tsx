@@ -970,22 +970,7 @@ export const UserDetailDrawer: React.FC<UserDetailDrawerProps> = ({
 
                         {/* List of Recent Sessions */}
                         <div className="space-y-2.5">
-                          {(detail.sessions.length > 0 ? detail.sessions.slice(0, 2) : [
-                            {
-                              id: 's-mock-1',
-                              ip: '127.0.0.1',
-                              device: 'Windows 10 • Chrome 142',
-                              createdAt: new Date().toISOString(),
-                              revokedAt: null,
-                            },
-                            {
-                              id: 's-mock-2',
-                              ip: '127.0.0.1',
-                              device: 'Windows 10 • Firefox 144',
-                              createdAt: new Date(Date.now() - 2.5 * 3600 * 1000).toISOString(),
-                              revokedAt: null,
-                            },
-                          ]).map((sess) => {
+                          {detail.sessions.slice(0, 2).map((sess) => {
                             const parsed = parseDeviceString(sess.device);
                             const isRevoked = Boolean(sess.revokedAt);
                             return (
@@ -2068,3 +2053,4 @@ export const UserDetailDrawer: React.FC<UserDetailDrawerProps> = ({
     </div>
   );
 };
+

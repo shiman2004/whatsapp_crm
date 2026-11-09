@@ -461,7 +461,11 @@ export async function processMediaRecord(prisma, mediaRecord, {
     const checksum = sha256Hex(buffer);
     const expected = String(meta.sha256 || claimed.checksum_sha256 || '').toLowerCase();
     if (expected && expected !== checksum) {
-      console.warn(`⚠️ [whatsappMedia] Checksum mismatch for media ${claimed.id}: expected ${expected}, got ${checksum}. Continuing with downloaded binary.`);
+      if (claimed.media_type === 'sticker') {
+        console.warn(`⚠️ [whatsappMedia] Checksum mismatch for sticker ${claimed.id}: expected ${expected}, got ${checksum}. Continuing with downloaded binary.`);
+      } else {
+        throw new Error(`Media checksum verification failed (expected ${expected}, got ${checksum})`);
+      }
     }
 
     const mimeType = String(meta.mime_type || claimed.mime_type || 'application/octet-stream').slice(0, 100);

@@ -11,11 +11,42 @@ interface WhatsAppVoiceNotePlayerProps {
   isOutbound: boolean;
 }
 
-// WhatsApp-like randomized bar heights (32 bars for realistic audio waveform)
+// ---------------------------------------------------------------------------
+// Global Audio Coordinator: ensures only ONE voice note plays across inbox
+// ---------------------------------------------------------------------------
+let activeAudioElement: HTMLAudioElement | null = null;
+let activeAudioPauseFn: (() => void) | null = null;
+
+function stopAllOtherVoiceNotes(currentAudio: HTMLAudioElement, pauseFn: () => void) {
+  if (activeAudioElement && activeAudioElement !== currentAudio) {
+    try {
+      activeAudioElement.pause();
+    } catch (_) {}
+    if (activeAudioPauseFn) {
+      activeAudioPauseFn();
+    }
+  }
+  activeAudioElement = currentAudio;
+  activeAudioPauseFn = pauseFn;
+}
+
+function clearActiveVoiceNote(currentAudio: HTMLAudioElement) {
+  if (activeAudioElement === currentAudio) {
+    activeAudioElement = null;
+    activeAudioPauseFn = null;
+  }
+}
+
+// WhatsApp-like randomized baseline bar heights (32 bars for realistic audio waveform)
 const DEFAULT_WAVEFORM_HEIGHTS = [
   6, 12, 18, 8, 14, 22, 16, 26, 12, 18, 24, 14, 20, 28, 16, 22,
   10, 18, 26, 14, 20, 16, 24, 12, 18, 22, 14, 20, 10, 16, 12, 6
 ];
+
+const getAuthToken = (): string => {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('token') || '';
+};
 
 export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = ({
   message,
@@ -33,11 +64,12 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState<number>(1);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [waveformHeights, setWaveformHeights] = useState<number[]>(DEFAULT_WAVEFORM_HEIGHTS);
 
   // Normalize media URL to absolute path with auth token if required
   const rawUrl = message.media?.url || '';
-  const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+  const token = getAuthToken();
   let audioUrl = rawUrl;
   if (audioUrl) {
     if (audioUrl.startsWith('/') && !audioUrl.startsWith('//')) {
@@ -56,7 +88,10 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
 
     const decodeAudioWaveform = async () => {
       try {
-        const res = await fetch(audioUrl);
+        const headers: Record<string, string> = {};
+        if (token) headers['Authorization'] = `Bearer ${token}`;
+
+        const res = await fetch(audioUrl, { headers });
         if (!res.ok) return;
 
         const arrayBuffer = await res.arrayBuffer();
@@ -106,7 +141,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
         } finally {
           ctx.close().catch(() => {});
         }
-      } catch (err) {
+      } catch (_) {
         // Fallback gracefully to HTML5 audio element duration
       }
     };
@@ -116,17 +151,23 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
     return () => {
       isCancelled = true;
     };
-  }, [audioUrl]);
+  }, [audioUrl, token]);
 
   // 2. HTML5 Audio element listeners with Chromium OGG Opus duration workaround
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
 
-    const updateFiniteDuration = () => {
+    const checkAndSetDuration = () => {
       if (audio.duration && !isNaN(audio.duration) && isFinite(audio.duration) && audio.duration > 0) {
         setDuration(prev => (prev > 0 ? prev : audio.duration));
         setIsLoaded(true);
+      } else if (audio.seekable && audio.seekable.length > 0) {
+        const seekableEnd = audio.seekable.end(audio.seekable.length - 1);
+        if (isFinite(seekableEnd) && seekableEnd > 0) {
+          setDuration(prev => (prev > 0 ? prev : seekableEnd));
+          setIsLoaded(true);
+        }
       } else if (audio.duration === Infinity) {
         // Chromium OGG Opus workaround: seek to the end to force Chromium to parse the last granule
         const onSeeked = () => {
@@ -151,39 +192,57 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
       }
     };
 
-    const handlePlay = () => setIsPlaying(true);
-    const handlePause = () => setIsPlaying(false);
+    const handlePlay = () => {
+      stopAllOtherVoiceNotes(audio, () => setIsPlaying(false));
+      setIsPlaying(true);
+    };
+
+    const handlePause = () => {
+      setIsPlaying(false);
+      clearActiveVoiceNote(audio);
+    };
 
     const handleEnded = () => {
       setIsPlaying(false);
-      setCurrentTime(0);
-      audio.currentTime = 0;
+      clearActiveVoiceNote(audio);
+      // Ensure visual progress reaches the full 100% on completion
+      const finalDuration = duration > 0 ? duration : (audio.duration && isFinite(audio.duration) ? audio.duration : audio.currentTime);
+      setCurrentTime(finalDuration);
+    };
+
+    const handleError = () => {
+      setLoadError(true);
+      setIsPlaying(false);
+      clearActiveVoiceNote(audio);
     };
 
     if (audio.readyState >= 1) {
-      updateFiniteDuration();
+      checkAndSetDuration();
     }
 
-    audio.addEventListener('loadedmetadata', updateFiniteDuration);
-    audio.addEventListener('durationchange', updateFiniteDuration);
-    audio.addEventListener('canplay', updateFiniteDuration);
+    audio.addEventListener('loadedmetadata', checkAndSetDuration);
+    audio.addEventListener('durationchange', checkAndSetDuration);
+    audio.addEventListener('canplay', checkAndSetDuration);
     audio.addEventListener('timeupdate', handleTimeUpdate);
     audio.addEventListener('play', handlePlay);
     audio.addEventListener('pause', handlePause);
     audio.addEventListener('ended', handleEnded);
+    audio.addEventListener('error', handleError);
 
     return () => {
-      audio.removeEventListener('loadedmetadata', updateFiniteDuration);
-      audio.removeEventListener('durationchange', updateFiniteDuration);
-      audio.removeEventListener('canplay', updateFiniteDuration);
+      clearActiveVoiceNote(audio);
+      audio.removeEventListener('loadedmetadata', checkAndSetDuration);
+      audio.removeEventListener('durationchange', checkAndSetDuration);
+      audio.removeEventListener('canplay', checkAndSetDuration);
       audio.removeEventListener('timeupdate', handleTimeUpdate);
       audio.removeEventListener('play', handlePlay);
       audio.removeEventListener('pause', handlePause);
       audio.removeEventListener('ended', handleEnded);
+      audio.removeEventListener('error', handleError);
     };
-  }, [audioUrl]);
+  }, [audioUrl, duration]);
 
-  // 3. Smooth 60fps tracking animation loop while audio is playing
+  // 3. Smooth animation frame loop while audio is actively playing
   useEffect(() => {
     if (!isPlaying) {
       if (animFrameRef.current) {
@@ -211,16 +270,32 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
     };
   }, [isPlaying]);
 
+  const effectiveDuration = duration > 0
+    ? duration
+    : (audioRef.current?.duration && isFinite(audioRef.current.duration)
+        ? audioRef.current.duration
+        : Math.max(currentTime, 0));
+
   const togglePlay = () => {
-    if (!audioRef.current) return;
+    const audio = audioRef.current;
+    if (!audio) return;
+
     if (isPlaying) {
-      audioRef.current.pause();
+      audio.pause();
       setIsPlaying(false);
+      clearActiveVoiceNote(audio);
     } else {
-      audioRef.current.play().then(() => {
+      // If audio already reached the end, restart from 0:00
+      if (effectiveDuration > 0 && currentTime >= effectiveDuration - 0.2) {
+        audio.currentTime = 0;
+        setCurrentTime(0);
+      }
+      stopAllOtherVoiceNotes(audio, () => setIsPlaying(false));
+      audio.play().then(() => {
         setIsPlaying(true);
       }).catch(err => {
         console.warn('Audio playback error:', err);
+        setIsPlaying(false);
       });
     }
   };
@@ -230,57 +305,60 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
     const track = waveformTrackRef.current;
     if (!audio || !track) return;
 
-    const effectiveDuration = duration > 0 ? duration : (audio.duration && isFinite(audio.duration) ? audio.duration : 0);
-    if (!effectiveDuration) return;
+    const effDuration = duration > 0 ? duration : (audio.duration && isFinite(audio.duration) ? audio.duration : audio.currentTime);
+    if (!effDuration || effDuration <= 0) return;
 
     const rect = track.getBoundingClientRect();
     const clickX = clientX - rect.left;
     const progressRatio = Math.max(0, Math.min(1, clickX / rect.width));
-    const newTime = progressRatio * effectiveDuration;
+    const newTime = progressRatio * effDuration;
 
     audio.currentTime = newTime;
     setCurrentTime(newTime);
   }, [duration]);
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Pointer event handlers with setPointerCapture for smooth dragging across desktop and mobile touch
+  const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.currentTarget.setPointerCapture(e.pointerId);
     isDraggingRef.current = true;
     seekToPosition(e.clientX);
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      if (isDraggingRef.current) {
-        seekToPosition(moveEvent.clientX);
-      }
-    };
-
-    const handleMouseUp = () => {
-      isDraggingRef.current = false;
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleMouseUp);
   };
 
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (!e.touches[0]) return;
-    isDraggingRef.current = true;
-    seekToPosition(e.touches[0].clientX);
+  const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current) {
+      seekToPosition(e.clientX);
+    }
+  };
 
-    const handleTouchMove = (moveEvent: TouchEvent) => {
-      if (isDraggingRef.current && moveEvent.touches[0]) {
-        seekToPosition(moveEvent.touches[0].clientX);
-      }
-    };
-
-    const handleTouchEnd = () => {
+  const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (isDraggingRef.current) {
       isDraggingRef.current = false;
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleTouchEnd);
-    };
+      try {
+        e.currentTarget.releasePointerCapture(e.pointerId);
+      } catch (_) {}
+    }
+  };
 
-    window.addEventListener('touchmove', handleTouchMove);
-    window.addEventListener('touchend', handleTouchEnd);
+  // Keyboard accessibility: Left / Right arrows to seek, Space / Enter to toggle play
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio) return;
+
+    if (e.key === ' ' || e.key === 'Enter') {
+      e.preventDefault();
+      togglePlay();
+    } else if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const newTime = Math.max(0, audio.currentTime - 2);
+      audio.currentTime = newTime;
+      setCurrentTime(newTime);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      const maxTime = effectiveDuration > 0 ? effectiveDuration : audio.currentTime + 2;
+      const newTime = Math.min(maxTime, audio.currentTime + 2);
+      audio.currentTime = newTime;
+      setCurrentTime(newTime);
+    }
   };
 
   const cycleSpeed = (e: React.MouseEvent) => {
@@ -300,9 +378,14 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
     return `${m}:${s < 10 ? '0' : ''}${s}`;
   };
 
-  const effectiveDuration = duration > 0 ? duration : (audioRef.current?.duration && isFinite(audioRef.current.duration) ? audioRef.current.duration : 0);
-  const progressPercent = effectiveDuration > 0 ? Math.min(100, Math.max(0, (currentTime / effectiveDuration) * 100)) : 0;
-  const displayDuration = isPlaying || currentTime > 0 ? formatTime(currentTime) : (effectiveDuration > 0 ? formatTime(effectiveDuration) : (isLoaded ? '0:00' : '0:00'));
+  const progressPercent = effectiveDuration > 0
+    ? Math.min(100, Math.max(0, (currentTime / effectiveDuration) * 100))
+    : 0;
+
+  // Display rule: while playing or scrubbed, show elapsed position; when at rest, show total duration
+  const displayDuration = isPlaying || (currentTime > 0 && currentTime < effectiveDuration - 0.2)
+    ? formatTime(currentTime)
+    : (effectiveDuration > 0 ? formatTime(effectiveDuration) : (isLoaded ? '0:00' : '0:00'));
 
   return (
     <div className="w-full min-w-[260px] max-w-[340px] py-1 select-none">
@@ -310,18 +393,18 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
       <audio 
         ref={audioRef} 
         src={audioUrl} 
-        preload="auto" 
+        preload="metadata" 
       />
 
       <div className="flex items-center gap-3">
-        {/* 1. Left Avatar with Microphone Badge */}
+        {/* 1. Left Avatar with Green Microphone Badge */}
         <div className="relative shrink-0">
           <WhatsAppAvatar 
             name={senderName} 
             avatarUrl={senderAvatar} 
             size="md" 
           />
-          {/* Green Microphone Icon Badge (Exact WhatsApp Web style) */}
+          {/* Green Microphone Icon Badge (Exact WhatsApp style) */}
           <div className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-[#00a884] border border-white dark:border-[#111b21] flex items-center justify-center shadow-xs">
             <Mic className="w-2.5 h-2.5 text-black stroke-[3]" />
           </div>
@@ -335,8 +418,11 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
             <button
               type="button"
               onClick={togglePlay}
-              className="w-8 h-8 rounded-full flex items-center justify-center text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] active:scale-95 transition-all shrink-0 cursor-pointer"
-              title={isPlaying ? 'Pause' : 'Play voice note'}
+              disabled={loadError}
+              className={`w-8 h-8 rounded-full flex items-center justify-center text-[#54656f] dark:text-[#8696a0] hover:text-[#111b21] dark:hover:text-[#e9edef] active:scale-95 transition-all shrink-0 cursor-pointer ${
+                loadError ? 'opacity-50 cursor-not-allowed' : ''
+              }`}
+              title={loadError ? 'Audio unavailable' : (isPlaying ? 'Pause' : 'Play voice note')}
             >
               {isPlaying ? (
                 <Pause className="w-5 h-5 fill-current" />
@@ -345,13 +431,22 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
               )}
             </button>
 
-            {/* Interactive Audio Waveform with Scrubber Dot */}
+            {/* Interactive Audio Waveform with Scrubber Dot & Accessibility */}
             <div 
               ref={waveformTrackRef}
-              className="flex-1 h-8 flex items-center gap-[2.5px] cursor-pointer relative group/wave py-1 touch-none"
-              onMouseDown={handleMouseDown}
-              onTouchStart={handleTouchStart}
-              title="Seek audio track"
+              role="slider"
+              tabIndex={0}
+              aria-label="Voice note playback progress"
+              aria-valuenow={Math.round(currentTime)}
+              aria-valuemin={0}
+              aria-valuemax={Math.round(effectiveDuration)}
+              className="flex-1 h-8 flex items-center gap-[2.5px] cursor-pointer relative group/wave py-1 touch-none outline-hidden focus-visible:ring-1 focus-visible:ring-[#34B7F1] rounded-sm"
+              onPointerDown={handlePointerDown}
+              onPointerMove={handlePointerMove}
+              onPointerUp={handlePointerUp}
+              onPointerCancel={handlePointerUp}
+              onKeyDown={handleKeyDown}
+              title="Click or drag to seek voice note"
             >
               {waveformHeights.map((height, idx) => {
                 const barProgress = (idx / (waveformHeights.length - 1)) * 100;
@@ -360,9 +455,9 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
                 return (
                   <div
                     key={idx}
-                    className={`w-[3px] rounded-full transition-colors duration-75 ${
+                    className={`w-[3px] rounded-full transition-colors duration-75 pointer-events-none ${
                       isPassed 
-                        ? 'bg-[#34B7F1]' // Active blue/cyan WhatsApp played color
+                        ? 'bg-[#34B7F1]' // Active WhatsApp cyan played color
                         : isOutbound ? 'bg-[#8696a0]/50' : 'bg-[#8696a0]/40'
                     }`}
                     style={{ height: `${height}px` }}
@@ -370,7 +465,7 @@ export const WhatsAppVoiceNotePlayer: React.FC<WhatsAppVoiceNotePlayerProps> = (
                 );
               })}
 
-              {/* Scrubber Knob (Draggable and smoothly animated) */}
+              {/* Scrubber Knob (Draggable, advances smoothly along the track) */}
               <div 
                 className="absolute top-1/2 -translate-y-1/2 w-3 h-3 rounded-full bg-[#34B7F1] shadow-md pointer-events-none transition-transform group-hover/wave:scale-125"
                 style={{ 

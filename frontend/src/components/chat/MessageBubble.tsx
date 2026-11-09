@@ -69,6 +69,11 @@ const isMediaPlaceholder = (content?: string, media?: MessageBubbleProps['messag
   return false;
 };
 
+const getCrmAuthToken = (): string => {
+  if (typeof window === 'undefined') return '';
+  return localStorage.getItem('rw_crm_auth_token') || localStorage.getItem('token') || '';
+};
+
 export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) => {
   const { 
     currentUser,
@@ -82,6 +87,10 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     retryFailedMessage,
     sendWhatsAppTemplate
   } = useCrm();
+
+  const isSticker = (message.media?.type === 'sticker') ||
+    ((message as any).mediaType === 'sticker') ||
+    (typeof message.content === 'string' && /^\[?sticker\]?$/i.test(message.content.trim()));
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
@@ -99,7 +108,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
   const handleDownloadMedia = async (url: string, fileName?: string) => {
     if (!url) return;
     try {
-      const token = localStorage.getItem('token') || '';
+      const token = getCrmAuthToken();
       let fetchUrl = url;
       if (fetchUrl.startsWith('/') && !fetchUrl.startsWith('//')) {
         fetchUrl = `${API_BASE_URL}${fetchUrl}`;
@@ -128,7 +137,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
       setTimeout(() => URL.revokeObjectURL(blobUrl), 10000);
     } catch (err) {
       console.warn('[Download fallback direct link]', err);
-      const token = localStorage.getItem('token') || '';
+      const token = getCrmAuthToken();
       let directUrl = url;
       if (directUrl.startsWith('/') && !directUrl.startsWith('//')) {
         directUrl = `${API_BASE_URL}${directUrl}`;
@@ -151,7 +160,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     if (retryingMedia || !mediaId) return;
     setRetryingMedia(true);
     try {
-      const token = localStorage.getItem('token') || '';
+      const token = getCrmAuthToken();
       const res = await fetch(`${API_BASE_URL}/api/media/${encodeURIComponent(mediaId)}/retry`, {
         method: 'POST',
         headers: {
@@ -203,7 +212,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
     const attemptFetch = async () => {
       if (cancelled || retryingMedia) return false;
       try {
-        const token = localStorage.getItem('token') || '';
+        const token = getCrmAuthToken();
         const res = await fetch(`${API_BASE_URL}/api/media/${encodeURIComponent(mediaId)}/retry`, {
           method: 'POST',
           headers: {
@@ -469,42 +478,52 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           ref={bubbleRef}
           onContextMenu={handleContextMenu}
           title={auditDisplayText ? `Audit Trail: ${auditDisplayText}` : undefined}
-          className={`relative max-w-[85%] md:max-w-[65%] rounded-[7.5px] px-[9px] pt-[6px] pb-[8px] wa-bubble-shadow text-xs leading-relaxed transition-all ${
-            isOutbound
-              ? 'bg-[#DCF8C6] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none'
-              : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none'
-          } ${message.pinned ? 'border border-amber-500/50 shadow-amber-500/10' : ''}`}
+          className={`relative ${
+            isSticker
+              ? 'w-fit max-w-[160px] bg-transparent p-0 shadow-none border-0'
+              : `max-w-[85%] md:max-w-[65%] rounded-[7.5px] px-[9px] pt-[6px] pb-[8px] wa-bubble-shadow text-xs leading-relaxed transition-all ${
+                  isOutbound
+                    ? 'bg-[#DCF8C6] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none'
+                    : 'bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none'
+                } ${message.pinned ? 'border border-amber-500/50 shadow-amber-500/10' : ''}`
+          }`}
         >
-          {/* Authentic WhatsApp Corner SVG Tail */}
-          {isOutbound ? (
-            <svg 
-              viewBox="0 0 8 13" 
-              height="13" 
-              width="8" 
-              preserveAspectRatio="xMidYMid meet" 
-              className="absolute top-0 -right-2 text-[#DCF8C6] dark:text-[#005c4b] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
-            >
-              <path opacity="0.13" fill="#000000" d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z" />
-              <path fill="currentColor" d="M5.188,0H0v11.193l6.467-8.625C7.526,1.156,6.958,0,5.188,0z" />
-            </svg>
-          ) : (
-            <svg 
-              viewBox="0 0 8 13" 
-              height="13" 
-              width="8" 
-              preserveAspectRatio="xMidYMid meet" 
-              className="absolute top-0 -left-2 text-white dark:text-[#202c33] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
-            >
-              <path opacity="0.13" fill="#000000" d="M1.533,3.568L8,12.193V1H2.812 C1.042,1,0.474,2.156,1.533,3.568z" />
-              <path fill="currentColor" d="M1.533,2.568L8,11.193V0L2.812,0C1.042,0,0.474,1.156,1.533,2.568z" />
-            </svg>
+          {/* Authentic WhatsApp Corner SVG Tail (Hidden for transparent stickers) */}
+          {!isSticker && (
+            isOutbound ? (
+              <svg 
+                viewBox="0 0 8 13" 
+                height="13" 
+                width="8" 
+                preserveAspectRatio="xMidYMid meet" 
+                className="absolute top-0 -right-2 text-[#DCF8C6] dark:text-[#005c4b] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+              >
+                <path opacity="0.13" fill="#000000" d="M5.188,1H0v11.193l6.467-8.625 C7.526,2.156,6.958,1,5.188,1z" />
+                <path fill="currentColor" d="M5.188,0H0v11.193l6.467-8.625C7.526,1.156,6.958,0,5.188,0z" />
+              </svg>
+            ) : (
+              <svg 
+                viewBox="0 0 8 13" 
+                height="13" 
+                width="8" 
+                preserveAspectRatio="xMidYMid meet" 
+                className="absolute top-0 -left-2 text-white dark:text-[#202c33] fill-current pointer-events-none drop-shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]"
+              >
+                <path opacity="0.13" fill="#000000" d="M1.533,3.568L8,12.193V1H2.812 C1.042,1,0.474,2.156,1.533,3.568z" />
+                <path fill="currentColor" d="M1.533,2.568L8,11.193V0L2.812,0C1.042,0,0.474,1.156,1.533,2.568z" />
+              </svg>
+            )
           )}
 
           {/* Top-Right Hover Chevron (WhatsApp Web standard) */}
-          <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+          <div className={`absolute ${isSticker ? 'top-1 right-1' : 'top-1.5 right-1.5'} z-10 opacity-0 group-hover:opacity-100 transition-opacity`}>
             <button
               onClick={handleOpenMenu}
-              className="w-5 h-5 rounded-full bg-white/90 dark:bg-black/40 hover:bg-white dark:hover:bg-black/70 text-[#54656f] dark:text-slate-300 hover:text-[#111b21] dark:hover:text-white flex items-center justify-center shadow-xs border border-slate-200/60 dark:border-transparent transition-all"
+              className={`w-5 h-5 rounded-full ${
+                isSticker
+                  ? 'bg-black/60 hover:bg-black/80 text-white'
+                  : 'bg-white/90 dark:bg-black/40 hover:bg-white dark:hover:bg-black/70 text-[#54656f] dark:text-slate-300 hover:text-[#111b21] dark:hover:text-white border border-slate-200/60 dark:border-transparent'
+              } flex items-center justify-center shadow-xs transition-all`}
               title="Menu"
             >
               <ChevronDown className="w-3.5 h-3.5" />
@@ -584,7 +603,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
             if (!media) return null;
 
-            const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
+            const token = getCrmAuthToken();
             const rawUrl = mediaPatched?.url || media.url || '';
             let mediaUrl = rawUrl;
             if (mediaUrl) {
@@ -639,21 +658,16 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               );
             }
 
-            const isSticker = media.type === 'sticker' || isStickerMsg;
-            const isImage = isSticker
-              || media.type === 'image'
-              || Boolean(mediaUrl && mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
-
             const isPending = !mediaUrl || media.status === 'pending' || media.status === 'processing';
             const isFailed = (media.status === 'failed' || imageLoadError) && !isPending;
 
-            // Dedicated WhatsApp Sticker Renderer (Transparent, clean aspect ratio, no cropping)
+            // Dedicated WhatsApp Sticker Renderer (Transparent, compact, max 160px, never object-cover)
             if (isSticker) {
               if (isPending && !isFailed) {
                 return (
                   <div
                     onClick={() => handleRetryMedia(media.id || message.id)}
-                    className="mb-1 w-[130px] h-[130px] md:w-[150px] md:h-[150px] rounded-xl bg-black/20 dark:bg-black/30 border border-white/10 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:bg-black/30 select-none"
+                    className="w-[130px] h-[130px] sm:w-[150px] sm:h-[150px] max-w-[160px] max-h-[160px] rounded-xl bg-black/20 dark:bg-black/30 border border-white/10 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:bg-black/30 select-none relative"
                     title="Retrieving sticker from WhatsApp servers. Click to fetch immediately."
                   >
                     <div className="w-8 h-8 rounded-full bg-black/40 border border-white/15 flex items-center justify-center">
@@ -676,7 +690,7 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                       setImageLoadError(false);
                       handleRetryMedia(media.id || message.id);
                     }}
-                    className="mb-1 w-[130px] h-[130px] md:w-[150px] md:h-[150px] rounded-xl bg-rose-500/10 border border-rose-500/30 flex flex-col items-center justify-center gap-2 p-2 cursor-pointer hover:bg-rose-500/15 transition-all select-none"
+                    className="w-[130px] h-[130px] sm:w-[150px] sm:h-[150px] max-w-[160px] max-h-[160px] rounded-xl bg-rose-500/10 border border-rose-500/30 flex flex-col items-center justify-center gap-2 p-2 cursor-pointer hover:bg-rose-500/15 transition-all select-none relative"
                     title="Failed to load sticker. Click to retry."
                   >
                     <div className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-300 flex items-center justify-center">
@@ -691,32 +705,50 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               }
 
               return (
-                <div className="my-1 max-w-[160px] max-h-[160px] flex items-center justify-center relative group/sticker select-none">
+                <div className="relative group/sticker select-none inline-block max-w-[160px] max-h-[160px]">
                   <img
                     src={mediaUrl}
                     alt="Sticker"
                     onError={() => setImageLoadError(true)}
                     onLoad={() => setImageLoadError(false)}
-                    className="w-[130px] h-[130px] md:w-[150px] md:h-[150px] object-contain drop-shadow-md hover:scale-105 transition-transform cursor-pointer"
+                    className="max-w-[160px] max-h-[160px] w-auto h-auto object-contain drop-shadow-sm hover:scale-105 transition-transform cursor-pointer"
                     onClick={() => setLightboxUrl(mediaUrl)}
                   />
+                  {/* Floating Download Button on Hover */}
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       handleDownloadMedia(mediaUrl, 'sticker.webp');
                     }}
-                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/sticker:opacity-100 transition-opacity shadow-sm cursor-pointer"
+                    className="absolute top-1 left-1 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/sticker:opacity-100 transition-opacity shadow-sm cursor-pointer z-10"
                     title="Save Sticker"
                   >
                     <Download className="w-3.5 h-3.5" />
                   </button>
+                  {/* WhatsApp Floating Timestamp & Status Badge */}
+                  <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded-full bg-black/50 text-white text-[10px] flex items-center gap-1 backdrop-blur-xs shadow-xs pointer-events-none select-none z-10 font-sans">
+                    <span className="tabular-nums">
+                      {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}
+                    </span>
+                    {isOutbound && (
+                      message.status === 'read' ? <CheckCheck className="w-3 h-3 text-[#34B7F1]" /> :
+                      message.status === 'delivered' ? <CheckCheck className="w-3 h-3 text-white/80" /> :
+                      message.status === 'sent' ? <Check className="w-3 h-3 text-white/80" /> :
+                      <Clock className="w-3 h-3 text-white/80 animate-pulse" />
+                    )}
+                  </div>
                 </div>
               );
             }
 
+            const isImage = !isSticker && (
+              media.type === 'image' ||
+              Boolean(mediaUrl && mediaUrl.match(/\.(jpeg|jpg|gif|png)($|\?)/i))
+            );
+
             if (isImage) {
-              const defaultName = media.type === 'sticker' ? 'sticker.webp' : 'photo.jpg';
+              const defaultName = 'photo.jpg';
 
               // 1. Loading / Retrieving Placeholder (WhatsApp-style compact fixed-dimension container)
               if (isPending && !isFailed) {
@@ -937,6 +969,11 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
               !isMediaPlaceholder(message.content, message.media) &&
               (!message.media || message.media.type !== 'audio' || (message.content !== 'Voice note' && message.content.trim().length > 0))
             );
+
+            // Standalone stickers and audio voice notes have their own self-contained timestamp & status badge
+            if (!hasUserCaption && (isSticker || (message.media && message.media.type === 'audio'))) {
+              return null;
+            }
 
             return isEditing ? (
               <div className="pt-0.5 pb-1 min-w-[220px]">

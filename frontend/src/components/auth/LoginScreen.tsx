@@ -15,7 +15,9 @@ import {
   ArrowLeft,
   ChevronRight,
   Building2,
-  GraduationCap
+  GraduationCap,
+  Clock,
+  Loader2
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 
@@ -218,6 +220,7 @@ export const LoginScreen: React.FC = () => {
   };
 
   const handlePinKey = useCallback((digit: string) => {
+    if (lockoutSeconds > 0 || isSubmitting) return;
     setErrorMsg(null);
     setPressedKey(digit);
     setTimeout(() => setPressedKey(null), 150);
@@ -229,35 +232,43 @@ export const LoginScreen: React.FC = () => {
         const fullPin = next.join('');
         setIsSubmitting(true);
         setTimeout(async () => {
-          const res = await login(identifierInput.trim(), fullPin);
-          if (!res.success) {
-            applyLoginResult(res);
+          try {
+            const res = await login(identifierInput.trim(), fullPin);
+            if (!res.success) {
+              applyLoginResult(res);
+              setPinDigits([]);
+            }
+          } catch (err: any) {
+            setErrorMsg(err.message || 'Unable to connect to login service.');
             setPinDigits([]);
+          } finally {
+            setIsSubmitting(false);
           }
-          setIsSubmitting(false);
-        }, 200);
+        }, 150);
       }
       return next;
     });
-  }, [identifierInput, login]);
+  }, [identifierInput, login, lockoutSeconds, isSubmitting]);
 
   const handleClearPin = useCallback(() => {
+    if (isSubmitting) return;
     setErrorMsg(null);
     setPressedKey('clear');
     setTimeout(() => setPressedKey(null), 150);
     setPinDigits([]);
-  }, []);
+  }, [isSubmitting]);
 
   const handleBackspace = useCallback(() => {
+    if (isSubmitting) return;
     setErrorMsg(null);
     setPressedKey('backspace');
     setTimeout(() => setPressedKey(null), 150);
     setPinDigits(prev => prev.slice(0, -1));
-  }, []);
+  }, [isSubmitting]);
 
   // Physical Keyboard Listener (Captures 0-9, Numpad 0-9, Backspace, Delete, Escape)
   useEffect(() => {
-    if (portalView === 'portal_select' || authMode !== 'pin' || isSubmitting) return;
+    if (portalView === 'portal_select' || authMode !== 'pin' || isSubmitting || lockoutSeconds > 0) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       const target = e.target as HTMLElement;
@@ -281,7 +292,7 @@ export const LoginScreen: React.FC = () => {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [portalView, authMode, isSubmitting, handlePinKey, handleBackspace, handleClearPin]);
+  }, [portalView, authMode, isSubmitting, lockoutSeconds, handlePinKey, handleBackspace, handleClearPin]);
 
   // Portal configuration metadata
   const getPortalMeta = () => {
@@ -768,9 +779,29 @@ export const LoginScreen: React.FC = () => {
                       );
                     })}
                   </div>
-                  <p className="text-[11px] text-[#8696a0] font-sans">
-                    Type with keyboard or tap keypad
-                  </p>
+                  
+                  {isSubmitting ? (
+                    <p className="flex items-center justify-center gap-1.5 text-xs font-semibold text-teal-400 animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" /> Verifying PIN...
+                    </p>
+                  ) : lockoutSeconds > 0 ? (
+                    <div className="my-1 rounded-xl border border-amber-500/40 bg-amber-950/60 p-2.5 text-center text-xs text-amber-200">
+                      <p className="font-bold flex items-center justify-center gap-1.5 text-amber-300">
+                        <Clock className="w-4 h-4 animate-pulse text-amber-400" />
+                        Too many failed attempts
+                      </p>
+                      <p className="mt-0.5 text-[11px] text-amber-300/80">
+                        Security cooldown active. Retry in{' '}
+                        <span className="font-mono font-bold text-white">
+                          {Math.floor(lockoutSeconds / 60)}:{String(lockoutSeconds % 60).padStart(2, '0')}
+                        </span>
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] text-[#8696a0] font-sans">
+                      Type with keyboard or tap keypad
+                    </p>
+                  )}
                 </div>
 
                 {/* Keypad */}
@@ -781,7 +812,7 @@ export const LoginScreen: React.FC = () => {
                       type="button"
                       disabled={isSubmitting || lockoutSeconds > 0}
                       onClick={() => handlePinKey(digit)}
-                      className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                      className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 disabled:hover:bg-[#202c33] ${
                         pressedKey === digit ? 'bg-slate-600 scale-95 ring-2 ring-white/60 text-white' : ''
                       }`}
                     >
@@ -790,8 +821,9 @@ export const LoginScreen: React.FC = () => {
                   ))}
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={handleClearPin}
-                    className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
+                    className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                       pressedKey === 'clear' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
                     }`}
                   >
@@ -801,7 +833,7 @@ export const LoginScreen: React.FC = () => {
                     type="button"
                     disabled={isSubmitting || lockoutSeconds > 0}
                     onClick={() => handlePinKey('0')}
-                    className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer ${
+                    className={`h-11 rounded-xl bg-[#202c33] hover:bg-slate-700 active:scale-95 border border-slate-700 text-base font-bold text-slate-100 transition-all shadow-sm flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100 disabled:hover:bg-[#202c33] ${
                       pressedKey === '0' ? 'bg-slate-600 scale-95 ring-2 ring-white/60 text-white' : ''
                     }`}
                   >
@@ -809,8 +841,9 @@ export const LoginScreen: React.FC = () => {
                   </button>
                   <button
                     type="button"
+                    disabled={isSubmitting}
                     onClick={handleBackspace}
-                    className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer ${
+                    className={`h-11 rounded-xl bg-[#202c33]/60 hover:bg-slate-800 text-xs font-semibold text-[#8696a0] transition-all flex items-center justify-center cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${
                       pressedKey === 'backspace' ? 'bg-[#202c33] text-white scale-95 ring-1 ring-slate-500' : ''
                     }`}
                   >

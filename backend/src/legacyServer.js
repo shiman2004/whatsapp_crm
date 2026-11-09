@@ -939,6 +939,42 @@ const CANONICAL_USERS = [
     active: true
   },
   {
+    id: 'dce269c6-6b13-4697-b383-b8db5166d043',
+    fullName: 'Sihaam',
+    email: 'sihaam@royalwellness.lk',
+    branch: 'Colombo',
+    company: 'RWC',
+    roleTitle: 'Patient Coordinator',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
+    role: 'coordinator',
+    active: true
+  },
+  {
+    id: '0b2cab87-ff4c-4d94-92ad-51e91dce3b54',
+    fullName: 'aska',
+    email: 'aska@royalwellness.lk',
+    branch: 'Colombo',
+    company: 'RWC',
+    roleTitle: 'Patient Coordinator',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
+    role: 'coordinator',
+    active: true
+  },
+  {
+    id: '565c3f48-4869-4a80-a661-487beb222a38',
+    fullName: 'Sathushika',
+    email: 'sathushika@royalwellness.lk',
+    branch: 'Colombo',
+    company: 'RWC',
+    roleTitle: 'Patient Coordinator',
+    password: DEFAULT_STAFF_PASSWORD_HASH,
+    pin: DEFAULT_STAFF_PIN_HASH,
+    role: 'coordinator',
+    active: true
+  },
+  {
     id: 'user-officer-1',
     fullName: 'Sarah Fernando',
     email: 'sarah@royalwellness.lk',

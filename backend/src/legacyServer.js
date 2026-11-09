@@ -1653,11 +1653,13 @@ const server = http.createServer(async (req, res) => {
         if (rateCheck.limited) {
           res.writeHead(429, { 
             'Content-Type': 'application/json',
-            'Retry-After': String(rateCheck.retryAfter)
+            'Retry-After': String(rateCheck.retryAfter),
+            'Access-Control-Expose-Headers': 'Retry-After'
           });
           res.end(JSON.stringify({ 
             success: false, 
-            error: 'Too many failed login attempts. Please try again later.' 
+            error: 'Too many failed login attempts. Please try again later.',
+            retryAfter: rateCheck.retryAfter
           }));
           return;
         }
@@ -8295,7 +8297,7 @@ const server = http.createServer(async (req, res) => {
                       } else if (!text) {
                         text = mediaFileName || (mediaType === 'audio'
                           ? (mediaDescriptor.isVoice ? 'Voice note' : 'Audio')
-                          : (mediaType === 'image' ? 'Photo' : `[${mediaType.toUpperCase()}]`));
+                          : (mediaType === 'image' ? 'Photo' : (mediaType === 'sticker' ? 'Sticker' : `[${mediaType.toUpperCase()}]`)));
                       }
                     }
 

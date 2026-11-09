@@ -377,15 +377,20 @@ const toClientMessage = (m: any): Message => ({
   deliveredAt: m.deliveredAt || m.delivered_at,
   readAt: m.readAt || m.read_at,
   createdAt: m.timestamp || m.createdAt || new Date().toISOString(),
-  media: (m.media?.url || m.mediaUrl || m.media) ? {
-    type: m.media?.type || m.mediaType || 'image',
-    url: m.media?.url || m.mediaUrl || null,
-    caption: m.media?.caption || m.mediaCaption || undefined,
-    fileName: m.media?.fileName || m.mediaFileName || undefined,
-    mimeType: m.media?.mimeType || m.mediaMimeType || undefined,
-    sizeBytes: m.media?.sizeBytes ?? m.mediaSizeBytes ?? null,
-    status: m.media?.status || m.mediaStatus
-  } : undefined,
+  media: (() => {
+    const isSticker = m.mediaType === 'sticker' || m.media?.type === 'sticker' || (typeof m.content === 'string' && /^\[?sticker\]?$/i.test(m.content.trim()));
+    if (!m.media?.url && !m.mediaUrl && !m.media && !m.mediaType && !isSticker) return undefined;
+    return {
+      id: m.media?.id || (m.mediaUrl ? String(m.mediaUrl).split('/').pop()?.split('?')[0] : null) || m.id,
+      type: (m.media?.type || m.mediaType || (isSticker ? 'sticker' : 'image')) as any,
+      url: m.media?.url || m.mediaUrl || null,
+      caption: m.media?.caption || m.mediaCaption || undefined,
+      fileName: m.media?.fileName || m.mediaFileName || (isSticker ? 'sticker.webp' : undefined),
+      mimeType: m.media?.mimeType || m.mediaMimeType || (isSticker ? 'image/webp' : undefined),
+      sizeBytes: m.media?.sizeBytes ?? m.mediaSizeBytes ?? null,
+      status: m.media?.status || m.mediaStatus || (m.mediaUrl || m.media?.url ? 'ready' : 'pending')
+    };
+  })(),
   reactions: m.reaction ? [m.reaction] : [],
   starred: m.starred || false,
   pinned: m.pinned || false,

@@ -135,6 +135,9 @@ export interface Message {
     sizeBytes?: number | null;
     status?: 'pending' | 'processing' | 'ready' | 'failed';
   };
+  mediaType?: string;
+  mediaUrl?: string | null;
+  mediaStatus?: 'pending' | 'processing' | 'ready' | 'failed';
   waMessageId?: string;
   status: MessageStatus;
   errorCode?: number;

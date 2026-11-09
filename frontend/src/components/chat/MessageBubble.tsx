@@ -23,7 +23,8 @@ import {
   Clock,
   RefreshCw,
   MapPin,
-  ExternalLink
+  ExternalLink,
+  Sticker
 } from 'lucide-react';
 import { Message, Lead } from '../../types';
 import { useCrm } from '../../context/CrmContext';
@@ -185,7 +186,8 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
 
   // Auto-retrieve pending, processing, or unlinked media so previews load quickly
   useEffect(() => {
-    const media = message.media;
+    const isStickerMsg = message.mediaType === 'sticker' || (typeof message.content === 'string' && /^\[?sticker\]?$/i.test(message.content.trim()));
+    const media = message.media || (isStickerMsg ? { id: message.id, type: 'sticker' as const, url: message.mediaUrl || null, fileName: 'sticker.webp', mimeType: 'image/webp', sizeBytes: null, status: 'pending' as const } : undefined);
     if (!media) return;
     const hasReadyUrl = Boolean(mediaPatched?.url || (media.url && media.status === 'ready'));
     if (hasReadyUrl) {
@@ -560,8 +562,28 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
           )}
 
           {/* Rich Media Attachment (Image, Video, Audio, Document, Sticker) */}
-          {message.media && (() => {
-            const media = message.media!;
+          {(() => {
+            const isStickerMsg = message.mediaType === 'sticker' || (typeof message.content === 'string' && /^\[?sticker\]?$/i.test(message.content.trim()));
+            const media = message.media || (isStickerMsg ? {
+              id: message.id,
+              type: 'sticker' as const,
+              url: message.mediaUrl || null,
+              fileName: 'sticker.webp',
+              mimeType: 'image/webp',
+              sizeBytes: null,
+              status: (message.mediaUrl ? 'ready' : 'pending') as 'ready' | 'pending'
+            } : message.mediaType ? {
+              id: message.id,
+              type: message.mediaType as any,
+              url: message.mediaUrl || null,
+              fileName: undefined,
+              mimeType: undefined,
+              sizeBytes: null,
+              status: (message.mediaUrl ? 'ready' : 'pending') as 'ready' | 'pending'
+            } : undefined);
+
+            if (!media) return null;
+
             const token = typeof window !== 'undefined' ? (localStorage.getItem('token') || '') : '';
             const rawUrl = mediaPatched?.url || media.url || '';
             let mediaUrl = rawUrl;
@@ -592,35 +614,106 @@ export const MessageBubble: React.FC<MessageBubbleProps> = ({ message, lead }) =
                         {media.fileName || mediaTypeLabel(media.type)}
                       </p>
                       <p className={`text-[10px] ${failed ? 'text-rose-300' : 'text-[#8696a0]'}`}>
-                        {failed ? 'Media could not be retrieved. It will be retried.' : 'Retrieving media…'}
+                        {failed ? 'Media could not be retrieved. Click to retry.' : 'Retrieving media… Click to fetch now.'}
                       </p>
                     </div>
                   </div>
-                  {failed && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRetryMedia(media.id || message.id);
-                      }}
-                      disabled={retryingMedia}
-                      className="px-2 py-1 rounded text-[11px] font-medium bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border border-rose-500/30 flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50"
-                      title="Retry downloading this media now"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${retryingMedia ? 'animate-spin' : ''}`} />
-                      <span>{retryingMedia ? 'Retrying…' : 'Retry'}</span>
-                    </button>
-                  )}
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleRetryMedia(media.id || message.id);
+                    }}
+                    disabled={retryingMedia}
+                    className={`px-2 py-1 rounded text-[11px] font-medium border flex items-center gap-1.5 transition-colors cursor-pointer shrink-0 disabled:opacity-50 ${
+                      failed 
+                        ? 'bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 border-rose-500/30' 
+                        : 'bg-[#00a884]/20 hover:bg-[#00a884]/30 text-[#00a884] border-[#00a884]/40'
+                    }`}
+                    title="Retry downloading this media now"
+                  >
+                    <RefreshCw className={`w-3 h-3 ${retryingMedia ? 'animate-spin' : ''}`} />
+                    <span>{retryingMedia ? 'Fetching…' : failed ? 'Retry' : 'Fetch'}</span>
+                  </button>
                 </div>
               );
             }
 
-            const isImage = media.type === 'image'
-              || media.type === 'sticker'
+            const isSticker = media.type === 'sticker' || isStickerMsg;
+            const isImage = isSticker
+              || media.type === 'image'
               || Boolean(mediaUrl && mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)($|\?)/i));
 
             const isPending = !mediaUrl || media.status === 'pending' || media.status === 'processing';
             const isFailed = (media.status === 'failed' || imageLoadError) && !isPending;
+
+            // Dedicated WhatsApp Sticker Renderer (Transparent, clean aspect ratio, no cropping)
+            if (isSticker) {
+              if (isPending && !isFailed) {
+                return (
+                  <div
+                    onClick={() => handleRetryMedia(media.id || message.id)}
+                    className="mb-1 w-[130px] h-[130px] md:w-[150px] md:h-[150px] rounded-xl bg-black/20 dark:bg-black/30 border border-white/10 flex flex-col items-center justify-center gap-2 cursor-pointer transition-all hover:bg-black/30 select-none"
+                    title="Retrieving sticker from WhatsApp servers. Click to fetch immediately."
+                  >
+                    <div className="w-8 h-8 rounded-full bg-black/40 border border-white/15 flex items-center justify-center">
+                      <RefreshCw className="w-4 h-4 text-[#00a884] animate-spin" />
+                    </div>
+                    <div className="text-center px-1">
+                      <p className="text-[11px] font-medium text-[#e9edef]">
+                        {retryingMedia ? 'Retrieving…' : 'Sticker'}
+                      </p>
+                      <p className="text-[9px] text-[#8696a0]">Click to load</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              if (isFailed) {
+                return (
+                  <div
+                    onClick={() => {
+                      setImageLoadError(false);
+                      handleRetryMedia(media.id || message.id);
+                    }}
+                    className="mb-1 w-[130px] h-[130px] md:w-[150px] md:h-[150px] rounded-xl bg-rose-500/10 border border-rose-500/30 flex flex-col items-center justify-center gap-2 p-2 cursor-pointer hover:bg-rose-500/15 transition-all select-none"
+                    title="Failed to load sticker. Click to retry."
+                  >
+                    <div className="w-8 h-8 rounded-full bg-rose-500/20 text-rose-300 flex items-center justify-center">
+                      <Sticker className="w-4 h-4" />
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[11px] font-semibold text-rose-200">Sticker</p>
+                      <p className="text-[9px] text-rose-300/80">Tap to retry</p>
+                    </div>
+                  </div>
+                );
+              }
+
+              return (
+                <div className="my-1 max-w-[160px] max-h-[160px] flex items-center justify-center relative group/sticker select-none">
+                  <img
+                    src={mediaUrl}
+                    alt="Sticker"
+                    onError={() => setImageLoadError(true)}
+                    onLoad={() => setImageLoadError(false)}
+                    className="w-[130px] h-[130px] md:w-[150px] md:h-[150px] object-contain drop-shadow-md hover:scale-105 transition-transform cursor-pointer"
+                    onClick={() => setLightboxUrl(mediaUrl)}
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleDownloadMedia(mediaUrl, 'sticker.webp');
+                    }}
+                    className="absolute top-1 right-1 w-6 h-6 rounded-full bg-black/60 hover:bg-black/80 text-white flex items-center justify-center opacity-0 group-hover/sticker:opacity-100 transition-opacity shadow-sm cursor-pointer"
+                    title="Save Sticker"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              );
+            }
 
             if (isImage) {
               const defaultName = media.type === 'sticker' ? 'sticker.webp' : 'photo.jpg';

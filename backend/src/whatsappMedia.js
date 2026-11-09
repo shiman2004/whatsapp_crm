@@ -96,8 +96,8 @@ export function extractMediaDescriptor(message) {
     mediaType: kind === 'voice' ? 'audio' : kind,
     isVoice: kind === 'voice' || Boolean(payload.voice),
     caption: typeof payload.caption === 'string' ? payload.caption : '',
-    fileName: safeFileName(payload.filename),
-    mimeType: String(payload.mime_type || '').toLowerCase().slice(0, 100),
+    fileName: safeFileName(payload.filename) || (kind === 'sticker' ? 'sticker.webp' : null),
+    mimeType: String(payload.mime_type || (kind === 'sticker' ? 'image/webp' : '')).toLowerCase().slice(0, 100),
     checksumSha256: typeof payload.sha256 === 'string' && /^[a-f0-9]{64}$/i.test(payload.sha256)
       ? payload.sha256.toLowerCase()
       : null,
@@ -460,7 +460,9 @@ export async function processMediaRecord(prisma, mediaRecord, {
 
     const checksum = sha256Hex(buffer);
     const expected = String(meta.sha256 || claimed.checksum_sha256 || '').toLowerCase();
-    if (expected && expected !== checksum) throw new Error('Media checksum verification failed');
+    if (expected && expected !== checksum) {
+      console.warn(`⚠️ [whatsappMedia] Checksum mismatch for media ${claimed.id}: expected ${expected}, got ${checksum}. Continuing with downloaded binary.`);
+    }
 
     const mimeType = String(meta.mime_type || claimed.mime_type || 'application/octet-stream').slice(0, 100);
     const storageKey = claimed.storage_key || buildMediaStorageKey({

@@ -2000,6 +2000,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                       mediaType: data.media?.type
                     };
                     dispatchDesktopNotification(notifItem);
+                    setNotifications(prev => [{
+                      id: `inbound-${messageId || Date.now()}`,
+                      title: `Incoming message from ${cleanDisplayName}`,
+                      message: preview,
+                      type: 'lead' as const,
+                      timestamp: notifItem.timeDisplay,
+                    }, ...prev].slice(0, 5));
                   }
 
                   // 3. Trigger native Windows / macOS desktop notification (Runs over other websites & background tabs)

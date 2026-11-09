@@ -1237,9 +1237,34 @@ const server = http.createServer(async (req, res) => {
       try {
         const stat = fs.statSync(filePath);
         if (stat.size > 0) {
+          const totalSize = stat.size;
+          const rangeHeader = req.headers.range;
+
+          if (rangeHeader) {
+            const parts = rangeHeader.replace(/bytes=/, '').split('-');
+            const start = parseInt(parts[0], 10);
+            const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+            if (!isNaN(start) && start < totalSize) {
+              const chunkEnd = Math.min(end, totalSize - 1);
+              const chunkSize = (chunkEnd - start) + 1;
+
+              res.writeHead(206, {
+                'Content-Range': `bytes ${start}-${chunkEnd}/${totalSize}`,
+                'Accept-Ranges': 'bytes',
+                'Content-Length': chunkSize,
+                'Content-Type': contentType,
+                'Cache-Control': 'public, max-age=31536000, immutable'
+              });
+              fs.createReadStream(filePath, { start, end: chunkEnd }).pipe(res);
+              return;
+            }
+          }
+
           res.writeHead(200, {
             'Content-Type': contentType,
             'Content-Length': stat.size,
+            'Accept-Ranges': 'bytes',
             'Cache-Control': 'public, max-age=31536000, immutable'
           });
           fs.createReadStream(filePath).pipe(res);
@@ -1516,9 +1541,39 @@ const server = http.createServer(async (req, res) => {
     }
     const safeDownloadName = String(downloadFileName).replace(/["\\\r\n]/g, '');
     const isAttachment = parsedUrl.query.download === '1' || parsedUrl.query.download === 'true';
+    const totalSize = mediaObject.buffer.length;
+    const rangeHeader = req.headers.range;
+
+    // Support HTTP Range requests (206 Partial Content) for seeking & audio/video duration tracking
+    if (rangeHeader && !isAttachment) {
+      const parts = rangeHeader.replace(/bytes=/, '').split('-');
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+      if (!isNaN(start) && start < totalSize) {
+        const chunkEnd = Math.min(end, totalSize - 1);
+        const chunkSize = (chunkEnd - start) + 1;
+        const chunk = mediaObject.buffer.subarray(start, chunkEnd + 1);
+
+        res.writeHead(206, {
+          'Content-Range': `bytes ${start}-${chunkEnd}/${totalSize}`,
+          'Accept-Ranges': 'bytes',
+          'Content-Length': chunkSize,
+          'Content-Type': mediaObject.mimeType || 'application/octet-stream',
+          'Cache-Control': 'private, max-age=900',
+          'Content-Disposition': `inline; filename="${safeDownloadName}"`,
+          'X-Content-Type-Options': 'nosniff',
+          'Content-Security-Policy': 'default-src \'none\'; sandbox'
+        });
+        res.end(chunk);
+        return;
+      }
+    }
+
     res.writeHead(200, {
       'Content-Type': mediaObject.mimeType || 'application/octet-stream',
-      'Content-Length': mediaObject.buffer.length,
+      'Content-Length': totalSize,
+      'Accept-Ranges': 'bytes',
       'Cache-Control': 'private, max-age=900',
       'Content-Disposition': `${isAttachment ? 'attachment' : 'inline'}; filename="${safeDownloadName}"`,
       'X-Content-Type-Options': 'nosniff',

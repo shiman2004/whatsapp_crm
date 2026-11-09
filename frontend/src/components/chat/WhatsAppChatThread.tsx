@@ -59,6 +59,10 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
   // True while an older-history page is being prepended, so the arrival effect below
   // does not mistake that growth for an incoming message.
   const prependingHistoryRef = useRef(false);
+  const lastScrollTopRef = useRef<number>(0);
+  const isAutoScrollingRef = useRef<boolean>(false);
+  const isInitialScrollDoneRef = useRef<boolean>(false);
+  const leadHistoryExhaustedRef = useRef<Record<string, boolean>>({});
   const [showScrollBottomBtn, setShowScrollBottomBtn] = useState(false);
   const prevLeadIdRef = useRef(lead.id);
   const prevMsgLengthRef = useRef(0);
@@ -262,90 +266,172 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
     return -1;
   })();
 
+  // Scroll to bottom helper with lock protection to prevent concurrent top-snapping
+  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
+    const container = messagesContainerRef.current;
+    if (!container) {
+      messagesEndRef.current?.scrollIntoView({ behavior });
+      return;
+    }
+    isAutoScrollingRef.current = true;
+    container.scrollTo({
+      top: container.scrollHeight,
+      behavior
+    });
+    isAtBottomRef.current = true;
+    setShowScrollBottomBtn(false);
+
+    // Release auto-scrolling flag after scroll transition completes
+    setTimeout(() => {
+      isAutoScrollingRef.current = false;
+      if (messagesContainerRef.current) {
+        lastScrollTopRef.current = messagesContainerRef.current.scrollTop;
+      }
+    }, behavior === 'smooth' ? 350 : 50);
+  };
+
   // Handle user scroll detection
   const handleScroll = () => {
-    if (!messagesContainerRef.current) return;
-    const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
+    const container = messagesContainerRef.current;
+    if (!container) return;
+    const { scrollTop, scrollHeight, clientHeight } = container;
+
+    // Detect direction of scroll
+    const prevScrollTop = lastScrollTopRef.current;
+    const isScrollingUp = scrollTop < prevScrollTop;
+    lastScrollTopRef.current = scrollTop;
+
     const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
     // Consider user at bottom if within 100px from the bottom
     const nearBottom = distanceFromBottom < 100;
     isAtBottomRef.current = nearBottom;
     setShowScrollBottomBtn(distanceFromBottom > 160);
 
-    // Reaching the top pulls in the next older page of history.
-    if (scrollTop < 80) void loadOlderHistory();
+    // CRITICAL: NEVER trigger loadOlderHistory when:
+    // 1) An auto-scroll operation is running
+    // 2) Initial scroll to bottom hasn't completed
+    // 3) The user is scrolling DOWN (or not scrolling up)
+    // 4) History for this lead has already been exhausted
+    // 5) The content doesn't even overflow the container
+    if (
+      isAutoScrollingRef.current ||
+      !isInitialScrollDoneRef.current ||
+      !isScrollingUp ||
+      scrollHeight <= clientHeight + 40 ||
+      leadHistoryExhaustedRef.current[lead.id]
+    ) {
+      return;
+    }
+
+    // Only load older history when user deliberately scrolls UP to the very top (scrollTop < 30)
+    if (scrollTop < 30) {
+      void loadOlderHistory();
+    }
   };
 
   // Loads older history while holding the scroll position steady, so the view
   // does not jump when the new page is prepended.
   const loadOlderHistory = async () => {
     const container = messagesContainerRef.current;
-    if (!container || loadingOlderRef.current || !hasOlderMessages) return;
+    if (
+      !container || 
+      loadingOlderRef.current || 
+      !hasOlderMessages || 
+      leadHistoryExhaustedRef.current[lead.id] || 
+      isAutoScrollingRef.current
+    ) {
+      return;
+    }
+
     loadingOlderRef.current = true;
-    // Prepending older messages also grows leadMessages, which the arrival effect would
-    // read as "a new message arrived" and auto-scroll to the bottom — overriding the
-    // position restore below. The flag is cleared on a later frame than the restore,
-    // because React commits the prepended page after this function returns.
     prependingHistoryRef.current = true;
     const previousHeight = container.scrollHeight;
     const previousTop = container.scrollTop;
+
     const clearPrependFlag = () => {
-      requestAnimationFrame(() => { prependingHistoryRef.current = false; });
+      requestAnimationFrame(() => {
+        prependingHistoryRef.current = false;
+        loadingOlderRef.current = false;
+      });
     };
+
     try {
       const more = await loadOlderMessages();
-      if (!more) {
-        clearPrependFlag();
-        return;
-      }
+
+      // Give React an animation frame to commit prepended messages
       requestAnimationFrame(() => {
-        if (!messagesContainerRef.current) return;
-        messagesContainerRef.current.scrollTop =
-          messagesContainerRef.current.scrollHeight - previousHeight + previousTop;
+        if (!messagesContainerRef.current) {
+          clearPrependFlag();
+          return;
+        }
+
+        const newHeight = messagesContainerRef.current.scrollHeight;
+        const heightDelta = newHeight - previousHeight;
+
+        // If new messages were prepended to this lead's thread, compensate scroll position.
+        // If NO new messages were added to this lead (heightDelta === 0), DO NOT touch scrollTop!
+        if (heightDelta > 0) {
+          messagesContainerRef.current.scrollTop = previousTop + heightDelta;
+          lastScrollTopRef.current = messagesContainerRef.current.scrollTop;
+        } else {
+          // If the global database returned no more or no messages for this lead
+          if (!more) {
+            leadHistoryExhaustedRef.current[lead.id] = true;
+          }
+        }
         clearPrependFlag();
       });
     } catch (e) {
       clearPrependFlag();
-      throw e;
-    } finally {
-      loadingOlderRef.current = false;
+      console.warn('Failed to load older history:', e);
     }
   };
 
-  // Scroll to bottom helper
-  const scrollToBottom = (behavior: ScrollBehavior = 'smooth') => {
-    if (messagesContainerRef.current) {
-      messagesContainerRef.current.scrollTo({
-        top: messagesContainerRef.current.scrollHeight,
-        behavior
-      });
-      isAtBottomRef.current = true;
-      setShowScrollBottomBtn(false);
-    } else {
-      messagesEndRef.current?.scrollIntoView({ behavior });
-    }
-  };
-
-  // 1. Initial mount scroll to bottom
+  // 1. Initial mount & lead switch: reliably position chat at the bottom
   useEffect(() => {
-    prevMsgLengthRef.current = leadMessages.length;
-    scrollToBottom('auto');
-  }, []);
+    isInitialScrollDoneRef.current = false;
+    isAtBottomRef.current = true;
+    setShowScrollBottomBtn(false);
 
-  // 2. Chat/Contact switch: Always scroll down to bottom for the newly opened chat
-  useEffect(() => {
-    if (lead.id !== prevLeadIdRef.current) {
-      prevLeadIdRef.current = lead.id;
-      prevMsgLengthRef.current = leadMessages.length;
-      isAtBottomRef.current = true;
-      setShowScrollBottomBtn(false);
-      requestAnimationFrame(() => {
-        scrollToBottom('auto');
-      });
-    }
+    const performInitialScroll = () => {
+      const container = messagesContainerRef.current;
+      if (!container) return;
+      isAutoScrollingRef.current = true;
+      container.scrollTop = container.scrollHeight;
+      lastScrollTopRef.current = container.scrollTop;
+    };
+
+    // Frame 1: Immediate scroll
+    performInitialScroll();
+
+    // Frame 2: Next animation frame after DOM paint
+    const rafId = requestAnimationFrame(() => {
+      performInitialScroll();
+    });
+
+    // Frame 3: 80ms timeout after fonts and bubble styles apply
+    const timer1 = setTimeout(() => {
+      performInitialScroll();
+      isInitialScrollDoneRef.current = true;
+      isAutoScrollingRef.current = false;
+    }, 80);
+
+    // Frame 4: 250ms fallback for images / media load
+    const timer2 = setTimeout(() => {
+      if (isAtBottomRef.current) {
+        performInitialScroll();
+      }
+      isAutoScrollingRef.current = false;
+    }, 250);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearTimeout(timer1);
+      clearTimeout(timer2);
+    };
   }, [lead.id]);
 
-  // 3. New message arrival: Only scroll down if user is ALREADY near the bottom OR if user sent the message
+  // 2. New message arrival: Only scroll down if user is ALREADY near the bottom OR if user sent the message
   useEffect(() => {
     const isNewMessageAdded = leadMessages.length > prevMsgLengthRef.current;
     const lastMsg = leadMessages[leadMessages.length - 1];
@@ -353,7 +439,13 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
 
     prevMsgLengthRef.current = leadMessages.length;
 
-    if (isNewMessageAdded && !prependingHistoryRef.current) {
+    // If initial scroll is not yet done, scroll to bottom immediately
+    if (!isInitialScrollDoneRef.current && leadMessages.length > 0) {
+      scrollToBottom('auto');
+      return;
+    }
+
+    if (isNewMessageAdded && !prependingHistoryRef.current && !isAutoScrollingRef.current) {
       if (isOwnOutbound || isAtBottomRef.current) {
         scrollToBottom('smooth');
       }
@@ -587,7 +679,9 @@ export const WhatsAppChatThread: React.FC<WhatsAppChatThreadProps> = ({
         {/* Older-history affordance: shows whether more pages exist above */}
         {leadMessages.length > 0 && (
           <div className="text-center text-[#667781] dark:text-[#8696a0] text-[11px] py-1">
-            {hasOlderMessages ? 'Scroll up to load earlier messages' : 'Beginning of conversation'}
+            {hasOlderMessages && !leadHistoryExhaustedRef.current[lead.id]
+              ? 'Scroll up to load earlier messages'
+              : 'Beginning of conversation'}
           </div>
         )}
 

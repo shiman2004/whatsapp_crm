@@ -20,20 +20,81 @@ function cookie(name, value, maxAge) {
   return name + '=' + value + '; HttpOnly; SameSite=Lax; Path=/api/student; Max-Age=' + maxAge + (process.env.NODE_ENV === 'production' ? '; Secure' : '');
 }
 
-function verifyStaffToken(token) {
+async function resolveStaffUser(token, authUser = null) {
+  if (authUser && authUser.id) return authUser;
   if (!token || typeof token !== 'string') return null;
   const parts = token.split('.');
   if (parts.length !== 2) return null;
   const [data, signature] = parts;
   const expectedSig = crypto.createHmac('sha256', JWT_SECRET).update(data).digest('base64url');
   if (signature.length !== expectedSig.length || !crypto.timingSafeEqual(Buffer.from(signature), Buffer.from(expectedSig))) return null;
+
+  let payload;
   try {
-    const payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
+    payload = JSON.parse(Buffer.from(data, 'base64url').toString('utf8'));
     if (!payload || (!payload.userId && !payload.id) || (payload.exp && Date.now() > payload.exp)) return null;
-    return { ...payload, id: payload.userId || payload.id };
   } catch {
     return null;
   }
+
+  const userId = payload.userId || payload.id;
+  const prisma = getPrisma();
+  let dbUser = null;
+  let sessionVersion = 0;
+  let lockedUntil = null;
+
+  if (prisma) {
+    try {
+      const rows = await prisma.$queryRawUnsafe(
+        `SELECT id, "fullName", email, role, branch, company, active, session_version, locked_until
+           FROM public.users WHERE id = $1 LIMIT 1`,
+        userId
+      );
+      dbUser = rows?.[0] || null;
+      sessionVersion = Number(dbUser?.session_version || 0);
+      lockedUntil = dbUser?.locked_until || null;
+    } catch {
+      try {
+        dbUser = await prisma.user.findUnique({ where: { id: userId } });
+      } catch {}
+    }
+  }
+
+  if (!dbUser && (process.env.NODE_ENV === 'test' || Boolean(process.env.IS_TEST_ENV))) {
+    try {
+      const { CANONICAL_USERS } = await import('./legacyServer.js');
+      dbUser = CANONICAL_USERS?.find(u => u.id === userId) || null;
+      sessionVersion = Number(dbUser?.session_version || 0);
+      lockedUntil = dbUser?.locked_until || null;
+    } catch {}
+  }
+
+  if (!dbUser) return null;
+  if (dbUser.active === false) return null;
+  if (lockedUntil && new Date(lockedUntil).getTime() > Date.now()) return null;
+
+  // Revoked sessions increment session_version; tokens issued before the bump stop working immediately
+  if (Number(payload.sv ?? 0) !== sessionVersion) return null;
+
+  // Per-device session revocation check
+  if (payload.sid && prisma) {
+    try {
+      const sessions = await prisma.$queryRawUnsafe(
+        `SELECT id, revoked_at FROM public.user_sessions WHERE id = $1 AND user_id = $2 LIMIT 1`,
+        String(payload.sid), userId
+      );
+      if (!sessions?.length || sessions[0].revoked_at) return null;
+    } catch {}
+  }
+
+  return {
+    id: dbUser.id,
+    role: dbUser.role,
+    email: dbUser.email,
+    fullName: dbUser.fullName,
+    branch: dbUser.branch || 'Colombo',
+    company: dbUser.company || 'ALL'
+  };
 }
 
 export async function handleStudentRoutes(req, res, pathname, authUser = null) {
@@ -193,7 +254,8 @@ export async function handleStudentRoutes(req, res, pathname, authUser = null) {
       });
     } else if (pathname.startsWith('/api/student/admin/') && pathname.endsWith('/status') && (req.method === 'PATCH' || req.method === 'POST')) {
       const targetStudentId = pathname.slice('/api/student/admin/'.length).replace(/\/status$/, '');
-      const staffUser = authUser || verifyStaffToken(bearerToken);
+      const staffUser = await resolveStaffUser(bearerToken, authUser);
+      requireValue(staffUser, 'UNAUTHORIZED', 'Valid staff authentication credentials required.', 401);
       requireValue(staffUser && (staffUser.role === 'super_admin' || staffUser.role === 'exam_department_manager'), 'FORBIDDEN', 'Administrative access required.', 403);
       const body = await readExamJson(req);
       requireValue(body.status, 'STATUS_REQUIRED', 'Status is required.');

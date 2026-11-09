@@ -1,24 +1,15 @@
 import { SettingsService, VersionConflictError, DEFAULT_SETTINGS } from './services/settingsService.js';
 import { getPrisma, getDbStatus } from './db.js';
+import { readBoundedJson, PayloadTooLargeError, REQUEST_BODY_LIMITS } from './requestBody.js';
 
 function json(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify(data));
 }
 
-function parseBody(req) {
-  return new Promise((resolve, reject) => {
-    let body = '';
-    req.on('data', chunk => { body += chunk; });
-    req.on('end', () => {
-      try {
-        resolve(JSON.parse(body || '{}'));
-      } catch (err) {
-        reject(new Error('Invalid JSON payload'));
-      }
-    });
-    req.on('error', reject);
-  });
+async function parseBody(req, limit = REQUEST_BODY_LIMITS.settings) {
+  const { data } = await readBoundedJson(req, limit);
+  return data;
 }
 
 function queryOf(req) {
@@ -258,6 +249,10 @@ export async function handleSettingsRoutes(req, res, pathname, user, correlation
     json(res, 404, { success: false, error: 'Settings endpoint not found.' });
     return true;
   } catch (err) {
+    if (err.status === 413 || err.statusCode === 413 || err.code === 'PAYLOAD_TOO_LARGE') {
+      json(res, 413, { success: false, code: 'PAYLOAD_TOO_LARGE', error: 'Request body too large.' });
+      return true;
+    }
     console.error('[SettingsRoutes Error]:', err);
     json(res, 500, { success: false, error: 'Internal server error in settings handler.' });
     return true;

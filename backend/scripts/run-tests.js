@@ -30,6 +30,7 @@ const ALL_SUITES = [
   'test-auth-security.js',
   'test-login-security.js',
   'test-auth-bypass-remediation.test.js',
+  'test-phase2-security-remediation.test.js',
   'test-24h-window.js',
   'test-company-switching.js',
   'test-cras-contact-creation.js',

@@ -5,6 +5,14 @@ import { handleClinicalRoutes } from './clinicalRoutes.js';
 import { handleStudentRoutes } from './studentRoutes.js';
 import { handleExamRoutes } from './examRoutes.js';
 import { JWT_SECRET } from './runtimeConfig.js';
+import {
+  REQUEST_BODY_LIMITS,
+  getBodyLimit,
+  readBoundedBody,
+  readBoundedJson,
+  applyIncrementalStreamLimiter,
+  PayloadTooLargeError
+} from './requestBody.js';
 import http from 'http';
 import url from 'url';
 import fs from 'fs';
@@ -90,12 +98,6 @@ function isAllowedOrigin(origin) {
 }
 const TRUST_PROXY = String(process.env.TRUST_PROXY || '').toLowerCase() === 'true';
 const META_APP_SECRET = String(process.env.META_APP_SECRET || '').trim();
-const REQUEST_BODY_LIMITS = {
-  default: 2 * 1024 * 1024,
-  upload: 25 * 1024 * 1024,
-  webhook: 2 * 1024 * 1024,
-  login: 32 * 1024
-};
 const MEDIA_URL_TTL_MS = 15 * 60 * 1000;
 const SSE_TICKET_TTL_MS = 15 * 60 * 1000;
 const sseTickets = new Map();
@@ -117,15 +119,6 @@ function sweepExpiredSseTickets() {
 }
 
 setInterval(sweepExpiredSseTickets, SSE_TICKET_TTL_MS).unref();
-
-function getBodyLimit(pathname) {
-  if (pathname === '/api/upload') return REQUEST_BODY_LIMITS.upload;
-  if (pathname === '/api/auth/login') return REQUEST_BODY_LIMITS.login;
-  if (pathname === '/api/webhook' || pathname === '/webhook' || pathname === '/api/meta/webhook' || pathname === '/meta/webhook') {
-    return REQUEST_BODY_LIMITS.webhook;
-  }
-  return REQUEST_BODY_LIMITS.default;
-}
 
 function issueSseTicket(user) {
   const ticket = crypto.randomBytes(32).toString('base64url');
@@ -153,19 +146,56 @@ function consumeSseTicket(ticket) {
   return record.user;
 }
 
-function verifyMetaSignature(rawBody, signatureHeader) {
-  const appSecret = String(process.env.META_APP_SECRET || (typeof metaConfig !== 'undefined' ? metaConfig?.appSecret : '') || META_APP_SECRET || '').trim();
-  if (!appSecret) {
-    return true;
+const KNOWN_PLACEHOLDER_SECRETS = new Set([
+  'change_me',
+  'changeme',
+  'your_meta_app_secret',
+  'your_app_secret',
+  'placeholder',
+  'meta_secret',
+  'meta_app_secret',
+  'insert_meta_app_secret_here',
+  'xxx',
+  'secret'
+]);
+
+function isPlaceholderAppSecret(secret) {
+  if (!secret || typeof secret !== 'string') return true;
+  const s = secret.trim().toLowerCase();
+  if (s.length < 8) return true;
+  return KNOWN_PLACEHOLDER_SECRETS.has(s);
+}
+
+function verifyMetaSignature(rawBody, signatureHeader, overrideSecret = undefined) {
+  const hasOverride = arguments.length >= 3;
+  const appSecret = String(
+    hasOverride
+      ? (overrideSecret || '')
+      : (process.env.META_APP_SECRET || (typeof metaConfig !== 'undefined' ? metaConfig?.appSecret : '') || META_APP_SECRET || '')
+  ).trim();
+
+  // Fail closed: never allow bypass if secret is missing or placeholder
+  if (!appSecret || isPlaceholderAppSecret(appSecret)) {
+    return false;
   }
-  if (!signatureHeader || typeof signatureHeader !== 'string') return false;
+  if (!signatureHeader || typeof signatureHeader !== 'string') {
+    return false;
+  }
   const provided = signatureHeader.startsWith('sha256=') ? signatureHeader.slice(7) : '';
-  if (!/^[a-f0-9]{64}$/i.test(provided)) return false;
-  const expectedBuf = Buffer.from(crypto.createHmac('sha256', appSecret).update(rawBody).digest('hex'), 'hex');
-  const providedBuf = Buffer.from(provided, 'hex');
-  // Length check first: timingSafeEqual throws on mismatched buffer sizes.
-  if (expectedBuf.length !== providedBuf.length) return false;
-  return crypto.timingSafeEqual(expectedBuf, providedBuf);
+  if (!/^[a-f0-9]{64}$/i.test(provided)) {
+    return false;
+  }
+  try {
+    const rawBuf = Buffer.isBuffer(rawBody) ? rawBody : Buffer.from(String(rawBody || ''), 'utf8');
+    const expectedBuf = Buffer.from(crypto.createHmac('sha256', appSecret).update(rawBuf).digest('hex'), 'hex');
+    const providedBuf = Buffer.from(provided, 'hex');
+    if (expectedBuf.length !== providedBuf.length) {
+      return false;
+    }
+    return crypto.timingSafeEqual(expectedBuf, providedBuf);
+  } catch {
+    return false;
+  }
 }
 
 function timingSafeStringEqual(a, b) {
@@ -1039,6 +1069,10 @@ async function authenticateRequest(req, parsedUrl) {
   // Isolated test environment fallback for unit tests and unseeded test fixtures
   if (!dbUser && IS_TEST_ENV) {
     dbUser = CANONICAL_USERS.find(u => u.id === payload.userId);
+    if (dbUser) {
+      sessionVersion = Number(dbUser.session_version || 0);
+      lockedUntil = dbUser.locked_until || null;
+    }
   }
 
   if (!dbUser) {
@@ -1122,8 +1156,8 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/templates' ||
     pathname.startsWith('/api/templates')
   )) return true;
-  // 6. Student Portal & Controlled Device Security API Routes
-  if (pathname.startsWith('/api/student/')) return true;
+  // 6. Student Portal & Controlled Device Security API Routes (student portal endpoints are public/student-authenticated; admin endpoints require staff authentication)
+  if (pathname.startsWith('/api/student/') && !pathname.startsWith('/api/student/admin/')) return true;
 
   return false;
 }
@@ -1149,10 +1183,17 @@ const server = http.createServer(async (req, res) => {
   const requestLimit = getBodyLimit(new URL(req.url || '/', 'http://localhost').pathname || '/');
   const declaredLength = Number(req.headers['content-length'] || 0);
   if (declaredLength > requestLimit) {
-    res.writeHead(413, { 'Content-Type': 'application/json' });
+    if (typeof req.resume === 'function') req.resume();
+    res.writeHead(413, {
+      'Content-Type': 'application/json',
+      'Connection': 'close'
+    });
     res.end(JSON.stringify({ success: false, error: 'Request body too large.' }));
     return;
   }
+
+  // Attach incremental stream limiter for chunked / unstated transfer encoding
+  applyIncrementalStreamLimiter(req, res, requestLimit);
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204);
@@ -1975,6 +2016,20 @@ const server = http.createServer(async (req, res) => {
 
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
+
+  // Student Portal Admin Routes require authenticated staff with super_admin or exam_department_manager role
+  if (pathname.startsWith('/api/student/admin/')) {
+    const authResult = await authenticateRequest(req, parsedUrl);
+    if (!authResult.user) {
+      sendApiError(res, authResult.status || 401, 'UNAUTHORIZED', authResult.error || 'Unauthorized: Valid staff authentication credentials required.', correlationId);
+      return;
+    }
+    authUser = authResult.user;
+    if (authUser.role !== 'super_admin' && authUser.role !== 'exam_department_manager') {
+      sendApiError(res, 403, 'FORBIDDEN', 'Administrative access required.', correlationId);
+      return;
+    }
+  }
 
   // Milestone 2: Student Portal & Controlled Device Security Routes
   if (await handleStudentRoutes(req, res, pathname, authUser)) return;
@@ -8184,18 +8239,29 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method === 'POST') {
-      let body = '';
-      req.on('data', chunk => { body += chunk; });
-      req.on('end', async () => {
-        try {
-          const payload = JSON.parse(body || '{}');
-          const signature = req.headers['x-hub-signature-256'];
-          if (!verifyMetaSignature(body, signature)) {
+      try {
+        const { raw, text } = await readBoundedBody(req, REQUEST_BODY_LIMITS.webhook);
+        const signature = req.headers['x-hub-signature-256'];
+        if (!verifyMetaSignature(raw, signature)) {
+          if (!res.headersSent) {
             res.writeHead(401, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({ error: 'Invalid webhook signature.' }));
-            return;
           }
-          console.log(`[Meta Webhook POST] Verified payload received on ${pathname}`);
+          return;
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(text || '{}');
+        } catch (parseErr) {
+          if (!res.headersSent) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: 'Malformed JSON payload' }));
+          }
+          return;
+        }
+
+        console.log(`[Meta Webhook POST] Verified payload received on ${pathname}`);
           if (payload.object === 'whatsapp_business_account' && Array.isArray(payload.entry)) {
             for (const entry of payload.entry) {
               for (const change of entry.changes || []) {
@@ -8671,13 +8737,23 @@ const server = http.createServer(async (req, res) => {
               }
             }
           }
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ status: 'EVENT_RECEIVED' }));
-        } catch (err) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Malformed JSON payload' }));
+          if (!res.headersSent) {
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ status: 'EVENT_RECEIVED' }));
+          }
+      } catch (err) {
+        if (err instanceof PayloadTooLargeError || err?.statusCode === 413 || err?.code === 'PAYLOAD_TOO_LARGE') {
+          if (!res.headersSent) {
+            res.writeHead(413, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, error: 'Request body too large.' }));
+          }
+          return;
         }
-      });
+        if (!res.headersSent) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: err.message || 'Malformed JSON payload' }));
+        }
+      }
       return;
     }
   }
@@ -8942,6 +9018,13 @@ export {
   sharedRateLimitKeys,
   dummyVerify,
   verifyMetaSignature,
+  // Bounded request body and payload size limiters
+  REQUEST_BODY_LIMITS,
+  getBodyLimit,
+  readBoundedBody,
+  readBoundedJson,
+  applyIncrementalStreamLimiter,
+  PayloadTooLargeError,
   // Bounded in-memory stores (tested for expiry and growth caps)
   issueSseTicket,
   consumeSseTicket,

@@ -31,6 +31,7 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
     setNotificationSettingsOpen,
     totalUnreadCountForUser,
     selectedLeadId,
+    setSelectedLeadId,
     openDirectIncomingChat,
   } = useCrm();
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -116,7 +117,11 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
       )}
 
       <ToastContainer />
-      <NotificationContainer />
+      <NotificationContainer onNavigateToChat={(leadId) => {
+        setSelectedLeadId(leadId);
+        setActiveNavTab('chat');
+        navigateToPath(routeForTab('chat'));
+      }} />
       <WhatsAppSimulator />
       {notificationSettingsOpen && (
         <NotificationSettingsModal

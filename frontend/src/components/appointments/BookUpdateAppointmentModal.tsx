@@ -356,7 +356,7 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     placeholder="Name, phone or lead serial number"
-                    className="w-full rounded-lg border border-slate-700 bg-slate-950 py-2 pl-9 pr-3 text-xs text-white placeholder-slate-500 focus:border-teal-500 focus:outline-none"
+                    className="w-full rounded-lg border border-[#222D34] bg-[#111B21] py-2 pl-9 pr-3 text-xs text-[#E9EDEF] placeholder-[#8696A0] focus:border-[#25D366] focus:outline-none"
                   />
                   {searching && <Loader2 className="absolute right-3 top-2.5 h-4 w-4 animate-spin text-teal-400" />}
                 </div>
@@ -375,7 +375,7 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
                         setSearchResults([]);
                         setSearchQuery('');
                       }}
-                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-950/60 px-3 py-2 text-left transition-colors hover:border-teal-500/50"
+                      className="flex w-full items-center justify-between gap-3 rounded-lg border border-[#222D34] bg-[#111B21]/60 px-3 py-2 text-left transition-colors hover:border-[#25D366]/50"
                     >
                       <div className="min-w-0">
                         <p className="truncate text-xs font-bold text-white">{row.displayName}</p>
@@ -398,16 +398,16 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
                   </button>
                 </div>
               ) : (
-                <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/40 p-4">
+                <div className="space-y-3 rounded-xl border border-[#222D34] bg-[#111B21]/40 p-4">
                   <p className="text-[11px] text-slate-400">No existing record selected. Book with a new patient, or search above to link a lead.</p>
                   <div className="grid gap-2 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-[11px] font-semibold text-slate-300">Patient name</label>
-                      <input value={patientName} onChange={(e) => setPatientName(e.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white focus:border-teal-500 focus:outline-none" />
+                      <input value={patientName} onChange={(e) => setPatientName(e.target.value)} className="w-full rounded-lg border border-[#222D34] bg-[#111B21] px-3 py-1.5 text-xs text-[#E9EDEF] focus:border-[#25D366] focus:outline-none" />
                     </div>
                     <div>
                       <label className="mb-1 block text-[11px] font-semibold text-slate-300">Phone number</label>
-                      <input value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-xs text-white focus:border-teal-500 focus:outline-none" />
+                      <input value={patientPhone} onChange={(e) => setPatientPhone(e.target.value)} className="w-full rounded-lg border border-[#222D34] bg-[#111B21] px-3 py-1.5 text-xs text-[#E9EDEF] focus:border-[#25D366] focus:outline-none" />
                     </div>
                   </div>
                   <button
@@ -432,14 +432,14 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
         <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="mb-1 block text-[11px] font-semibold text-slate-300">Branch / clinic</label>
-            <select value={branchId} onChange={(e) => invalidateSchedule({ branchId: e.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none">
+            <select value={branchId} onChange={(e) => invalidateSchedule({ branchId: e.target.value })} className="w-full rounded-lg border border-[#222D34] bg-[#111B21] px-3 py-2 text-xs text-[#E9EDEF] focus:border-[#25D366] focus:outline-none">
               <option value="">Select branch</option>
               {branches.map((branch) => <option key={branch.id} value={branch.id}>{branch.name}</option>)}
             </select>
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-semibold text-slate-300">Doctor</label>
-            <select value={doctorId} onChange={(e) => invalidateSchedule({ doctorId: e.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none">
+            <select value={doctorId} onChange={(e) => invalidateSchedule({ doctorId: e.target.value })} className="w-full rounded-lg border border-[#222D34] bg-[#111B21] px-3 py-2 text-xs text-[#E9EDEF] focus:border-[#25D366] focus:outline-none">
               <option value="">Select doctor</option>
               {branchDoctors.map((doctor) => <option key={doctor.id} value={doctor.id}>{doctor.fullName}{doctor.title ? ` — ${doctor.title}` : ''}</option>)}
             </select>
@@ -447,7 +447,7 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
           </div>
           <div>
             <label className="mb-1 block text-[11px] font-semibold text-slate-300">Treatment / service</label>
-            <select value={treatmentId} onChange={(e) => invalidateSchedule({ treatmentId: e.target.value })} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white focus:border-teal-500 focus:outline-none">
+            <select value={treatmentId} onChange={(e) => invalidateSchedule({ treatmentId: e.target.value })} className="w-full rounded-lg border border-[#222D34] bg-[#111B21] px-3 py-2 text-xs text-[#E9EDEF] focus:border-[#25D366] focus:outline-none">
               <option value="">Select treatment</option>
               {treatments.filter((t) => t.active !== false).map((t) => (
                 <option key={t.id} value={t.id}>{t.name}{t.durationMinutes ? ` (${t.durationMinutes}m)` : ''}</option>
@@ -605,8 +605,8 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center overflow-y-auto bg-black/80 p-2 backdrop-blur-sm sm:p-4">
-      <div className="my-auto flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-slate-800 bg-slate-900 text-slate-100 shadow-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex shrink-0 items-center justify-between border-b border-slate-800 bg-slate-950/70 px-5 py-3.5">
+      <div className="my-auto flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[#222D34] bg-[#202C33] text-[#E9EDEF] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between border-b border-[#222D34] bg-[#111B21]/70 px-5 py-3.5">
           <div className="flex items-center gap-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-teal-500/30 bg-teal-500/15 text-teal-400">
               <CalendarDays className="h-5 w-5" />
@@ -621,7 +621,7 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
           </button>
         </div>
 
-        <div className="flex shrink-0 items-center gap-1 border-b border-slate-800 bg-slate-950/30 px-5 py-2">
+        <div className="flex shrink-0 items-center gap-1 border-b border-[#222D34] bg-[#111B21]/30 px-5 py-2">
           {STEPS.map((label, index) => (
             <React.Fragment key={label}>
               <button
@@ -629,15 +629,15 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
                 onClick={() => index < step && setStep(index)}
                 disabled={index > step}
                 className={`flex items-center gap-1.5 rounded-lg px-2 py-1 text-[11px] font-semibold transition-colors ${
-                  index === step ? 'bg-teal-500/15 text-teal-300' : index < step ? 'text-teal-400 hover:bg-slate-800' : 'text-slate-500'
+                  index === step ? 'bg-[#005C4B]/40 text-[#25D366]' : index < step ? 'text-[#25D366] hover:bg-[#2A3942]' : 'text-[#8696A0]'
                 }`}
               >
-                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${index <= step ? 'bg-teal-500 text-slate-950' : 'bg-slate-800 text-slate-400'}`}>
+                <span className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${index <= step ? 'bg-[#25D366] text-[#111B21]' : 'bg-[#2A3942] text-[#8696A0]'}`}>
                   {index < step ? '✓' : index + 1}
                 </span>
                 <span className="hidden sm:inline">{label}</span>
               </button>
-              {index < STEPS.length - 1 && <span className="h-px flex-1 bg-slate-800" />}
+              {index < STEPS.length - 1 && <span className="h-px flex-1 bg-[#222D34]" />}
             </React.Fragment>
           ))}
         </div>
@@ -655,16 +655,16 @@ export const BookUpdateAppointmentModal: React.FC<BookUpdateAppointmentModalProp
           ) : renderStep()}
         </div>
 
-        <div className="flex shrink-0 items-center justify-between border-t border-slate-800 bg-slate-950/40 px-5 py-3">
-          <button type="button" onClick={step === 0 ? onClose : () => setStep(step - 1)} className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-slate-400 hover:bg-slate-800 hover:text-white">
+        <div className="flex shrink-0 items-center justify-between border-t border-[#222D34] bg-[#111B21]/40 px-5 py-3">
+          <button type="button" onClick={step === 0 ? onClose : () => setStep(step - 1)} className="inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-[#8696A0] hover:bg-[#2A3942] hover:text-[#E9EDEF]">
             {step === 0 ? 'Cancel' : <><ArrowLeft className="h-3.5 w-3.5" /> Back</>}
           </button>
           {step < STEPS.length - 1 ? (
-            <button type="button" onClick={() => setStep(step + 1)} disabled={!canContinue} className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-500 disabled:opacity-40">
+            <button type="button" onClick={() => setStep(step + 1)} disabled={!canContinue} className="inline-flex items-center gap-1.5 rounded-xl bg-[#128C7E] px-4 py-2 text-xs font-bold text-white hover:bg-[#075E54] disabled:opacity-40">
               Continue <ArrowRight className="h-3.5 w-3.5" />
             </button>
           ) : (
-            <button type="button" onClick={handleSubmit} disabled={submitting || !canContinue} className="inline-flex items-center gap-1.5 rounded-xl bg-teal-600 px-4 py-2 text-xs font-bold text-white hover:bg-teal-500 disabled:opacity-50">
+            <button type="button" onClick={handleSubmit} disabled={submitting || !canContinue} className="inline-flex items-center gap-1.5 rounded-xl bg-[#128C7E] px-4 py-2 text-xs font-bold text-white hover:bg-[#075E54] disabled:opacity-50">
               {submitting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
               {isEditMode ? 'Save changes' : 'Confirm booking'}
             </button>

@@ -74,14 +74,14 @@ export const DesktopNotificationCard: React.FC<DesktopNotificationCardProps> = (
   return (
     <div 
       onClick={handleCardClick}
-      className="w-[340px] sm:w-[360px] bg-[#202c33] border border-[#2a3942] rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 hover:border-[#00a884]/40 hover:shadow-[#00a884]/5 pointer-events-auto select-none animate-in slide-in-from-bottom-5 fade-in duration-200"
+      className="w-[300px] sm:w-[320px] bg-[#202c33] border border-[#2a3942] rounded-2xl shadow-2xl overflow-hidden transition-all duration-300 hover:border-[#00a884]/40 hover:shadow-[#00a884]/5 pointer-events-auto select-none animate-in slide-in-from-bottom-5 fade-in duration-200"
       style={{
         backdropFilter: 'blur(16px)',
         boxShadow: '0 12px 36px rgba(0, 0, 0, 0.55), 0 0 0 1px rgba(255, 255, 255, 0.05)'
       }}
     >
       {/* 1. Header Bar: WhatsApp Logo + Label + Actions (Matches Reference Screenshot) */}
-      <div className="px-3.5 pt-2.5 pb-1.5 flex items-center justify-between text-[#8696a0] border-b border-[#2a3942]/40 bg-[#182229]/60">
+      <div className="px-2.5 pt-2 pb-1 flex items-center justify-between text-[#8696a0] border-b border-[#2a3942]/40 bg-[#182229]/60">
         <div className="flex items-center gap-1.5">
           {/* Authentic WhatsApp Green Icon */}
           <div className="w-4 h-4 rounded-full bg-[#25D366] flex items-center justify-center text-slate-950 font-bold">
@@ -156,7 +156,7 @@ export const DesktopNotificationCard: React.FC<DesktopNotificationCardProps> = (
       </div>
 
       {/* 2. Body: Avatar + Contact Name + Preview + Unread Count + Timestamp */}
-      <div className="p-3.5 flex items-start gap-3 cursor-pointer hover:bg-white/[0.02] transition-colors">
+      <div className="p-2.5 flex items-start gap-2.5 cursor-pointer hover:bg-white/[0.02] transition-colors">
         {/* Contact Profile Picture / Avatar */}
         <div className="shrink-0 mt-0.5">
           <WhatsAppAvatar
@@ -197,7 +197,7 @@ export const DesktopNotificationCard: React.FC<DesktopNotificationCardProps> = (
       {/* 3. Bottom Quick Reply Input Bar (Matches Reference Screenshot) */}
       <form 
         onSubmit={handleSendReply}
-        className="px-3 pb-3 pt-0 flex items-center gap-2"
+        className="px-2.5 pb-2.5 pt-0 flex items-center gap-2"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex-1 bg-[#111b21] border border-[#2a3942] rounded-lg px-2.5 py-1.5 flex items-center focus-within:border-[#00a884]/60 transition-colors">

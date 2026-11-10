@@ -119,7 +119,7 @@ export async function convertAudioToWhatsAppOggOpusAsync(inputBuffer, inputExt =
       '-ac', '1',
       '-f', 'ogg',
       tmpOut
-    ], { stdio: 'pipe' });
+    ], { maxBuffer: 10 * 1024 * 1024 });
 
     try {
       const converted = await fs.promises.readFile(tmpOut);
@@ -207,7 +207,7 @@ export function convertAudioToWhatsAppOggOpus(inputBuffer, inputExt = 'webm') {
       '-ac', '1',
       '-f', 'ogg',
       tmpOut
-    ], { stdio: 'pipe' });
+    ], { stdio: 'pipe', maxBuffer: 10 * 1024 * 1024 });
 
     if (fs.existsSync(tmpOut)) {
       const converted = fs.readFileSync(tmpOut);

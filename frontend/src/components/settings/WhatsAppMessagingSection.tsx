@@ -21,11 +21,15 @@ import {
   Puzzle,
   Smartphone,
   PhoneCall,
-  CheckCheck
+  CheckCheck,
+  Key,
+  RefreshCw,
+  Copy
 } from 'lucide-react';
 import { useSettingsSection } from './useSettingsSection';
 import { SettingsLayout } from './SettingsLayout';
 import { useCrm } from '../../context/CrmContext';
+import { API_BASE_URL } from '../../config/api';
 
 interface WhatsAppMessagingProps {
   currentSectionId: string;
@@ -107,6 +111,136 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
   });
 
   const [activeTab, setActiveTab] = useState<TabType>('setup');
+
+  // Real WhatsApp Cloud API Account Management State
+  const [metaHasToken, setMetaHasToken] = useState<boolean>(false);
+  const [metaPhoneId, setMetaPhoneId] = useState<string>('');
+  const [metaWabaId, setMetaWabaId] = useState<string>('');
+  const [metaVerifyToken, setMetaVerifyToken] = useState<string>('');
+  const [metaAppSecret, setMetaAppSecret] = useState<string>('');
+  const [waStatus, setWaStatus] = useState<{ status: string; phone?: string; provider?: string }>({ status: 'checking' });
+  const [isSavingMeta, setIsSavingMeta] = useState<boolean>(false);
+  const [testWaPhone, setTestWaPhone] = useState<string>('');
+  const [isSendingWaTest, setIsSendingWaTest] = useState<boolean>(false);
+  const [waTestResult, setWaTestResult] = useState<{ success: boolean; message: string } | null>(null);
+  const [realTemplates, setRealTemplates] = useState<any[]>([]);
+  const [copiedWebhook, setCopiedWebhook] = useState<boolean>(false);
+
+  const getToken = () =>
+    localStorage.getItem('rw_crm_auth_token') ||
+    localStorage.getItem('royal_crm_token') ||
+    localStorage.getItem('auth_token') ||
+    '';
+
+  const loadWhatsAppAccountState = async () => {
+    const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+    const headers = { Authorization: `Bearer ${getToken()}` };
+    try {
+      const [cfgRes, statusRes, tplRes] = await Promise.all([
+        fetch(`${base}/api/meta/config`, { headers }).catch(() => null),
+        fetch(`${base}/api/whatsapp/status`, { headers }).catch(() => null),
+        fetch(`${base}/api/templates`, { headers }).catch(() => null)
+      ]);
+      if (cfgRes?.ok) {
+        const cfg = await cfgRes.json();
+        setMetaHasToken(Boolean(cfg.hasToken));
+        if (cfg.phoneNumberId) setMetaPhoneId(cfg.phoneNumberId);
+        if (cfg.wabaId) setMetaWabaId(cfg.wabaId);
+      }
+      if (statusRes?.ok) {
+        const st = await statusRes.json();
+        setWaStatus({ status: st.status || 'disconnected', phone: st.phone, provider: st.provider });
+      } else {
+        setWaStatus({ status: 'disconnected' });
+      }
+      if (tplRes?.ok) {
+        const tpls = await tplRes.json();
+        if (Array.isArray(tpls)) setRealTemplates(tpls);
+        else if (Array.isArray(tpls?.templates)) setRealTemplates(tpls.templates);
+      }
+    } catch {
+      setWaStatus({ status: 'disconnected' });
+    }
+  };
+
+  useEffect(() => {
+    loadWhatsAppAccountState();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleSaveMetaAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingMeta(true);
+    const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+    try {
+      const payload: Record<string, string> = {
+        phoneNumberId: metaPhoneId.trim(),
+        wabaId: metaWabaId.trim(),
+      };
+      if (metaVerifyToken.trim()) payload.verifyToken = metaVerifyToken.trim();
+      if (metaAppSecret.trim()) payload.appSecret = metaAppSecret.trim();
+
+      const res = await fetch(`${base}/api/meta/config`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`
+        },
+        body: JSON.stringify(payload)
+      });
+      const json = await res.json();
+      if (res.ok && json.success) {
+        setMetaHasToken(Boolean(json.hasToken));
+        setMetaVerifyToken('');
+        setMetaAppSecret('');
+        toast('WhatsApp Account Updated', 'Meta Cloud API Phone ID & WABA ID persisted and synced to all connected staff.', 'success');
+        await loadWhatsAppAccountState();
+      } else {
+        toast('Update Failed', json.error || 'Unable to save WhatsApp account identifiers.', 'warning');
+      }
+    } catch (err: any) {
+      toast('Network Error', err?.message || 'Unable to reach backend server.', 'warning');
+    } finally {
+      setIsSavingMeta(false);
+    }
+  };
+
+  const handleSendTestWhatsApp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!testWaPhone.trim()) return;
+    setIsSendingWaTest(true);
+    setWaTestResult(null);
+    const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+    try {
+      let cleanTo = testWaPhone.replace(/[^0-9]/g, '');
+      if (cleanTo.startsWith('0') && cleanTo.length === 10) cleanTo = '94' + cleanTo.slice(1);
+      else if (cleanTo.length === 9 && (cleanTo.startsWith('7') || cleanTo.startsWith('1'))) cleanTo = '94' + cleanTo;
+
+      const res = await fetch(`${base}/api/send-template`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${getToken()}`
+        },
+        body: JSON.stringify({
+          to: cleanTo,
+          templateName: 'hello_world',
+          language: 'en_US',
+          parameters: []
+        })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok && json.success !== false) {
+        setWaTestResult({ success: true, message: `Template 'hello_world' dispatched to +${cleanTo}!` });
+      } else {
+        setWaTestResult({ success: false, message: json.error || 'Meta API rejected test template dispatch.' });
+      }
+    } catch (err: any) {
+      setWaTestResult({ success: false, message: err?.message || 'Network error dispatching test template.' });
+    } finally {
+      setIsSendingWaTest(false);
+    }
+  };
 
   // Company preset configuration
   const activePreset = useMemo(() => {
@@ -206,7 +340,7 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
             }`}
           >
             <MessageSquare className="h-4 w-4" />
-            <span>Channel Connections</span>
+            <span>WhatsApp Account & Channels</span>
           </button>
 
           <button
@@ -319,8 +453,12 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
                 <p className="text-[10px] text-[#667781] dark:text-[#8696A0] mt-0.5">RWC, CRAS, Alpha Health</p>
               </div>
             </div>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 whitespace-nowrap">
-              ● All Online
+            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border whitespace-nowrap ${
+              waStatus.status === 'connected' && metaHasToken
+                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+            }`}>
+              ● {waStatus.status === 'connected' && metaHasToken ? 'Online' : 'Checking / Config'}
             </span>
           </div>
 
@@ -658,30 +796,155 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
         )}
 
         {/* ========================================================================= */}
-        {/* OTHER TABS: CHANNELS, HOURS, TEMPLATES, INTEGRATIONS */}
+        {/* OTHER TABS: CHANNELS (REAL ACCOUNT MANAGEMENT), HOURS, TEMPLATES, INTEGRATIONS */}
         {/* ========================================================================= */}
         {activeTab === 'channels' && (
-          <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-6 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">Active WhatsApp Channel Endpoints</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {[
-                { name: 'Royal Wellness Center WhatsApp', number: '+94 77 123 4567', type: 'Meta Cloud API', status: 'Online' },
-                { name: 'CRAS Academic Enquiries', number: '+94 11 456 7890', type: 'Web Gateway', status: 'Online' },
-                { name: 'Alpha Health Group Advisory', number: '+94 11 789 0123', type: 'Meta Cloud API', status: 'Online' }
-              ].map((channel, i) => (
-                <div key={i} className="p-4 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-[#111B21] dark:text-[#E9EDEF]">{channel.name}</span>
-                    <span className="text-[10px] font-bold text-emerald-500 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                      ● {channel.status}
-                    </span>
-                  </div>
-                  <p className="text-xs text-[#667781] dark:text-[#8696A0] font-mono">{channel.number}</p>
-                  <span className="inline-block text-[10px] font-semibold text-[#128C7E] dark:text-[#25D366] bg-[#DDF5EC] dark:bg-[#005C4B]/40 px-2 py-0.5 rounded">
-                    {channel.type}
-                  </span>
+          <div className="space-y-6">
+            {/* 1. Live Meta Cloud API Gateway Status */}
+            <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-6 shadow-sm space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E0E5E7] dark:border-[#222D34] pb-4">
+                <div>
+                  <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] flex items-center gap-2">
+                    <Smartphone className="h-4 w-4 text-[#128C7E] dark:text-[#25D366]" />
+                    Meta WhatsApp Cloud API Account Management
+                  </h3>
+                  <p className="text-xs text-[#667781] dark:text-[#8696A0]">
+                    Configure live WhatsApp Business Account (WABA), Phone Number ID, and test outbound connectivity
+                  </p>
                 </div>
-              ))}
+                <div className="flex items-center gap-2">
+                  <span className={`px-3 py-1 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
+                    waStatus.status === 'connected' && metaHasToken
+                      ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30'
+                      : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30'
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${waStatus.status === 'connected' && metaHasToken ? 'bg-emerald-500 animate-pulse' : 'bg-amber-500'}`} />
+                    {waStatus.status === 'connected' && metaHasToken ? 'Meta Gateway Connected' : 'Gateway Disconnected / Unconfigured'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={loadWhatsAppAccountState}
+                    className="p-2 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[#667781] dark:text-[#8696A0] hover:text-[#128C7E] dark:hover:text-[#25D366] transition-colors cursor-pointer"
+                    title="Refresh WhatsApp Account Status"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-4 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] space-y-1">
+                  <span className="text-[11px] font-semibold text-[#667781] dark:text-[#8696A0]">Server Access Token (META_ACCESS_TOKEN)</span>
+                  <div className="flex items-center gap-2 text-xs font-bold text-[#111B21] dark:text-[#E9EDEF]">
+                    <Key className={`h-3.5 w-3.5 ${metaHasToken ? 'text-emerald-500' : 'text-rose-500'}`} />
+                    <span>{metaHasToken ? 'Configured in Server Secret Manager' : 'Missing on Server Environment'}</span>
+                  </div>
+                </div>
+                <div className="p-4 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] space-y-1">
+                  <span className="text-[11px] font-semibold text-[#667781] dark:text-[#8696A0]">Master Connected Number</span>
+                  <p className="text-xs font-mono font-bold text-[#111B21] dark:text-[#E9EDEF]">
+                    {waStatus.phone ? `+${waStatus.phone}` : 'Not Reported'}
+                  </p>
+                </div>
+                <div className="p-4 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] space-y-1">
+                  <span className="text-[11px] font-semibold text-[#667781] dark:text-[#8696A0]">Active Provider Engine</span>
+                  <p className="text-xs font-bold text-[#128C7E] dark:text-[#25D366]">
+                    Meta WhatsApp Cloud API v20.0
+                  </p>
+                </div>
+              </div>
+
+              {/* 2. Editable Meta Account Identifiers Form */}
+              <form onSubmit={handleSaveMetaAccount} className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">Meta Phone Number ID</label>
+                  <input
+                    type="text"
+                    value={metaPhoneId}
+                    onChange={(e) => setMetaPhoneId(e.target.value)}
+                    placeholder="e.g. 1358157244046701"
+                    className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3.5 py-2 text-xs font-mono text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">WhatsApp Business Account (WABA) ID</label>
+                  <input
+                    type="text"
+                    value={metaWabaId}
+                    onChange={(e) => setMetaWabaId(e.target.value)}
+                    placeholder="e.g. 2332922997481634"
+                    className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3.5 py-2 text-xs font-mono text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">Webhook Verify Token (Optional Update)</label>
+                  <input
+                    type="text"
+                    value={metaVerifyToken}
+                    onChange={(e) => setMetaVerifyToken(e.target.value)}
+                    placeholder="Leave blank to keep existing server verify token"
+                    className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3.5 py-2 text-xs font-mono text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">Meta App Secret (Optional Update)</label>
+                  <input
+                    type="password"
+                    value={metaAppSecret}
+                    onChange={(e) => setMetaAppSecret(e.target.value)}
+                    placeholder="Leave blank to keep existing app secret"
+                    className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3.5 py-2 text-xs font-mono text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  />
+                </div>
+
+                <div className="md:col-span-2 flex items-center justify-between pt-2">
+                  <p className="text-[11px] text-[#667781] dark:text-[#8696A0]">
+                    Note: Permanent <code className="font-mono">META_ACCESS_TOKEN</code> is managed in Render Environment Variables for zero-knowledge security.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={isSavingMeta}
+                    className="px-4 py-2 rounded-xl bg-[#128C7E] hover:bg-[#075E54] dark:bg-[#25D366] dark:hover:bg-[#128C7E] text-white dark:text-[#111B21] text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                  >
+                    <Check className="h-3.5 w-3.5" />
+                    <span>{isSavingMeta ? 'Syncing...' : 'Save Account Identifiers'}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* 3. Live Outbound WhatsApp Verification Tester */}
+            <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-6 shadow-sm space-y-4">
+              <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF] flex items-center gap-2">
+                <Send className="h-4 w-4 text-[#128C7E] dark:text-[#25D366]" />
+                Send Live WhatsApp Connection Test
+              </h3>
+              <form onSubmit={handleSendTestWhatsApp} className="flex flex-wrap gap-2">
+                <input
+                  type="text"
+                  value={testWaPhone}
+                  onChange={(e) => setTestWaPhone(e.target.value)}
+                  placeholder="Enter test WhatsApp number (e.g. 0771234567 or +94771234567)"
+                  className="flex-1 min-w-[240px] bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3.5 py-2 text-xs font-mono text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                />
+                <button
+                  type="submit"
+                  disabled={isSendingWaTest || !testWaPhone.trim()}
+                  className="px-4 py-2 rounded-xl bg-[#128C7E] hover:bg-[#075E54] dark:bg-[#25D366] dark:hover:bg-[#128C7E] text-white dark:text-[#111B21] text-xs font-bold flex items-center gap-1.5 transition-all shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{isSendingWaTest ? 'Dispatching...' : 'Send Hello World Template'}</span>
+                </button>
+              </form>
+              {waTestResult && (
+                <div className={`p-3 rounded-xl text-xs border ${
+                  waTestResult.success
+                    ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300'
+                    : 'bg-rose-500/10 border-rose-500/30 text-rose-700 dark:text-rose-300'
+                }`}>
+                  {waTestResult.message}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -700,24 +963,39 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
 
         {activeTab === 'templates' && (
           <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-6 shadow-sm space-y-4">
-            <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">Pre-Approved WhatsApp Templates</h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696A0]">
-              Manage templates for 24+ hour outbound communication.
-            </p>
-            <div className="space-y-2">
-              {[
-                { name: 'appointment_confirmation', category: 'UTILITY', status: 'APPROVED' },
-                { name: 'clinical_followup_reminder', category: 'UTILITY', status: 'APPROVED' },
-                { name: 'inquiry_acknowledgment', category: 'MARKETING', status: 'APPROVED' }
-              ].map((t) => (
-                <div key={t.name} className="flex items-center justify-between p-3 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-xs">
-                  <span className="font-mono font-bold text-[#111B21] dark:text-[#E9EDEF]">{t.name}</span>
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">Meta Approved WhatsApp Templates</h3>
+                <p className="text-xs text-[#667781] dark:text-[#8696A0]">
+                  Live synchronized templates available for 24+ hour re-engagement outbound messages ({realTemplates.length} loaded).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={loadWhatsAppAccountState}
+                className="px-3 py-1.5 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-xs font-semibold text-[#128C7E] dark:text-[#25D366] flex items-center gap-1.5 cursor-pointer"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Sync</span>
+              </button>
+            </div>
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {realTemplates.length > 0 ? realTemplates.map((t, idx) => (
+                <div key={t.id || t.name || idx} className="flex items-center justify-between p-3 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-xs">
+                  <div>
+                    <span className="font-mono font-bold text-[#111B21] dark:text-[#E9EDEF] block">{t.waTemplateName || t.name}</span>
+                    {t.language && <span className="text-[10px] text-[#667781] dark:text-[#8696A0]">Lang: {t.language}</span>}
+                  </div>
                   <div className="flex items-center space-x-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] bg-slate-200 dark:bg-[#202C33] text-[#667781] dark:text-[#8696A0]">{t.category}</span>
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">{t.status}</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] bg-slate-200 dark:bg-[#202C33] text-[#667781] dark:text-[#8696A0]">{t.category || 'UTILITY'}</span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">{t.status || (t.approved ? 'APPROVED' : 'PENDING')}</span>
                   </div>
                 </div>
-              ))}
+              )) : (
+                <div className="p-4 text-center text-xs text-[#667781] dark:text-[#8696A0]">
+                  No synced templates returned yet. Manage templates under the Templates tab in the main menu.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -725,11 +1003,35 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
         {activeTab === 'integrations' && (
           <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-6 shadow-sm space-y-4">
             <h3 className="text-sm font-bold text-[#111B21] dark:text-[#E9EDEF]">WhatsApp Gateway & Webhook Connections</h3>
-            <p className="text-xs text-[#667781] dark:text-[#8696A0]">
-              Meta Webhook Listener: <code className="bg-[#F0F2F5] dark:bg-[#111B21] px-2 py-1 rounded text-[#128C7E] dark:text-[#25D366]">/api/webhook/whatsapp</code>
-            </p>
-            <div className="p-4 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-600 dark:text-emerald-400">
-              ✓ Inbound and outbound message webhooks are active and operational.
+            <div className="flex flex-wrap items-center justify-between gap-2 p-3.5 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34]">
+              <div className="text-xs">
+                <span className="text-[#667781] dark:text-[#8696A0] block mb-1">Active Meta Webhook Callback Path:</span>
+                <code className="font-mono font-bold text-[#128C7E] dark:text-[#25D366]">
+                  {(API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : window.location.origin)}/api/webhook
+                </code>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = `${API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : window.location.origin}/api/webhook`;
+                  navigator.clipboard.writeText(url);
+                  setCopiedWebhook(true);
+                  setTimeout(() => setCopiedWebhook(false), 2000);
+                }}
+                className="px-3 py-1.5 rounded-lg bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] flex items-center gap-1.5 cursor-pointer"
+              >
+                {copiedWebhook ? <Check className="h-3.5 w-3.5 text-emerald-500" /> : <Copy className="h-3.5 w-3.5" />}
+                <span>{copiedWebhook ? 'Copied' : 'Copy URL'}</span>
+              </button>
+            </div>
+            <div className={`p-4 rounded-xl border text-xs ${
+              waStatus.status === 'connected' && metaHasToken
+                ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                : 'bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400'
+            }`}>
+              {waStatus.status === 'connected' && metaHasToken
+                ? '✓ Meta Cloud API inbound and outbound webhooks are connected and verified.'
+                : '⚠️ Meta Cloud API token not yet verified. Check Render environment variables.'}
             </div>
           </div>
         )}

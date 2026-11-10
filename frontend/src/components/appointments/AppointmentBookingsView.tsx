@@ -334,7 +334,7 @@ export const AppointmentBookingsView: React.FC = () => {
       {/* ------------------------------------------------------------- */}
       <section className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6" aria-label="Appointment Statistics">
         {/* Total Appointments */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
+        <div className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
           <span className="absolute inset-x-0 top-0 h-1 bg-teal-500" aria-hidden="true" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Total</span>
@@ -353,7 +353,7 @@ export const AppointmentBookingsView: React.FC = () => {
         </div>
 
         {/* Pending */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
+        <div className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
           <span className="absolute inset-x-0 top-0 h-1 bg-amber-500" aria-hidden="true" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Pending</span>
@@ -372,7 +372,7 @@ export const AppointmentBookingsView: React.FC = () => {
         </div>
 
         {/* Confirmed */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
+        <div className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
           <span className="absolute inset-x-0 top-0 h-1 bg-emerald-500" aria-hidden="true" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Confirmed</span>
@@ -391,7 +391,7 @@ export const AppointmentBookingsView: React.FC = () => {
         </div>
 
         {/* Completed */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
+        <div className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
           <span className="absolute inset-x-0 top-0 h-1 bg-blue-500" aria-hidden="true" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Completed</span>
@@ -410,7 +410,7 @@ export const AppointmentBookingsView: React.FC = () => {
         </div>
 
         {/* Cancelled */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
+        <div className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
           <span className="absolute inset-x-0 top-0 h-1 bg-rose-500" aria-hidden="true" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Cancelled</span>
@@ -429,7 +429,7 @@ export const AppointmentBookingsView: React.FC = () => {
         </div>
 
         {/* No-show */}
-        <div className="group relative flex flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
+        <div className="group relative flex h-32 flex-col justify-between overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md dark:border-slate-800 dark:bg-[#1E293B]">
           <span className="absolute inset-x-0 top-0 h-1 bg-slate-400" aria-hidden="true" />
           <div className="flex items-center justify-between gap-2">
             <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">No-show</span>

@@ -74,15 +74,28 @@ async function runE2EWorkflowMatrix() {
 
   // Query actual admin and coordinator users from test database
   let adminUser = await prisma.user.findFirst({
-    where: { email: 'admin@royalwellness.lk', active: true }
+    where: { id: 'user-admin-1' }
   }) || await prisma.user.findFirst({
-    where: { role: 'super_admin', active: true }
+    where: { email: 'admin@royalwellness.lk' }
   });
   if (!adminUser) {
     adminUser = await prisma.user.upsert({
       where: { id: 'user-admin-1' },
-      create: { id: 'user-admin-1', email: 'admin@royalwellness.lk', fullName: 'Super Admin', role: 'super_admin', active: true },
-      update: { active: true, role: 'super_admin' }
+      create: { 
+        id: 'user-admin-1', 
+        email: 'admin@royalwellness.lk', 
+        fullName: 'Super Admin', 
+        role: 'super_admin', 
+        active: true,
+        pin: 'scrypt:6566f2bde057d37362485a313d9b8cb2:c4bf9869604cec8c8f7aafe5fe207a83544619e4962843a920626121ca486b22ca66f1c679053c7cd736a862ee540842f5f24bcf7d126274d8cc78dc8df892a2',
+        password: 'scrypt:29d50adcda785df1044227f9f0bff0b2:0869d5fca849543d7a39d0550fb55cb0ef20c7249f22b3787d30496ab154fd9a7ee7a1718a0e1ee6da59c0fb23a1e6761dea011a9d0ea494e23b43c471dfc5f7'
+      },
+      update: { 
+        active: true, 
+        role: 'super_admin',
+        pin: 'scrypt:6566f2bde057d37362485a313d9b8cb2:c4bf9869604cec8c8f7aafe5fe207a83544619e4962843a920626121ca486b22ca66f1c679053c7cd736a862ee540842f5f24bcf7d126274d8cc78dc8df892a2',
+        password: 'scrypt:29d50adcda785df1044227f9f0bff0b2:0869d5fca849543d7a39d0550fb55cb0ef20c7249f22b3787d30496ab154fd9a7ee7a1718a0e1ee6da59c0fb23a1e6761dea011a9d0ea494e23b43c471dfc5f7'
+      }
     });
   }
 

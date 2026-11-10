@@ -33,6 +33,15 @@ export default defineConfig({
           if (id.includes('node_modules/lucide-react/')) {
             return 'vendor-icons';
           }
+          if (id.includes('node_modules/socket.io-client/')) {
+            return 'vendor-socket';
+          }
+          if (id.includes('node_modules/axios/')) {
+            return 'vendor-axios';
+          }
+          if (id.includes('node_modules/flatpickr/') || id.includes('node_modules/react-flatpickr/')) {
+            return 'vendor-datepicker';
+          }
         },
       },
     },

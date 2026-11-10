@@ -37,7 +37,12 @@ export const getPrisma = () => {
 
   if (!prismaInstance) {
     try {
-      const adapter = new PrismaPg({ connectionString: databaseUrl });
+      const adapter = new PrismaPg({
+        connectionString: databaseUrl,
+        max: 20, // Cap pool connections to prevent exhausting Supabase connection poolers
+        idleTimeoutMillis: 30000, // Release idle clients after 30s
+        connectionTimeoutMillis: 10000, // Fail fast after 10s timeout
+      });
       prismaInstance = new PrismaClient({
         adapter,
         // Test isolation promotes the throwaway test URL into both variables.

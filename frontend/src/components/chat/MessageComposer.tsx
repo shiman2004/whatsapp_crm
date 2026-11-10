@@ -366,6 +366,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!is24hWindowOpen) return;
     let finalMsg = inputVal.trim();
     if (!finalMsg) return;
 
@@ -853,16 +854,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
               value={inputVal}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              disabled={!is24hWindowOpen}
               onPaste={(e) => {
+                if (!is24hWindowOpen) {
+                  e.preventDefault();
+                  return;
+                }
                 const handled = processClipboardData(e.clipboardData);
                 if (handled) {
                   e.preventDefault();
                 }
               }}
               placeholder={
-                replyingMessage ? "Replying to message..." : "Type a message..."
+                !is24hWindowOpen
+                  ? "24-hour window closed — select an approved template above to message patient"
+                  : replyingMessage ? "Replying to message..." : "Type a message..."
               }
-              className="w-full bg-transparent text-[#111b21] dark:text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5"
+              className={`w-full bg-transparent text-[#111b21] dark:text-[#d1d7db] placeholder-[#8696a0] text-sm outline-none border-none resize-none leading-relaxed max-h-[130px] overflow-y-auto py-0.5 ${!is24hWindowOpen ? 'opacity-60 cursor-not-allowed' : ''}`}
             />
           </div>
         )}
@@ -877,7 +885,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
           >
             <Send className="w-5 h-5 fill-current ml-0.5" />
           </button>
-        ) : inputVal.trim() ? (
+        ) : inputVal.trim() && is24hWindowOpen ? (
           <button
             type="button"
             onClick={() => handleSendText()}
@@ -889,9 +897,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({ lead }) => {
         ) : (
           <button
             type="button"
-            onClick={handleStartRecording}
-            className="w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-[#8696a0] hover:text-[#d1d7db] hover:bg-[#374248]/50 mb-0.5"
-            title="Record Voice Note"
+            onClick={is24hWindowOpen ? handleStartRecording : undefined}
+            disabled={!is24hWindowOpen}
+            className={`w-10 h-10 rounded-full flex items-center justify-center transition-colors shrink-0 text-[#8696a0] mb-0.5 ${is24hWindowOpen ? 'hover:text-[#d1d7db] hover:bg-[#374248]/50 cursor-pointer' : 'opacity-40 cursor-not-allowed'}`}
+            title={is24hWindowOpen ? "Record Voice Note" : "Voice notes unavailable outside 24h window"}
           >
             <Mic className="w-5 h-5" />
           </button>

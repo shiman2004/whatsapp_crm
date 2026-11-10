@@ -38,6 +38,7 @@ import {
 import { convertAudioToWhatsAppOggOpus, convertAudioToWhatsAppOggOpusAsync, isOggOpus, isMp3, isMp4OrAac, isWebm } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleCatalogRoutes } from './catalogRoutes.js';
+import { handleStaffRoutes } from './staffRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
@@ -2159,6 +2160,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;
   if (await handleCatalogRoutes(req, res, pathname, authUser)) return;
+  if (await handleStaffRoutes(req, res, pathname, authUser, { CANONICAL_USERS, DELETED_USER_IDS })) return;
 
   // 0. Appointment Booking & Room Scheduling Module
   const handledAppointmentRoute = await handleAppointmentRoutes(req, res, pathname, authUser);

@@ -1,9 +1,6 @@
 import React, { Suspense, lazy, useEffect, useRef } from 'react';
 import { CrmProvider, useCrm } from './context/CrmContext';
 import { AppShell } from './components/layout/AppShell';
-import { DashboardOverview } from './components/dashboard/DashboardOverview';
-import { LeadsView } from './components/leads/LeadsView';
-import { LeadDetailWorkspace } from './components/chat/LeadDetailWorkspace';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ToastContainer } from './components/layout/ToastContainer';
 import {
@@ -20,6 +17,9 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Compass } from 'lucide-react';
 
 // Lazy-loaded secondary & admin modules for code-splitting and small initial chunk sizes
+const DashboardOverview = lazy(() => import('./components/dashboard/DashboardOverview').then((m) => ({ default: m.DashboardOverview })));
+const LeadsView = lazy(() => import('./components/leads/LeadsView').then((m) => ({ default: m.LeadsView })));
+const LeadDetailWorkspace = lazy(() => import('./components/chat/LeadDetailWorkspace').then((m) => ({ default: m.LeadDetailWorkspace })));
 const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
 const TreatmentsManager = lazy(() => import('./components/admin/TreatmentsManager').then((m) => ({ default: m.TreatmentsManager })));
 const TemplatesManager = lazy(() => import('./components/admin/TemplatesManager').then((m) => ({ default: m.TemplatesManager })));

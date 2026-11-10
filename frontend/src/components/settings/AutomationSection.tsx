@@ -146,22 +146,22 @@ export const AutomationSection: React.FC<AutomationProps> = ({
 
           <form onSubmit={handleAddRule} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 bg-[#F0F2F5] dark:bg-[#111B21]/80 border border-[#E0E5E7] dark:border-[#222D34] rounded-xl">
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Rule Name</label>
+              <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696A0] mb-1">Rule Name</label>
               <input
                 type="text"
                 placeholder="e.g. Instant Welcome on CRAS Course Enquiry"
                 value={ruleName}
                 onChange={(e) => setRuleName(e.target.value)}
-                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] placeholder-[#667781] dark:placeholder-[#8696A0] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Trigger Event</label>
+              <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696A0] mb-1">Trigger Event</label>
               <select
                 value={trigger}
                 onChange={(e) => setTrigger(e.target.value)}
-                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="lead.created">Lead Created</option>
                 <option value="deal.stage_changed">Deal Stage Changed</option>
@@ -171,11 +171,11 @@ export const AutomationSection: React.FC<AutomationProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Automated Action</label>
+              <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696A0] mb-1">Automated Action</label>
               <select
                 value={action}
                 onChange={(e) => setAction(e.target.value)}
-                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="send_whatsapp_template">Send WhatsApp Template</option>
                 <option value="assign_round_robin">Assign Coordinator</option>
@@ -188,7 +188,7 @@ export const AutomationSection: React.FC<AutomationProps> = ({
               <button
                 type="button"
                 onClick={runDryTest}
-                className="text-xs text-[#667781] dark:text-[#8696A0] hover:text-[#128C7E] dark:text-[#25D366] flex items-center space-x-1.5 transition-colors"
+                className="text-xs text-[#667781] dark:text-[#8696A0] hover:text-[#128C7E] dark:hover:text-[#25D366] flex items-center space-x-1.5 transition-colors cursor-pointer"
               >
                 <Play className="h-3 w-3" />
                 <span>Test Simulation</span>
@@ -196,7 +196,7 @@ export const AutomationSection: React.FC<AutomationProps> = ({
 
               <button
                 type="submit"
-                className="px-4 py-1.5 bg-[#128C7E] hover:bg-[#075E54] dark:bg-[#25D366] dark:hover:bg-[#128C7E] text-white dark:text-[#111B21] rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors"
+                className="px-4 py-1.5 bg-[#128C7E] hover:bg-[#075E54] dark:bg-[#25D366] dark:hover:bg-[#128C7E] text-white dark:text-[#111B21] rounded-lg text-xs font-semibold flex items-center space-x-1.5 transition-colors cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />
                 <span>Create Rule</span>
@@ -205,7 +205,7 @@ export const AutomationSection: React.FC<AutomationProps> = ({
           </form>
 
           {testResult && (
-            <div className="p-3 bg-[#F0F2F5] dark:bg-[#111B21] border border-emerald-500/30 rounded-xl text-xs text-emerald-300 font-mono">
+            <div className="p-3 bg-[#F0F2F5] dark:bg-[#111B21] border border-emerald-500/30 rounded-xl text-xs text-emerald-700 dark:text-emerald-300 font-mono">
               {testResult}
             </div>
           )}

@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useSettingsSection } from './useSettingsSection';
 import { SettingsLayout } from './SettingsLayout';
+import { useCrm } from '../../context/CrmContext';
 
 interface AppearanceProps {
   currentSectionId: string;
@@ -23,6 +24,8 @@ export const AppearanceSection: React.FC<AppearanceProps> = ({
   selectedCompanyId,
   onSelectCompany
 }) => {
+  const { theme, setTheme } = useCrm();
+
   const {
     data,
     updateField,
@@ -89,8 +92,12 @@ export const AppearanceSection: React.FC<AppearanceProps> = ({
             <div>
               <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">Theme Mode</label>
               <select
-                value={data.theme || 'dark'}
-                onChange={(e) => updateField('theme', e.target.value)}
+                value={data.theme || theme || 'dark'}
+                onChange={(e) => {
+                  const next = e.target.value as 'light' | 'dark' | 'system';
+                  updateField('theme', next);
+                  setTheme(next);
+                }}
                 className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
               >
                 <option value="dark">Enterprise Dark (Emerald / Slate)</option>

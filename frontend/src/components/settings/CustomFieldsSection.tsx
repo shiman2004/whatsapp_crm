@@ -122,22 +122,22 @@ export const CustomFieldsSection: React.FC<CustomFieldsProps> = ({
 
           <form onSubmit={handleAddField} className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4 bg-[#F0F2F5] dark:bg-[#111B21]/80 border border-[#E0E5E7] dark:border-[#222D34] rounded-xl">
             <div className="md:col-span-2">
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Field Label</label>
+              <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696A0] mb-1">Field Label</label>
               <input
                 type="text"
                 placeholder="e.g. Previous Surgery History"
                 value={fieldLabel}
                 onChange={(e) => setFieldLabel(e.target.value)}
-                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] placeholder-[#667781] dark:placeholder-[#8696A0] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Target Entity</label>
+              <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696A0] mb-1">Target Entity</label>
               <select
                 value={targetEntity}
                 onChange={(e) => setTargetEntity(e.target.value)}
-                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="lead">Lead / Deal</option>
                 <option value="appointment">Appointment</option>
@@ -147,11 +147,11 @@ export const CustomFieldsSection: React.FC<CustomFieldsProps> = ({
             </div>
 
             <div>
-              <label className="block text-[11px] font-semibold text-slate-400 mb-1">Field Type</label>
+              <label className="block text-[11px] font-semibold text-[#667781] dark:text-[#8696A0] mb-1">Field Type</label>
               <select
                 value={fieldType}
                 onChange={(e) => setFieldType(e.target.value)}
-                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               >
                 <option value="text">Single Line Text</option>
                 <option value="number">Number</option>

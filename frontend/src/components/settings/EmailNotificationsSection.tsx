@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { useSettingsSection } from './useSettingsSection';
 import { SettingsLayout } from './SettingsLayout';
+import { API_BASE_URL } from '../../config/api';
 
 interface EmailNotificationsProps {
   currentSectionId: string;
@@ -68,8 +69,14 @@ export const EmailNotificationsSection: React.FC<EmailNotificationsProps> = ({
     setIsSendingTest(true);
     setTestStatus(null);
     try {
-      const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') || '';
-      const res = await fetch('/api/settings/email/test', {
+      const token =
+        localStorage.getItem('rw_crm_auth_token') ||
+        localStorage.getItem('royal_crm_token') ||
+        localStorage.getItem('auth_token') ||
+        sessionStorage.getItem('auth_token') ||
+        '';
+      const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+      const res = await fetch(`${base}/api/settings/email/test`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -149,8 +156,9 @@ export const EmailNotificationsSection: React.FC<EmailNotificationsProps> = ({
               <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">SMTP Username / Email</label>
               <input
                 type="text"
-                value={data.smtpUser || 'notifications@royalwellness.lk'}
+                value={data.smtpUser ?? ''}
                 onChange={(e) => updateField('smtpUser', e.target.value)}
+                placeholder="notifications@royalwellness.lk"
                 className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer font-mono"
               />
             </div>
@@ -161,8 +169,8 @@ export const EmailNotificationsSection: React.FC<EmailNotificationsProps> = ({
                 <Lock className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
                 <input
                   type="password"
-                  value={data.smtpPass || '••••••••'}
-                  onChange={(e) => updateField('smtpPass', e.target.value)}
+                  value={data.smtpPassword ?? ''}
+                  onChange={(e) => updateField('smtpPassword', e.target.value)}
                   placeholder="Enter new password to update"
                   className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl pl-9 pr-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 font-mono"
                 />
@@ -173,8 +181,8 @@ export const EmailNotificationsSection: React.FC<EmailNotificationsProps> = ({
               <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] mb-1.5">Sender From Display Name</label>
               <input
                 type="text"
-                value={data.fromName || 'Alpha Health Group Alerts'}
-                onChange={(e) => updateField('fromName', e.target.value)}
+                value={data.senderName ?? 'Alpha Health Group CRM'}
+                onChange={(e) => updateField('senderName', e.target.value)}
                 className="w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
               />
             </div>
@@ -189,7 +197,7 @@ export const EmailNotificationsSection: React.FC<EmailNotificationsProps> = ({
                 placeholder="recipient@example.com"
                 value={testEmailTo}
                 onChange={(e) => setTestEmailTo(e.target.value)}
-                className="flex-1 bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-2 text-xs text-white placeholder-slate-500 focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="flex-1 bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-lg px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] placeholder-[#667781] dark:placeholder-[#8696A0] focus:outline-none focus:ring-1 focus:ring-emerald-500"
               />
               <button
                 type="submit"

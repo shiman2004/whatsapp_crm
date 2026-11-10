@@ -136,6 +136,7 @@ export async function handleSettingsRoutes(req, res, pathname, user, correlation
     if (pathname === '/api/settings/monitoring/health' && req.method === 'GET') {
       const dbConnected = getDbStatus();
       const startTime = process.uptime();
+      const hasMetaToken = Boolean((process.env.META_ACCESS_TOKEN || '').trim());
       json(res, 200, {
         success: true,
         status: dbConnected ? 'healthy' : 'degraded',
@@ -146,7 +147,7 @@ export async function handleSettingsRoutes(req, res, pathname, user, correlation
           orm: 'Prisma 7.10.1'
         },
         services: {
-          whatsappGateways: 'connected',
+          whatsappGateways: hasMetaToken ? 'connected' : 'unconfigured',
           scheduler: 'active',
           realtimeSockets: 'active'
         },
@@ -159,17 +160,64 @@ export async function handleSettingsRoutes(req, res, pathname, user, correlation
     // ---------------------------------------------------------------- SMTP Test Dispatcher
     if (pathname === '/api/settings/email/test' && req.method === 'POST') {
       const body = await parseBody(req);
-      const recipient = body.to || user.email;
+      const recipient = String(body.recipient || body.to || user.email || '').trim();
       if (!recipient || !recipient.includes('@')) {
         json(res, 400, { success: false, error: 'Valid recipient email address is required.' });
         return true;
       }
-      // Simulation of connection & safe verify
-      json(res, 200, {
-        success: true,
-        message: `SMTP test connection verified. Verification email dispatched to ${recipient}.`,
-        timestamp: new Date().toISOString()
-      });
+
+      const prisma = getPrisma();
+      if (prisma && getDbStatus()) {
+        try {
+          const { decryptReversible } = await import('./secretHash.js');
+          const setting = await prisma.systemSetting.findFirst({
+            where: { section: 'email_notifications', scope: 'global', scopeId: null },
+            select: { payload: true },
+          });
+          const smtp = setting?.payload || {};
+          const smtpPass = decryptReversible(smtp.smtpPassword || smtp.smtpPass || '');
+
+          if (!smtp.smtpHost || !smtp.smtpUser || !smtpPass) {
+            json(res, 400, {
+              success: false,
+              error: 'SMTP server credentials are not configured yet. Enter SMTP Host, Username, and Password, then Save Changes first.'
+            });
+            return true;
+          }
+
+          const { default: nodemailer } = await import('nodemailer');
+          const transport = nodemailer.createTransport({
+            host: smtp.smtpHost,
+            port: Number(smtp.smtpPort) || 587,
+            secure: smtp.smtpSecure === true || Number(smtp.smtpPort) === 465,
+            auth: { user: smtp.smtpUser, pass: smtpPass },
+          });
+
+          const senderEmail = smtp.senderEmail || smtp.smtpUser;
+          const senderName = smtp.senderName || smtp.fromName || 'Alpha Health Group CRM';
+          await transport.sendMail({
+            from: `${senderName} <${senderEmail}>`,
+            to: recipient,
+            subject: 'CRM SMTP Configuration Test Email',
+            text: `Hello,\n\nThis is a real-time verification email confirming your SMTP settings on Royal Wellness CRM are working properly.\n\nTimestamp: ${new Date().toISOString()}`,
+          });
+
+          json(res, 200, {
+            success: true,
+            message: `Real verification email successfully dispatched via ${smtp.smtpHost} to ${recipient}.`,
+            timestamp: new Date().toISOString()
+          });
+          return true;
+        } catch (smtpErr) {
+          json(res, 502, {
+            success: false,
+            error: `SMTP dispatch failed: ${smtpErr.message}`
+          });
+          return true;
+        }
+      }
+
+      json(res, 503, { success: false, error: 'Database offline; cannot load SMTP configuration.' });
       return true;
     }
 

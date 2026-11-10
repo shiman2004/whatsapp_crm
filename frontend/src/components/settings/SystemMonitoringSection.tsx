@@ -10,6 +10,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { SettingsLayout } from './SettingsLayout';
+import { API_BASE_URL } from '../../config/api';
 
 interface SystemMonitoringProps {
   currentSectionId: string;
@@ -30,8 +31,14 @@ export const SystemMonitoringSection: React.FC<SystemMonitoringProps> = ({
   const fetchHealth = async () => {
     setIsLoading(true);
     try {
-      const token = localStorage.getItem('auth_token') || sessionStorage.getItem('auth_token') || '';
-      const res = await fetch('/api/settings/monitoring/health', {
+      const token =
+        localStorage.getItem('rw_crm_auth_token') ||
+        localStorage.getItem('royal_crm_token') ||
+        localStorage.getItem('auth_token') ||
+        sessionStorage.getItem('auth_token') ||
+        '';
+      const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+      const res = await fetch(`${base}/api/settings/monitoring/health`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       const json = await res.json();

@@ -1,15 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   HardDrive,
   Download,
-  Upload,
-  Calendar,
   ShieldCheck,
-  CheckCircle2,
-  FileSpreadsheet
+  FileSpreadsheet,
+  RotateCw
 } from 'lucide-react';
 import { useSettingsSection } from './useSettingsSection';
 import { SettingsLayout } from './SettingsLayout';
+import { API_BASE_URL } from '../../config/api';
 
 interface DataManagementProps {
   currentSectionId: string;
@@ -39,6 +38,90 @@ export const DataManagementSection: React.FC<DataManagementProps> = ({
     sectionId: 'data_management',
     scope: 'global'
   });
+
+  const [exportingKey, setExportingKey] = useState<string | null>(null);
+  const [exportStatus, setExportStatus] = useState<{ success?: boolean; message?: string } | null>(null);
+
+  const getToken = () =>
+    localStorage.getItem('rw_crm_auth_token') ||
+    localStorage.getItem('royal_crm_token') ||
+    localStorage.getItem('auth_token') ||
+    sessionStorage.getItem('auth_token') ||
+    '';
+
+  const triggerDownload = (filename: string, content: string, mime: string) => {
+    const blob = new Blob([content], { type: mime });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const csvCell = (val: unknown) => {
+    const str = String(val ?? '');
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const handleExport = async (type: 'contacts' | 'leads' | 'audit') => {
+    setExportingKey(type);
+    setExportStatus(null);
+    const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+    const dateStamp = new Date().toISOString().split('T')[0];
+
+    try {
+      const headers = { Authorization: `Bearer ${getToken()}` };
+      if (type === 'audit') {
+        const res = await fetch(`${base}/api/settings/audit-logs?limit=200`, { headers });
+        const json = await res.json();
+        const logs = json?.logs || json?.data || [];
+        triggerDownload(`crm_audit_logs_${dateStamp}.json`, JSON.stringify(logs, null, 2), 'application/json');
+        setExportStatus({ success: true, message: `Exported ${logs.length} audit log records.` });
+      } else {
+        const companyParam = selectedCompanyId && selectedCompanyId !== 'ALL' ? `&company=${encodeURIComponent(selectedCompanyId)}` : '';
+        const res = await fetch(`${base}/api/leads?limit=500${companyParam}`, { headers });
+        const json = await res.json();
+        const rows: any[] = Array.isArray(json) ? json : (json?.leads || json?.data || []);
+
+        if (type === 'contacts') {
+          const header = ['LeadSerial', 'Name', 'Phone', 'Email', 'Company', 'Source', 'CreatedAt'].join(',');
+          const lines = rows.map(r => [
+            csvCell(r.serial || r.id),
+            csvCell(r.customer?.displayName || r.name || ''),
+            csvCell(r.customer?.phone || r.phone || ''),
+            csvCell(r.customer?.email || ''),
+            csvCell(r.company || ''),
+            csvCell(r.source || ''),
+            csvCell(r.createdAt || '')
+          ].join(','));
+          triggerDownload(`crm_contacts_${dateStamp}.csv`, [header, ...lines].join('\n'), 'text/csv;charset=utf-8;');
+          setExportStatus({ success: true, message: `Exported ${rows.length} contacts to CSV.` });
+        } else {
+          const header = ['LeadID', 'Serial', 'PatientName', 'Phone', 'Company', 'Stage', 'Treatment', 'AssignedTo', 'CreatedAt'].join(',');
+          const lines = rows.map(r => [
+            csvCell(r.id),
+            csvCell(r.serial || ''),
+            csvCell(r.customer?.displayName || r.name || ''),
+            csvCell(r.customer?.phone || r.phone || ''),
+            csvCell(r.company || ''),
+            csvCell(r.stage || ''),
+            csvCell(r.treatmentName || r.treatment || ''),
+            csvCell(r.assignedTo || ''),
+            csvCell(r.createdAt || '')
+          ].join(','));
+          triggerDownload(`crm_pipeline_leads_${dateStamp}.csv`, [header, ...lines].join('\n'), 'text/csv;charset=utf-8;');
+          setExportStatus({ success: true, message: `Exported ${rows.length} pipeline leads to CSV.` });
+        }
+      }
+    } catch (err: any) {
+      setExportStatus({ success: false, message: err?.message || 'Export failed. Check network or permissions.' });
+    } finally {
+      setExportingKey(null);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -136,28 +219,39 @@ export const DataManagementSection: React.FC<DataManagementProps> = ({
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
-              { name: 'Export Contacts Database', ext: 'CSV', count: '10,400+ Records' },
-              { name: 'Export Deals & Pipeline', ext: 'CSV', count: '4,200+ Leads' },
-              { name: 'Export Audit Log Trail', ext: 'JSON', count: 'Full Cryptographic Trail' }
-            ].map((item, idx) => (
-              <div
-                key={idx}
-                className="p-3.5 bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl flex items-center justify-between"
-              >
-                <div>
-                  <span className="text-xs font-bold text-[#111B21] dark:text-[#E9EDEF] block">{item.name}</span>
-                  <span className="text-[10px] text-slate-400">{item.count}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => alert(`Initiating secure encrypted ${item.ext} export download...`)}
-                  className="p-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-[#111B21] dark:text-[#E9EDEF] hover:text-white transition-colors"
+              { key: 'contacts' as const, name: 'Export Contacts Database', ext: 'CSV', subtitle: 'Patient & Student Contact Directory' },
+              { key: 'leads' as const, name: 'Export Deals & Pipeline', ext: 'CSV', subtitle: 'Company-Scoped Pipeline Leads' },
+              { key: 'audit' as const, name: 'Export Audit Log Trail', ext: 'JSON', subtitle: 'Security & Settings Audit Trail' }
+            ].map((item) => {
+              const isBusy = exportingKey === item.key;
+              return (
+                <div
+                  key={item.key}
+                  className="p-3.5 bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl flex items-center justify-between"
                 >
-                  <Download className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
+                  <div>
+                    <span className="text-xs font-bold text-[#111B21] dark:text-[#E9EDEF] block">{item.name}</span>
+                    <span className="text-[10px] text-[#667781] dark:text-[#8696A0]">{item.subtitle} ({item.ext})</span>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => handleExport(item.key)}
+                    title={`Download ${item.name} (${item.ext})`}
+                    className="p-2 rounded-lg bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] hover:bg-[#DDF5EC] dark:hover:bg-[#005C4B]/40 text-[#128C7E] dark:text-[#25D366] transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    {isBusy ? <RotateCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                  </button>
+                </div>
+              );
+            })}
           </div>
+
+          {exportStatus && (
+            <div className={`p-3 rounded-xl text-xs border ${exportStatus.success ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-700 dark:text-emerald-300' : 'bg-red-500/10 border-red-500/30 text-red-700 dark:text-red-300'}`}>
+              {exportStatus.message}
+            </div>
+          )}
         </div>
       </div>
     </SettingsLayout>

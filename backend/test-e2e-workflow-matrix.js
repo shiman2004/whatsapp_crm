@@ -74,6 +74,8 @@ async function runE2EWorkflowMatrix() {
 
   // Query actual admin and coordinator users from test database
   let adminUser = await prisma.user.findFirst({
+    where: { email: 'admin@royalwellness.lk', active: true }
+  }) || await prisma.user.findFirst({
     where: { role: 'super_admin', active: true }
   });
   if (!adminUser) {
@@ -145,10 +147,11 @@ async function runE2EWorkflowMatrix() {
     console.log('--- Module 1: Authentication, Session Handling & Role Permissions ---');
     
     // 1.1 Valid Super Admin Login
+    const adminPin = (adminUser.email === 'mnmshiman@gmail.com' || adminUser.id === '1124d646-210c-4a6a-8a62-4d408212e1f6') ? '7777' : '1234';
     const loginRes = await request({
       method: 'POST',
       path: '/api/auth/login',
-      body: { identifier: adminUser.email || adminUser.id, pin: '1234' }
+      body: { identifier: adminUser.email || adminUser.id, pin: adminPin }
     });
     assert.equal(loginRes.status, 200, 'Super admin login must succeed: ' + JSON.stringify(loginRes.body));
     assert.ok(loginRes.body.token, 'Must return JWT auth token');

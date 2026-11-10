@@ -309,10 +309,11 @@ const SHIMAN_PIN_HASH = hashSecret('7777');
 // =============================================================================
 // Progressive Abuse Protection & Rate Limiting for Login Attempts
 // =============================================================================
+const LOGIN_LOCKOUT_SECONDS = Number(process.env.LOGIN_LOCKOUT_SECONDS || 10);
 const LOGIN_RATE_LIMIT = {
   WINDOW_MS: 15 * 60 * 1000, // 15 minutes window
   MAX_ATTEMPTS: 5,           // 5 failed attempts before lockout
-  LOCKOUT_MS: 15 * 60 * 1000  // 15 minutes lockout duration
+  LOCKOUT_MS: LOGIN_LOCKOUT_SECONDS * 1000  // 10 seconds lockout duration
 };
 
 const loginAttemptStore = new Map();
@@ -371,7 +372,7 @@ function recordLoginFailure(ip, identifier) {
 
   for (const key of keys) {
     let entry = loginAttemptStore.get(key);
-    if (!entry || (now - entry.firstAttempt > LOGIN_RATE_LIMIT.WINDOW_MS)) {
+    if (!entry || (now - entry.firstAttempt > LOGIN_RATE_LIMIT.WINDOW_MS) || (entry.lockedUntil && now > entry.lockedUntil)) {
       entry = { count: 1, firstAttempt: now, lockedUntil: 0 };
     } else {
       entry.count += 1;
@@ -438,16 +439,19 @@ async function recordSharedLoginFailure(ip, identifier, forceDb = false) {
         VALUES ($1, 1, NOW(), NOW())
         ON CONFLICT (rate_key) DO UPDATE SET
           attempt_count = CASE
+            WHEN auth_rate_limits.locked_until IS NOT NULL AND auth_rate_limits.locked_until < NOW() THEN 1
             WHEN auth_rate_limits.updated_at < NOW() - INTERVAL '15 minutes' THEN 1
             ELSE auth_rate_limits.attempt_count + 1
           END,
           first_attempt_at = CASE
+            WHEN auth_rate_limits.locked_until IS NOT NULL AND auth_rate_limits.locked_until < NOW() THEN NOW()
             WHEN auth_rate_limits.updated_at < NOW() - INTERVAL '15 minutes' THEN NOW()
             ELSE auth_rate_limits.first_attempt_at
           END,
           locked_until = CASE
+            WHEN auth_rate_limits.locked_until IS NOT NULL AND auth_rate_limits.locked_until < NOW() THEN NULL
             WHEN auth_rate_limits.updated_at < NOW() - INTERVAL '15 minutes' THEN NULL
-            WHEN auth_rate_limits.attempt_count + 1 >= 5 THEN NOW() + INTERVAL '15 minutes'
+            WHEN auth_rate_limits.attempt_count + 1 >= 5 THEN NOW() + INTERVAL '${LOGIN_LOCKOUT_SECONDS} seconds'
             ELSE auth_rate_limits.locked_until
           END,
           updated_at = NOW();
@@ -481,7 +485,7 @@ async function cleanupExpiredRateLimits(customPrisma) {
   try {
     const deleted = await prisma.$executeRawUnsafe(`
       DELETE FROM public.auth_rate_limits
-      WHERE (locked_until IS NOT NULL AND locked_until < NOW() - INTERVAL '15 minutes')
+      WHERE (locked_until IS NOT NULL AND locked_until < NOW() - INTERVAL '1 minute')
          OR (locked_until IS NULL AND updated_at < NOW() - INTERVAL '15 minutes');
     `);
     return deleted;

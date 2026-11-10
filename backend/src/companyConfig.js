@@ -52,12 +52,16 @@ export function resolveCompany(phoneId, displayPhoneNumber) {
   const dPhone = String(displayPhoneNumber || '').replace(/[^0-9]/g, '');
   const ahcPhoneId = (process.env.META_PHONE_NUMBER_ID_AHC || '1408148915714830').trim();
   const crasPhoneId = (process.env.META_PHONE_NUMBER_ID_CRAS || '1378201582041705').trim();
+  const rwcPhoneId = (process.env.META_PHONE_NUMBER_ID_RWC || '1358157244046701').trim();
 
   if (pId === ahcPhoneId || pId === '1408148915714830' || dPhone.includes('971543723912') || dPhone.includes('543723912') || dPhone.includes('3723912')) {
     return COMPANIES.AHC;
   }
   if (pId === crasPhoneId || pId === '1378201582041705' || dPhone.includes('6373353')) {
     return COMPANIES.CRAS;
+  }
+  if (pId === rwcPhoneId || pId === '1358157244046701' || dPhone.includes('6393353')) {
+    return COMPANIES.RWC;
   }
   return COMPANIES.RWC;
 }

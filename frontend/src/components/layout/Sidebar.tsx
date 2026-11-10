@@ -241,7 +241,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ setActiveTab, isMobileOpen = f
       <aside
         aria-label="Primary navigation"
         className={cn(
-          'relative z-50 flex h-full max-h-screen shrink-0 select-none flex-col border-r border-[#E0E5E7] bg-white text-[#111B21] transition-[width,transform] duration-200 ease-out dark:border-[#222D34] dark:bg-[#111B21] dark:text-[#E9EDEF]',
+          'z-50 flex h-full max-h-screen shrink-0 select-none flex-col border-r border-[#E0E5E7] bg-white text-[#111B21] transition-[width,transform] duration-200 ease-out dark:border-[#222D34] dark:bg-[#111B21] dark:text-[#E9EDEF]',
           'fixed inset-y-0 left-0 md:static',
           isCollapsed ? 'w-[272px] md:w-[74px]' : 'w-[272px]',
           isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full invisible md:visible md:translate-x-0',

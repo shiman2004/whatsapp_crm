@@ -62,14 +62,14 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
 
         <main
           className={cn(
-            'flex min-h-0 flex-1 flex-col overflow-hidden',
+            'flex min-h-0 min-w-0 flex-1 flex-col',
             activeTab === 'chat'
-              ? 'bg-[#ECE5DD] p-0 dark:bg-[#111B21]'
+              ? 'overflow-hidden bg-[#ECE5DD] p-0 dark:bg-[#111B21]'
               : activeTab === 'appointment-rooms'
-              ? 'overflow-hidden bg-[#F5F7F8] p-0 dark:bg-[#111B21]'
+              ? 'overflow-y-auto overflow-x-hidden bg-[#F5F7F8] p-0 dark:bg-[#111B21]'
               : activeTab === 'settings'
               ? 'overflow-hidden bg-[#F5F7F8] p-0 dark:bg-[#111B21]'
-              : 'overflow-y-auto bg-[#F5F7F8] p-3 sm:p-5 dark:bg-[#111B21]',
+              : 'overflow-y-auto overflow-x-hidden bg-[#F5F7F8] p-3 sm:p-5 dark:bg-[#111B21]',
           )}
         >
           {children}

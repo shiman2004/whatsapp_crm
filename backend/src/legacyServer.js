@@ -35,8 +35,9 @@ import {
   startInboundMediaRetryWorker,
   extensionForMedia
 } from './whatsappMedia.js';
-import { convertAudioToWhatsAppOggOpus, isOggOpus, isMp3, isMp4OrAac, isWebm } from './audioConverter.js';
+import { convertAudioToWhatsAppOggOpus, convertAudioToWhatsAppOggOpusAsync, isOggOpus, isMp3, isMp4OrAac, isWebm } from './audioConverter.js';
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
+import { handleCatalogRoutes } from './catalogRoutes.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
@@ -674,7 +675,7 @@ function logWaSessionDebug(endpoint, authUser, targetCoordinatorId, sessionCtx, 
 /**
  * Save Base64 or DataURL media to local storage (/uploads/)
  */
-function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) {
+async function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) {
   if (!dataUrl || !dataUrl.startsWith('data:')) return dataUrl ? { mediaUrl: dataUrl, buffer: null, mimeType: '', fileName: customFilename } : null;
   try {
     const [mimePart, base64Part] = dataUrl.split(';base64,');
@@ -696,8 +697,8 @@ function saveBase64MediaLocally(dataUrl, type = 'image', customFilename = null) 
         inExt = 'mp3';
       }
 
-      // Convert any audio format to WhatsApp-compliant OGG Opus (48kHz mono libopus)
-      const transcodeResult = convertAudioToWhatsAppOggOpus(buffer, inExt);
+      // Convert any audio format to WhatsApp-compliant OGG Opus (48kHz mono libopus) non-blockingly
+      const transcodeResult = await convertAudioToWhatsAppOggOpusAsync(buffer, inExt);
       if (transcodeResult.isOggOpus) {
         buffer = transcodeResult.buffer;
         mimeType = 'audio/ogg';
@@ -836,7 +837,7 @@ async function uploadMetaMedia(phoneId, metaToken, buffer, mimeType, filename) {
           effectiveFilename = 'voice_note.ogg';
         } else {
           const inExt = isWebm(buffer) ? 'webm' : 'wav';
-          const transcodeResult = convertAudioToWhatsAppOggOpus(buffer, inExt);
+          const transcodeResult = await convertAudioToWhatsAppOggOpusAsync(buffer, inExt);
           if (transcodeResult.isOggOpus) {
             buffer = transcodeResult.buffer;
             effectiveMime = 'audio/ogg';
@@ -2157,6 +2158,7 @@ const server = http.createServer(async (req, res) => {
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
   if (await handleExamRoutes(req, res, pathname, authUser)) return;
+  if (await handleCatalogRoutes(req, res, pathname, authUser)) return;
 
   // 0. Appointment Booking & Room Scheduling Module
   const handledAppointmentRoute = await handleAppointmentRoutes(req, res, pathname, authUser);
@@ -2193,7 +2195,7 @@ const server = http.createServer(async (req, res) => {
           return;
         }
 
-        const saved = saveBase64MediaLocally(dataUrl, type, fileName);
+        const saved = await saveBase64MediaLocally(dataUrl, type, fileName);
         if (saved && saved.mediaUrl) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
           res.end(JSON.stringify({ success: true, url: saved.mediaUrl, mediaUrl: saved.mediaUrl, type, fileName: saved.fileName }));
@@ -2458,7 +2460,7 @@ const server = http.createServer(async (req, res) => {
 
           // 1. Data URL (Base64)
           if (typeof rawUrl === 'string' && rawUrl.startsWith('data:')) {
-            localMediaInfo = saveBase64MediaLocally(rawUrl, media.type, media.fileName);
+            localMediaInfo = await saveBase64MediaLocally(rawUrl, media.type, media.fileName);
             if (localMediaInfo) {
               savedMediaUrl = localMediaInfo.mediaUrl;
             }

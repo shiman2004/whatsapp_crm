@@ -373,7 +373,7 @@ await check('5.1 isOggOpus strictly validates OGG container and OpusHead signatu
 });
 
 await check('5.2 Audio transcoding produces verified OGG Opus and prevents corrupted WhatsApp playback', async () => {
-  const { convertAudioToWhatsAppOggOpus, isOggOpus } = await import('./src/audioConverter.js');
+  const { convertAudioToWhatsAppOggOpus, convertAudioToWhatsAppOggOpusAsync, isOggOpus } = await import('./src/audioConverter.js');
   const { execFileSync } = await import('node:child_process');
   const { getFfmpegPath } = await import('./src/audioConverter.js');
   const fs = await import('node:fs');
@@ -392,6 +392,12 @@ await check('5.2 Audio transcoding produces verified OGG Opus and prevents corru
     assert(result.isOggOpus, 'Transcoded audio must be verified Ogg Opus');
     assert.strictEqual(result.mimeType, 'audio/ogg; codecs=opus');
     assert(isOggOpus(result.buffer), 'Buffer must pass Ogg Opus verification');
+
+    // Async non-blocking verification
+    const asyncResult = await convertAudioToWhatsAppOggOpusAsync(wavBytes, 'wav');
+    assert(asyncResult.isOggOpus, 'Async transcoded audio must be verified Ogg Opus');
+    assert.strictEqual(asyncResult.mimeType, 'audio/ogg; codecs=opus');
+    assert(isOggOpus(asyncResult.buffer), 'Async buffer must pass Ogg Opus verification');
 
     // 5.3 Verify PTS presentation timestamps start strictly at 0.000000 (no negative start time)
     const tmpCheck = path.resolve('public/uploads/test_check_pts.ogg');

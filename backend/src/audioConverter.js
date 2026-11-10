@@ -1,7 +1,10 @@
 import fs from 'fs';
 import path from 'path';
-import { execFileSync } from 'child_process';
+import { execFileSync, execFile } from 'child_process';
+import { promisify } from 'util';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
+
+const execFileAsync = promisify(execFile);
 
 let cachedFfmpegPath = null;
 
@@ -73,6 +76,76 @@ export function isMp4OrAac(buffer) {
 export function isWebm(buffer) {
   if (!buffer || buffer.length < 4) return false;
   return buffer[0] === 0x1A && buffer[1] === 0x45 && buffer[2] === 0xDF && buffer[3] === 0xA3;
+}
+
+/**
+ * Convert any audio buffer (WebM, WAV, MP4, AAC, MP3) into WhatsApp-compliant OGG Opus asynchronously.
+ * Fully non-blocking: does not freeze the Node.js event loop during FFmpeg encoding.
+ */
+export async function convertAudioToWhatsAppOggOpusAsync(inputBuffer, inputExt = 'webm') {
+  if (!inputBuffer || inputBuffer.length === 0) {
+    return { success: false, buffer: inputBuffer, mimeType: 'audio/webm', isOggOpus: false };
+  }
+
+  const ffmpegBin = getFfmpegPath();
+  const tmpDir = path.join(process.cwd(), 'public', 'uploads');
+  if (!fs.existsSync(tmpDir)) {
+    await fs.promises.mkdir(tmpDir, { recursive: true });
+  }
+
+  const cleanExt = (inputExt || 'webm').replace(/[^a-zA-Z0-9]/g, '') || 'webm';
+  const tmpIn = path.join(tmpDir, `tmp_raw_${Date.now()}_${Math.random().toString(36).substring(7)}.${cleanExt}`);
+  const tmpOut = path.join(tmpDir, `tmp_opus_${Date.now()}_${Math.random().toString(36).substring(7)}.ogg`);
+
+  try {
+    await fs.promises.writeFile(tmpIn, inputBuffer);
+    console.log(`🎙️ [AudioConverter:Async] Transcoding audio (${cleanExt}, ${(inputBuffer.length / 1024).toFixed(1)} KB) to WhatsApp OGG Opus via ${path.basename(ffmpegBin)}...`);
+
+    await execFileAsync(ffmpegBin, [
+      '-y',
+      '-i', tmpIn,
+      '-vn',
+      '-sn',
+      '-dn',
+      '-map', '0:a:0',
+      '-map_metadata', '-1',
+      '-af', 'asetpts=N/SR/TB',
+      '-c:a', 'libopus',
+      '-b:a', '64k',
+      '-vbr', 'on',
+      '-compression_level', '10',
+      '-application', 'voip',
+      '-ar', '48000',
+      '-ac', '1',
+      '-f', 'ogg',
+      tmpOut
+    ], { stdio: 'pipe' });
+
+    try {
+      const converted = await fs.promises.readFile(tmpOut);
+      if (isOggOpus(converted)) {
+        console.log(`✅ [AudioConverter:Async] Successfully generated WhatsApp OGG Opus (${(converted.length / 1024).toFixed(1)} KB, 48kHz mono voip, PTS normalized, clean metadata)`);
+        return { success: true, buffer: converted, mimeType: 'audio/ogg; codecs=opus', isOggOpus: true };
+      }
+    } catch {}
+  } catch (err) {
+    console.warn(`⚠️ [AudioConverter:Async Warning] FFmpeg transcoding failed: ${err.message}.`);
+  } finally {
+    try { await fs.promises.unlink(tmpIn); } catch (e) {}
+    try { await fs.promises.unlink(tmpOut); } catch (e) {}
+  }
+
+  // Fallback if FFmpeg failed: check if already Ogg Opus
+  if (isOggOpus(inputBuffer)) {
+    return { success: true, buffer: inputBuffer, mimeType: 'audio/ogg; codecs=opus', isOggOpus: true };
+  }
+
+  // If conversion failed, determine fallback mime
+  let fallbackMime = 'audio/webm';
+  if (isMp3(inputBuffer)) fallbackMime = 'audio/mpeg';
+  else if (isMp4OrAac(inputBuffer)) fallbackMime = 'audio/mp4';
+
+  return { success: false, buffer: inputBuffer, mimeType: fallbackMime, isOggOpus: false };
 }
 
 /**

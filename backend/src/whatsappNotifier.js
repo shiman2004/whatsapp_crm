@@ -148,6 +148,15 @@ We look forward to seeing you.`;
         return { sent: false, error: data?.error?.message || 'Meta API error' };
       }
     } else {
+      const isProduction = process.env.NODE_ENV === 'production';
+      if (isProduction) {
+        console.error(`❌ [Appointment WA Notification] Meta WhatsApp token or phone ID is not configured in production! Outbound message to ${cleanPhone} aborted.`);
+        return {
+          sent: false,
+          error: 'Meta WhatsApp credentials missing or unconfigured in production environment',
+          simulated: false
+        };
+      }
       console.log(`ℹ️ [Appointment WA Notification] Meta token/phoneId not configured. Simulating outbound text to ${cleanPhone}: "${messageText.slice(0, 60)}..."`);
       return { sent: true, simulated: true, preview: messageText };
     }

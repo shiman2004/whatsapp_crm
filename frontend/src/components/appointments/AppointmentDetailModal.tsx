@@ -19,6 +19,7 @@ import { getAppointmentStatusConfig } from '../../utils/appointmentStatusUtils';
 import { ActivityTimeline, FormDrawer } from '../ui';
 import { addMinutesToTime, colomboDateKey, formatColomboDate, formatColomboDateTime, formatColomboTime, toColomboISO } from '../../utils/appointmentTime';
 import { AppDatePicker, AppTimePicker } from '../common';
+import { CustomFieldsPanel } from '../common/CustomFieldsPanel';
 
 interface AppointmentDetailModalProps {
   isOpen: boolean;
@@ -277,6 +278,8 @@ export const AppointmentDetailModal: React.FC<AppointmentDetailModalProps> = ({
                 <p className="text-[#111B21] dark:text-[#E9EDEF]">{appointment.notes}</p>
               </div>
             )}
+
+            <CustomFieldsPanel entityType="appointment" entityId={appointment.id} company={(appointment as any).company || 'RWC'} />
 
             {appointment.status === 'cancelled' && appointment.cancellationReason && (
               <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs">

@@ -10,6 +10,7 @@ import crypto from 'crypto';
 import { getPrisma, getDbStatus } from './db.js';
 import { validateAppointmentSlot } from './conflictEngine.js';
 import { sendAppointmentNotification } from './whatsappNotifier.js';
+import { dispatchAutomationEvent } from './automationEngine.js';
 
 const COLOMBO_TZ = 'Asia/Colombo';
 
@@ -1537,6 +1538,14 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
               customerId: txResult.resolved.patientId,
             }).catch(err => console.warn('Non-blocking WA error:', err.message));
           }
+
+          dispatchAutomationEvent('appointment.booked', {
+            appointmentId: txResult.apptId,
+            company: apptRecord.company || 'RWC',
+            patientPhone: apptRecord.patientPhone || patientPhone,
+            treatmentName: apptRecord.treatmentName,
+            actorId: authUser?.id
+          }).catch(() => {});
 
           return sendJson(res, 201, { success: true, appointment: apptRecord });
         } catch (dbErr) {

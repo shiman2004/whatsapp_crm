@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import { parseCourseMetadata } from '../admin/SuperAdminSettings/CourseManagementTab';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
+import { CustomFieldsPanel } from '../common/CustomFieldsPanel';
 import { WhatsApp24hWindowInfo } from './WhatsApp24hWindowInfo';
 import { PRESET_LABELS } from './WhatsAppChatList';
 import { CreateAssignLabelModal } from './CreateAssignLabelModal';
@@ -503,6 +504,9 @@ export const CrmIntelligencePanel: React.FC<CrmIntelligencePanelProps> = ({ lead
           </div>
 
         </div>
+
+        {/* Dynamic Custom Fields configured in System Settings */}
+        <CustomFieldsPanel entityType="lead" entityId={lead.id} company={lead.company || 'RWC'} />
 
         {/* Patient/Student Preferred Language */}
         <div className="space-y-1">

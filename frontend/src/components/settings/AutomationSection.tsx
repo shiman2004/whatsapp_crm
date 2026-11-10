@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useSettingsSection } from './useSettingsSection';
 import { SettingsLayout } from './SettingsLayout';
+import { API_BASE_URL } from '../../config/api';
 
 interface AutomationProps {
   currentSectionId: string;
@@ -107,11 +108,31 @@ export const AutomationSection: React.FC<AutomationProps> = ({
     updateField('rules', rules.filter((r: any) => r.id !== id));
   };
 
-  const runDryTest = () => {
-    setTestResult('Running dry test simulation on mock event...');
-    setTimeout(() => {
-      setTestResult('✅ Simulation Complete: Trigger parsed, condition passed, action payload validated successfully.');
-    }, 600);
+  const runDryTest = async () => {
+    setTestResult('Evaluating rule condition and action payload on backend engine...');
+    try {
+      const token =
+        localStorage.getItem('rw_crm_auth_token') ||
+        localStorage.getItem('royal_crm_token') ||
+        localStorage.getItem('auth_token') ||
+        '';
+      const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+      const res = await fetch(`${base}/api/settings/automation/test`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          rule: { name: ruleName || 'Draft Rule', trigger, condition: 'true', action },
+          context: { company: selectedCompanyId === 'ALL' ? 'RWC' : selectedCompanyId }
+        })
+      });
+      const json = await res.json();
+      setTestResult(json.message || 'Dry-run complete.');
+    } catch (err: any) {
+      setTestResult(`⚠️ Dry-run failed: ${err?.message || 'Unable to reach backend engine'}`);
+    }
   };
 
   return (

@@ -1,6 +1,7 @@
 import { SettingsService, VersionConflictError, DEFAULT_SETTINGS } from './services/settingsService.js';
 import { getPrisma, getDbStatus } from './db.js';
 import { readBoundedJson, PayloadTooLargeError, REQUEST_BODY_LIMITS } from './requestBody.js';
+import { dryRunAutomationRule } from './automationEngine.js';
 
 function json(res, status, data) {
   res.writeHead(status, { 'Content-Type': 'application/json' });
@@ -46,18 +47,98 @@ export const SETTINGS_SECTIONS_CATALOG = [
 ];
 
 export async function handleSettingsRoutes(req, res, pathname, user, correlationId) {
-  // Routes covered: /api/settings/*, /api/companies/:companyId/settings/*, /api/users/me/preferences
+  // Routes covered: /api/settings/*, /api/companies/:companyId/settings/*, /api/users/me/preferences, /api/custom-fields/*
   const isSettingsPath = pathname.startsWith('/api/settings');
   const isCompanySettingsPath = /^\/api\/companies\/[^\/]+\/settings/.test(pathname);
   const isUserPrefPath = pathname === '/api/users/me/preferences';
+  const isCustomFieldsPath = pathname.startsWith('/api/custom-fields');
 
-  if (!isSettingsPath && !isCompanySettingsPath && !isUserPrefPath) {
+  if (!isSettingsPath && !isCompanySettingsPath && !isUserPrefPath && !isCustomFieldsPath) {
     return false;
   }
 
   if (req.method === 'OPTIONS') {
     json(res, 204, {});
     return true;
+  }
+
+  // 0. Dynamic Custom Fields Definitions & Entity Values (accessible to authenticated active staff)
+  if (isCustomFieldsPath) {
+    if (!user?.id || user.active === false) {
+      json(res, 401, { success: false, error: 'Authentication required for custom fields.' });
+      return true;
+    }
+
+    const prisma = getPrisma();
+    if (!prisma || !getDbStatus()) {
+      json(res, 200, { success: true, fields: [], values: {} });
+      return true;
+    }
+
+    if (pathname === '/api/custom-fields/definitions' && req.method === 'GET') {
+      const q = queryOf(req);
+      const entity = q.entity || '';
+      const company = q.company || 'RWC';
+      const [companySetting, allSetting] = await Promise.all([
+        SettingsService.getSetting('custom_fields', 'company', company).catch(() => null),
+        company !== 'ALL' ? SettingsService.getSetting('custom_fields', 'company', 'ALL').catch(() => null) : Promise.resolve(null),
+      ]);
+      const companyFields = Array.isArray(companySetting?.data?.fields) ? companySetting.data.fields : [];
+      const allFields = Array.isArray(allSetting?.data?.fields) ? allSetting.data.fields : [];
+      const combined = [...companyFields, ...allFields];
+      const filtered = entity ? combined.filter(f => f && f.entity === entity) : combined;
+      json(res, 200, { success: true, fields: filtered });
+      return true;
+    }
+
+    const valMatch = pathname.match(/^\/api\/custom-fields\/values\/([^\/]+)\/([^\/]+)$/);
+    if (valMatch) {
+      const entityType = valMatch[1];
+      const entityId = valMatch[2];
+      const allowedEntities = new Set(['lead', 'appointment', 'patient', 'student']);
+      if (!allowedEntities.has(entityType) || !entityId) {
+        json(res, 400, { success: false, error: 'Invalid custom field entity type or ID.' });
+        return true;
+      }
+
+      if (req.method === 'GET') {
+        const result = await SettingsService.getSetting('custom_field_values', entityType, entityId).catch(() => null);
+        json(res, 200, { success: true, values: result?.data || {}, version: result?.version || 1 });
+        return true;
+      }
+
+      if (req.method === 'PUT') {
+        try {
+          const body = await parseBody(req);
+          const values = body.values && typeof body.values === 'object' ? body.values : body;
+          const existing = await prisma.systemSetting.findFirst({
+            where: { section: 'custom_field_values', scope: entityType, scopeId: entityId },
+          });
+          if (existing) {
+            const updated = await prisma.systemSetting.update({
+              where: { id: existing.id },
+              data: { payload: values, version: existing.version + 1, updatedById: user.id },
+            });
+            json(res, 200, { success: true, values: updated.payload, version: updated.version });
+          } else {
+            const created = await prisma.systemSetting.create({
+              data: {
+                section: 'custom_field_values',
+                scope: entityType,
+                scopeId: entityId,
+                payload: values,
+                version: 1,
+                updatedById: user.id,
+              },
+            });
+            json(res, 200, { success: true, values: created.payload, version: created.version });
+          }
+        } catch (err) {
+          json(res, 400, { success: false, error: err.message });
+        }
+        return true;
+      }
+    }
   }
 
   // 1. User preferences endpoint (accessible by any active authenticated user)
@@ -129,6 +210,14 @@ export async function handleSettingsRoutes(req, res, pathname, user, correlation
         toDate: query.to
       });
       json(res, 200, { success: true, ...result });
+      return true;
+    }
+
+    // ---------------------------------------------------------------- Automation Rule Dry-Run Test
+    if (pathname === '/api/settings/automation/test' && req.method === 'POST') {
+      const body = await parseBody(req);
+      const result = dryRunAutomationRule(body.rule || body, body.context || {});
+      json(res, 200, result);
       return true;
     }
 

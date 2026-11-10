@@ -39,6 +39,7 @@ import { convertAudioToWhatsAppOggOpus, convertAudioToWhatsAppOggOpusAsync, isOg
 import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleCatalogRoutes } from './catalogRoutes.js';
 import { handleStaffRoutes } from './staffRoutes.js';
+import { dispatchAutomationEvent } from './automationEngine.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
@@ -6510,6 +6511,15 @@ const server = http.createServer(async (req, res) => {
                 reason: reason || `Stage changed from ${prevStage} to ${stage}`
               }
             }).catch(() => {});
+
+            dispatchAutomationEvent('deal.stage_changed', {
+              leadId: updated.id,
+              company: updated.company || resolveLeadCompany(updated),
+              new_stage: stage,
+              previous_stage: prevStage,
+              phone: updated.customer?.whatsappNumber,
+              actorId: authUser?.id
+            }).catch(() => {});
           }
 
           if (language && updated.customer?.id) {
@@ -7209,6 +7219,14 @@ const server = http.createServer(async (req, res) => {
           });
 
           console.log(`✅ [Contact Created] ${contactName} (${canonicalPhone}) saved to Supabase PostgreSQL. Lead ID: ${savedLead.id}, Company: ${compCode}`);
+
+          dispatchAutomationEvent('lead.created', {
+            leadId: savedLead.id,
+            company: compCode,
+            phone: canonicalPhone,
+            source: savedLead.source,
+            actorId: authUser?.id
+          }).catch(() => {});
         } else {
           // In-memory fallback. This is still protected against duplicates
           // created during the current process lifetime.

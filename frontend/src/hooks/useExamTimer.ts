@@ -1,7 +1,8 @@
 // src/hooks/useExamTimer.ts
 import { useEffect, useState, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
-import axios from "axios"; // Assuming axios is used for API calls
+import axios from "axios";
+import { API_BASE_URL } from "../config/api";
 
 interface UseExamTimerProps {
   examId: string;
@@ -21,7 +22,8 @@ export function useExamTimer({ examId, studentId, onTimeUp }: UseExamTimerProps)
 
   // Initialize socket connection once
   useEffect(() => {
-    const s = io("http://localhost:3000", {
+    const socketOrigin = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : window.location.origin;
+    const s = io(socketOrigin, {
       withCredentials: true,
     });
     setSocket(s);
@@ -42,11 +44,15 @@ export function useExamTimer({ examId, studentId, onTimeUp }: UseExamTimerProps)
     };
     const handleTimeUp = async () => {
       setRemaining(0);
-      // Auto‑submit the exam via existing API endpoint
+      // Auto-submit the exam via existing API endpoint
       try {
-        await axios.post(`/api/exams/${examId}/submit`, { studentId });
+        const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+        const token = localStorage.getItem('rw_crm_auth_token') || '';
+        await axios.post(`${base}/api/exams/${examId}/submit`, { studentId }, {
+          headers: token ? { Authorization: `Bearer ${token}` } : undefined
+        });
       } catch (err) {
-        console.error("Auto‑submit failed", err);
+        console.error("Auto-submit failed", err);
       }
       if (onTimeUp) onTimeUp();
     };
@@ -63,7 +69,11 @@ export function useExamTimer({ examId, studentId, onTimeUp }: UseExamTimerProps)
   // Optional manual submit function
   const submitNow = useCallback(async () => {
     try {
-      await axios.post(`/api/exams/${examId}/submit`, { studentId });
+      const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+      const token = localStorage.getItem('rw_crm_auth_token') || '';
+      await axios.post(`${base}/api/exams/${examId}/submit`, { studentId }, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined
+      });
     } catch (err) {
       console.error("Manual submit failed", err);
     }

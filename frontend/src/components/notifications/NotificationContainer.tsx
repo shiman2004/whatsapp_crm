@@ -20,7 +20,10 @@ export const NotificationContainer: React.FC<NotificationContainerProps> = ({
     return null;
   }
 
-  const handleCardClick = (leadId: string) => {
+  const handleCardClick = (leadId: string, notificationId?: string) => {
+    if (notificationId) {
+      dismissDesktopNotification(notificationId);
+    }
     setSelectedLeadId(leadId);
     if (onNavigateToChat) {
       onNavigateToChat(leadId);
@@ -30,14 +33,14 @@ export const NotificationContainer: React.FC<NotificationContainerProps> = ({
   return (
     <div 
       aria-live="polite"
-      className="fixed bottom-4 right-4 z-[9999] flex flex-col-reverse gap-3 max-w-[370px] w-full pointer-events-none"
+      className="fixed bottom-16 right-3 z-50 flex w-[calc(100vw-24px)] max-w-[300px] flex-col-reverse gap-2 pointer-events-none md:bottom-3"
     >
-      {desktopNotifications.slice(0, 3).map((item) => (
+      {desktopNotifications.slice(0, 2).map((item) => (
         <DesktopNotificationCard
           key={item.id}
           notification={item}
           onDismiss={dismissDesktopNotification}
-          onClick={handleCardClick}
+          onClick={(leadId) => handleCardClick(leadId, item.id)}
         />
       ))}
     </div>

@@ -221,7 +221,7 @@ export const FlatpickrBase: React.FC<FlatpickrBaseProps> = ({
         aria-label={ariaLabel || defaultPlaceholder}
         aria-invalid={isInvalid}
         className={`w-full transition-colors duration-150 rounded-xl border font-mono text-xs outline-none
-          pl-3 pr-8 py-2
+          pl-3 ${hasValue && clearable ? 'pr-12' : 'pr-8'} py-2
           bg-white text-slate-800 border-slate-300 placeholder:text-slate-400
           hover:border-slate-400 focus:border-teal-500 focus:ring-1 focus:ring-teal-500/20
           dark:bg-slate-950 dark:text-slate-100 dark:border-slate-800 dark:placeholder:text-slate-500

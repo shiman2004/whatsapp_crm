@@ -1,5 +1,6 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
+import { API_BASE_URL } from '../../config/api';
 import { 
   BarChart, 
   Bar, 
@@ -54,6 +55,49 @@ export const AnalyticsView: React.FC = () => {
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
   const [selectedEntity, setSelectedEntity] = useState<EntityFilter>('all');
   const [selectedBranch, setSelectedBranch] = useState<BranchFilter>('all');
+  const [reportingTargets, setReportingTargets] = useState<{
+    monthlyRevenueTarget: number;
+    targetConversionRate: number;
+    targetResponseTimeMins: number;
+    targetMonthlyConversions: number;
+  }>({
+    monthlyRevenueTarget: 5000000,
+    targetConversionRate: 25,
+    targetResponseTimeMins: 15,
+    targetMonthlyConversions: 50,
+  });
+
+  useEffect(() => {
+    let active = true;
+    const loadTargets = async () => {
+      try {
+        const token =
+          localStorage.getItem('rw_crm_auth_token') ||
+          localStorage.getItem('royal_crm_token') ||
+          localStorage.getItem('auth_token') ||
+          '';
+        if (!token) return;
+        const base = API_BASE_URL ? API_BASE_URL.replace(/\/+$/, '') : '';
+        const url = selectedEntity === 'all'
+          ? `${base}/api/settings/reporting`
+          : `${base}/api/companies/${encodeURIComponent(selectedEntity)}/settings/reporting`;
+        const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+        if (!res.ok) return;
+        const json = await res.json();
+        const d = json?.data || {};
+        if (active) {
+          setReportingTargets({
+            monthlyRevenueTarget: Number(d.monthlyRevenueTarget ?? 5000000),
+            targetConversionRate: Number(d.targetConversionRate ?? 25),
+            targetResponseTimeMins: Number(d.targetResponseTimeMins ?? d.slaResponseMinutes ?? 15),
+            targetMonthlyConversions: Number(d.targetMonthlyConversions ?? 50),
+          });
+        }
+      } catch {}
+    };
+    loadTargets();
+    return () => { active = false; };
+  }, [selectedEntity]);
 
   // Filter Leads based on TimeRange, Entity & Branch
   const filteredLeads = useMemo(() => {
@@ -370,8 +414,19 @@ export const AnalyticsView: React.FC = () => {
               <TrendingUp className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">{conversionRate}%</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400">{conversionRate}%</div>
+            <span className="text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400">
+              Target: {reportingTargets.targetConversionRate}%
+            </span>
+          </div>
+          <div className="w-full h-1.5 bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden mt-2">
+            <div
+              className="h-full bg-emerald-500 rounded-full transition-all duration-500"
+              style={{ width: `${Math.min(100, Math.round((Number(conversionRate) / Math.max(1, reportingTargets.targetConversionRate)) * 100))}%` }}
+            />
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
             <span className="text-emerald-600 dark:text-emerald-400 font-bold">{convertedLeads} won</span>
             <span>of {totalInquiries} inquiries</span>
           </div>
@@ -385,10 +440,15 @@ export const AnalyticsView: React.FC = () => {
               <Zap className="w-4 h-4" />
             </span>
           </div>
-          <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">{avgResponseMinutes}m</div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1">
+          <div className="flex items-baseline justify-between gap-2">
+            <div className="text-2xl font-black font-mono text-amber-600 dark:text-amber-400">{avgResponseMinutes}m</div>
+            <span className="text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400">
+              Goal: &lt;{reportingTargets.targetResponseTimeMins}m
+            </span>
+          </div>
+          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-3">
             <span className="text-emerald-600 dark:text-emerald-400 font-bold">{slaCompliancePct}%</span>
-            <span>within &lt;5m SLA</span>
+            <span>within &lt;{reportingTargets.targetResponseTimeMins}m SLA</span>
           </div>
         </div>
 

@@ -40,6 +40,7 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleCatalogRoutes } from './catalogRoutes.js';
 import { handleStaffRoutes } from './staffRoutes.js';
 import { dispatchAutomationEvent } from './automationEngine.js';
+import { extractClickToWhatsAppReferral, recordMetaAdReferralNote } from './metaAdsHandler.js';
 import { isValidStageKeyFormat, normalizeStageKey, validateAuthorizedStage } from './stageValidation.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
@@ -8458,8 +8459,9 @@ const server = http.createServer(async (req, res) => {
                     const name = contact?.profile?.name || (phone ? `+${phone}` : 'Meta Direct Contact');
                     const msgType = message.type || 'text';
                     const messageId = message.id;
+                    const adReferral = extractClickToWhatsAppReferral(message);
 
-                    console.log(`📩 [Meta Webhook Event] Inbound on Phone ID: ${incomingPhoneId || 'none'} (${incomingDisplayPhone || 'none'}) -> Company: ${companyInfo.code} (${companyInfo.tag}) | MsgId: ${messageId}`);
+                    console.log(`📩 [Meta Webhook Event] Inbound on Phone ID: ${incomingPhoneId || 'none'} (${incomingDisplayPhone || 'none'}) -> Company: ${companyInfo.code} (${companyInfo.tag}) | MsgId: ${messageId}${adReferral ? ` | AdReferral: ${adReferral.sourceId || adReferral.headline || 'yes'}` : ''}`);
 
                     // Media descriptor is extracted and persisted before any binary is
                     // fetched, so a Meta outage or restart can never lose the message.
@@ -8571,7 +8573,9 @@ const server = http.createServer(async (req, res) => {
                           });
                         }
 
+                        let isNewlyCreatedLead = false;
                         if (!lead) {
+                          isNewlyCreatedLead = true;
                           const firstCat = await prisma.treatmentCategory.findFirst().catch(() => null);
                           const firstTrt = await prisma.treatment.findFirst().catch(() => null);
 
@@ -8601,6 +8605,18 @@ const server = http.createServer(async (req, res) => {
                         }
 
                         savedLeadId = lead?.id || null;
+
+                        if (adReferral && savedLeadId) {
+                          await recordMetaAdReferralNote({ prisma, leadId: savedLeadId, referral: adReferral }).catch(() => {});
+                        }
+                        if (isNewlyCreatedLead && savedLeadId) {
+                          dispatchAutomationEvent('lead.created', {
+                            leadId: savedLeadId,
+                            company: companyInfo.code,
+                            phone: canonicalPhone,
+                            source: adReferral ? 'meta_ctwa_ad' : companyInfo.code,
+                          }).catch(() => {});
+                        }
 
                         // 3. Save Message to DB before any media binary is fetched. The
                         // canonical media pointer is written once the upload succeeds.
@@ -8719,6 +8735,7 @@ const server = http.createServer(async (req, res) => {
                       companyColor: companyInfo.colorHex,
                       companyPhoneNumberId: companyInfo.phoneId,
                       companyPhoneNumber: companyInfo.phoneNumber,
+                      referral: adReferral || null,
                       timestamp: new Date().toISOString()
                     });
                   }

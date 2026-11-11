@@ -40,6 +40,7 @@ import { handleAppointmentRoutes } from './appointmentRoutes.js';
 import { handleCatalogRoutes } from './catalogRoutes.js';
 import { handleStaffRoutes } from './staffRoutes.js';
 import { dispatchAutomationEvent } from './automationEngine.js';
+import { isValidStageKeyFormat, normalizeStageKey, validateAuthorizedStage } from './stageValidation.js';
 import { handleMarketingRoutes } from './marketing/routes.js';
 import { handleSecurityRoutes } from './securityRoutes.js';
 import { handleUserManagementRoutes } from './userManagementRoutes.js';
@@ -4363,16 +4364,17 @@ const server = http.createServer(async (req, res) => {
     req.on('end', async () => {
       try {
         const payload = JSON.parse(body || '{}');
-        const rawKey = String(payload.key || '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '_');
-        if (!/^[a-z][a-z0-9_]{0,49}$/.test(rawKey)) {
+        const rawKey = normalizeStageKey(String(payload.key || '').replace(/[^a-zA-Z0-9_]/g, '_'));
+        if (!isValidStageKeyFormat(rawKey)) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Invalid stage key.' }));
+          res.end(JSON.stringify({ success: false, errorCode: 'INVALID_STAGE_KEY', error: 'Invalid stage key. Use lowercase letters, numbers, and underscores.' }));
           return;
         }
         const label = String(payload.label || '').trim();
         const description = payload.description ? String(payload.description).trim() : '';
         const color = payload.color ? String(payload.color).trim() : 'teal';
-        const company = payload.company || 'ALL';
+        const rawCompany = String(payload.company || 'ALL').trim().toUpperCase();
+        const company = ['ALL', 'RWC', 'CRAS', 'AHC'].includes(rawCompany) ? rawCompany : 'ALL';
 
         if (!rawKey || !label) {
           res.writeHead(400, { 'Content-Type': 'application/json' });
@@ -4407,7 +4409,7 @@ const server = http.createServer(async (req, res) => {
             VALUES ($1, $2, $3, $4, $5, $6, TRUE, FALSE, $7, NOW(), NOW());
           `, stageId, rawKey, label, description, color, nextOrder, company);
 
-          // Ensure LeadStage enum in Postgres accepts the new key
+          // Best-effort backwards-compatible enum add in case legacy Postgres enum column has not been migrated yet
           await prisma.$executeRawUnsafe(`ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS '${rawKey}';`).catch(() => null);
 
           const newStage = {
@@ -4653,7 +4655,7 @@ const server = http.createServer(async (req, res) => {
 
         // Reassign any leads currently in this stage to 'new'
         await prisma.$executeRawUnsafe(
-          `UPDATE public.leads SET stage = 'new', updated_at = NOW() WHERE stage = $1::text::"LeadStage";`,
+          `UPDATE public.leads SET stage = 'new', "updatedAt" = NOW() WHERE stage::text = $1;`,
           current.key
         ).catch(() => null);
 
@@ -5705,7 +5707,7 @@ const server = http.createServer(async (req, res) => {
         const isSuperAdmin = authUser?.role === 'super_admin';
         
         // Coordinators and Clinical Nurses can only see leads assigned directly to them; Super Admin and Leads Officer see all leads
-        if (authUser.role === 'coordinator' || authUser.role === 'clinical_nurse') {
+        if (['coordinator', 'sales_coordinator', 'clinical_nurse'].includes(authUser.role)) {
           whereClause.assignedTo = authUser.id;
         }
 
@@ -5725,7 +5727,7 @@ const server = http.createServer(async (req, res) => {
           ];
         }
         if (parsedUrl.query.stage) {
-          whereClause.stage = String(parsedUrl.query.stage);
+          whereClause.stage = normalizeStageKey(parsedUrl.query.stage);
         }
 
         // Lead summaries only: the conversation is fetched separately via
@@ -6343,225 +6345,313 @@ const server = http.createServer(async (req, res) => {
         const payload = JSON.parse(body || '{}');
         const urlLeadId = pathname.startsWith('/api/leads/') && pathname !== '/api/leads/assign' && pathname !== '/api/leads/update' && pathname !== '/api/leads/create' ? pathname.split('/')[3] : null;
         const leadId = payload.leadId || payload.id || urlLeadId;
-        const { treatmentId, categoryId, serialNumber, stage, language, customerId, phone, whatsappId, reason, acceptedAt } = payload;
+          const { treatmentId, categoryId, serialNumber, stage, language, customerId, phone, whatsappId, reason, acceptedAt, expectedStage } = payload;
 
-        if (!leadId && !customerId && !phone && !whatsappId) {
-          res.writeHead(400, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: false, error: 'Missing leadId or customer identifier' }));
-          return;
-        }
-
-        const prisma = getPrisma();
-        if (prisma && getDbStatus()) {
-          // Robust Lead Resolution
-          let targetLead = null;
-          if (leadId) {
-            targetLead = await prisma.lead.findUnique({ 
-              where: { id: leadId },
-              include: { assignedCoordinator: true }
-            }).catch(() => null);
+          if (!leadId && !customerId && !phone && !whatsappId) {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ success: false, errorCode: 'MISSING_IDENTIFIER', error: 'Missing leadId or customer identifier' }));
+            return;
           }
 
-          if (!targetLead && (customerId || phone || whatsappId)) {
-            const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
-            const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
-            targetLead = await prisma.lead.findFirst({
-              where: {
-                OR: [
-                  ...(customerId ? [{ customerId }] : []),
-                  ...(cleanPhone ? [{ customer: { whatsappNumber: `+${cleanPhone}` } }, { customer: { whatsappNumber: cleanPhone } }] : []),
-                  ...(cleanWaId ? [{ customer: { whatsappId: cleanWaId } }] : [])
-                ]
-              },
-              include: { assignedCoordinator: true },
-              orderBy: { updatedAt: 'desc' }
-            }).catch(() => null);
-          }
+          const prisma = getPrisma();
+          if (prisma && getDbStatus()) {
+            // Robust Lead Resolution
+            let targetLead = null;
+            if (leadId) {
+              targetLead = await prisma.lead.findUnique({ 
+                where: { id: leadId },
+                include: { assignedCoordinator: true }
+              }).catch(() => null);
+            }
 
-          const actualLeadId = targetLead ? targetLead.id : leadId;
-          const prevStage = targetLead?.stage || null;
+            if (!targetLead && (customerId || phone || whatsappId)) {
+              const cleanPhone = (phone || '').replace(/[^0-9]/g, '');
+              const cleanWaId = (whatsappId || '').replace(/[^0-9]/g, '');
+              targetLead = await prisma.lead.findFirst({
+                where: {
+                  OR: [
+                    ...(customerId ? [{ customerId }] : []),
+                    ...(cleanPhone ? [{ customer: { whatsappNumber: `+${cleanPhone}` } }, { customer: { whatsappNumber: cleanPhone } }] : []),
+                    ...(cleanWaId ? [{ customer: { whatsappId: cleanWaId } }] : [])
+                  ]
+                },
+                include: { assignedCoordinator: true },
+                orderBy: { updatedAt: 'desc' }
+              }).catch(() => null);
+            }
 
-          if (payload.assignedTo !== undefined && payload.assignedTo !== targetLead?.assignedTo) {
-            if (authUser.role !== 'super_admin' && authUser.role !== 'leads_officer') {
-              res.writeHead(403, { 'Content-Type': 'application/json' });
+            if (!targetLead) {
+              res.writeHead(404, { 'Content-Type': 'application/json' });
               res.end(JSON.stringify({
                 success: false,
-                errorCode: 'ASSIGNMENT_LOCKED',
-                error: 'Forbidden: Lead assignment cannot be modified via update endpoint. Only Super Admin and Leads Officer can change assignments.'
+                errorCode: 'LEAD_NOT_FOUND',
+                error: 'Lead record was not found.'
               }));
               return;
             }
-          }
 
-          // Resource-level authorization: coordinators can only update leads assigned directly to them
-          if (authUser.role === 'coordinator' && targetLead && targetLead.assignedTo && targetLead.assignedTo !== authUser.id) {
-            res.writeHead(403, { 'Content-Type': 'application/json' });
+            const actualLeadId = targetLead.id;
+            const prevStage = targetLead.stage || 'new';
+
+            if (payload.assignedTo !== undefined && payload.assignedTo !== targetLead.assignedTo) {
+              if (authUser.role !== 'super_admin' && authUser.role !== 'leads_officer') {
+                res.writeHead(403, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  errorCode: 'ASSIGNMENT_LOCKED',
+                  error: 'Forbidden: Lead assignment cannot be modified via update endpoint. Only Super Admin and Leads Officer can change assignments.'
+                }));
+                return;
+              }
+            }
+
+            // Resource-level authorization: coordinators/counsellors can only update leads assigned directly to them
+            if (['coordinator', 'sales_coordinator'].includes(authUser.role) && targetLead.assignedTo && targetLead.assignedTo !== authUser.id) {
+              res.writeHead(403, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                errorCode: 'FORBIDDEN_LEAD_ACCESS',
+                error: 'Forbidden: You can only update leads assigned directly to you.'
+              }));
+              return;
+            }
+
+            // Company change authorization: Only Super Admin and Leads Officer can change company
+            const isExplicitCompanyChange = payload.company !== undefined || 
+              (payload.source !== undefined && ['CRAS', 'RWC', 'AHC'].includes(String(payload.source).toUpperCase()));
+            if (isExplicitCompanyChange) {
+              const isAuthorized = authUser.role === 'super_admin' || authUser.role === 'leads_officer';
+              if (!isAuthorized) {
+                res.writeHead(403, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  errorCode: 'FORBIDDEN_COMPANY_CHANGE',
+                  error: 'Forbidden: Only Super Admin and Leads Officer can change the company affiliation.'
+                }));
+                return;
+              }
+            }
+
+            const updateData = {};
+            if (treatmentId !== undefined) updateData.treatmentId = treatmentId || null;
+            if (categoryId !== undefined) updateData.categoryId = categoryId || null;
+            if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
+            if (acceptedAt !== undefined) updateData.acceptedAt = acceptedAt ? new Date(acceptedAt) : null;
+            if (language !== undefined) updateData.language = language;
+            if (payload.lastCustomerMessageAt !== undefined) {
+              updateData.lastCustomerMessageAt = payload.lastCustomerMessageAt ? new Date(payload.lastCustomerMessageAt) : null;
+            }
+
+            if (payload.company !== undefined) {
+              const rawComp = String(payload.company).toUpperCase();
+              const companyCode = rawComp === 'AHC' ? 'AHC' : (rawComp === 'CRAS' ? 'CRAS' : 'RWC');
+              updateData.company = companyCode;
+
+              // When company changes, reset treatment/course and unassign coordinator if they belong to another company
+              const prevCompany = resolveLeadCompany(targetLead);
+              if (prevCompany !== companyCode) {
+                updateData.treatmentId = null;
+                updateData.categoryId = null;
+                updateData.serialNumber = null;
+
+                if (targetLead.assignedCoordinator) {
+                  const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
+                  if (coordComp !== companyCode) {
+                    updateData.assignedTo = null;
+                    updateData.assignedById = null;
+                    updateData.assignedByName = null;
+                    updateData.assignedAt = null;
+                    updateData.stage = 'new';
+                  }
+                }
+              }
+            }
+
+            if (payload.source !== undefined) {
+              const rawSrc = String(payload.source).trim();
+              const srcUpper = rawSrc.toUpperCase();
+              if (srcUpper === 'CRAS' || srcUpper === 'RWC' || srcUpper === 'AHC') {
+                updateData.source = srcUpper;
+                if (payload.company === undefined) {
+                  updateData.company = srcUpper;
+                  const prevCompany = resolveLeadCompany(targetLead);
+                  if (prevCompany !== srcUpper) {
+                    updateData.treatmentId = null;
+                    updateData.categoryId = null;
+                    updateData.serialNumber = null;
+                    if (targetLead.assignedCoordinator) {
+                      const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
+                      if (coordComp !== srcUpper) {
+                        updateData.assignedTo = null;
+                        updateData.assignedById = null;
+                        updateData.assignedByName = null;
+                        updateData.assignedAt = null;
+                        updateData.stage = 'new';
+                      }
+                    }
+                  }
+                }
+              } else {
+                // Acquisition channel: facebook, instagram, whatsapp, website, etc.
+                updateData.source = rawSrc.toLowerCase();
+              }
+            }
+
+            // Validate pipeline stage key & company authorization before writing
+            const effectiveCompany = updateData.company || resolveLeadCompany(targetLead);
+            let validatedStage = null;
+            if (stage !== undefined && stage !== null && String(stage).trim() !== '') {
+              const validation = await validateAuthorizedStage({
+                prisma,
+                stageKey: stage,
+                companyCode: effectiveCompany,
+                currentStage: prevStage,
+                leadId: actualLeadId,
+              });
+              if (!validation.valid) {
+                res.writeHead(validation.statusCode, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({
+                  success: false,
+                  errorCode: validation.errorCode,
+                  error: validation.error,
+                }));
+                return;
+              }
+              validatedStage = validation.stageKey;
+              updateData.stage = validatedStage;
+            }
+            updateData.updatedAt = new Date();
+
+            // Execute lead update, optional optimistic stage conflict check, customer language sync,
+            // and exact-once stage history creation inside a single database transaction.
+            let txResult;
+            try {
+              txResult = await prisma.$transaction(async (tx) => {
+                // Lock row for update so concurrent transactions serialize on the latest committed stage
+                const lockedRows = await tx.$queryRawUnsafe(
+                  `SELECT id, stage, "customerId" FROM "public"."leads" WHERE id = $1 FOR UPDATE`,
+                  actualLeadId
+                );
+                const fresh = Array.isArray(lockedRows) && lockedRows[0]
+                  ? lockedRows[0]
+                  : await tx.lead.findUnique({
+                      where: { id: actualLeadId },
+                      select: { id: true, stage: true, customerId: true },
+                    });
+                if (!fresh) {
+                  const err = new Error('Lead record was not found.');
+                  err.statusCode = 404;
+                  err.errorCode = 'LEAD_NOT_FOUND';
+                  throw err;
+                }
+
+                if (expectedStage !== undefined && expectedStage !== null && String(fresh.stage || '') !== String(expectedStage)) {
+                  const err = new Error(`Lead stage was modified concurrently (expected "${expectedStage}", found "${fresh.stage}").`);
+                  err.statusCode = 409;
+                  err.errorCode = 'STAGE_CONFLICT';
+                  err.currentStage = fresh.stage;
+                  throw err;
+                }
+
+                const priorStage = fresh.stage;
+                const updatedRow = await tx.lead.update({
+                  where: { id: actualLeadId },
+                  data: updateData,
+                  include: {
+                    customer: true,
+                    category: true,
+                    treatment: true,
+                    assignedCoordinator: true,
+                    messages: { orderBy: { timestamp: 'asc' } }
+                  }
+                });
+
+                let recordedHistory = null;
+                if (validatedStage && priorStage && priorStage !== validatedStage) {
+                  recordedHistory = await tx.leadStageHistory.create({
+                    data: {
+                      leadId: actualLeadId,
+                      fromStage: priorStage,
+                      toStage: validatedStage,
+                      changedById: authUser?.id || 'user-admin-1',
+                      changedByName: authUser?.fullName || 'Super Admin',
+                      reason: reason || `Stage changed from ${priorStage} to ${validatedStage}`
+                    }
+                  });
+                }
+
+                if (language && updatedRow.customer?.id) {
+                  await tx.customer.update({
+                    where: { id: updatedRow.customer.id },
+                    data: { preferredLanguage: language }
+                  });
+                }
+
+                return { updated: updatedRow, priorStage, recordedHistory };
+              });
+            } catch (txErr) {
+              const status = txErr.statusCode || (txErr.code === 'P2003' ? 400 : 500);
+              res.writeHead(status, { 'Content-Type': 'application/json' });
+              res.end(JSON.stringify({
+                success: false,
+                errorCode: txErr.errorCode || 'LEAD_UPDATE_FAILED',
+                error: txErr.message,
+                ...(txErr.currentStage ? { currentStage: txErr.currentStage } : {}),
+              }));
+              return;
+            }
+
+            const { updated, priorStage, recordedHistory } = txResult;
+
+            if (validatedStage && priorStage && priorStage !== validatedStage) {
+              dispatchAutomationEvent('deal.stage_changed', {
+                leadId: updated.id,
+                company: updated.company || resolveLeadCompany(updated),
+                new_stage: validatedStage,
+                previous_stage: priorStage,
+                phone: updated.customer?.whatsappNumber,
+                actorId: authUser?.id
+              }).catch(() => {});
+            }
+
+            const compCode = resolveLeadCompany(updated);
+            const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
+            const enrichedLead = {
+              ...updated,
+              company: compCode,
+              companyTag: compConfig.tag,
+              companyColor: compConfig.color,
+              companyPhoneNumberId: compConfig.phoneId,
+              companyPhoneNumber: compConfig.phone
+            };
+
+            console.log(`✅ [Lead Updated] ID: ${actualLeadId}, Stage: ${validatedStage || 'unchanged'}, Treatment: ${treatmentId || 'unchanged'}, Company: ${compCode}`);
+
+            broadcastScopedSSE(null, {
+              type: 'LEAD_UPDATED',
+              leadId: actualLeadId,
+              lead: enrichedLead,
+              ...(recordedHistory ? { stageHistory: recordedHistory } : {}),
+            });
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(JSON.stringify({
-              success: false,
-              errorCode: 'FORBIDDEN_LEAD_ACCESS',
-              error: 'Forbidden: You can only update leads assigned directly to you.'
+              success: true,
+              lead: enrichedLead,
+              ...(recordedHistory ? { stageHistory: recordedHistory } : {}),
             }));
             return;
           }
 
-          // Company change authorization: Only Super Admin and Leads Officer can change company
-          const isExplicitCompanyChange = payload.company !== undefined || 
-            (payload.source !== undefined && ['CRAS', 'RWC', 'AHC'].includes(String(payload.source).toUpperCase()));
-          if (isExplicitCompanyChange) {
-            const isAuthorized = authUser.role === 'super_admin' || authUser.role === 'leads_officer';
-            if (!isAuthorized) {
-              res.writeHead(403, { 'Content-Type': 'application/json' });
-              res.end(JSON.stringify({
-                success: false,
-                errorCode: 'FORBIDDEN_COMPANY_CHANGE',
-                error: 'Forbidden: Only Super Admin and Leads Officer can change the company affiliation.'
-              }));
-              return;
-            }
-          }
-
-          const updateData = {};
-          if (treatmentId !== undefined) updateData.treatmentId = treatmentId || null;
-          if (categoryId !== undefined) updateData.categoryId = categoryId || null;
-          if (serialNumber !== undefined) updateData.serialNumber = serialNumber || null;
-          if (stage !== undefined) updateData.stage = stage;
-          if (acceptedAt !== undefined) updateData.acceptedAt = acceptedAt ? new Date(acceptedAt) : null;
-          if (language !== undefined) updateData.language = language;
-          if (payload.lastCustomerMessageAt !== undefined) {
-            updateData.lastCustomerMessageAt = payload.lastCustomerMessageAt ? new Date(payload.lastCustomerMessageAt) : null;
-          }
-
-          if (payload.company !== undefined) {
-            const rawComp = String(payload.company).toUpperCase();
-            const companyCode = rawComp === 'AHC' ? 'AHC' : (rawComp === 'CRAS' ? 'CRAS' : 'RWC');
-            updateData.company = companyCode;
-
-            // When company changes, reset treatment/course and unassign coordinator if they belong to another company
-            const prevCompany = resolveLeadCompany(targetLead);
-            if (prevCompany !== companyCode) {
-              updateData.treatmentId = null;
-              updateData.categoryId = null;
-              updateData.serialNumber = null;
-
-              if (targetLead?.assignedCoordinator) {
-                const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
-                if (coordComp !== companyCode) {
-                  updateData.assignedTo = null;
-                  updateData.assignedById = null;
-                  updateData.assignedByName = null;
-                  updateData.assignedAt = null;
-                  updateData.stage = 'new';
-                }
-              }
-            }
-          }
-
-          if (payload.source !== undefined) {
-            const rawSrc = String(payload.source).trim();
-            const srcUpper = rawSrc.toUpperCase();
-            if (srcUpper === 'CRAS' || srcUpper === 'RWC' || srcUpper === 'AHC') {
-              updateData.source = srcUpper;
-              if (payload.company === undefined) {
-                updateData.company = srcUpper;
-                const prevCompany = resolveLeadCompany(targetLead);
-                if (prevCompany !== srcUpper) {
-                  updateData.treatmentId = null;
-                  updateData.categoryId = null;
-                  updateData.serialNumber = null;
-                  if (targetLead?.assignedCoordinator) {
-                    const coordComp = (targetLead.assignedCoordinator.company || 'RWC').toUpperCase();
-                    if (coordComp !== srcUpper) {
-                      updateData.assignedTo = null;
-                      updateData.assignedById = null;
-                      updateData.assignedByName = null;
-                      updateData.assignedAt = null;
-                      updateData.stage = 'new';
-                    }
-                  }
-                }
-              }
-            } else {
-              // Acquisition channel: facebook, instagram, whatsapp, website, etc.
-              updateData.source = rawSrc.toLowerCase();
-            }
-          }
-          updateData.updatedAt = new Date();
-
-          const updated = await prisma.lead.update({
-            where: { id: actualLeadId },
-            data: updateData,
-            include: {
-              customer: true,
-              category: true,
-              treatment: true,
-              assignedCoordinator: true,
-              messages: { orderBy: { timestamp: 'asc' } }
-            }
-          });
-
-          // Record Stage History in DB
-          if (stage && prevStage && prevStage !== stage) {
-            await prisma.leadStageHistory.create({
-              data: {
-                leadId: actualLeadId,
-                fromStage: prevStage,
-                toStage: stage,
-                changedById: authUser?.id || 'user-admin-1',
-                changedByName: authUser?.fullName || 'Super Admin',
-                reason: reason || `Stage changed from ${prevStage} to ${stage}`
-              }
-            }).catch(() => {});
-
-            dispatchAutomationEvent('deal.stage_changed', {
-              leadId: updated.id,
-              company: updated.company || resolveLeadCompany(updated),
-              new_stage: stage,
-              previous_stage: prevStage,
-              phone: updated.customer?.whatsappNumber,
-              actorId: authUser?.id
-            }).catch(() => {});
-          }
-
-          if (language && updated.customer?.id) {
-            await prisma.customer.update({
-              where: { id: updated.customer.id },
-              data: { preferredLanguage: language }
-            }).catch(() => {});
-          }
-
-          const compCode = resolveLeadCompany(updated);
-          const compConfig = COMPANIES[compCode] || COMPANIES.RWC;
-          const enrichedLead = {
-            ...updated,
-            company: compCode,
-            companyTag: compConfig.tag,
-            companyColor: compConfig.color,
-            companyPhoneNumberId: compConfig.phoneId,
-            companyPhoneNumber: compConfig.phone
-          };
-
-          console.log(`✅ [Lead Updated] ID: ${actualLeadId}, Stage: ${stage || 'unchanged'}, Treatment: ${treatmentId || 'unchanged'}, Company: ${compCode}`);
-
-          broadcastScopedSSE(null, {
-            type: 'LEAD_UPDATED',
-            leadId: actualLeadId,
-            lead: enrichedLead
-          });
-
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, lead: enrichedLead }));
-          return;
+          res.writeHead(503, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, errorCode: 'DB_UNAVAILABLE', error: 'Database offline' }));
+        } catch (err) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
         }
-
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true }));
-      } catch (err) {
-        res.writeHead(500, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: false, error: err.message }));
-      }
-    });
-    return;
-  }
+      });
+      return;
+    }
 
   // 10b3. REST: Update Customer Details (Name, Phone, WhatsApp ID)
   if ((req.method === 'POST' || req.method === 'PATCH' || req.method === 'PUT') && (pathname === '/api/customer/update' || pathname === '/api/customers/update' || pathname.startsWith('/api/customers/'))) {

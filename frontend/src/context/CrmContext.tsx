@@ -170,7 +170,7 @@ interface CrmContextType {
   assignLead: (leadId: string, coordinatorId: string) => Promise<boolean>;
   recallLeadToAdmin: (leadId: string) => Promise<boolean>;
   recallLeadsBulk: (leadIds: string[]) => Promise<{ success: boolean; recalledCount: number }>;
-  updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string, examDetails?: ExamHandoffDetails) => void;
+  updateLeadStage: (leadId: string, newStage: LeadStage, reason?: string, examDetails?: ExamHandoffDetails, acceptedAtOverride?: string | null) => Promise<boolean>;
   examHandoffDraft: { leadId: string; reason?: string } | null;
   cancelExamHandoff: () => void;
   submitExamHandoff: (details: ExamHandoffDetails) => void;
@@ -1640,9 +1640,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           }
 
           if (data.type === 'LEAD_UPDATED') {
-            const { leadId: incomingLeadId, lead: incomingLead } = data;
+            const { leadId: incomingLeadId, lead: incomingLead, stageHistory: incomingHistory } = data;
             setLeads(prevLeads => {
-              return prevLeads.map(l => {
+              const nextLeads = prevLeads.map(l => {
                 if (l.id === incomingLeadId || (incomingLead && l.id === incomingLead.id)) {
                   return {
                     ...l,
@@ -1650,6 +1650,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     categoryId: incomingLead?.categoryId !== undefined ? (incomingLead.categoryId || undefined) : l.categoryId,
                     serialNumber: incomingLead?.serialNumber !== undefined ? (incomingLead.serialNumber || undefined) : l.serialNumber,
                     stage: incomingLead?.stage !== undefined ? incomingLead.stage : l.stage,
+                    acceptedAt: incomingLead?.acceptedAt !== undefined ? (incomingLead.acceptedAt || undefined) : l.acceptedAt,
                     assignedTo: incomingLead?.assignedTo !== undefined ? (incomingLead.assignedTo || undefined) : l.assignedTo,
                     assignedById: incomingLead?.assignedById !== undefined ? (incomingLead.assignedById || undefined) : l.assignedById,
                     assignedByName: incomingLead?.assignedByName !== undefined ? (incomingLead.assignedByName || undefined) : l.assignedByName,
@@ -1660,12 +1661,17 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                     companyColor: incomingLead?.companyColor !== undefined ? incomingLead.companyColor : l.companyColor,
                     companyPhoneNumberId: incomingLead?.companyPhoneNumberId !== undefined ? incomingLead.companyPhoneNumberId : l.companyPhoneNumberId,
                     companyPhoneNumber: incomingLead?.companyPhoneNumber !== undefined ? incomingLead.companyPhoneNumber : l.companyPhoneNumber,
-                    updatedAt: new Date().toISOString()
+                    updatedAt: incomingLead?.updatedAt || new Date().toISOString()
                   };
                 }
                 return l;
               });
+              try { localStorage.setItem('rw_crm_leads', JSON.stringify(nextLeads)); } catch {}
+              return nextLeads;
             });
+            if (incomingHistory?.id) {
+              setStageHistories(prev => prev.some(h => h.id === incomingHistory.id) ? prev : [incomingHistory, ...prev]);
+            }
             return;
           }
 
@@ -2657,85 +2663,138 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  // Update lead stage
-  const updateLeadStage = (leadId: string, newStage: LeadStage, reason?: string, examDetails?: ExamHandoffDetails) => {
+  // Update lead stage with server response validation, conflict handling & rollback
+  const updateLeadStage = async (
+    leadId: string,
+    newStage: LeadStage,
+    reason?: string,
+    examDetails?: ExamHandoffDetails,
+    acceptedAtOverride?: string | null,
+  ): Promise<boolean> => {
     const lead = leads.find(l => l.id === leadId);
-    if (!lead) return;
+    if (!lead) return false;
 
-    if (lead.stage === newStage && !(newStage === 'assigned' && !lead.acceptedAt)) return;
+    const acceptedAtChanged = acceptedAtOverride !== undefined && (acceptedAtOverride || undefined) !== (lead.acceptedAt || undefined);
+    if (lead.stage === newStage && !acceptedAtChanged && !(newStage === 'assigned' && !lead.acceptedAt)) {
+      return true;
+    }
 
     const prevStage = lead.stage;
-    const stageLabel = stages.find(stage => stage.key === newStage)?.label?.toLowerCase() || '';
+    const prevLeadSnapshot = { ...lead };
+    const stageConfigMatch = stages.find(stage => stage.key === newStage);
+    const stageLabel = stageConfigMatch?.label?.toLowerCase() || '';
     const forwardedToExam = newStage === 'forwarded_to_exam_department' || stageLabel.includes('forwarded to exam');
     if (forwardedToExam && !examDetails) {
       setExamHandoffDraft({ leadId, reason });
       notify('Exam handoff details required', 'Complete the exam country, title, authority, services, client and payment details before forwarding.', 'warning');
-      return;
+      return false;
     }
 
-    // Trigger celebration confetti on conversion!
-    if (newStage === 'converted') {
-      confetti({
-        particleCount: 120,
-        spread: 70,
-        origin: { y: 0.6 },
-        colors: ['#2dd4be', '#d4a438', '#14b8a6', '#f5eecc']
-      });
-      notify('🎉 Lead Converted!', `${lead.customer?.displayName || 'Client'} has been successfully converted!`, 'success');
-    } else {
-      notify('Stage Updated', `Lead moved to ${newStage.toUpperCase().replace('_', ' ')}`, 'info');
-    }
+    const stageKeyNormalized = String(newStage || '').trim().toLowerCase();
+    const computedAcceptedAt = acceptedAtOverride !== undefined
+      ? (acceptedAtOverride || undefined)
+      : (stageKeyNormalized === 'assigned' || stageKeyNormalized === 'accepted')
+        ? (lead.acceptedAt || new Date().toISOString())
+        : (stageKeyNormalized === 'lost' || stageKeyNormalized === 'new' ? undefined : lead.acceptedAt);
 
-    const updatedLeads = leads.map(l => {
-      if (l.id === leadId) {
-        return {
-          ...l,
-          stage: newStage,
-          acceptedAt: newStage === 'assigned' ? (lead.acceptedAt || new Date().toISOString()) : (newStage === 'lost' ? undefined : lead.acceptedAt),
-          updatedAt: new Date().toISOString(),
-        };
-      }
-      return l;
+    // Apply optimistic state temporarily while persisting to backend
+    setLeads(prev => {
+      const next = prev.map(l => (
+        l.id === leadId
+          ? { ...l, stage: newStage, acceptedAt: computedAcceptedAt, updatedAt: new Date().toISOString() }
+          : l
+      ));
+      try { localStorage.setItem('rw_crm_leads', JSON.stringify(next)); } catch {}
+      return next;
     });
 
-    setLeads(updatedLeads);
-    localStorage.setItem('rw_crm_leads', JSON.stringify(updatedLeads));
-
-    // Sync to Supabase PostgreSQL backend in real-time
-    fetch(`${API_BASE_URL}/api/leads/update`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${getAuthToken()}`,
-      },
-      body: JSON.stringify({
-        leadId,
-        customerId: lead.customerId,
-        phone: lead.customer?.whatsappNumber,
-        whatsappId: lead.customer?.whatsappId,
-        stage: newStage,
-        acceptedAt: newStage === 'assigned' ? (lead.acceptedAt || new Date().toISOString()) : (newStage === 'lost' ? null : lead.acceptedAt),
-        reason: reason || `Stage changed from ${prevStage} to ${newStage}`
-      })
-    }).catch(err => console.warn('Could not sync lead stage update to backend:', err));
-
-    // A sales handoff to the exam department creates a durable inbox item for
-    // the Head of Exam Department. The lead stage remains the source of truth;
-    // this side-effect adds the departmental work queue without blocking the
-    // optimistic pipeline update.
-    if (forwardedToExam) {
-      fetch(`${API_BASE_URL}/api/exam-ops/handoffs`, {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/leads/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${getAuthToken()}`,
         },
         body: JSON.stringify({
-          leadId: lead.id,
+          leadId,
+          customerId: lead.customerId,
+          phone: lead.customer?.whatsappNumber,
+          whatsappId: lead.customer?.whatsappId,
+          stage: newStage,
+          expectedStage: prevStage,
+          acceptedAt: computedAcceptedAt || null,
+          reason: reason || `Stage changed from ${prevStage} to ${newStage}`
+        })
+      });
+      const data = await res.json().catch(() => ({}));
+
+      if (!res.ok || data?.success === false) {
+        // Rollback optimistic update cleanly on validation, permission, or concurrency failure
+        setLeads(prev => {
+          const reverted = prev.map(l => {
+            if (l.id !== leadId) return l;
+            if (data?.currentStage) {
+              return { ...prevLeadSnapshot, stage: data.currentStage };
+            }
+            return prevLeadSnapshot;
+          });
+          try { localStorage.setItem('rw_crm_leads', JSON.stringify(reverted)); } catch {}
+          return reverted;
+        });
+        notify(
+          'Stage Update Failed',
+          data?.error || `Server rejected stage change (${res.status}). Changes were reverted.`,
+          'warning'
+        );
+        return false;
+      }
+
+      const persistedLead = data?.lead;
+      if (persistedLead) {
+        setLeads(prev => {
+          const synced = prev.map(l => (
+            l.id === leadId
+              ? {
+                  ...l,
+                  stage: persistedLead.stage ?? newStage,
+                  acceptedAt: persistedLead.acceptedAt !== undefined ? (persistedLead.acceptedAt || undefined) : computedAcceptedAt,
+                  updatedAt: persistedLead.updatedAt || new Date().toISOString(),
+                  company: persistedLead.company || l.company,
+                }
+              : l
+          ));
+          try { localStorage.setItem('rw_crm_leads', JSON.stringify(synced)); } catch {}
+          return synced;
+        });
+      }
+
+      // Only celebrate and notify AFTER server persistence succeeds
+      const effectiveStage = String(persistedLead?.stage || newStage);
+      if (['converted', 'payment_received', 'treatment_completed'].includes(effectiveStage)) {
+        confetti({
+          particleCount: 120,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#2dd4be', '#d4a438', '#14b8a6', '#f5eecc']
+        });
+        notify('Lead Converted', `${lead.customer?.displayName || 'Client'} moved to ${stageConfigMatch?.label || effectiveStage.replace(/_/g, ' ')}!`, 'success');
+      } else {
+        notify('Stage Updated', `Lead moved to ${stageConfigMatch?.label || effectiveStage.toUpperCase().replace(/_/g, ' ')}`, 'info');
+      }
+
+      if (forwardedToExam) {
+        fetch(`${API_BASE_URL}/api/exam-ops/handoffs`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${getAuthToken()}`,
+          },
+          body: JSON.stringify({
+            leadId: lead.id,
             leadName: examDetails?.clientName || lead.customer?.displayName || 'Unnamed lead',
             phone: examDetails?.contactNumber || lead.customer?.whatsappNumber || lead.customer?.phoneNumber || '',
             email: examDetails?.clientEmail || '',
-          profession: lead.categoryId || lead.treatmentId || '',
+            profession: lead.categoryId || lead.treatmentId || '',
             examCountry: examDetails?.examCountry,
             examTitle: examDetails?.examTitle,
             authority: examDetails?.authority,
@@ -2750,33 +2809,55 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             receiptVoucherUrl: examDetails?.receiptVoucherUrl,
             receiptVoucherFileName: examDetails?.receiptVoucherFileName,
             receiptVoucherNo: examDetails?.receiptVoucherNo,
-          source: 'Sales Pipeline',
-          company: lead.company || 'RWC',
-          notes: reason || 'Sales forwarded this lead for exam materials and delivery.'
-        })
-      }).then(async response => {
-        if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || 'Exam Department handoff failed');
-        notify('Exam Department Notified', `${lead.customer?.displayName || 'Lead'} was added to the Exam Department inbox.`, 'success');
-      }).catch(err => {
-        notify('Exam Handoff Warning', err.message || 'The lead moved locally, but the Exam Department inbox could not be updated.', 'warning');
+            source: 'Sales Pipeline',
+            company: lead.company || 'RWC',
+            notes: reason || 'Sales forwarded this lead for exam materials and delivery.'
+          })
+        }).then(async response => {
+          if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || 'Exam Department handoff failed');
+          notify('Exam Department Notified', `${lead.customer?.displayName || 'Lead'} was added to the Exam Department inbox.`, 'success');
+        }).catch(err => {
+          notify('Exam Handoff Warning', err.message || 'The lead moved cleanly, but the Exam Department inbox could not be updated.', 'warning');
+        });
+      }
+
+      const persistedHistory: LeadStageHistory = data?.stageHistory
+        ? {
+            id: data.stageHistory.id,
+            leadId,
+            fromStage: data.stageHistory.fromStage || prevStage,
+            toStage: data.stageHistory.toStage || effectiveStage,
+            changedBy: data.stageHistory.changedById || currentUser.id,
+            changedByName: data.stageHistory.changedByName || currentUser.fullName,
+            reason: data.stageHistory.reason || reason || `Stage changed from ${prevStage} to ${effectiveStage}`,
+            createdAt: data.stageHistory.createdAt || new Date().toISOString(),
+          }
+        : {
+            id: 'hist-' + Date.now(),
+            leadId,
+            fromStage: prevStage,
+            toStage: effectiveStage,
+            changedBy: currentUser.id,
+            changedByName: currentUser.fullName,
+            reason: reason || `Stage changed from ${prevStage} to ${effectiveStage}`,
+            createdAt: new Date().toISOString(),
+          };
+
+      if (prevStage !== effectiveStage) {
+        setStageHistories(prev => prev.some(h => h.id === persistedHistory.id) ? prev : [persistedHistory, ...prev]);
+        logAudit('STAGE_CHANGED', 'Lead', leadId, { stage: prevStage }, { stage: effectiveStage, reason });
+      }
+      return true;
+    } catch (err: any) {
+      // Rollback optimistic update on network failure
+      setLeads(prev => {
+        const reverted = prev.map(l => (l.id === leadId ? prevLeadSnapshot : l));
+        try { localStorage.setItem('rw_crm_leads', JSON.stringify(reverted)); } catch {}
+        return reverted;
       });
+      notify('Stage Update Error', err?.message || 'Network error saving stage change. Reverted.', 'warning');
+      return false;
     }
-
-    // Record stage history
-    const hist: LeadStageHistory = {
-      id: 'hist-' + Date.now(),
-      leadId,
-      fromStage: prevStage,
-      toStage: newStage,
-      changedBy: currentUser.id,
-      changedByName: currentUser.fullName,
-      reason: reason || `Stage changed from ${prevStage} to ${newStage}`,
-      createdAt: new Date().toISOString(),
-    };
-    setStageHistories(prev => [hist, ...prev]);
-
-    // Audit log
-    logAudit('STAGE_CHANGED', 'Lead', leadId, { stage: prevStage }, { stage: newStage, reason });
   };
 
   const cancelExamHandoff = useCallback(() => setExamHandoffDraft(null), []);

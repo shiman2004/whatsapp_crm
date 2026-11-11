@@ -3,21 +3,23 @@ import { AlertCircle, MessageSquare, TrendingUp, Zap } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import { Lead } from '../../types';
 import { StatCard } from '../ui';
+import { summarizeStageMetrics } from '../../utils/stageMetrics';
 
 interface KpiCardsProps {
   leads?: Lead[];
 }
 
 export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
-  const { leads: ctxLeads, followups } = useCrm();
+  const { leads: ctxLeads, followups, stages } = useCrm();
   const leads = propLeads || ctxLeads;
   const leadIds = new Set(leads.map((l) => l.id));
 
   const totalLeads = leads.length;
   const unassigned = leads.filter((l) => l.stage === 'new' && !l.assignedTo).length;
-  const activeThreads = leads.filter((l) => !['converted', 'lost', 'not_relevant', 'not_eligible'].includes(l.stage)).length;
-  const converted = leads.filter((l) => l.stage === 'converted').length;
-  const conversionRate = totalLeads > 0 ? ((converted / totalLeads) * 100).toFixed(1) : '0.0';
+  const metrics = summarizeStageMetrics(leads, stages);
+  const activeThreads = metrics.activeOpen;
+  const converted = metrics.businessConverted;
+  const conversionRate = metrics.conversionRateExact;
   const pendingFollowups = followups.filter((f) => f.status === 'pending' && leadIds.has(f.leadId)).length;
 
   return (
@@ -32,14 +34,14 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ leads: propLeads }) => {
       <StatCard
         label="Active conversations"
         value={activeThreads}
-        hint="Open WhatsApp threads"
+        hint={`${metrics.appointmentBooked} booked · ${metrics.consultationDone} consulted`}
         icon={MessageSquare}
         tone="teal"
       />
       <StatCard
         label="Conversion rate"
         value={`${conversionRate}%`}
-        hint={`${converted} converted leads`}
+        hint={`${converted} converted (${metrics.closedWon} won · ${metrics.paymentReceived + metrics.treatmentCompleted} paid/treated)`}
         icon={TrendingUp}
         tone="blue"
       />

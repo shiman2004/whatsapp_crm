@@ -56,6 +56,7 @@ const ALL_SUITES = [
   'test-exam-upgrade.test.js',
   'test-exam-ops-database.test.js',
   'test-settings-foundation.test.js',
+  'test-pipeline-dynamic-stages.test.js',
 ];
 
 if (!fs.existsSync(path.join(backendDir, '.env.test'))) {

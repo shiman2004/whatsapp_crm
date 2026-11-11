@@ -7,7 +7,7 @@ interface StageBadgeProps {
   short?: boolean;
 }
 
-export const STAGE_CONFIG: Record<LeadStage, { label: string; shortLabel: string; bg: string; text: string; border: string; pillBg: string; pillText: string; pillBorder: string }> = {
+export const STAGE_CONFIG: Record<string, { label: string; shortLabel: string; bg: string; text: string; border: string; pillBg: string; pillText: string; pillBorder: string }> = {
   new: {
     label: 'New Inquiry',
     shortLabel: 'NEW',

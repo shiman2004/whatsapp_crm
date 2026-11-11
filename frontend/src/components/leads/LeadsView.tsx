@@ -68,7 +68,7 @@ export const LeadsView: React.FC<LeadsViewProps> = ({ onSelectLead }) => {
 
   const effectiveCompany: PipelineCompany = canSeeBothCompanies 
     ? selectedCompany 
-    : (currentUser.company === 'CRAS' ? 'CRAS' : 'RWC');
+    : (currentUser.company === 'CRAS' ? 'CRAS' : currentUser.company === 'AHC' ? 'AHC' : 'RWC');
 
   // Handle switching pipeline company for Super Admin and Leads Officer
   const handleCompanyChange = (comp: PipelineCompany) => {

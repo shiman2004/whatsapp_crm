@@ -1,5 +1,6 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangle, RefreshCw, Home } from 'lucide-react';
+import { clearStaleChunkReloadFlag } from '../../utils/chunkRecovery';
 
 interface Props {
   children: ReactNode;
@@ -29,10 +30,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   private handleReload = () => {
+    clearStaleChunkReloadFlag();
     window.location.reload();
   };
 
   private handleGoHome = () => {
+    clearStaleChunkReloadFlag();
     window.location.hash = '/dashboard';
     window.location.reload();
   };

@@ -1,9 +1,15 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useCrm } from '../../context/CrmContext';
-import { Award, Calendar, CheckCircle2, Building2, PieChart, BarChart3, Clock } from 'lucide-react';
+import { Award, Calendar, CalendarCheck2, CheckCircle2, Building2, PieChart, BarChart3, Clock } from 'lucide-react';
 import { CompanyCode, Lead, LeadStageConfig } from '../../types';
-import { getDayKey } from '../../utils/dateUtils';
 import { getLeadCompany } from '../../utils/companyUtils';
+import {
+  classifyLeadStage,
+  getColomboDayString,
+  isEligibleStaffForLeaderboard,
+  normalizeLeadStageKey,
+  resolveAssignedColomboDay,
+} from '../../utils/stageMetrics';
 
 interface CoordinatorLeaderboardProps {
   leads?: Lead[];
@@ -16,30 +22,22 @@ type TimePeriod = 'today' | 'yesterday' | 'this_month' | 'all';
 function isLeadInTimeframe(lead: Lead, coordId: string, timeframe: TimePeriod): boolean {
   if (timeframe === 'all') return true;
 
-  // Find most relevant timestamp for this coordinator
-  const hist = Array.isArray(lead.assignmentHistories)
-    ? lead.assignmentHistories.find(h => h.assignedToId === coordId)
-    : undefined;
-  const rawDateStr = hist?.assignedAt || lead.assignedAt || lead.updatedAt || lead.createdAt;
-  if (!rawDateStr) return false;
+  const assignedDay = resolveAssignedColomboDay(lead, coordId);
+  if (assignedDay === 'invalid') return false;
 
-  const leadDate = new Date(rawDateStr);
-  if (isNaN(leadDate.getTime())) return false;
-
-  const now = new Date();
+  const todayColombo = getColomboDayString(new Date());
 
   if (timeframe === 'today') {
-    return getDayKey(leadDate) === getDayKey(now);
+    return assignedDay === todayColombo;
   }
 
   if (timeframe === 'yesterday') {
-    const yesterday = new Date(now);
-    yesterday.setDate(yesterday.getDate() - 1);
-    return getDayKey(leadDate) === getDayKey(yesterday);
+    const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return assignedDay === getColomboDayString(yesterday);
   }
 
   if (timeframe === 'this_month') {
-    return leadDate.getFullYear() === now.getFullYear() && leadDate.getMonth() === now.getMonth();
+    return assignedDay.slice(0, 7) === todayColombo.slice(0, 7);
   }
 
   return true;
@@ -98,12 +96,18 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
     setSelectedCompany(initialCompanyFilter);
   }, [initialCompanyFilter]);
 
-  const todayKey = getDayKey(new Date());
+  const todayKey = getColomboDayString(new Date());
 
-  // Filter coordinators
+  const stageConfigMap = useMemo(() => {
+    const map = new Map<string, LeadStageConfig>();
+    (stages || []).forEach((s) => map.set(normalizeLeadStageKey(s.key), s));
+    return map;
+  }, [stages]);
+
+  // Filter active coordinators & sales counsellors
   const coordinators = useMemo(() => {
     return users.filter(u => {
-      if (u.role !== 'coordinator') return false;
+      if (!isEligibleStaffForLeaderboard(u)) return false;
       if (selectedCompany === 'CRAS') return u.company === 'CRAS';
       if (selectedCompany === 'AHC') return u.company === 'AHC';
       if (selectedCompany === 'RWC') return u.company === 'RWC' || !u.company;
@@ -114,26 +118,35 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
   // Compute stats for each coordinator (Overview mode)
   const stats = useMemo(() => {
     return coordinators.map(coord => {
-      // All leads assigned to this coordinator
+      // All leads currently assigned to this coordinator
       const assignedLeads = allLeads.filter(l => l.assignedTo === coord.id);
-      
+
       // Filter by selected company if applicable
-      const relevantLeads = selectedCompany === 'all' 
-        ? assignedLeads 
+      const relevantLeads = selectedCompany === 'all'
+        ? assignedLeads
         : assignedLeads.filter(l => getLeadCompany(l).code === selectedCompany);
 
-      // Assigned on current day (today)
-      const assignedTodayCount = relevantLeads.filter(l => {
-        if (l.assignedAt && getDayKey(l.assignedAt) === todayKey) return true;
-        if (Array.isArray(l.assignmentHistories) && l.assignmentHistories.some(h => (h.assignedToId === coord.id || !h.assignedToId) && getDayKey(h.assignedAt) === todayKey)) return true;
-        if (getDayKey(l.createdAt) === todayKey) return true;
-        return false;
-      }).length;
+      // Assigned on current day (Asia/Colombo clinic timezone) using verified assignment event
+      const assignedTodayCount = relevantLeads.filter(l => resolveAssignedColomboDay(l, coord.id) === todayKey).length;
 
-      // Converted leads
-      const convertedCount = relevantLeads.filter(l => l.stage === 'converted').length;
-      const convRate = relevantLeads.length > 0 
-        ? Math.round((convertedCount / relevantLeads.length) * 100) 
+      let appointmentBookedCount = 0;
+      let consultationDoneCount = 0;
+      let treatmentCompletedCount = 0;
+      let paymentReceivedCount = 0;
+      let businessConvertedCount = 0;
+
+      for (const l of relevantLeads) {
+        const cls = classifyLeadStage(l.stage, stageConfigMap.get(normalizeLeadStageKey(l.stage)));
+        if (cls.isAppointmentMilestone) appointmentBookedCount += 1;
+        if (cls.isConsultationMilestone) consultationDoneCount += 1;
+        if (cls.isTreatmentMilestone) treatmentCompletedCount += 1;
+        if (cls.isPaymentMilestone) paymentReceivedCount += 1;
+        if (cls.isBusinessConverted) businessConvertedCount += 1;
+      }
+
+      const clinicalProgressed = appointmentBookedCount + consultationDoneCount;
+      const convRate = relevantLeads.length > 0
+        ? Math.round((businessConvertedCount / relevantLeads.length) * 100)
         : 0;
 
       // Primary Company assignment
@@ -144,24 +157,33 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
         companyCode,
         totalAssigned: relevantLeads.length,
         assignedToday: assignedTodayCount,
-        converted: convertedCount,
+        clinicalProgressed,
+        appointmentBookedCount,
+        consultationDoneCount,
+        treatmentCompletedCount,
+        paymentReceivedCount,
+        converted: businessConvertedCount,
         convRate,
       };
     }).sort((a, b) => {
       if (b.assignedToday !== a.assignedToday) {
         return b.assignedToday - a.assignedToday;
       }
+      if (b.converted !== a.converted) {
+        return b.converted - a.converted;
+      }
       return b.totalAssigned - a.totalAssigned;
     });
-  }, [coordinators, allLeads, selectedCompany, todayKey]);
+  }, [coordinators, allLeads, selectedCompany, todayKey, stageConfigMap]);
 
   // Overall totals across coordinators for quick summary
   const summaryTotals = useMemo(() => {
     return stats.reduce((acc, curr) => ({
       today: acc.today + curr.assignedToday,
       total: acc.total + curr.totalAssigned,
+      clinical: acc.clinical + curr.clinicalProgressed,
       converted: acc.converted + curr.converted
-    }), { today: 0, total: 0, converted: 0 });
+    }), { today: 0, total: 0, clinical: 0, converted: 0 });
   }, [stats]);
 
   const overallConvRate = summaryTotals.total > 0
@@ -586,7 +608,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
         /* VIEW 2: STANDARD ASSIGNMENTS OVERVIEW */
         <div>
           {/* Summary KPI Strip */}
-          <div className="grid grid-cols-3 divide-x divide-slate-100 dark:divide-slate-800/80 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#111b21] text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-4 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 dark:divide-slate-800/80 border-b border-slate-100 dark:border-slate-800/80 bg-white dark:bg-[#111b21] text-xs">
             <div className="px-4 py-2.5 flex items-center justify-between">
               <span className="text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-sky-500" /> Assigned Today
@@ -603,7 +625,15 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                 {summaryTotals.total}
               </span>
             </div>
-            <div className="px-4 py-2.5 flex items-center justify-between">
+            <div className="px-4 py-2.5 flex items-center justify-between" title="Appointments booked + Consultations completed">
+              <span className="text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1.5">
+                <CalendarCheck2 className="w-3.5 h-3.5 text-amber-500" /> Booked / Consulted
+              </span>
+              <span className="font-mono font-bold text-amber-600 dark:text-amber-400 text-sm">
+                {summaryTotals.clinical}
+              </span>
+            </div>
+            <div className="px-4 py-2.5 flex items-center justify-between" title="Closed won, payment received, or treatment completed">
               <span className="text-slate-500 dark:text-slate-400 text-[11px] flex items-center gap-1.5">
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" /> Converted
               </span>
@@ -622,13 +652,14 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                   <th className="py-2.5 px-3">Company</th>
                   <th className="py-2.5 px-3 text-center">Assigned Today</th>
                   <th className="py-2.5 px-3 text-center">Total Assigned</th>
+                  <th className="py-2.5 px-3 text-center">Booked / Consulted</th>
                   <th className="py-2.5 px-4 text-right">Converted</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                 {stats.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="py-6 text-center text-slate-400 dark:text-slate-500 text-xs">
+                    <td colSpan={6} className="py-6 text-center text-slate-400 dark:text-slate-500 text-xs">
                       No staff members registered for this company filter.
                     </td>
                   </tr>
@@ -708,8 +739,21 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
                         </span>
                       </td>
 
+                      {/* Booked / Consulted */}
+                      <td
+                        className="py-2.5 px-3 text-center whitespace-nowrap"
+                        title={`${item.appointmentBookedCount} booked · ${item.consultationDoneCount} consulted`}
+                      >
+                        <span className={`font-mono font-bold ${item.clinicalProgressed > 0 ? 'text-amber-600 dark:text-amber-400' : 'text-slate-400 dark:text-slate-600'}`}>
+                          {item.clinicalProgressed}
+                        </span>
+                      </td>
+
                       {/* Converted */}
-                      <td className="py-2.5 px-4 text-right whitespace-nowrap">
+                      <td
+                        className="py-2.5 px-4 text-right whitespace-nowrap"
+                        title={`${item.paymentReceivedCount} paid · ${item.treatmentCompletedCount} treated`}
+                      >
                         <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                           {item.converted}
                         </span>

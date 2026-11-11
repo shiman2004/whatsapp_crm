@@ -115,6 +115,15 @@ export async function handleCatalogRoutes(req, res, pathname, authUser) {
   // 2. GET /api/stages & GET /api/admin/stages
   if (req.method === 'GET' && (pathname === '/api/stages' || pathname === '/api/admin/stages')) {
     const prisma = getPrisma();
+    const urlObj = new URL(req.url || '/', 'http://localhost');
+    const queryCompany = String(urlObj.searchParams.get('company') || '').trim().toUpperCase();
+    const filterByCompany = (list) => {
+      if (!queryCompany || queryCompany === 'ALL') return list;
+      return list.filter((s) => {
+        const sc = String(s.company || 'ALL').trim().toUpperCase();
+        return !sc || sc === 'ALL' || sc === queryCompany;
+      });
+    };
     if (prisma && getDbStatus()) {
       try {
         const stages = await prisma.leadStageConfig.findMany({
@@ -122,7 +131,7 @@ export async function handleCatalogRoutes(req, res, pathname, authUser) {
         });
         if (stages && stages.length > 0) {
           res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ success: true, stages }));
+          res.end(JSON.stringify({ success: true, stages: filterByCompany(stages) }));
           return true;
         }
       } catch (e) {
@@ -136,14 +145,14 @@ export async function handleCatalogRoutes(req, res, pathname, authUser) {
           `);
           if (Array.isArray(rawStages) && rawStages.length > 0) {
             res.writeHead(200, { 'Content-Type': 'application/json' });
-            res.end(JSON.stringify({ success: true, stages: rawStages }));
+            res.end(JSON.stringify({ success: true, stages: filterByCompany(rawStages) }));
             return true;
           }
         } catch (rawErr) {}
       }
     }
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ success: true, stages: DEFAULT_LEAD_STAGES }));
+    res.end(JSON.stringify({ success: true, stages: filterByCompany(DEFAULT_LEAD_STAGES) }));
     return true;
   }
 

@@ -39,8 +39,14 @@ import {
   UserCheck
 } from 'lucide-react';
 import { CompanyTagBadge } from '../common/CompanyTagBadge';
-import { CompanyCode, LeadStage } from '../../types';
+import { CompanyCode } from '../../types';
 import { getLeadCompany } from '../../utils/companyUtils';
+import {
+  classifyLeadStage,
+  isEligibleStaffForLeaderboard,
+  normalizeLeadStageKey,
+  summarizeStageMetrics,
+} from '../../utils/stageMetrics';
 
 type TimeRange = 'today' | '7d' | '30d' | 'all';
 type EntityFilter = 'all' | 'RWC' | 'CRAS' | 'AHC';
@@ -49,7 +55,7 @@ type BranchFilter = 'all' | 'Colombo' | 'Maruthamunai';
 const CHART_COLORS = ['#10b981', '#f59e0b', '#6366f1', '#ec4899', '#06b6d4', '#8b5cf6', '#14b8a6'];
 
 export const AnalyticsView: React.FC = () => {
-  const { leads, users, categories, treatments, followups, resolvedTheme } = useCrm();
+  const { leads, users, categories, treatments, followups, stages, resolvedTheme } = useCrm();
   const isDark = resolvedTheme === 'dark';
 
   const [timeRange, setTimeRange] = useState<TimeRange>('all');
@@ -130,37 +136,73 @@ export const AnalyticsView: React.FC = () => {
     });
   }, [leads, users, timeRange, selectedEntity, selectedBranch]);
 
-  // Key KPI Calculations
-  const totalInquiries = filteredLeads.length;
-  const convertedLeads = filteredLeads.filter(l => l.stage === 'converted').length;
-  const activeDiscussionLeads = filteredLeads.filter(l => l.stage === 'under_discussion' || l.stage === 'potential').length;
-  const lostLeads = filteredLeads.filter(l => l.stage === 'lost' || l.stage === 'not_relevant' || l.stage === 'not_eligible').length;
+  // Key KPI Calculations (synchronized with dynamic pipeline stage classification)
+  const stageConfigMap = useMemo(() => {
+    const map = new Map<string, typeof stages[number]>();
+    stages.forEach((s) => map.set(normalizeLeadStageKey(s.key), s));
+    return map;
+  }, [stages]);
 
-  const conversionRate = totalInquiries > 0 
-    ? ((convertedLeads / totalInquiries) * 100).toFixed(1) 
-    : '0.0';
+  const stageSummary = useMemo(
+    () => summarizeStageMetrics(filteredLeads, stages),
+    [filteredLeads, stages]
+  );
+
+  const totalInquiries = filteredLeads.length;
+  const convertedLeads = stageSummary.businessConverted;
+  const activeDiscussionLeads = filteredLeads.filter((l) => {
+    const c = classifyLeadStage(l.stage, stageConfigMap.get(normalizeLeadStageKey(l.stage)));
+    return c.isActiveOpen && (c.key === 'under_discussion' || c.key === 'potential' || c.isClinicalProgressed);
+  }).length;
+  const lostLeads = stageSummary.negativeLost;
+
+  const conversionRate = stageSummary.conversionRateExact;
 
   // Average First Response Speed SLA (Simulated clinical response telemetry)
   const avgResponseMinutes = 2.1;
   const slaCompliancePct = 98.4;
 
-  // Stage Velocity Data (Conversion Funnel)
+  // Stage Velocity Data (Conversion Funnel driven by configured pipeline stages)
   const funnelData = useMemo(() => {
-    const stageCounts: Record<string, number> = {
-      'New Inbound': filteredLeads.filter(l => l.stage === 'new').length,
-      'Assigned': filteredLeads.filter(l => l.stage === 'assigned').length,
-      'Contacted': filteredLeads.filter(l => l.stage === 'contacted').length,
-      'Discussion': filteredLeads.filter(l => l.stage === 'under_discussion' || l.stage === 'potential').length,
-      'Converted (Won)': convertedLeads,
-      'Drop-offs / Lost': lostLeads
-    };
+    const countMap = new Map<string, number>();
+    filteredLeads.forEach((l) => {
+      const key = normalizeLeadStageKey(l.stage);
+      countMap.set(key, (countMap.get(key) || 0) + 1);
+    });
 
-    return Object.entries(stageCounts).map(([name, count]) => ({
-      name,
-      count,
-      pct: totalInquiries > 0 ? ((count / totalInquiries) * 100).toFixed(0) : '0'
-    }));
-  }, [filteredLeads, totalInquiries, convertedLeads, lostLeads]);
+    const configured = [...stages]
+      .filter((s) => s.isActive && (!s.company || s.company === 'ALL' || selectedEntity === 'all' || s.company === selectedEntity))
+      .sort((a, b) => a.orderIndex - b.orderIndex);
+
+    const rows: { name: string; count: number; pct: string; color?: string }[] = [];
+    const seen = new Set<string>();
+
+    configured.forEach((s) => {
+      const k = normalizeLeadStageKey(s.key);
+      seen.add(k);
+      const count = countMap.get(k) || 0;
+      rows.push({
+        name: s.label,
+        count,
+        pct: totalInquiries > 0 ? ((count / totalInquiries) * 100).toFixed(0) : '0',
+        color: s.color || undefined,
+      });
+    });
+
+    countMap.forEach((count, key) => {
+      if (!seen.has(key) && count > 0) {
+        const cfg = stageConfigMap.get(key);
+        rows.push({
+          name: cfg?.label || key.replace(/_+/g, ' '),
+          count,
+          pct: totalInquiries > 0 ? ((count / totalInquiries) * 100).toFixed(0) : '0',
+          color: cfg?.color || undefined,
+        });
+      }
+    });
+
+    return rows;
+  }, [filteredLeads, totalInquiries, stages, selectedEntity, stageConfigMap]);
 
   // Hourly Peak Inbound Activity Distribution (08:00 to 22:00)
   const hourlyTrafficData = useMemo(() => {
@@ -187,7 +229,9 @@ export const AnalyticsView: React.FC = () => {
   const categoryDemandData = useMemo(() => {
     return categories.map((cat) => {
       const catLeads = filteredLeads.filter(l => l.categoryId === cat.id);
-      const won = catLeads.filter(l => l.stage === 'converted').length;
+      const won = catLeads.filter((l) =>
+        classifyLeadStage(l.stage, stageConfigMap.get(normalizeLeadStageKey(l.stage))).isBusinessConverted
+      ).length;
       const rate = catLeads.length > 0 ? ((won / catLeads.length) * 100).toFixed(1) : '0.0';
       return {
         id: cat.id,
@@ -211,7 +255,9 @@ export const AnalyticsView: React.FC = () => {
 
     return langs.map(l => {
       const langLeads = filteredLeads.filter(ld => ld.language === l.code);
-      const won = langLeads.filter(ld => ld.stage === 'converted').length;
+      const won = langLeads.filter((ld) =>
+        classifyLeadStage(ld.stage, stageConfigMap.get(normalizeLeadStageKey(ld.stage))).isBusinessConverted
+      ).length;
       return {
         ...l,
         count: langLeads.length,
@@ -224,11 +270,17 @@ export const AnalyticsView: React.FC = () => {
 
   // Coordinators Performance Benchmark
   const coordinatorLeaderboard = useMemo(() => {
-    const staff = users.filter(u => u.role === 'coordinator' || u.role === 'leads_officer');
+    const staff = users.filter(
+      (u) => isEligibleStaffForLeaderboard(u) || (u.active !== false && u.role === 'leads_officer')
+    );
     return staff.map((coord) => {
       const assigned = filteredLeads.filter(l => l.assignedTo === coord.id);
-      const active = assigned.filter(l => l.stage !== 'converted' && l.stage !== 'lost');
-      const won = assigned.filter(l => l.stage === 'converted');
+      const active = assigned.filter((l) =>
+        classifyLeadStage(l.stage, stageConfigMap.get(normalizeLeadStageKey(l.stage))).isActiveOpen
+      );
+      const won = assigned.filter((l) =>
+        classifyLeadStage(l.stage, stageConfigMap.get(normalizeLeadStageKey(l.stage))).isBusinessConverted
+      );
       const winRate = assigned.length > 0 ? ((won.length / assigned.length) * 100).toFixed(1) : '0.0';
 
       return {
@@ -259,7 +311,9 @@ export const AnalyticsView: React.FC = () => {
 
     const getBranchMetric = (branchLeadsList: typeof leads) => {
       const count = branchLeadsList.length;
-      const won = branchLeadsList.filter(l => l.stage === 'converted').length;
+      const won = branchLeadsList.filter((l) =>
+        classifyLeadStage(l.stage, stageConfigMap.get(normalizeLeadStageKey(l.stage))).isBusinessConverted
+      ).length;
       const rate = count > 0 ? ((won / count) * 100).toFixed(1) : '0.0';
       return { count, won, rate };
     };
@@ -426,9 +480,9 @@ export const AnalyticsView: React.FC = () => {
               style={{ width: `${Math.min(100, Math.round((Number(conversionRate) / Math.max(1, reportingTargets.targetConversionRate)) * 100))}%` }}
             />
           </div>
-          <div className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
-            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{convertedLeads} won</span>
-            <span>of {totalInquiries} inquiries</span>
+          <div className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400 mt-1.5">
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold">{convertedLeads} converted</span>
+            <span>of {totalInquiries} ({stageSummary.closedWon} won · {stageSummary.paymentReceived + stageSummary.treatmentCompleted} paid/treated · {stageSummary.appointmentBooked} booked)</span>
           </div>
         </div>
 
@@ -642,9 +696,9 @@ export const AnalyticsView: React.FC = () => {
                 <div className="w-full bg-slate-200 dark:bg-slate-800/80 h-2 rounded-full overflow-hidden">
                   <div 
                     className="h-full rounded-full transition-all duration-500"
-                    style={{ 
+                      style={{ 
                       width: `${Math.max(3, parseFloat(stage.pct))}%`,
-                      backgroundColor: idx === 4 ? '#10b981' : idx === 5 ? '#f43f5e' : CHART_COLORS[idx % CHART_COLORS.length]
+                      backgroundColor: stage.color || CHART_COLORS[idx % CHART_COLORS.length]
                     }}
                   />
                 </div>

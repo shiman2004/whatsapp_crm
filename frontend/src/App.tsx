@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useRef } from 'react';
+import React, { Suspense, useEffect, useRef } from 'react';
 import { CrmProvider, useCrm } from './context/CrmContext';
 import { AppShell } from './components/layout/AppShell';
 import { LoginScreen } from './components/auth/LoginScreen';
@@ -14,31 +14,32 @@ import {
 import { useHashPath } from './hooks/useHashRoute';
 import { EmptyState, InlineLoader } from './components/ui';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
+import { lazyWithChunkRecovery } from './utils/chunkRecovery';
 import { Compass } from 'lucide-react';
 
-// Lazy-loaded secondary & admin modules for code-splitting and small initial chunk sizes
-const DashboardOverview = lazy(() => import('./components/dashboard/DashboardOverview').then((m) => ({ default: m.DashboardOverview })));
-const LeadsView = lazy(() => import('./components/leads/LeadsView').then((m) => ({ default: m.LeadsView })));
-const LeadDetailWorkspace = lazy(() => import('./components/chat/LeadDetailWorkspace').then((m) => ({ default: m.LeadDetailWorkspace })));
-const AnalyticsView = lazy(() => import('./components/analytics/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
-const TreatmentsManager = lazy(() => import('./components/admin/TreatmentsManager').then((m) => ({ default: m.TreatmentsManager })));
-const TemplatesManager = lazy(() => import('./components/admin/TemplatesManager').then((m) => ({ default: m.TemplatesManager })));
-const AuditLogsViewer = lazy(() => import('./components/admin/AuditLogsViewer').then((m) => ({ default: m.AuditLogsViewer })));
-const ArchitectureBlueprint = lazy(() => import('./components/admin/ArchitectureBlueprint').then((m) => ({ default: m.ArchitectureBlueprint })));
-const StudentExamPage = lazy(() => import('./components/StudentExamPage').then((m) => ({ default: m.StudentExamPage })));
-const WebhookSimulatorPlayground = lazy(() => import('./components/admin/WebhookSimulatorPlayground').then((m) => ({ default: m.WebhookSimulatorPlayground })));
-const SuperAdminSettingsView = lazy(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then((m) => ({ default: m.SuperAdminSettingsView })));
-const EnterpriseSettingsHub = lazy(() => import('./components/settings/EnterpriseSettingsHub').then((m) => ({ default: m.default || m.EnterpriseSettingsHub })));
-const SecurityAccessView = lazy(() => import('./components/admin/SecurityAccessView').then((m) => ({ default: m.SecurityAccessView })));
-const UserManagementView = lazy(() => import('./components/admin/user-management/UserManagementView').then((m) => ({ default: m.UserManagementView })));
-const TeamBroadcastView = lazy(() => import('./components/broadcast/TeamBroadcastView').then((m) => ({ default: m.TeamBroadcastView })));
-const AppointmentBookingsView = lazy(() => import('./components/appointments/AppointmentBookingsView').then((m) => ({ default: m.AppointmentBookingsView })));
-const DoctorAvailabilityView = lazy(() => import('./components/appointments/DoctorAvailabilityView').then((m) => ({ default: m.DoctorAvailabilityView })));
-const DoctorScheduleView = lazy(() => import('./components/appointments/DoctorScheduleView').then((m) => ({ default: m.DoctorScheduleView })));
-const MarketingModule = lazy(() => import('./components/marketing/MarketingModule').then((m) => ({ default: m.MarketingModule })));
-const ExamDepartmentWorkspace = lazy(() => import('./components/exam/ExamDepartmentWorkspace').then((m) => ({ default: m.ExamDepartmentWorkspace })));
-const StudentPortal = lazy(() => import('./components/exam/StudentPortal').then((m) => ({ default: m.StudentPortal })));
-const PatientAssessmentWorkspace = lazy(() => import('./components/clinical/PatientAssessmentWorkspace').then((m) => ({ default: m.PatientAssessmentWorkspace })));
+// Lazy-loaded secondary & admin modules with stale-chunk deployment auto-recovery
+const DashboardOverview = lazyWithChunkRecovery(() => import('./components/dashboard/DashboardOverview').then((m) => ({ default: m.DashboardOverview })));
+const LeadsView = lazyWithChunkRecovery(() => import('./components/leads/LeadsView').then((m) => ({ default: m.LeadsView })));
+const LeadDetailWorkspace = lazyWithChunkRecovery(() => import('./components/chat/LeadDetailWorkspace').then((m) => ({ default: m.LeadDetailWorkspace })));
+const AnalyticsView = lazyWithChunkRecovery(() => import('./components/analytics/AnalyticsView').then((m) => ({ default: m.AnalyticsView })));
+const TreatmentsManager = lazyWithChunkRecovery(() => import('./components/admin/TreatmentsManager').then((m) => ({ default: m.TreatmentsManager })));
+const TemplatesManager = lazyWithChunkRecovery(() => import('./components/admin/TemplatesManager').then((m) => ({ default: m.TemplatesManager })));
+const AuditLogsViewer = lazyWithChunkRecovery(() => import('./components/admin/AuditLogsViewer').then((m) => ({ default: m.AuditLogsViewer })));
+const ArchitectureBlueprint = lazyWithChunkRecovery(() => import('./components/admin/ArchitectureBlueprint').then((m) => ({ default: m.ArchitectureBlueprint })));
+const StudentExamPage = lazyWithChunkRecovery(() => import('./components/StudentExamPage').then((m) => ({ default: m.StudentExamPage })));
+const WebhookSimulatorPlayground = lazyWithChunkRecovery(() => import('./components/admin/WebhookSimulatorPlayground').then((m) => ({ default: m.WebhookSimulatorPlayground })));
+const SuperAdminSettingsView = lazyWithChunkRecovery(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then((m) => ({ default: m.SuperAdminSettingsView })));
+const EnterpriseSettingsHub = lazyWithChunkRecovery(() => import('./components/settings/EnterpriseSettingsHub').then((m) => ({ default: m.default || m.EnterpriseSettingsHub })));
+const SecurityAccessView = lazyWithChunkRecovery(() => import('./components/admin/SecurityAccessView').then((m) => ({ default: m.SecurityAccessView })));
+const UserManagementView = lazyWithChunkRecovery(() => import('./components/admin/user-management/UserManagementView').then((m) => ({ default: m.UserManagementView })));
+const TeamBroadcastView = lazyWithChunkRecovery(() => import('./components/broadcast/TeamBroadcastView').then((m) => ({ default: m.TeamBroadcastView })));
+const AppointmentBookingsView = lazyWithChunkRecovery(() => import('./components/appointments/AppointmentBookingsView').then((m) => ({ default: m.AppointmentBookingsView })));
+const DoctorAvailabilityView = lazyWithChunkRecovery(() => import('./components/appointments/DoctorAvailabilityView').then((m) => ({ default: m.DoctorAvailabilityView })));
+const DoctorScheduleView = lazyWithChunkRecovery(() => import('./components/appointments/DoctorScheduleView').then((m) => ({ default: m.DoctorScheduleView })));
+const MarketingModule = lazyWithChunkRecovery(() => import('./components/marketing/MarketingModule').then((m) => ({ default: m.MarketingModule })));
+const ExamDepartmentWorkspace = lazyWithChunkRecovery(() => import('./components/exam/ExamDepartmentWorkspace').then((m) => ({ default: m.ExamDepartmentWorkspace })));
+const StudentPortal = lazyWithChunkRecovery(() => import('./components/exam/StudentPortal').then((m) => ({ default: m.StudentPortal })));
+const PatientAssessmentWorkspace = lazyWithChunkRecovery(() => import('./components/clinical/PatientAssessmentWorkspace').then((m) => ({ default: m.PatientAssessmentWorkspace })));
 
 const NotFound: React.FC = () => (
   <div className="mx-auto mt-10 w-full max-w-xl">

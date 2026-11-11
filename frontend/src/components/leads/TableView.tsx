@@ -225,7 +225,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
   };
 
   const isCras = company === 'CRAS';
-  const coordinators = users.filter(u => u.role === 'coordinator');
+  const coordinators = users.filter(
+    u => u.active !== false && (u.role === 'coordinator' || u.role === 'sales_coordinator')
+  );
   const displayedLeads = contactSort || treatmentSort
     ? [...leads].sort((a, b) => {
         if (contactSort) {
@@ -387,7 +389,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     if (!hasCustomerMessage) {
       return (
         <div
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-800/80 border-slate-700 text-slate-400 whitespace-nowrap shadow-xs"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 whitespace-nowrap shadow-xs"
           title="No inbound customer message timestamp is available"
         >
           <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
@@ -399,7 +401,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     if (isExpired) {
       return (
         <div
-          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-800/80 border-slate-700 text-slate-400 whitespace-nowrap shadow-xs"
+          className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold border bg-slate-100 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 whitespace-nowrap shadow-xs"
           title={`24H Window Expired.\nCustomer last replied: ${formatWindowTimestamp(lastCustomerMsgTime)}`}
         >
           <span className="w-2 h-2 rounded-full bg-slate-500 shrink-0" />
@@ -493,7 +495,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           className="flex flex-col gap-1 whitespace-nowrap"
           title={`First reply sent on ${d.toLocaleString()}${assignedTime > 0 ? ` (${delayText} after assignment)` : ''}`}
         >
-          <div className="flex items-center gap-1.5 text-slate-200 font-semibold font-mono text-xs whitespace-nowrap">
+          <div className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-semibold font-mono text-xs whitespace-nowrap">
             <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
             <span>{dateStr}, {timeStr}</span>
           </div>
@@ -540,7 +542,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
     }
 
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-800 text-slate-400 border border-slate-700 whitespace-nowrap">
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-medium bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-slate-700 whitespace-nowrap">
         No Reply Yet
       </span>
     );
@@ -636,7 +638,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             {creatorName.charAt(0).toUpperCase()}
           </div>
           <div className="min-w-0 flex flex-col">
-            <span className="font-semibold text-slate-200 text-xs truncate leading-tight">
+            <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs truncate leading-tight">
               {creatorName}
             </span>
             <span className="text-[10px] text-slate-400 truncate">
@@ -681,7 +683,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         className="flex items-center gap-2 whitespace-nowrap"
         title={`Assigned by ${assignerName}`}
       >
-        <div className="w-6 h-6 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-400 shrink-0 shadow-xs">
+        <div className="w-6 h-6 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-[10px] font-bold text-teal-600 dark:text-teal-400 shrink-0 shadow-xs">
           {assignerName.charAt(0).toUpperCase()}
         </div>
         <span className="font-semibold text-slate-800 dark:text-slate-200 text-xs whitespace-nowrap leading-tight">{assignerName}</span>
@@ -734,8 +736,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             Pipeline Management Table
           </span>
           <span className="text-slate-600">•</span>
-          <span className="text-[11px] font-semibold text-slate-400">
-            Companies: <span className="text-emerald-300">AHC</span> · <span className="text-rose-300">CRAS</span>
+          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+            Companies: <span className="text-emerald-600 dark:text-emerald-300">RWC</span> · <span className="text-teal-600 dark:text-teal-300">AHC</span> · <span className="text-rose-600 dark:text-rose-300">CRAS</span>
           </span>
         </div>
 
@@ -787,7 +789,18 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             grid-template-columns: 75px 120px 180px 110px 220px 150px 150px 220px 160px 180px 180px 180px 160px 170px 220px 90px 65px 90px 90px;
             min-width: 2860px;
           }
-          .pipeline-table tbody tr, .pipeline-table tbody tr:hover { background: rgb(2 6 23); }
+          .pipeline-table {
+            --pt-row-bg: #ffffff;
+            --pt-row-hover: #f8fafc;
+            --pt-head-bg: #f1f5f9;
+          }
+          :is(.dark, html.dark, [data-theme="dark"]) .pipeline-table {
+            --pt-row-bg: rgb(2, 6, 23);
+            --pt-row-hover: rgb(2, 6, 23);
+            --pt-head-bg: rgb(2, 6, 23);
+          }
+          .pipeline-table tbody tr { background-color: var(--pt-row-bg); }
+          .pipeline-table tbody tr:hover { background-color: var(--pt-row-hover); }
           .pipeline-table th, .pipeline-table td { grid-row: 1; order: initial; }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { grid-column: 1; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { grid-column: 2; }
@@ -815,7 +828,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
           .pipeline-table th:nth-child(3), .pipeline-table td:nth-child(3) {
             position: sticky;
             z-index: 4;
-            background: rgb(2 6 23);
+            background-color: var(--pt-row-bg);
           }
           .pipeline-table th:nth-child(1), .pipeline-table td:nth-child(1) { left: 0; }
           .pipeline-table th:nth-child(2), .pipeline-table td:nth-child(2) { left: 75px; }
@@ -824,7 +837,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             position: sticky;
             right: 0;
             z-index: 5;
-            background: rgb(2 6 23);
+            background-color: var(--pt-row-bg);
           }
           /* Header cells own the vertical sticky position. This keeps the left
              identity headers visible at the top while their columns are fixed horizontally. */
@@ -832,7 +845,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
             position: sticky;
             top: 0;
             z-index: 20;
-            background: rgb(2 6 23);
+            background-color: var(--pt-head-bg);
           }
           .pipeline-table thead th:nth-child(1),
           .pipeline-table thead th:nth-child(2),
@@ -894,11 +907,11 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     setContactSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null);
                     setTreatmentSort(null);
                   }}
-                  className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  className="inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors"
                   title="Sort contacts by name"
                 >
                   Contact
-                  <span className="text-[9px]">{contactSort === 'asc' ? 'â†‘' : contactSort === 'desc' ? 'â†“' : 'â†•'}</span>
+                  <span className="text-[9px]">{contactSort === 'asc' ? '↑' : contactSort === 'desc' ? '↓' : '↕'}</span>
                 </button>
               </th>
               <th className="py-3.5 px-3">Company</th>
@@ -912,7 +925,7 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                     setTreatmentSort(current => current === null ? 'asc' : current === 'asc' ? 'desc' : null);
                     setContactSort(null);
                   }}
-                  className="inline-flex items-center gap-1 hover:text-white transition-colors"
+                  className="inline-flex items-center gap-1 hover:text-slate-900 dark:hover:text-white transition-colors"
                   title="Sort by treatment or service"
                 >
                   Description (Treatment / Service)
@@ -957,8 +970,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                   <tr
                     key={lead.id}
                     onClick={() => onSelectLead(lead.id)}
-                    className={`[&>td]:py-2 hover:bg-slate-800/50 cursor-pointer transition-colors ${
-                      isSelected ? 'bg-teal-950/40' : ''
+                    className={`[&>td]:py-2 hover:bg-slate-100/80 dark:hover:bg-slate-800/50 cursor-pointer transition-colors ${
+                      isSelected ? 'bg-teal-50 dark:bg-teal-950/40' : ''
                     } ${selectedRowIds.has(lead.id) ? 'bg-amber-500/5 dark:bg-amber-500/10' : ''}`}
                   >
                     {/* 1. Sequential row number with row checkbox */}
@@ -1035,10 +1048,10 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
 
                             {/* Dropdown Menu */}
                             <div 
-                              className="absolute left-0 top-full mt-1.5 w-48 bg-[#202C33] dark:bg-[#202C33] border border-[#2A3942] dark:border-[#2A3942] rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100"
+                              className="absolute left-0 top-full mt-1.5 w-48 bg-white dark:bg-[#202C33] border border-slate-200 dark:border-[#2A3942] rounded-xl shadow-2xl z-50 py-1.5 animate-in fade-in zoom-in-95 duration-100"
                               onClick={(e) => e.stopPropagation()}
                             >
-                              <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#2A3942]">
+                              <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-500 dark:text-[#8696a0] uppercase border-b border-slate-200 dark:border-[#2A3942]">
                                 Source Channel
                               </div>
                               <div className="py-1">
@@ -1059,8 +1072,8 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                                       }}
                                       className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer ${
                                         isSelected 
-                                          ? 'bg-teal-500/15 text-teal-300' 
-                                          : 'text-slate-200 hover:bg-[#111B21] hover:text-white'
+                                          ? 'bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300' 
+                                          : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#111B21] hover:text-slate-900 dark:hover:text-white'
                                       }`}
                                     >
                                       <div className="flex items-center gap-2">
@@ -1128,18 +1141,51 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                       )}
                     </td>
 
-                    {/* 6. Current Status */}
+                    {/* 6. Current Status (operational triage kept separate from progressed clinical stages) */}
                     <td className="py-3.5 px-4 min-w-[150px] whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      <select
-                        value={lead.stage === 'assigned' ? 'accepted' : lead.stage === 'lost' ? 'rejected' : 'new'}
-                        onChange={(e) => updateLeadStage(lead.id, e.target.value === 'accepted' ? 'assigned' : e.target.value === 'rejected' ? 'lost' : 'new', 'Current status changed via Pipeline table')}
-                        aria-label={`Change current status for ${lead.customer?.displayName || 'lead'}`}
-                        className={`marketing-status-select rounded-lg border px-2 py-1.5 text-[10px] font-semibold outline-none cursor-pointer [color-scheme:dark] ${lead.stage === 'assigned' ? 'bg-emerald-500/15 border-emerald-500/50 text-emerald-300 focus:border-emerald-400' : lead.stage === 'lost' ? 'bg-rose-500/15 border-rose-500/50 text-rose-300 focus:border-rose-400' : 'bg-sky-500/15 border-sky-500/50 text-sky-300 focus:border-sky-400'}`}
-                      >
-                        <option value="new">New</option>
-                        <option value="accepted">Accept</option>
-                        <option value="rejected">Reject</option>
-                      </select>
+                      {(() => {
+                        const isProgressedStage = lead.stage !== 'new' && lead.stage !== 'assigned' && lead.stage !== 'lost';
+                        const currentStatusValue =
+                          lead.stage === 'lost'
+                            ? 'rejected'
+                            : lead.acceptedAt || lead.stage !== 'new'
+                              ? 'accepted'
+                              : 'new';
+                        return (
+                          <select
+                            value={currentStatusValue}
+                            onChange={(e) => {
+                              const nextStatus = e.target.value;
+                              if (nextStatus === 'accepted') {
+                                const targetStage = isProgressedStage ? lead.stage : 'assigned';
+                                updateLeadStage(
+                                  lead.id,
+                                  targetStage,
+                                  'Current status accepted via Pipeline table',
+                                  undefined,
+                                  lead.acceptedAt || new Date().toISOString()
+                                );
+                              } else if (nextStatus === 'rejected') {
+                                updateLeadStage(lead.id, 'lost', 'Current status rejected via Pipeline table');
+                              } else if (!isProgressedStage) {
+                                updateLeadStage(lead.id, 'new', 'Current status reset via Pipeline table');
+                              }
+                            }}
+                            aria-label={`Change current status for ${lead.customer?.displayName || 'lead'}`}
+                            className={`marketing-status-select rounded-lg border px-2 py-1.5 text-[10px] font-semibold outline-none cursor-pointer bg-white dark:bg-slate-900 ${
+                              currentStatusValue === 'accepted'
+                                ? 'bg-emerald-50 dark:bg-emerald-500/15 border-emerald-300 dark:border-emerald-500/50 text-emerald-700 dark:text-emerald-300 focus:border-emerald-400'
+                                : currentStatusValue === 'rejected'
+                                  ? 'bg-rose-50 dark:bg-rose-500/15 border-rose-300 dark:border-rose-500/50 text-rose-700 dark:text-rose-300 focus:border-rose-400'
+                                  : 'bg-sky-50 dark:bg-sky-500/15 border-sky-300 dark:border-sky-500/50 text-sky-700 dark:text-sky-300 focus:border-sky-400'
+                            }`}
+                          >
+                            <option value="new" disabled={isProgressedStage}>New</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                          </select>
+                        );
+                      })()}
                     </td>
 
                     {/* 8. Coordinator (Wide, Clear, Never Truncated) */}
@@ -1152,7 +1198,13 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                         >
                           <option value="">{lead.assignedTo ? '↩ Recall to Admin (Unassign)' : (isCrasLead ? '-- Assign Counsellor --' : '-- Assign Coordinator --')}</option>
                           {[...coordinators]
-                            .filter(c => isCrasLead ? c.company === 'CRAS' : (c.company === 'RWC' || !c.company))
+                            .filter(c =>
+                              lead.company === 'CRAS'
+                                ? c.company === 'CRAS'
+                                : lead.company === 'AHC'
+                                  ? c.company === 'AHC'
+                                  : (c.company === 'RWC' || !c.company)
+                            )
                             .sort((a, b) => a.fullName.localeCompare(b.fullName))
                             .map((c) => (
                             <option key={c.id} value={c.id}>
@@ -1278,32 +1330,38 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                             />
 
                             {/* Custom Stage Dropdown Menu */}
-                            <div 
-                              className="absolute left-0 top-full mt-1.5 w-64 bg-[#202C33] dark:bg-[#202C33] border border-[#2A3942] dark:border-[#2A3942] rounded-xl shadow-2xl z-50 py-1.5 max-h-72 overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-[#8696a0] uppercase border-b border-[#2A3942] flex items-center justify-between">
-                                <span>Change Output Stage</span>
-                                <span className="text-[9px] text-[#8696a0] font-mono">{activeStages.length} stages</span>
-                              </div>
+                            {(() => {
+                              const rowCompany = (lead.company || (company !== 'ALL' ? company : 'RWC')).toUpperCase();
+                              const rowStages = activeStages.filter(
+                                (s) => !s.company || s.company === 'ALL' || s.company === rowCompany
+                              );
+                              return (
+                                <div 
+                                  className="absolute left-0 top-full mt-1.5 w-64 bg-white dark:bg-[#202C33] border border-slate-200 dark:border-[#2A3942] rounded-xl shadow-2xl z-50 py-1.5 max-h-72 overflow-y-auto animate-in fade-in zoom-in-95 duration-100"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="px-3 py-1.5 text-[10px] font-bold tracking-wider text-slate-500 dark:text-[#8696a0] uppercase border-b border-slate-200 dark:border-[#2A3942] flex items-center justify-between">
+                                    <span>Change Output Stage</span>
+                                    <span className="text-[9px] text-slate-500 dark:text-[#8696a0] font-mono">{rowStages.length} stages</span>
+                                  </div>
 
-                              <div className="py-1">
-                                {activeStages.map((stage) => {
-                                  const isSelected = lead.stage === stage.key;
-                                  return (
-                                    <button
-                                      key={stage.id}
-                                      type="button"
-                                      onClick={() => {
-                                        updateLeadStage(lead.id, stage.key as LeadStage, 'Output changed via Pipeline table');
-                                        setOpenStageMenuLeadId(null);
-                                      }}
-                                      className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer ${
-                                        isSelected 
-                                          ? 'bg-teal-500/15 text-teal-300 dark:text-teal-300 font-bold' 
-                                          : 'text-slate-200 hover:bg-[#111B21] hover:text-white'
-                                      }`}
-                                    >
+                                  <div className="py-1">
+                                    {rowStages.map((stage) => {
+                                      const isSelected = lead.stage === stage.key;
+                                      return (
+                                        <button
+                                          key={stage.id}
+                                          type="button"
+                                          onClick={() => {
+                                            updateLeadStage(lead.id, stage.key as LeadStage, 'Output changed via Pipeline table');
+                                            setOpenStageMenuLeadId(null);
+                                          }}
+                                          className={`w-full flex items-center justify-between px-3 py-2 text-xs font-semibold text-left transition-colors cursor-pointer ${
+                                            isSelected 
+                                              ? 'bg-teal-50 dark:bg-teal-500/15 text-teal-700 dark:text-teal-300 font-bold' 
+                                              : 'text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-[#111B21] hover:text-slate-900 dark:hover:text-white'
+                                          }`}
+                                        >
                                       <div className="flex items-center gap-2 min-w-0">
                                         <span 
                                           className="w-2 h-2 rounded-full shrink-0"
@@ -1311,12 +1369,14 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                                         />
                                         <span className="truncate">{stage.label}</span>
                                       </div>
-                                      {isSelected && <Check className="w-3.5 h-3.5 text-teal-400 shrink-0 stroke-[2.5]" />}
+                                      {isSelected && <Check className="w-3.5 h-3.5 text-teal-500 dark:text-teal-400 shrink-0 stroke-[2.5]" />}
                                     </button>
                                   );
                                 })}
                               </div>
                             </div>
+                              );
+                            })()}
                           </>
                         )}
                       </div>
@@ -1439,9 +1499,9 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
         </div>
 
         {/* Right: Page indicator */}
-        <div className="text-xs text-slate-400 font-mono hidden sm:block">
-          Page <span className="font-semibold text-slate-200">{currentPage}</span> of{' '}
-          <span className="font-semibold text-slate-200">{totalPages}</span>
+        <div className="text-xs text-slate-600 dark:text-slate-400 font-mono hidden sm:block">
+          Page <span className="font-semibold text-slate-900 dark:text-slate-200">{currentPage}</span> of{' '}
+          <span className="font-semibold text-slate-900 dark:text-slate-200">{totalPages}</span>
         </div>
       </div>
 
@@ -1455,22 +1515,22 @@ export const TableView: React.FC<TableViewProps> = ({ leads, onSelectLead, compa
                 <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">Notes · {noteLead.customer?.displayName || 'Lead'}</p>
                 <p className="text-[10px] text-slate-500 font-mono">{noteLead.serialNumber || 'Lead record'} · Internal only</p>
               </div>
-              <button type="button" onClick={closeNotes} className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800" aria-label="Close notes"><X className="w-4 h-4" /></button>
+              <button type="button" onClick={closeNotes} className="p-1.5 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800" aria-label="Close notes"><X className="w-4 h-4" /></button>
             </div>
             <div className="max-h-[45vh] overflow-y-auto p-4 space-y-2.5">
               {leadNotes.length === 0 ? <p className="py-5 text-center text-xs text-slate-500">No internal notes added yet.</p> : leadNotes.map((note) => (
                 <div key={note.id} className="p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950/70 space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-slate-500">
-                    <span className="text-teal-300 font-semibold flex items-center gap-1"><User className="w-3 h-3" />{note.authorName}</span>
+                    <span className="text-teal-700 dark:text-teal-300 font-semibold flex items-center gap-1"><User className="w-3 h-3" />{note.authorName}</span>
                     <span className="font-mono flex items-center gap-1"><NoteClock className="w-2.5 h-2.5" />{new Date(note.updatedAt || note.createdAt).toLocaleString()}</span>
                   </div>
-                  <p className="text-xs text-slate-200 whitespace-pre-line leading-relaxed">{note.note}</p>
-                  <button type="button" onClick={() => { setEditingNoteId(note.id); setNoteText(note.note); }} className="text-[10px] text-slate-400 hover:text-teal-300 inline-flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit note</button>
+                  <p className="text-xs text-slate-800 dark:text-slate-200 whitespace-pre-line leading-relaxed">{note.note}</p>
+                  <button type="button" onClick={() => { setEditingNoteId(note.id); setNoteText(note.note); }} className="text-[10px] text-slate-500 dark:text-slate-400 hover:text-teal-600 dark:hover:text-teal-300 inline-flex items-center gap-1"><Pencil className="w-3 h-3" /> Edit note</button>
                 </div>
               ))}
             </div>
             <form onSubmit={saveNote} className="p-4 border-t border-slate-200 dark:border-slate-800 space-y-2">
-              <label className="text-[11px] font-bold text-slate-300 flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5 text-teal-400" />{editingNoteId ? 'Edit internal note' : 'Add internal note'}</label>
+              <label className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1.5"><StickyNote className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />{editingNoteId ? 'Edit internal note' : 'Add internal note'}</label>
               <textarea rows={3} value={noteText} onChange={(event) => setNoteText(event.target.value)} placeholder={isCras ? 'Add academic background, course requirements, or tuition fee quotes...' : 'Add clinical observations, consultant availability, or price quotes...'} className="w-full resize-none rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 p-2.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 outline-none focus:border-teal-500" autoFocus />
               <div className="flex justify-end gap-2">
                 {editingNoteId && <button type="button" onClick={() => { setEditingNoteId(null); setNoteText(''); }} className="px-3 py-1.5 rounded-lg text-xs text-slate-400 hover:text-white">Cancel</button>}

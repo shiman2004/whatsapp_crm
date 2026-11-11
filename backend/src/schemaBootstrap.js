@@ -285,18 +285,31 @@ const STATEMENTS = [
   // --- UserRole enum values ----------------------------------------------------
   `ALTER TYPE "UserRole" ADD VALUE IF NOT EXISTS 'leads_officer';`,
 
-  // --- LeadStage enum values ---------------------------------------------------
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'new';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'assigned';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'contacted';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'potential';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'under_discussion';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'not_relevant';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'not_eligible';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'converted';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'lost';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'interested';`,
-  `ALTER TYPE "LeadStage" ADD VALUE IF NOT EXISTS 'follow_up';`,
+  // --- Dynamic LeadStage columns (convert fixed enum -> VARCHAR(100) safely) ---
+  `DO $$
+   BEGIN
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'leads' AND column_name = 'stage' AND data_type = 'USER-DEFINED'
+     ) THEN
+       ALTER TABLE "public"."leads" ALTER COLUMN "stage" DROP DEFAULT;
+       ALTER TABLE "public"."leads" ALTER COLUMN "stage" TYPE VARCHAR(100) USING "stage"::text;
+       ALTER TABLE "public"."leads" ALTER COLUMN "stage" SET DEFAULT 'new';
+     END IF;
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'lead_stage_histories' AND column_name = 'fromStage' AND data_type = 'USER-DEFINED'
+     ) THEN
+       ALTER TABLE "public"."lead_stage_histories" ALTER COLUMN "fromStage" TYPE VARCHAR(100) USING "fromStage"::text;
+     END IF;
+     IF EXISTS (
+       SELECT 1 FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'lead_stage_histories' AND column_name = 'toStage' AND data_type = 'USER-DEFINED'
+     ) THEN
+       ALTER TABLE "public"."lead_stage_histories" ALTER COLUMN "toStage" TYPE VARCHAR(100) USING "toStage"::text;
+     END IF;
+   END $$;`,
+  `CREATE INDEX IF NOT EXISTS "leads_stage_idx" ON "public"."leads"("stage");`,
 
   // --- global settings ---------------------------------------------------------
   `CREATE TABLE IF NOT EXISTS public.system_settings (

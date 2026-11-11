@@ -65,10 +65,13 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
   const isCras = company === 'CRAS';
   const isRwc = company === 'RWC';
 
-  // Filter coordinators strictly according to company pipeline
-  const allCoordinators = users.filter(u => u.role === 'coordinator');
+  // Filter active coordinators & sales coordinators strictly according to company pipeline
+  const allCoordinators = users.filter(
+    u => u.active !== false && (u.role === 'coordinator' || u.role === 'sales_coordinator')
+  );
   const relevantCoordinators = allCoordinators.filter(u => {
     if (isCras) return u.company === 'CRAS';
+    if (company === 'AHC') return u.company === 'AHC';
     if (isRwc) return u.company === 'RWC' || !u.company;
     return true;
   });
@@ -287,7 +290,10 @@ export const FiltersBar: React.FC<FiltersBarProps> = ({
             className="min-w-0 bg-transparent text-slate-700 dark:text-slate-300 text-[13px] outline-none cursor-pointer max-w-[100px] lg:max-w-[100px] truncate"
           >
             <option value="" className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">All Lead Stages</option>
-            {stages.filter((stage) => stage.isActive).sort((a, b) => a.orderIndex - b.orderIndex).map((stage) => (
+            {stages
+              .filter((stage) => stage.isActive && (!stage.company || stage.company === 'ALL' || company === 'ALL' || stage.company === company))
+              .sort((a, b) => a.orderIndex - b.orderIndex)
+              .map((stage) => (
               <option key={stage.id} value={stage.key} className="bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200">
                 {stage.label}
               </option>

@@ -90,22 +90,6 @@ enum LanguageCode {
   ta
 }
 
-enum LeadStage {
-  new
-  assigned
-  contacted
-  potential
-  under_discussion
-  forwarded_to_exam_department
-  forwarded_to_processing_department
-  not_relevant
-  not_eligible
-  converted
-  lost
-  interested
-  follow_up
-}
-
 enum MessageDirection {
   inbound
   outbound
@@ -357,7 +341,7 @@ model Lead {
   assignedAt            DateTime?
   acceptedAt            DateTime?
   whatsappSessionId     String?            @db.VarChar(50)
-  stage                 LeadStage          @default(new)
+  stage                 String             @default("new") @db.VarChar(100)
   source                String             @default("whatsapp") @db.VarChar(50)
   company               String?            @default("RWC") @db.VarChar(50)
   language              LanguageCode       @default(en)
@@ -499,8 +483,8 @@ model LeadNote {
 model LeadStageHistory {
   id            String    @id @default(uuid()) @db.VarChar(50)
   leadId        String    @db.VarChar(50)
-  fromStage     LeadStage
-  toStage       LeadStage
+  fromStage     String    @db.VarChar(100)
+  toStage       String    @db.VarChar(100)
   changedById   String    @db.VarChar(36)
   changedByName String    @db.VarChar(255)
   reason        String?   @db.VarChar(500)

@@ -660,6 +660,7 @@ model Doctor {
   branch    String?  @db.VarChar(100)
   phone     String?  @db.VarChar(50)
   avatar    String?  @db.VarChar(500)
+  userId    String?  @map("user_id") @db.VarChar(36)
   isActive  Boolean  @default(true) @map("is_active")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -668,6 +669,7 @@ model Doctor {
 
   @@index([branch])
   @@index([isActive])
+  @@index([userId])
   @@map("doctors")
 }
 

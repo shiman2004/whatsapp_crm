@@ -599,7 +599,9 @@ const STATEMENTS = [
      ('doc-asmy', 'Dr. Asmy', 'Maruthamunai', TRUE, NOW(), NOW()),
      ('doc-reenes', 'Dr. Reenes', 'Maruthamunai', TRUE, NOW(), NOW()),
      ('doc-shrin-siththara', 'Dr. M.A Shrin siththara', 'Maruthamunai', TRUE, NOW(), NOW()),
-     ('doc-numais', 'Dr. Numais', 'Maruthamunai', TRUE, NOW(), NOW())
+     ('doc-numais', 'Dr. Numais', 'Maruthamunai', TRUE, NOW(), NOW()),
+     ('doc-rees-ahamed', 'Dr. Rees Ahamed', 'Colombo', TRUE, NOW(), NOW()),
+     ('doc-zeenath', 'Dr. Zeenath', 'Colombo', TRUE, NOW(), NOW())
    ON CONFLICT (id) DO NOTHING;`,
   `INSERT INTO public.doctor_services (id, doctor_id, name) VALUES
      ('svc-asmy-1', 'doc-asmy', 'PRP consultation'),
@@ -616,7 +618,13 @@ const STATEMENTS = [
      ('svc-shrin-6', 'doc-shrin-siththara', 'Vasti'),
      ('svc-shrin-7', 'doc-shrin-siththara', 'Fomentation therapy'),
      ('svc-numais-1', 'doc-numais', 'Pain management'),
-     ('svc-numais-2', 'doc-numais', 'Skin consultation & treatment')
+     ('svc-numais-2', 'doc-numais', 'Skin consultation & treatment'),
+     ('svc-rees-1', 'doc-rees-ahamed', 'Laser and Aesthetic treatment plus consultation'),
+     ('svc-rees-2', 'doc-rees-ahamed', 'Hair transplant Consultation'),
+     ('svc-rees-3', 'doc-rees-ahamed', 'PRP and GFC treatment plus consultation'),
+     ('svc-rees-4', 'doc-rees-ahamed', 'Advanced Injectable Consultation and treatment'),
+     ('svc-zeenath-1', 'doc-zeenath', 'Hijama consultation & treatment'),
+     ('svc-zeenath-2', 'doc-zeenath', 'Leech consultation & treatment')
    ON CONFLICT (id) DO NOTHING;`,
   // Clinical doctor CRM accounts so the seeded doctors appear in User Management
   // with role access. Passwords are pre-hashed; reset them from the admin UI.
@@ -624,12 +632,16 @@ const STATEMENTS = [
      ('user-doc-asmy', 'Dr. Asmy', 'asmy@royalwellness.lk', 'scrypt:280a84a66b9b3185d2dea03cc14fedc8:52213115b370fb765a377258c113c295f2c999799218694ab3e8c74c3ff496f701a3974d0a1b9ddaa21cbd91ae87fc2c580549d6aa1b9444c1d8650f3ce151ab', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
      ('user-doc-reenes', 'Dr. Reenes', 'reenes@royalwellness.lk', 'scrypt:c465951be0eb178cd7a9658a7edf5ed8:2e852379c4814437c1ac3f5758019fbe8cd7c49a73a9ee92e7824f1c7e3cf1e89d29800c58b224c014572576e9852b94dbc6afeb8f798377e3b973ae4173505b', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
      ('user-doc-shrin-siththara', 'Dr. M.A Shrin siththara', 'shrin@royalwellness.lk', 'scrypt:e0afae4a27f42a804230ef15a919b4c8:acb3cccfc9f8b45a65d12bb4f4dd56c42bd765a305c4436a809a79cec1457025b7269fd65e63c50db252f2d0d39e181f644da0192c939a000800a8c9882c777c', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
-     ('user-doc-numais', 'Dr. Numais', 'numais@royalwellness.lk', 'scrypt:7c07a2e5b5e3999e218852d76ee6d204:a98e7ef2d48d609b14b2b83609e716d32b70963c320d7489ea3e998f42544d3b71478b9a5bfea4a51e4241ef8d0b953dfd0a0f3e5df3f007cd88a3ca082bee60', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW())
+     ('user-doc-numais', 'Dr. Numais', 'numais@royalwellness.lk', 'scrypt:7c07a2e5b5e3999e218852d76ee6d204:a98e7ef2d48d609b14b2b83609e716d32b70963c320d7489ea3e998f42544d3b71478b9a5bfea4a51e4241ef8d0b953dfd0a0f3e5df3f007cd88a3ca082bee60', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
+     ('user-doc-rees-ahamed', 'Dr. Rees Ahamed', 'reesahamed@royalwellness.lk', 'scrypt:230fd1fdc432cd4c993a4fad9e32edba:afe96bd0fb0511fc125b95921bdc1c28171c024800064e1fd0c89c09ccae599ce492da7e2d96fa9deb4e5b9a0d2265ba20f53551dc3ee21b96a9fe0e8f8d957a', 'clinical_doctor', 'Colombo', 'RWC', TRUE, NOW(), NOW())
    ON CONFLICT DO NOTHING;`,
+  `UPDATE public.users SET role = 'clinical_doctor', company = 'RWC', branch = 'Colombo', "updatedAt" = NOW() WHERE email = 'zeenath@royalwellness.lk';`,
   `UPDATE public.doctors SET user_id = 'user-doc-asmy', updated_at = NOW() WHERE id = 'doc-asmy' AND user_id IS NULL;`,
   `UPDATE public.doctors SET user_id = 'user-doc-reenes', updated_at = NOW() WHERE id = 'doc-reenes' AND user_id IS NULL;`,
   `UPDATE public.doctors SET user_id = 'user-doc-shrin-siththara', updated_at = NOW() WHERE id = 'doc-shrin-siththara' AND user_id IS NULL;`,
   `UPDATE public.doctors SET user_id = 'user-doc-numais', updated_at = NOW() WHERE id = 'doc-numais' AND user_id IS NULL;`,
+  `UPDATE public.doctors SET user_id = 'user-doc-rees-ahamed', updated_at = NOW() WHERE id = 'doc-rees-ahamed' AND user_id IS NULL;`,
+  `UPDATE public.doctors SET user_id = (SELECT id FROM public.users WHERE email = 'zeenath@royalwellness.lk'), updated_at = NOW() WHERE id = 'doc-zeenath' AND user_id IS NULL;`,
   `CREATE TABLE IF NOT EXISTS public.room_treatments (
      room_id VARCHAR(50) NOT NULL,
      treatment_id VARCHAR(50) NOT NULL,
@@ -1090,6 +1102,13 @@ export async function ensureSchema(prisma) {
     console.warn('⚠️ [Schema Bootstrap] Error loading enterprise RBAC migration:', err.message);
   }
 
+  // Dr. Zeenath moved from a CRAS coordinator to an RWC clinical doctor; drop
+  // the stale role assignment now that the RBAC tables exist.
+  await runAll(prisma, [
+    `UPDATE public.user_role_assignments SET active = FALSE
+     WHERE user_id = (SELECT id FROM public.users WHERE email = 'zeenath@royalwellness.lk')
+       AND role_key <> 'clinical_doctor';`,
+  ], failures);
 
   if (failures.length > 0) {
     console.warn(`⚠️ [Schema] ${failures.length} bootstrap statement(s) did not apply:`);

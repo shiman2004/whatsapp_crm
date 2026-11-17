@@ -1432,6 +1432,11 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
             return;
           }
 
+          if (data.type === 'WHATSAPP_CONNECTION_UPDATED') {
+            window.dispatchEvent(new CustomEvent('whatsapp-connection-updated', { detail: data }));
+            return;
+          }
+
           if (data.type === 'STAGE_CONFIG_UPDATED') {
             fetchStages();
             return;

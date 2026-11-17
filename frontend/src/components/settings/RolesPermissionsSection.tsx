@@ -407,15 +407,15 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
 
                 {/* Table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[720px] text-left text-xs">
+                  <table className="w-full min-w-[620px] table-fixed text-left text-xs">
                     <thead>
                       <tr className="border-b border-[#E0E5E7] dark:border-[#222D34] text-[11px] font-semibold text-[#667781] dark:text-[#8696A0]">
-                        <th className="pb-2.5 pr-4">Staff Name</th>
-                        <th className="pb-2.5 px-4">Role</th>
-                        <th className="pb-2.5 px-4">Company</th>
-                        <th className="pb-2.5 px-4">Status</th>
-                        <th className="pb-2.5 px-4">Last Login</th>
-                        <th className="pb-2.5 pl-4 text-right">Actions</th>
+                        <th className="pb-2.5 pr-3 w-[26%]">Staff Name</th>
+                        <th className="pb-2.5 px-3 w-[19%]">Role</th>
+                        <th className="pb-2.5 px-3 w-[15%]">Company</th>
+                        <th className="pb-2.5 px-3 w-[12%]">Status</th>
+                        <th className="pb-2.5 px-3 w-[20%]">Last Login</th>
+                        <th className="pb-2.5 pl-3 text-right w-[8%]">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#E0E5E7]/50 dark:divide-[#222D34]/50">
@@ -427,8 +427,8 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
                           className="cursor-pointer hover:bg-[#F0F2F5]/60 dark:hover:bg-[#111B21]/60 transition-colors"
                         >
                             {/* Staff Name & Initial */}
-                            <td className="py-3 pr-4">
-                              <div className="flex items-center space-x-3">
+                            <td className="py-3 pr-3">
+                              <div className="flex items-center space-x-2.5">
                                 <div className="h-8 w-8 rounded-lg bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] flex items-center justify-center text-xs font-bold text-[#111B21] dark:text-[#E9EDEF] shrink-0">
                                   {getInitials(user.fullName)}
                                 </div>
@@ -440,32 +440,34 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
                             </td>
 
                             {/* Role */}
-                            <td className="py-3 px-4 font-medium text-[#111B21] dark:text-[#E9EDEF]">
+                            <td className="py-3 px-3 font-medium text-[#111B21] dark:text-[#E9EDEF] truncate" title={user.roleLabel || formatRoleLabel(user.role)}>
                               {user.roleLabel || formatRoleLabel(user.role)}
                             </td>
 
                             {/* Company */}
-                            <td className="py-3 px-4">
-                              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[#111B21] dark:text-[#E9EDEF]">
+                            <td className="py-3 px-3">
+                              <span className="block max-w-full truncate px-2 py-0.5 rounded-md text-[10px] font-bold bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[#111B21] dark:text-[#E9EDEF]" title={user.company || '—'}>
                                 {user.company || '—'}
                               </span>
                             </td>
 
                             {/* Status */}
-                            <td className="py-3 px-4">
-                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#111B21] dark:text-[#E9EDEF]">
+                            <td className="py-3 px-3">
+                              <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-[#111B21] dark:text-[#E9EDEF] whitespace-nowrap">
                                 <span className={`h-2 w-2 rounded-full ${user.status === 'active' ? 'bg-[#128C7E] dark:bg-[#25D366]' : 'bg-gray-400'}`} />
                                 {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
                               </span>
                             </td>
 
                             {/* Last Login */}
-                            <td className="py-3 px-4 text-[11px] text-[#667781] dark:text-[#8696A0] whitespace-nowrap">
-                              {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never logged in'}
+                            <td className="py-3 px-3 text-[11px] text-[#667781] dark:text-[#8696A0]" title={user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never logged in'}>
+                              <span className="block truncate">
+                                {user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleString() : 'Never logged in'}
+                              </span>
                             </td>
 
                             {/* Actions */}
-                            <td className="py-3 pl-4 text-right" onClick={(event) => event.stopPropagation()}>
+                            <td className="py-3 pl-3 text-right" onClick={(event) => event.stopPropagation()}>
                               <button
                                 type="button"
                                 onClick={() => setDetailUserId(user.id)}

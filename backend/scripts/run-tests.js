@@ -55,6 +55,7 @@ const ALL_SUITES = [
   'test-settings-foundation.test.js',
   'test-pipeline-dynamic-stages.test.js',
   'test-meta-ctwa-attribution.test.js',
+  'test-whatsapp-connections.js',
 ];
 
 if (!fs.existsSync(path.join(backendDir, '.env.test'))) {

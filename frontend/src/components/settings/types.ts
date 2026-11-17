@@ -101,6 +101,17 @@ export const SETTINGS_SECTIONS: SettingsSectionMeta[] = [
     adminOnly: true
   },
   {
+    id: 'whatsapp_connections',
+    num: 4.2,
+    label: 'WhatsApp Connection Settings',
+    shortDesc: 'Registered phone numbers, live Meta Cloud API connection health, reconnect & diagnostics',
+    category: 'communication',
+    scope: 'global',
+    path: '/settings/whatsapp_connections',
+    iconName: 'Radio',
+    adminOnly: true
+  },
+  {
     id: 'whatsapp_messaging',
     num: 4.5,
     label: 'WhatsApp Messaging Configuration',

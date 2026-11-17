@@ -3,6 +3,7 @@ import { CompanyBranchSection } from './CompanyBranchSection';
 import { UserManagementSection } from './UserManagementSection';
 import { RolesPermissionsSection } from './RolesPermissionsSection';
 import { WhatsAppMessagingSection } from './WhatsAppMessagingSection';
+import { WhatsAppConnectionsSection } from './WhatsAppConnectionsSection';
 import { SalesPipelinesSection } from './SalesPipelinesSection';
 import { MarketingSettingsSection } from './MarketingSettingsSection';
 import { ClinicalSettingsSection } from './ClinicalSettingsSection';
@@ -29,13 +30,14 @@ export const EnterpriseSettingsHub: React.FC = () => {
       if (section === 'treatments') return 'clinical';
       if (section === 'stages') return 'sales';
       if (section === 'labels') return 'labels';
+      if (section === 'connections' || section === 'whatsapp_connections') return 'whatsapp_connections';
       return section;
     }
     return 'company';
   };
 
   const [currentSectionId, setCurrentSectionId] = useState<string>(getHashSection());
-  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('RWC');
+  const [selectedCompanyId, setSelectedCompanyId] = useState<string>('ALL');
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -72,6 +74,8 @@ export const EnterpriseSettingsHub: React.FC = () => {
           </div>
         </SettingsLayout>
       );
+    case 'whatsapp_connections':
+      return <WhatsAppConnectionsSection {...commonProps} />;
     case 'whatsapp_messaging':
       return <WhatsAppMessagingSection {...commonProps} />;
     case 'sales':

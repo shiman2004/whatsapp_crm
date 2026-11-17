@@ -297,6 +297,18 @@ export const IntegrationsSection: React.FC<IntegrationsProps> = ({
   const rateLimitReqMin = data?.rateLimitReqMin || 1000;
   const webhookMaxRetries = data?.webhookMaxRetries || 5;
   const hmacEnforced = data?.hmacEnforced !== undefined ? data.hmacEnforced : true;
+  const museAi = data?.museAi || {
+    enabled: false,
+    replyMode: 'approval',
+    endpoint: '',
+    apiKey: '',
+    allTreatments: true,
+    humanHandoff: true,
+    respectWhatsAppWindow: true
+  };
+  const updateMuseAi = (field: string, value: unknown) => {
+    updateField('museAi', { ...museAi, [field]: value });
+  };
 
   // Handlers for API Keys
   const handleOpenGenerateKey = () => {
@@ -1166,6 +1178,85 @@ export const IntegrationsSection: React.FC<IntegrationsProps> = ({
                   />
                 </div>
               </div>
+            </div>
+
+            <div className="lg:col-span-2 bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-5 sm:p-6 shadow-sm space-y-4 transition-colors">
+              <div className="flex items-start justify-between gap-4 border-b border-[#E0E5E7] dark:border-[#222D34] pb-4">
+                <div className="flex items-start space-x-3">
+                  <Zap className="h-4 w-4 mt-0.5 text-[#128C7E] dark:text-[#25D366]" />
+                  <div>
+                    <h3 className="text-sm sm:text-base font-bold text-[#111B21] dark:text-[#E9EDEF]">
+                      Muse AI Client Reply Control
+                    </h3>
+                    <p className="text-[11px] text-[#667781] dark:text-[#8696A0] mt-0.5">
+                      Common patient flow for every treatment, with safe human handoff controls.
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={museAi.enabled === true}
+                    onChange={(e) => updateMuseAi('enabled', e.target.checked)}
+                    className="rounded text-[#128C7E] focus:ring-0"
+                  />
+                  Enable
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF]">
+                  Muse API Endpoint
+                  <input
+                    type="url"
+                    value={museAi.endpoint || ''}
+                    onChange={(e) => updateMuseAi('endpoint', e.target.value)}
+                    placeholder="https://..."
+                    className="mt-1 w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF]">
+                  Muse API Key
+                  <input
+                    type="password"
+                    value={museAi.apiKey || ''}
+                    onChange={(e) => updateMuseAi('apiKey', e.target.value)}
+                    placeholder="Stored encrypted"
+                    className="mt-1 w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  />
+                </label>
+                <label className="block text-xs font-semibold text-[#111B21] dark:text-[#E9EDEF]">
+                  Reply Mode
+                  <select
+                    value={museAi.replyMode || 'approval'}
+                    onChange={(e) => updateMuseAi('replyMode', e.target.value)}
+                    className="mt-1 w-full bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-3 py-2 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40"
+                  >
+                    <option value="approval">Staff approval required</option>
+                    <option value="automatic">Automatic reply</option>
+                  </select>
+                </label>
+                <div className="space-y-2 pt-5">
+                  {[
+                    ['allTreatments', 'Apply to all treatments'],
+                    ['humanHandoff', 'Enable human handoff'],
+                    ['respectWhatsAppWindow', 'Respect WhatsApp 24-hour window']
+                  ].map(([field, label]) => (
+                    <label key={field} className="flex items-center gap-2 text-xs text-[#111B21] dark:text-[#E9EDEF] cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={museAi[field] !== false}
+                        onChange={(e) => updateMuseAi(field, e.target.checked)}
+                        className="rounded text-[#128C7E] focus:ring-0"
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                Automatic mode should only be enabled after the Muse API and treatment flow are verified.
+              </p>
             </div>
           </div>
         )}

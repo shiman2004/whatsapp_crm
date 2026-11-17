@@ -22,7 +22,8 @@ import {
   Save,
   Undo2,
   ShieldAlert,
-  Tag
+  Tag,
+  Radio
 } from 'lucide-react';
 import {
   SETTINGS_SECTIONS,
@@ -67,7 +68,8 @@ const ICON_MAP: Record<string, React.ElementType> = {
   Activity,
   BarChart3,
   Palette,
-  Tag
+  Tag,
+  Radio
 };
 
 export const SettingsLayout: React.FC<SettingsLayoutProps> = ({

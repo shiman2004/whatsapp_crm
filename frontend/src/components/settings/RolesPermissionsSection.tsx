@@ -26,6 +26,7 @@ import { SettingsLayout } from './SettingsLayout';
 import { useCrm } from '../../context/CrmContext';
 import { UserDetailDrawer } from '../admin/user-management/UserDetailDrawer';
 import { setUserManagementTokenReader, userManagementApi, type Department, type ManagedUser } from '../admin/user-management/api';
+import { sanitizeFilterOptions } from '../../utils/filterUtils';
 
 interface RolesPermissionsSectionProps {
   currentSectionId: string;
@@ -375,8 +376,8 @@ export const RolesPermissionsSection: React.FC<RolesPermissionsSectionProps> = (
                     className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
                   >
                     <option value="ALL">Role: All</option>
-                    {[...new Map(staffUsers.map((user) => [user.role, user.roleLabel])).entries()].map(([role, label]) => (
-                      <option key={role} value={role}>{label}</option>
+                    {sanitizeFilterOptions(staffUsers.map((user) => ({ value: user.role, label: user.roleLabel }))).map(({ value, label }) => (
+                      <option key={value} value={value}>{label}</option>
                     ))}
                   </select>
 

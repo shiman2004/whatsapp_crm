@@ -577,12 +577,15 @@ const STATEMENTS = [
      branch VARCHAR(100),
      phone VARCHAR(50),
      avatar VARCHAR(500),
+     user_id VARCHAR(36),
      is_active BOOLEAN DEFAULT TRUE,
      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
    );`,
+  `ALTER TABLE public.doctors ADD COLUMN IF NOT EXISTS user_id VARCHAR(36);`,
   `CREATE INDEX IF NOT EXISTS idx_doctors_branch ON public.doctors(branch);`,
   `CREATE INDEX IF NOT EXISTS idx_doctors_active ON public.doctors(is_active);`,
+  `CREATE INDEX IF NOT EXISTS idx_doctors_user ON public.doctors(user_id);`,
   `CREATE TABLE IF NOT EXISTS public.doctor_services (
      id VARCHAR(50) PRIMARY KEY,
      doctor_id VARCHAR(50) NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
@@ -615,6 +618,18 @@ const STATEMENTS = [
      ('svc-numais-1', 'doc-numais', 'Pain management'),
      ('svc-numais-2', 'doc-numais', 'Skin consultation & treatment')
    ON CONFLICT (id) DO NOTHING;`,
+  // Clinical doctor CRM accounts so the seeded doctors appear in User Management
+  // with role access. Passwords are pre-hashed; reset them from the admin UI.
+  `INSERT INTO public.users (id, "fullName", email, password, role, branch, company, active, "createdAt", "updatedAt") VALUES
+     ('user-doc-asmy', 'Dr. Asmy', 'asmy@royalwellness.lk', 'scrypt:280a84a66b9b3185d2dea03cc14fedc8:52213115b370fb765a377258c113c295f2c999799218694ab3e8c74c3ff496f701a3974d0a1b9ddaa21cbd91ae87fc2c580549d6aa1b9444c1d8650f3ce151ab', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
+     ('user-doc-reenes', 'Dr. Reenes', 'reenes@royalwellness.lk', 'scrypt:c465951be0eb178cd7a9658a7edf5ed8:2e852379c4814437c1ac3f5758019fbe8cd7c49a73a9ee92e7824f1c7e3cf1e89d29800c58b224c014572576e9852b94dbc6afeb8f798377e3b973ae4173505b', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
+     ('user-doc-shrin-siththara', 'Dr. M.A Shrin siththara', 'shrin@royalwellness.lk', 'scrypt:e0afae4a27f42a804230ef15a919b4c8:acb3cccfc9f8b45a65d12bb4f4dd56c42bd765a305c4436a809a79cec1457025b7269fd65e63c50db252f2d0d39e181f644da0192c939a000800a8c9882c777c', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW()),
+     ('user-doc-numais', 'Dr. Numais', 'numais@royalwellness.lk', 'scrypt:7c07a2e5b5e3999e218852d76ee6d204:a98e7ef2d48d609b14b2b83609e716d32b70963c320d7489ea3e998f42544d3b71478b9a5bfea4a51e4241ef8d0b953dfd0a0f3e5df3f007cd88a3ca082bee60', 'clinical_doctor', 'Maruthamunai', 'RWC', TRUE, NOW(), NOW())
+   ON CONFLICT DO NOTHING;`,
+  `UPDATE public.doctors SET user_id = 'user-doc-asmy', updated_at = NOW() WHERE id = 'doc-asmy' AND user_id IS NULL;`,
+  `UPDATE public.doctors SET user_id = 'user-doc-reenes', updated_at = NOW() WHERE id = 'doc-reenes' AND user_id IS NULL;`,
+  `UPDATE public.doctors SET user_id = 'user-doc-shrin-siththara', updated_at = NOW() WHERE id = 'doc-shrin-siththara' AND user_id IS NULL;`,
+  `UPDATE public.doctors SET user_id = 'user-doc-numais', updated_at = NOW() WHERE id = 'doc-numais' AND user_id IS NULL;`,
   `CREATE TABLE IF NOT EXISTS public.room_treatments (
      room_id VARCHAR(50) NOT NULL,
      treatment_id VARCHAR(50) NOT NULL,

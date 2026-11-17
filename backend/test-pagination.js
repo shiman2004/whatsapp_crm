@@ -164,6 +164,19 @@ await check('3.3 A coordinator only sees leads assigned to them', () => {
   }
 });
 
+console.log('\n📦 SECTION: /api/lead-stage-history audit feed');
+
+const history = await get('/api/lead-stage-history');
+await check('Stage history is an array with the frontend timeline shape', () => {
+  assert.strictEqual(history.status, 200);
+  assert(Array.isArray(history.body), 'expected an array of stage changes');
+  for (const h of history.body) {
+    assert(h.id && h.leadId && h.fromStage && h.toStage, 'stage change is missing identity fields');
+    assert.strictEqual(typeof h.changedBy, 'string');
+    assert.strictEqual(typeof h.createdAt, 'string');
+  }
+});
+
 console.log(`\n🎉 ALL PAGINATION TESTS PASSED (${passed} checks)\n`);
 
 // Tear down both sides before exiting. fetch() pools keep-alive sockets in undici's

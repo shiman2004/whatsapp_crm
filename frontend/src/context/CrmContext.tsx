@@ -31,14 +31,7 @@ import {
   INITIAL_TREATMENTS,
   INITIAL_TEMPLATES,
   INITIAL_QUICK_RESPONSES,
-  INITIAL_SEQUENCES,
-  INITIAL_CUSTOMERS,
-  INITIAL_LEADS,
-  INITIAL_MESSAGES,
-  INITIAL_FOLLOWUPS,
-  INITIAL_NOTES,
-  INITIAL_STAGE_HISTORY,
-  INITIAL_AUDIT_LOGS
+  INITIAL_SEQUENCES
 } from '../mockData/initialData';
 import { 
   normalizeWhatsAppNumber, 
@@ -402,39 +395,32 @@ const toClientMessage = (m: any): Message => ({
   waMessageId: m.id,
 });
 
+export const isMockOrDemoUser = (u: { id?: string; email?: string } | null | undefined): boolean => {
+  if (!u) return false;
+  const id = u.id || '';
+  const email = (u.email || '').toLowerCase().trim();
+  return (
+    id === 'user-student-1' ||
+    id === 'user-rwcc-admin-1' ||
+    id === 'fca103e7-9843-4060-ad3f-16b3499e3337' ||
+    email === 'student@royalwellness.lk' ||
+    email === 'rwcc@royalwellness.lk' ||
+    email === 'testing@royalwellness.lk' ||
+    email.startsWith('admin_test_') ||
+    ['6186a081-c8be-40c2-ad05-fc8faba514fe', 'f84ff967-3c72-4d1f-888f-6c1c998e0f40', '5dab2d42-2041-4e58-9b9f-28f73f58b8b4'].includes(id)
+  );
+};
+
 export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Load state with localStorage persistence across refreshes
   const [users, setUsers] = useState<User[]>(() => {
     const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
-    const stored = getStored<User[]>('rw_crm_users', INITIAL_USERS);
-    const filteredStored = stored.filter(u => !deletedUserIds.includes(u.id));
-    const merged = [...filteredStored];
-    for (const initU of INITIAL_USERS) {
-      if (deletedUserIds.includes(initU.id)) continue;
-      const existingIdx = merged.findIndex(u => u.id === initU.id);
-      if (existingIdx === -1) {
-        merged.push(initU);
-      } else {
-        // preserve password and pin defaults if missing
-        merged[existingIdx] = {
-          ...initU,
-          ...merged[existingIdx],
-          password: merged[existingIdx].password || initU.password,
-          pin: merged[existingIdx].pin || initU.pin,
-        };
-      }
-    }
-    const filteredUsers = merged.filter(u => 
-      !['6186a081-c8be-40c2-ad05-fc8faba514fe', 'f84ff967-3c72-4d1f-888f-6c1c998e0f40', '5dab2d42-2041-4e58-9b9f-28f73f58b8b4'].includes(u.id) &&
-      !u.email.startsWith('admin_test_')
-    );
-    try {
-      localStorage.setItem('rw_crm_users', JSON.stringify(filteredUsers));
-    } catch (e) {}
-    return filteredUsers.map(u => ({
+    const stored = getStored<User[]>('rw_crm_users', []);
+    const filteredStored = stored.filter(u => !deletedUserIds.includes(u.id) && !isMockOrDemoUser(u));
+    return filteredStored.map(u => ({
       ...u,
       branch: u.branch || 'Colombo',
-        company: u.role === 'super_admin' ? 'ALL' : ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || 'RWC'),
+      company: u.role === 'super_admin' ? 'ALL' : ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || 'RWC'),
       roleTitle: getStaffRoleTitle(u),
     }));
   });
@@ -445,7 +431,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const [currentUser, setCurrentUser] = useState<User>(() => {
     const authId = localStorage.getItem('rw_crm_auth_user_id');
-    const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    const storedUsers = getStored<User[]>('rw_crm_users', []).filter(u => !isMockOrDemoUser(u));
     let resolvedUser: User | undefined;
     if (authId) {
       resolvedUser = storedUsers.find(u => u.id === authId);
@@ -496,11 +482,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }, [chatLabels]);
 
   const [superAdmins, setSuperAdmins] = useState<User[]>(() => {
-    const storedUsers = getStored<User[]>('rw_crm_users', INITIAL_USERS);
+    const storedUsers = getStored<User[]>('rw_crm_users', []);
     return storedUsers.filter(u => 
       u.role === 'super_admin' && 
-      !['6186a081-c8be-40c2-ad05-fc8faba514fe', 'f84ff967-3c72-4d1f-888f-6c1c998e0f40', '5dab2d42-2041-4e58-9b9f-28f73f58b8b4'].includes(u.id) &&
-      !u.email.startsWith('admin_test_')
+      !isMockOrDemoUser(u)
     );
   });
   const [templates, setTemplates] = useState<WhatsAppTemplate[]>(() => getStored('rw_crm_templates', INITIAL_TEMPLATES));
@@ -521,10 +506,10 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     try { localStorage.removeItem('rw_crm_messages'); } catch { /* ignore */ }
   }, []);
 
-  const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', INITIAL_FOLLOWUPS));
-  const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', INITIAL_NOTES));
-  const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', INITIAL_STAGE_HISTORY));
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', INITIAL_AUDIT_LOGS));
+  const [followups, setFollowups] = useState<Followup[]>(() => getStored('rw_crm_followups', []));
+  const [notes, setNotes] = useState<LeadNote[]>(() => getStored('rw_crm_notes', []));
+  const [stageHistories, setStageHistories] = useState<LeadStageHistory[]>(() => getStored('rw_crm_stage_histories', []));
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => getStored('rw_crm_audit_logs', []));
   const [broadcasts, setBroadcasts] = useState<TeamBroadcast[]>(() => getStored('rw_crm_broadcasts', []));
   const [readBroadcastIds, setReadBroadcastIds] = useState<string[]>(() => {
     const authId = localStorage.getItem('rw_crm_auth_user_id') || 'user-admin-1';
@@ -771,75 +756,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
-  // Poll the durable exam handoff inbox globally so Heads of Exam and assigned
-  // officers receive an alert even while working in another CRM module.
-  const seenExamHandoffsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    const role = String(currentUser?.role || '').toLowerCase();
-    const title = String(currentUser?.roleTitle || '').toLowerCase();
-    const canReceiveAsHead = role === 'super_admin' || role === 'exam_department_manager' || title.includes('head of exam') || title.includes('exam department manager');
-    const canReceiveAsOfficer = role === 'coordinator' || role === 'exam_coordinator' || role === 'exam_providing_officer' || title.includes('exam providing') || title.includes('exam officer');
-    if (!canReceiveAsHead && !canReceiveAsOfficer) return;
-    let stopped = false;
-    let running = false;
-    const poll = async () => {
-      if (stopped || running || document.hidden) return;
-      running = true;
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/exam-ops/handoffs`, { headers: { Authorization: `Bearer ${getAuthToken()}` } });
-        const payload = await response.json();
-        if (!response.ok || !payload.success || !Array.isArray(payload.data)) return;
-        payload.data.forEach((handoff: any) => {
-          const isNewForHead = canReceiveAsHead && ['PENDING_ACCEPTANCE', 'OFFICER_ACCEPTED', 'IN_PROGRESS', 'DELIVERED_TO_CRM'].includes(handoff.status);
-          const isAssignedToOfficer = canReceiveAsOfficer && handoff.assignedOfficerId === currentUser?.id && handoff.status === 'ASSIGNED';
-          if (!isNewForHead && !isAssignedToOfficer) return;
-          const eventKey = `${handoff.id}:${handoff.status}:${canReceiveAsHead ? 'head' : 'officer'}`;
-          if (seenExamHandoffsRef.current.has(eventKey)) return;
-          seenExamHandoffsRef.current.add(eventKey);
-          const eventTimestamp = handoff.status === 'ASSIGNED'
-            ? handoff.assignedAt
-            : handoff.status === 'OFFICER_ACCEPTED'
-              ? handoff.officerAcceptedAt
-              : handoff.status === 'IN_PROGRESS'
-                ? handoff.startedAt
-                : handoff.status === 'DELIVERED_TO_CRM'
-                  ? handoff.completedAt
-                  : handoff.submittedAt;
-          const notificationTime = eventTimestamp || new Date().toISOString();
-          const message = handoff.status === 'PENDING_ACCEPTANCE'
-            ? `New exam materials handoff ${handoff.number || ''} is waiting for acceptance.`.trim()
-            : handoff.status === 'ASSIGNED'
-              ? `Exam handoff ${handoff.number || ''} was assigned to you.`.trim()
-              : handoff.status === 'OFFICER_ACCEPTED'
-                ? `${handoff.officerAcceptedByName || 'Exam officer'} accepted exam handoff ${handoff.number || ''}.`.trim()
-                : handoff.status === 'IN_PROGRESS'
-                  ? `${handoff.assignedOfficerName || 'Exam officer'} started work on exam handoff ${handoff.number || ''}.`.trim()
-                  : `Exam materials for handoff ${handoff.number || ''} were provided successfully.`.trim();
-          dispatchDesktopNotification({
-            id: `exam-handoff-${eventKey}`,
-            leadId: handoff.leadId,
-            customerId: handoff.leadId,
-            contactName: handoff.leadName || 'Exam handoff',
-            contactPhone: handoff.phone || '',
-            messageText: message,
-            timestamp: notificationTime,
-            timeDisplay: new Date(notificationTime).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }),
-            unreadCount: 1,
-            company: 'EXAM',
-          });
-          if (notificationSettingsRef.current.nativeBrowser && 'Notification' in window && Notification.permission === 'granted') {
-            showDesktopNativeNotification('Exam Department — Handoff Update', { body: message, icon: '/logo.png', badge: '/favicon.png', leadId: handoff.leadId, tag: `exam-handoff-${eventKey}` });
-          }
-        });
-      } catch (_) {
-        // The Operations inbox displays storage errors; background polling stays quiet.
-      } finally { running = false; }
-    };
-    void poll();
-    const timer = window.setInterval(() => void poll(), 30000);
-    return () => { stopped = true; window.clearInterval(timer); };
-  }, [currentUser?.id, currentUser?.role, currentUser?.roleTitle, dispatchDesktopNotification]);
-
   const dispatchTestNotification = useCallback(() => {
     if (notificationSettingsRef.current.sound) {
       playWhatsAppChime();
@@ -916,7 +832,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     updatedAt: new Date().toISOString(),
   }));
 
-  // Automatically remove any legacy mock/fake leads on initial load
+  // Automatically remove any legacy mock/fake leads and demo users on initial load
   useEffect(() => {
     const isMockLead = (l: Lead) => {
       const name = l.customer?.displayName?.toLowerCase() || '';
@@ -943,7 +859,27 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (selectedLeadId && !cleanLeadIds.has(selectedLeadId)) {
         setSelectedLeadId(cleanLeads[0]?.id || null);
       }
+      try {
+        localStorage.setItem('rw_crm_leads', JSON.stringify(cleanLeads));
+      } catch {}
     }
+
+    // Clean mock customers and mock users from localStorage and state
+    try {
+      const storedCusts = getStored<Customer[]>('rw_crm_customers', []);
+      const cleanCusts = storedCusts.filter(c => c.id !== 'cust-1' && c.id !== 'cust-2' && c.id !== 'cust-3' && !c.displayName?.toLowerCase().includes('kasun'));
+      if (cleanCusts.length !== storedCusts.length) {
+        localStorage.setItem('rw_crm_customers', JSON.stringify(cleanCusts));
+        setCustomers(cleanCusts);
+      }
+
+      const storedU = getStored<User[]>('rw_crm_users', []);
+      const cleanU = storedU.filter(u => !isMockOrDemoUser(u));
+      if (cleanU.length !== storedU.length) {
+        localStorage.setItem('rw_crm_users', JSON.stringify(cleanU));
+        setUsers(cleanU);
+      }
+    } catch {}
 
     // Auto-normalize any multi-reaction messages to strictly single reaction
     setMessages(prev => {
@@ -1012,15 +948,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(dbCoords) && dbCoords.length > 0) {
           const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const userMap = new Map<string, User>();
-          INITIAL_USERS.forEach(u => {
-            if (!deletedUserIds.includes(u.id)) userMap.set(u.id, u);
-          });
           const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
           storedLocalUsers.forEach(u => {
-            if (!deletedUserIds.includes(u.id) && u.active !== false) userMap.set(u.id, u);
+            if (!deletedUserIds.includes(u.id) && u.active !== false && !isMockOrDemoUser(u)) userMap.set(u.id, u);
           });
           dbCoords.forEach(u => {
-            if (deletedUserIds.includes(u.id) || u.active === false) return;
+            if (deletedUserIds.includes(u.id) || u.active === false || isMockOrDemoUser(u)) return;
             const existingLocal = userMap.get(u.id);
             userMap.set(u.id, {
               ...existingLocal,
@@ -1034,20 +967,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
             });
           });
-          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
+          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id) && !isMockOrDemoUser(u));
           setUsers(updatedUsers);
           localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
         } else if (Array.isArray(dbCoords)) {
           const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
-          const userMap = new Map<string, User>();
-          const superAdmin = INITIAL_USERS.find(u => u.role === 'super_admin') || INITIAL_USERS[0];
-          userMap.set(superAdmin.id, superAdmin);
-          INITIAL_USERS.forEach(u => {
-            if (!deletedUserIds.includes(u.id)) {
-              userMap.set(u.id, u);
-            }
-          });
-          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
+          const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
+          const updatedUsers = storedLocalUsers.filter(u => !deletedUserIds.includes(u.id) && !isMockOrDemoUser(u));
           setUsers(updatedUsers);
           localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
         }
@@ -2682,13 +2608,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const prevStage = lead.stage;
     const prevLeadSnapshot = { ...lead };
     const stageConfigMatch = stages.find(stage => stage.key === newStage);
-    const stageLabel = stageConfigMatch?.label?.toLowerCase() || '';
-    const forwardedToExam = newStage === 'forwarded_to_exam_department' || stageLabel.includes('forwarded to exam');
-    if (forwardedToExam && !examDetails) {
-      setExamHandoffDraft({ leadId, reason });
-      notify('Exam handoff details required', 'Complete the exam country, title, authority, services, client and payment details before forwarding.', 'warning');
-      return false;
-    }
 
     const stageKeyNormalized = String(newStage || '').trim().toLowerCase();
     const computedAcceptedAt = acceptedAtOverride !== undefined
@@ -2782,45 +2701,6 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notify('Stage Updated', `Lead moved to ${stageConfigMatch?.label || effectiveStage.toUpperCase().replace(/_/g, ' ')}`, 'info');
       }
 
-      if (forwardedToExam) {
-        fetch(`${API_BASE_URL}/api/exam-ops/handoffs`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${getAuthToken()}`,
-          },
-          body: JSON.stringify({
-            leadId: lead.id,
-            leadName: examDetails?.clientName || lead.customer?.displayName || 'Unnamed lead',
-            phone: examDetails?.contactNumber || lead.customer?.whatsappNumber || lead.customer?.phoneNumber || '',
-            email: examDetails?.clientEmail || '',
-            profession: lead.categoryId || lead.treatmentId || '',
-            examCountry: examDetails?.examCountry,
-            examTitle: examDetails?.examTitle,
-            authority: examDetails?.authority,
-            priority: examDetails?.priority,
-            services: examDetails?.services,
-            quotationNumber: examDetails?.quotationNumber,
-            clientName: examDetails?.clientName,
-            clientEmail: examDetails?.clientEmail,
-            contactNumber: examDetails?.contactNumber,
-            paymentReceiptUrl: examDetails?.paymentReceiptUrl,
-            paymentReceiptFileName: examDetails?.paymentReceiptFileName,
-            receiptVoucherUrl: examDetails?.receiptVoucherUrl,
-            receiptVoucherFileName: examDetails?.receiptVoucherFileName,
-            receiptVoucherNo: examDetails?.receiptVoucherNo,
-            source: 'Sales Pipeline',
-            company: lead.company || 'RWC',
-            notes: reason || 'Sales forwarded this lead for exam materials and delivery.'
-          })
-        }).then(async response => {
-          if (!response.ok) throw new Error((await response.json().catch(() => ({})))?.error || 'Exam Department handoff failed');
-          notify('Exam Department Notified', `${lead.customer?.displayName || 'Lead'} was added to the Exam Department inbox.`, 'success');
-        }).catch(err => {
-          notify('Exam Handoff Warning', err.message || 'The lead moved cleanly, but the Exam Department inbox could not be updated.', 'warning');
-        });
-      }
-
       const persistedHistory: LeadStageHistory = data?.stageHistory
         ? {
             id: data.stageHistory.id,
@@ -2860,13 +2740,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const cancelExamHandoff = useCallback(() => setExamHandoffDraft(null), []);
-  const submitExamHandoff = useCallback((details: ExamHandoffDetails) => {
-    if (!examHandoffDraft) return;
-    const draft = examHandoffDraft;
-    setExamHandoffDraft(null);
-    updateLeadStage(draft.leadId, 'forwarded_to_exam_department', draft.reason, details);
-  }, [examHandoffDraft, updateLeadStage]);
+  const cancelExamHandoff = useCallback(() => {}, []);
+  const submitExamHandoff = useCallback((_details: ExamHandoffDetails) => {}, []);
 
   // Update lead treatment & generate/save serial number
   const updateLeadTreatment = (leadId: string, treatmentId: string, customSerial?: string) => {
@@ -4886,16 +4761,12 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (Array.isArray(dbCoords)) {
           const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
           const userMap = new Map<string, User>();
-          INITIAL_USERS.forEach(u => {
-            if (!deletedUserIds.includes(u.id)) userMap.set(u.id, u);
-          });
           const storedLocalUsers = getStored<User[]>('rw_crm_users', []);
           storedLocalUsers.forEach(u => {
-            if (!deletedUserIds.includes(u.id) && u.active !== false) userMap.set(u.id, u);
+            if (!deletedUserIds.includes(u.id) && u.active !== false && !isMockOrDemoUser(u)) userMap.set(u.id, u);
           });
           dbCoords.forEach(u => {
-            if (deletedUserIds.includes(u.id) || u.active === false) return;
-            const isSuper = u.role === 'super_admin' || u.id === 'user-admin-1';
+            if (deletedUserIds.includes(u.id) || u.active === false || isMockOrDemoUser(u)) return;
             const existingLocal = userMap.get(u.id);
             userMap.set(u.id, {
               ...existingLocal,
@@ -4909,7 +4780,7 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               activeLeadsCount: u.activeLeadsCount || existingLocal?.activeLeadsCount || 0
             });
           });
-          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id));
+          const updatedUsers = Array.from(userMap.values()).filter(u => !deletedUserIds.includes(u.id) && !isMockOrDemoUser(u));
           setUsers(updatedUsers);
           try {
             localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));

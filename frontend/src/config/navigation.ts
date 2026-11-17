@@ -58,9 +58,7 @@ export type NavTab =
   | 'audit'
   | 'webhook-sandbox'
   | 'architecture'
-  | 'exam'
   | 'marketing'
-  | 'exam-department'
   | 'patient-assessment';
 
 /** Sub-destination inside a module. `intentEvent` lets the existing module
@@ -120,25 +118,6 @@ export const MARKETING_ROLES: UserRole[] = [
   'marketing_officer',
   'marketing_admin',
   'coordinator',
-];
-
-const examChildren: NavChild[] = [
-  { id: 'operations', label: 'Operations & Case Management', icon: Inbox, path: '/exam-department/operations', intentEvent: 'exam-subtab-change', intentValue: 'operations' },
-  { id: 'dashboard', label: 'Operations Dashboard', icon: LayoutDashboard, path: '/exam-department/dashboard', intentEvent: 'exam-subtab-change', intentValue: 'dashboard' },
-  { id: 'courses', label: 'Course Catalog', icon: BookOpen, path: '/exam-department/courses', intentEvent: 'exam-subtab-change', intentValue: 'courses' },
-  { id: 'mcq-practice', label: 'Interactive MCQ Practice', icon: Target, path: '/exam-department/mcq-practice', intentEvent: 'exam-subtab-change', intentValue: 'mcq-practice' },
-  { id: 'mock-tests', label: 'Mock Tests', icon: FileCheck2, path: '/exam-department/mock-tests', intentEvent: 'exam-subtab-change', intentValue: 'mock-tests' },
-  { id: 'question-bank', label: 'Question Bank', icon: Database, path: '/exam-department/question-bank', intentEvent: 'exam-subtab-change', intentValue: 'question-bank' },
-  { id: 'study-materials', label: 'Study Materials', icon: FileText, path: '/exam-department/study-materials', intentEvent: 'exam-subtab-change', intentValue: 'study-materials' },
-  { id: 'guidelines', label: 'Exam Guidelines', icon: ShieldCheck, path: '/exam-department/guidelines', intentEvent: 'exam-subtab-change', intentValue: 'guidelines' },
-  { id: 'my-drafts', label: 'My Drafts & Submissions', icon: Edit3, path: '/exam-department/my-drafts', intentEvent: 'exam-subtab-change', intentValue: 'my-drafts' },
-  { id: 'approval-queue', label: 'Manager Approval Queue', icon: CheckSquare, path: '/exam-department/approval-queue', intentEvent: 'exam-subtab-change', intentValue: 'approval-queue', adminOnly: true },
-  { id: 'progress', label: 'Student Progress', icon: TrendingUp, path: '/exam-department/progress', intentEvent: 'exam-subtab-change', intentValue: 'progress' },
-  { id: 'reports', label: 'Exam Reports & Analytics', icon: BarChart3, path: '/exam-department/reports', intentEvent: 'exam-subtab-change', intentValue: 'reports' },
-  { id: 'results', label: 'Exam Results', icon: Award, path: '/exam-department/results', intentEvent: 'exam-subtab-change', intentValue: 'results' },
-  { id: 'categories', label: 'Categories', icon: Layers, path: '/exam-department/categories', intentEvent: 'exam-subtab-change', intentValue: 'categories' },
-  { id: 'requests', label: 'Material Requests', icon: Inbox, path: '/exam-department/requests', intentEvent: 'exam-subtab-change', intentValue: 'requests' },
-  { id: 'settings', label: 'Exam Settings', icon: Sliders, path: '/exam-department/settings', intentEvent: 'exam-subtab-change', intentValue: 'settings' },
 ];
 
 const settingsChildren: NavChild[] = [
@@ -243,8 +222,8 @@ export const NAV_SECTIONS: NavSection[] = [
     ],
   },
   {
-    id: 'clinical-academic',
-    title: 'Clinical & Academic',
+    id: 'clinical',
+    title: 'Clinical Operations',
     items: [
       {
         id: 'patient-assessment',
@@ -253,23 +232,6 @@ export const NAV_SECTIONS: NavSection[] = [
         icon: ClipboardCheck,
         path: '/patient-assessments',
         clinicalStaffOnly: true,
-      },
-      {
-        id: 'exam-department',
-        label: 'Exam Department',
-        description: 'Academic exams, materials and approvals',
-        icon: ClipboardList,
-        path: '/exam-department',
-        examStaffOnly: true,
-        children: examChildren,
-      },
-      {
-        id: 'exam',
-        label: 'Exam Portal',
-        description: 'Student exam portal',
-        icon: Clock,
-        path: '/exam-portal',
-        studentOnly: true,
       },
     ],
   },
@@ -441,9 +403,6 @@ export function isNavItemVisible(item: NavItem, user: User | null | undefined): 
     if (item.clinicalStaffOnly && user.moduleAccess.clinical !== undefined) {
       return Boolean(user.moduleAccess.clinical);
     }
-    if (item.examStaffOnly && user.moduleAccess.exam !== undefined) {
-      return Boolean(user.moduleAccess.exam);
-    }
     if (item.marketingModule && user.moduleAccess.marketing !== undefined) {
       return Boolean(user.moduleAccess.marketing);
     }
@@ -457,8 +416,6 @@ export function isNavItemVisible(item: NavItem, user: User | null | undefined): 
 
   // 2. Baseline role defaults
   if (item.adminOnly) return (role as string) === 'super_admin';
-  if (item.studentOnly) return String(role) === 'student';
-  if (item.examStaffOnly) return EXAM_STAFF_ROLES.includes(role);
   if (item.clinicalStaffOnly) return CLINICAL_ROLES.includes(role);
   if (item.marketingModule) {
     // Backend remains the authority; this only hides links a role cannot use.

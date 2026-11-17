@@ -26,7 +26,6 @@ const TreatmentsManager = lazyWithChunkRecovery(() => import('./components/admin
 const TemplatesManager = lazyWithChunkRecovery(() => import('./components/admin/TemplatesManager').then((m) => ({ default: m.TemplatesManager })));
 const AuditLogsViewer = lazyWithChunkRecovery(() => import('./components/admin/AuditLogsViewer').then((m) => ({ default: m.AuditLogsViewer })));
 const ArchitectureBlueprint = lazyWithChunkRecovery(() => import('./components/admin/ArchitectureBlueprint').then((m) => ({ default: m.ArchitectureBlueprint })));
-const StudentExamPage = lazyWithChunkRecovery(() => import('./components/StudentExamPage').then((m) => ({ default: m.StudentExamPage })));
 const WebhookSimulatorPlayground = lazyWithChunkRecovery(() => import('./components/admin/WebhookSimulatorPlayground').then((m) => ({ default: m.WebhookSimulatorPlayground })));
 const SuperAdminSettingsView = lazyWithChunkRecovery(() => import('./components/admin/SuperAdminSettings/SuperAdminSettingsView').then((m) => ({ default: m.SuperAdminSettingsView })));
 const EnterpriseSettingsHub = lazyWithChunkRecovery(() => import('./components/settings/EnterpriseSettingsHub').then((m) => ({ default: m.default || m.EnterpriseSettingsHub })));
@@ -37,8 +36,6 @@ const AppointmentBookingsView = lazyWithChunkRecovery(() => import('./components
 const DoctorAvailabilityView = lazyWithChunkRecovery(() => import('./components/appointments/DoctorAvailabilityView').then((m) => ({ default: m.DoctorAvailabilityView })));
 const DoctorScheduleView = lazyWithChunkRecovery(() => import('./components/appointments/DoctorScheduleView').then((m) => ({ default: m.DoctorScheduleView })));
 const MarketingModule = lazyWithChunkRecovery(() => import('./components/marketing/MarketingModule').then((m) => ({ default: m.MarketingModule })));
-const ExamDepartmentWorkspace = lazyWithChunkRecovery(() => import('./components/exam/ExamDepartmentWorkspace').then((m) => ({ default: m.ExamDepartmentWorkspace })));
-const StudentPortal = lazyWithChunkRecovery(() => import('./components/exam/StudentPortal').then((m) => ({ default: m.StudentPortal })));
 const PatientAssessmentWorkspace = lazyWithChunkRecovery(() => import('./components/clinical/PatientAssessmentWorkspace').then((m) => ({ default: m.PatientAssessmentWorkspace })));
 
 const NotFound: React.FC = () => (
@@ -135,20 +132,12 @@ const MainLayout: React.FC = () => {
         return currentUser?.role === 'super_admin' ? <AuditLogsViewer /> : <NotFound />;
       case 'webhook-sandbox':
         return currentUser?.role === 'super_admin' ? <WebhookSimulatorPlayground /> : <NotFound />;
-      case 'exam-department':
-        return ['super_admin', 'coordinator', 'leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer'].includes(currentUser?.role || '') ? (
-          <ExamDepartmentWorkspace initialSubTab={route.child?.id ?? 'operations'} />
-        ) : (
-          <NotFound />
-        );
       case 'patient-assessment':
         return ['super_admin', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(currentUser?.role || '') ? (
           <PatientAssessmentWorkspace />
         ) : (
           <NotFound />
         );
-      case 'exam':
-        return <StudentExamPage />;
       case 'architecture':
         return currentUser?.role === 'super_admin' ? <ArchitectureBlueprint /> : <NotFound />;
       default:
@@ -185,25 +174,6 @@ const RootApp: React.FC = () => {
 };
 
 export default function App() {
-  const [hash, setHash] = React.useState(() => window.location.hash);
-  React.useEffect(() => {
-    const onHash = () => setHash(window.location.hash);
-    window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
-  }, []);
-
-  const isStudent =
-    window.location.pathname.startsWith('/student') ||
-    hash.startsWith('#/student') ||
-    hash === '#student';
-
-  if (isStudent) {
-    return (
-      <Suspense fallback={<InlineLoader label="Loading student portal…" />}>
-        <StudentPortal />
-      </Suspense>
-    );
-  }
   return (
     <CrmProvider>
       <RootApp />

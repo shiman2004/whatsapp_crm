@@ -1,9 +1,5 @@
-import { startExamMonitor } from './examMonitor.js';
-import { handleExamOperations } from './examOperationsRoutes.js';
 import { handleStudentDatabaseRoutes } from './studentDatabaseRoutes.js';
 import { handleClinicalRoutes } from './clinicalRoutes.js';
-import { handleStudentRoutes } from './studentRoutes.js';
-import { handleExamRoutes } from './examRoutes.js';
 import { JWT_SECRET } from './runtimeConfig.js';
 import {
   REQUEST_BODY_LIMITS,
@@ -1227,8 +1223,6 @@ function isPublicRoute(req, pathname) {
     pathname === '/api/templates' ||
     pathname.startsWith('/api/templates')
   )) return true;
-  // 6. Student Portal & Controlled Device Security API Routes (student portal endpoints are public/student-authenticated; admin endpoints require staff authentication)
-  if (pathname.startsWith('/api/student/') && !pathname.startsWith('/api/student/admin/')) return true;
 
   return false;
 }
@@ -2088,23 +2082,6 @@ const server = http.createServer(async (req, res) => {
   // Strict Authentication Enforcement for All Protected CRM Routes (Deny by default)
   let authUser = null;
 
-  // Student Portal Admin Routes require authenticated staff with super_admin or exam_department_manager role
-  if (pathname.startsWith('/api/student/admin/')) {
-    const authResult = await authenticateRequest(req, parsedUrl);
-    if (!authResult.user) {
-      sendApiError(res, authResult.status || 401, 'UNAUTHORIZED', authResult.error || 'Unauthorized: Valid staff authentication credentials required.', correlationId);
-      return;
-    }
-    authUser = authResult.user;
-    if (authUser.role !== 'super_admin' && authUser.role !== 'exam_department_manager') {
-      sendApiError(res, 403, 'FORBIDDEN', 'Administrative access required.', correlationId);
-      return;
-    }
-  }
-
-  // Milestone 2: Student Portal & Controlled Device Security Routes
-  if (await handleStudentRoutes(req, res, pathname, authUser)) return;
-
   if (!isPublicRoute(req, pathname)) {
     if (req.method === 'GET' && pathname === '/api/events') {
       if (parsedUrl.query.ticket) {
@@ -2155,15 +2132,13 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (await handleExamOperations(req, res, pathname, authUser)) return;
   if (await handleSecurityRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleUserManagementRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleSettingsRoutes(req, res, pathname, authUser, correlationId)) return;
   if (await handleStudentDatabaseRoutes(req, res, pathname, authUser)) return;
   if (await handleClinicalRoutes(req, res, pathname, authUser)) return;
-  if (await handleExamRoutes(req, res, pathname, authUser)) return;
   if (await handleCatalogRoutes(req, res, pathname, authUser)) return;
-  if (await handleStaffRoutes(req, res, pathname, authUser, { CANONICAL_USERS, DELETED_USER_IDS })) return;
+  if (await handleStaffRoutes(req, res, pathname, authUser, { CANONICAL_USERS, DELETED_USER_IDS, IS_TEST_ENV })) return;
 
   // 0. Appointment Booking & Room Scheduling Module
   const handledAppointmentRoute = await handleAppointmentRoutes(req, res, pathname, authUser);
@@ -7609,12 +7584,15 @@ const server = http.createServer(async (req, res) => {
                 };
               });
 
-            // Ensure all canonical users (such as Leads Officers) are present even if DB is partially seeded
-            const existingIds = new Set(mappedUsers.map(u => u.id));
-            const existingEmails = new Set(mappedUsers.map(u => (u.email || '').toLowerCase()));
-            for (const canonical of defaultCoordinators) {
-              if (!existingIds.has(canonical.id) && !existingEmails.has((canonical.email || '').toLowerCase())) {
-                mappedUsers.push(canonical);
+            // In test environments only: ensure test coordinators are present if test DB is empty/partial.
+            // In production, strictly return actual database users only (never leak canonical mock users).
+            if (IS_TEST_ENV) {
+              const existingIds = new Set(mappedUsers.map(u => u.id));
+              const existingEmails = new Set(mappedUsers.map(u => (u.email || '').toLowerCase()));
+              for (const canonical of defaultCoordinators) {
+                if (!existingIds.has(canonical.id) && !existingEmails.has((canonical.email || '').toLowerCase())) {
+                  mappedUsers.push(canonical);
+                }
               }
             }
 
@@ -7624,8 +7602,13 @@ const server = http.createServer(async (req, res) => {
           }
         } catch (e) {}
       }
+      if (IS_TEST_ENV) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(defaultCoordinators));
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(defaultCoordinators));
+      res.end(JSON.stringify([]));
       return;
     }
 
@@ -9166,8 +9149,6 @@ export async function startServer() {
     server.once('error', reject);
     server.listen(PORT, '0.0.0.0', async () => {
       // Initialize Socket.io after server starts listening
-      // Legacy exam socket disabled: it trusted client-supplied student identity.
-      startExamMonitor();
       if (getDbStatus()) {
         startInboundMediaRetryWorker({
           getMetaToken: getMetaAccessToken,

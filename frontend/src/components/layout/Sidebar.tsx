@@ -10,6 +10,7 @@ import {
   X,
   Bell,
   Layers,
+  Sparkles,
 } from 'lucide-react';
 import { useCrm } from '../../context/CrmContext';
 import {
@@ -50,6 +51,13 @@ const ROLE_LABEL: Record<string, string> = {
 };
 
 const COLLAPSE_KEY = 'ahc_sidebar_collapsed';
+
+// Muse blocks iframes (X-Frame-Options: SAMEORIGIN), so it opens in a popup we own
+// and re-navigate every 10 min. shortcut: refresh only works while this CRM tab and
+// the popup both stay open; upgrade to an API feed if Muse ever exposes one.
+const MUSE_THREAD_URL = 'https://muse.ai/thread/0ded8f20-7509-40be-b246-5db410ac4b03';
+const MUSE_WINDOW_NAME = 'ahc-muse-agent';
+const MUSE_REFRESH_MS = 10 * 60 * 1000;
 
 const Badge: React.FC<{ value?: number | string; tone?: 'teal' | 'amber' | 'rose'; collapsed?: boolean }> = ({
   value,
@@ -110,6 +118,22 @@ export const Sidebar: React.FC<SidebarProps> = ({ setActiveTab, isMobileOpen = f
   const [query, setQuery] = React.useState('');
   const [collapsedSections, setCollapsedSections] = React.useState<Record<string, boolean>>({});
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
+  const museWindowRef = React.useRef<Window | null>(null);
+
+  const openMuse = () => {
+    // Same window name → a second click reuses and reloads the same tab.
+    museWindowRef.current = window.open(MUSE_THREAD_URL, MUSE_WINDOW_NAME) || museWindowRef.current;
+  };
+
+  React.useEffect(() => {
+    const timer = window.setInterval(() => {
+      const win = museWindowRef.current;
+      if (!win || win.closed) return;
+      // Cross-origin windows can't be told to reload(); re-assigning the URL navigates them.
+      win.location.href = MUSE_THREAD_URL;
+    }, MUSE_REFRESH_MS);
+    return () => window.clearInterval(timer);
+  }, []);
 
   React.useEffect(() => {
     try {
@@ -420,6 +444,20 @@ export const Sidebar: React.FC<SidebarProps> = ({ setActiveTab, isMobileOpen = f
             );
           })}
         </nav>
+
+        {/* Muse agent launcher */}
+        <button
+          type="button"
+          onClick={openMuse}
+          title="Open Muse agent (auto-refreshes every 10 min)"
+          className={cn(
+            'mx-2 mb-1 flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-[12px] font-medium text-[#111B21] transition-colors hover:bg-[#F0F2F5] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#25D366] dark:text-[#E9EDEF] dark:hover:bg-[#2A3942]',
+            isCollapsed && 'md:justify-center md:px-2',
+          )}
+        >
+          <Sparkles className="h-4 w-4 shrink-0 text-[#667781] dark:text-[#8696A0]" />
+          <span className={cn('truncate', isCollapsed && 'md:hidden')}>Muse Agent</span>
+        </button>
 
         {/* Account footer */}
         <div className="relative shrink-0 border-t border-[#E0E5E7] bg-[#F0F2F5] p-2 dark:border-[#222D34] dark:bg-[#202C33]">

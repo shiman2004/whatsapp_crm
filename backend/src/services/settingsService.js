@@ -133,10 +133,21 @@ export const DEFAULT_SETTINGS = {
     density: 'comfortable',
     language: 'en',
     timezone: 'Asia/Colombo'
+  },
+  integrations: {
+    museAi: {
+      enabled: String(process.env.MUSE_AI_ENABLED || '').toLowerCase() === 'true',
+      replyMode: process.env.MUSE_AI_REPLY_MODE === 'automatic' ? 'automatic' : 'approval',
+      endpoint: String(process.env.MUSE_AI_ENDPOINT || '').trim(),
+      apiKey: String(process.env.MUSE_AI_API_KEY || '').trim(),
+      allTreatments: true,
+      humanHandoff: true,
+      respectWhatsAppWindow: true
+    }
   }
 };
 
-const SECRET_FIELDS = ['smtpPassword', 'signingSecret', 'secretKey', 'webhookSecret'];
+const SECRET_FIELDS = ['smtpPassword', 'signingSecret', 'secretKey', 'webhookSecret', 'apiKey'];
 
 export function maskSecrets(obj) {
   if (!obj || typeof obj !== 'object') return obj;

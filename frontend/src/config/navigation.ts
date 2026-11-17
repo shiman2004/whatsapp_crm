@@ -39,6 +39,7 @@ import {
   TrendingUp,
   Award,
   Tag,
+  Radio,
 } from 'lucide-react';
 import type { User, UserRole } from '../types';
 
@@ -125,6 +126,7 @@ const settingsChildren: NavChild[] = [
   { id: 'users', label: 'User Management', icon: Users, path: '/settings/users' },
   { id: 'roles', label: 'Role Access & Monitoring', icon: ShieldCheck, path: '/settings/roles' },
   { id: 'labels', label: 'Assign Labels', icon: Tag, path: '/settings/labels', adminOnly: true },
+  { id: 'whatsapp_connections', label: 'WhatsApp Connection Settings', icon: Radio, path: '/settings/whatsapp_connections', adminOnly: true },
   { id: 'whatsapp_messaging', label: 'WhatsApp Messaging Configuration', icon: MessageSquare, path: '/settings/whatsapp_messaging' },
   { id: 'sales', label: 'Leads & Pipeline Settings', icon: KanbanSquare, path: '/settings/sales' },
   { id: 'marketing', label: 'Contacts & Marketing Settings', icon: Megaphone, path: '/settings/marketing' },

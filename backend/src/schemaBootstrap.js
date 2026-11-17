@@ -272,6 +272,52 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_message_audits_sender ON public.message_audits(sender_id);`,
   `CREATE INDEX IF NOT EXISTS idx_message_audits_sent ON public.message_audits(sent_at DESC);`,
 
+  // --- whatsapp connections & health management -------------------------------
+  `CREATE TABLE IF NOT EXISTS public.whatsapp_connections (
+     id VARCHAR(50) PRIMARY KEY,
+     company VARCHAR(50) NOT NULL,
+     business_name VARCHAR(255) NOT NULL,
+     branch VARCHAR(255) NOT NULL,
+     display_name VARCHAR(255) NOT NULL,
+     phone_number VARCHAR(50) NOT NULL,
+     phone_number_id VARCHAR(100) NOT NULL,
+     waba_id VARCHAR(100) NOT NULL,
+     connection_status VARCHAR(50) DEFAULT 'UNKNOWN',
+     quality_rating VARCHAR(50) DEFAULT 'UNKNOWN',
+     code_verification_status VARCHAR(50) DEFAULT 'UNKNOWN',
+     webhook_status VARCHAR(50) DEFAULT 'UNKNOWN',
+     last_checked_at TIMESTAMP WITH TIME ZONE,
+     last_connected_at TIMESTAMP WITH TIME ZONE,
+     last_error TEXT,
+     last_error_at TIMESTAMP WITH TIME ZONE,
+     last_reconnect_attempt_at TIMESTAMP WITH TIME ZONE,
+     reconnect_in_progress BOOLEAN DEFAULT FALSE,
+     metadata JSONB DEFAULT '{}'::jsonb,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_wa_conn_company ON public.whatsapp_connections(company);`,
+  `CREATE INDEX IF NOT EXISTS idx_wa_conn_status ON public.whatsapp_connections(connection_status);`,
+  `CREATE TABLE IF NOT EXISTS public.whatsapp_connection_logs (
+     id VARCHAR(50) PRIMARY KEY,
+     connection_id VARCHAR(50) NOT NULL,
+     event_type VARCHAR(50) NOT NULL,
+     status VARCHAR(50) NOT NULL,
+     response_time_ms INT,
+     performed_by_id VARCHAR(100),
+     performed_by_name VARCHAR(255),
+     details JSONB DEFAULT '{}'::jsonb,
+     error_message TEXT,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_wa_conn_logs_conn ON public.whatsapp_connection_logs(connection_id, created_at DESC);`,
+  `INSERT INTO public.whatsapp_connections (id, company, business_name, branch, display_name, phone_number, phone_number_id, waba_id)
+   VALUES
+     ('conn-rwc', 'RWC', 'Royal Wellness Center', 'Colombo (Head Office)', 'Royal Wellness Center', '+94 70 639 3353', '1358157244046701', '2332922997481634'),
+     ('conn-cras', 'CRAS', 'College of Royal Aesthetic of Sri Lanka', 'Maruthamunai / Colombo', 'CRAS College', '+94 70 637 3353', '1378201582041705', '2332922997481634'),
+     ('conn-ahc', 'AHC', 'Alpha Health Consultancy', 'Dubai / International', 'Alpha Health Consultancy', '+971 54 372 3912', '1408148915714830', '1141190518257266')
+   ON CONFLICT (id) DO NOTHING;`,
+
   // --- messages sender audit columns ------------------------------------------
   `ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "senderName" VARCHAR(255);`,
   `ALTER TABLE "messages" ADD COLUMN IF NOT EXISTS "senderRole" VARCHAR(50);`,

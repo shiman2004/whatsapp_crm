@@ -188,6 +188,18 @@ export const MetaApiModal: React.FC<MetaApiModalProps> = ({ isOpen, onClose }) =
             </div>
           </div>
 
+          {/* Quick link to Multi-brand Connection Settings */}
+          <div className="p-3 bg-slate-800/60 border border-slate-700/60 rounded-xl flex items-center justify-between text-xs">
+            <span className="text-slate-300">Need to monitor health or reconnect phone numbers?</span>
+            <a
+              href="#/settings/whatsapp_connections"
+              onClick={onClose}
+              className="px-2.5 py-1 rounded-lg bg-[#128C7E] text-white font-bold hover:bg-[#075E54] transition-all"
+            >
+              Connection Settings
+            </a>
+          </div>
+
           {/* Credentials Info */}
           <div className="grid grid-cols-2 gap-3 text-xs">
             <div className="p-3 bg-[#202c33] rounded-xl border border-slate-800">

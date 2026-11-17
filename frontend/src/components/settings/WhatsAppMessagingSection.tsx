@@ -24,7 +24,9 @@ import {
   CheckCheck,
   Key,
   RefreshCw,
-  Copy
+  Copy,
+  Radio,
+  ChevronRight
 } from 'lucide-react';
 import { useSettingsSection } from './useSettingsSection';
 import { SettingsLayout } from './SettingsLayout';
@@ -800,6 +802,27 @@ export const WhatsAppMessagingSection: React.FC<WhatsAppMessagingProps> = ({
         {/* ========================================================================= */}
         {activeTab === 'channels' && (
           <div className="space-y-6">
+            {/* Quick jump to WhatsApp Connection Settings Dashboard */}
+            <div className="bg-[#DDF5EC]/50 dark:bg-[#005C4B]/20 border border-[#128C7E]/30 dark:border-[#25D366]/30 rounded-2xl p-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-xs font-bold text-[#075E54] dark:text-[#25D366]">
+                  <Radio className="h-4 w-4" />
+                  <span>WhatsApp Connection Settings & Reconnect Management</span>
+                </div>
+                <p className="text-xs text-[#667781] dark:text-[#8696A0]">
+                  View live connection health across all registered WhatsApp numbers (RWC, CRAS, AHC), run diagnostic tests, and execute safe reconnections.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => onSelectSection('whatsapp_connections')}
+                className="px-4 py-2 rounded-xl bg-[#128C7E] hover:bg-[#075E54] dark:bg-[#25D366] dark:hover:bg-[#128C7E] text-white dark:text-[#111B21] text-xs font-bold transition-all shadow-sm flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <span>Open Connection Dashboard</span>
+                <ChevronRight className="h-3.5 w-3.5" />
+              </button>
+            </div>
+
             {/* 1. Live Meta Cloud API Gateway Status */}
             <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-6 shadow-sm space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E0E5E7] dark:border-[#222D34] pb-4">

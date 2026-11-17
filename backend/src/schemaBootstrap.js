@@ -572,7 +572,7 @@ const STATEMENTS = [
   `CREATE INDEX IF NOT EXISTS idx_rooms_branch ON public.rooms(branch_id);`,
   `CREATE TABLE IF NOT EXISTS public.doctors (
      id VARCHAR(50) PRIMARY KEY,
-     full_name VARCHAR(255) NOT NULL,
+     "fullName" VARCHAR(255) NOT NULL,
      title VARCHAR(255),
      branch VARCHAR(100),
      phone VARCHAR(50),
@@ -583,6 +583,38 @@ const STATEMENTS = [
    );`,
   `CREATE INDEX IF NOT EXISTS idx_doctors_branch ON public.doctors(branch);`,
   `CREATE INDEX IF NOT EXISTS idx_doctors_active ON public.doctors(is_active);`,
+  `CREATE TABLE IF NOT EXISTS public.doctor_services (
+     id VARCHAR(50) PRIMARY KEY,
+     doctor_id VARCHAR(50) NOT NULL REFERENCES public.doctors(id) ON DELETE CASCADE,
+     name VARCHAR(255) NOT NULL,
+     active BOOLEAN DEFAULT TRUE,
+     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+   );`,
+  `CREATE INDEX IF NOT EXISTS idx_doctor_services_doctor ON public.doctor_services(doctor_id);`,
+  `INSERT INTO public.doctors (id, "fullName", branch, is_active, created_at, updated_at) VALUES
+     ('doc-asmy', 'Dr. Asmy', 'Maruthamunai', TRUE, NOW(), NOW()),
+     ('doc-reenes', 'Dr. Reenes', 'Maruthamunai', TRUE, NOW(), NOW()),
+     ('doc-shrin-siththara', 'Dr. M.A Shrin siththara', 'Maruthamunai', TRUE, NOW(), NOW()),
+     ('doc-numais', 'Dr. Numais', 'Maruthamunai', TRUE, NOW(), NOW())
+   ON CONFLICT (id) DO NOTHING;`,
+  `INSERT INTO public.doctor_services (id, doctor_id, name) VALUES
+     ('svc-asmy-1', 'doc-asmy', 'PRP consultation'),
+     ('svc-asmy-2', 'doc-asmy', 'Hair transplantation consultation'),
+     ('svc-reenes-1', 'doc-reenes', 'PRP Treatment'),
+     ('svc-reenes-2', 'doc-reenes', 'Unwanted hair removal (Laser treatment)'),
+     ('svc-reenes-3', 'doc-reenes', 'Skin consultation & treatment'),
+     ('svc-reenes-4', 'doc-reenes', 'Hydra facial'),
+     ('svc-shrin-1', 'doc-shrin-siththara', 'Hijama therapy'),
+     ('svc-shrin-2', 'doc-shrin-siththara', 'Leech therapy'),
+     ('svc-shrin-3', 'doc-shrin-siththara', 'Nasya'),
+     ('svc-shrin-4', 'doc-shrin-siththara', 'Venesection'),
+     ('svc-shrin-5', 'doc-shrin-siththara', 'Ayurvedic massage (female only)'),
+     ('svc-shrin-6', 'doc-shrin-siththara', 'Vasti'),
+     ('svc-shrin-7', 'doc-shrin-siththara', 'Fomentation therapy'),
+     ('svc-numais-1', 'doc-numais', 'Pain management'),
+     ('svc-numais-2', 'doc-numais', 'Skin consultation & treatment')
+   ON CONFLICT (id) DO NOTHING;`,
   `CREATE TABLE IF NOT EXISTS public.room_treatments (
      room_id VARCHAR(50) NOT NULL,
      treatment_id VARCHAR(50) NOT NULL,

@@ -243,7 +243,7 @@ export const CoordinatorLeaderboard: React.FC<CoordinatorLeaderboardProps> = ({
       // Distribution per dynamic stage
       const distribution: Record<string, { count: number; percentage: number }> = {};
       dynamicStages.forEach(st => {
-        const stageCount = timeframeLeads.filter(l => l.stage === st.key).length;
+        const stageCount = timeframeLeads.filter(l => normalizeLeadStageKey(l.stage) === normalizeLeadStageKey(st.key)).length;
         const pct = totalPeriodLeads > 0 ? Math.round((stageCount / totalPeriodLeads) * 100) : 0;
         distribution[st.key] = {
           count: stageCount,

@@ -5832,6 +5832,46 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // 10b. REST: Recent lead stage changes (audit feed for the dashboard).
+  // Uses the same visibility rule as /api/leads: assigned-only for staff, all for admin.
+  if (req.method === 'GET' && pathname === '/api/lead-stage-history') {
+    const prisma = getPrisma();
+    if (prisma && getDbStatus()) {
+      try {
+        const where = {};
+        if (['coordinator', 'sales_coordinator', 'clinical_nurse'].includes(authUser?.role)) {
+          where.lead = { assignedTo: authUser.id };
+        }
+        const rows = await prisma.leadStageHistory.findMany({
+          where,
+          orderBy: { timestamp: 'desc' },
+          take: 50,
+          select: {
+            id: true, leadId: true, fromStage: true, toStage: true,
+            changedById: true, changedByName: true, reason: true, timestamp: true,
+          },
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(rows.map((r) => ({
+          id: r.id,
+          leadId: r.leadId,
+          fromStage: r.fromStage,
+          toStage: r.toStage,
+          changedBy: r.changedById,
+          changedByName: r.changedByName,
+          reason: r.reason || undefined,
+          createdAt: r.timestamp.toISOString(),
+        }))));
+        return;
+      } catch (e) {
+        console.error('Error fetching lead stage history:', e);
+      }
+    }
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify([]));
+    return;
+  }
+
   // 10c. REST: Bulk Recall Assigned Inquiries to Admin (Strictly Super Admin only)
   if (req.method === 'POST' && pathname === '/api/leads/recall-bulk') {
     let body = '';

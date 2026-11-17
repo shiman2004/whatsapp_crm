@@ -919,12 +919,13 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // Paginated fetch: lead summaries + the most recent message page only.
       // Older history is loaded on demand (see loadOlderMessages).
-      const [leadsRes, msgsRes, metaRes, coordsRes, broadcastsRes] = await Promise.all([
+      const [leadsRes, msgsRes, metaRes, coordsRes, broadcastsRes, historyRes] = await Promise.all([
         fetch(`${API_BASE_URL}/api/leads?paginate=1&pageSize=200`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/messages?paginate=1&limit=200`, { headers: authHeaders }).catch(() => null),
         fetch(`${API_BASE_URL}/api/meta/config`, { headers: { Authorization: token ? `Bearer ${token}` : '' } }).catch(() => null),
         fetch(`${API_BASE_URL}/api/coordinators`, { headers: authHeaders }).catch(() => null),
-        fetch(`${API_BASE_URL}/api/broadcasts`, { headers: authHeaders }).catch(() => null)
+        fetch(`${API_BASE_URL}/api/broadcasts`, { headers: authHeaders }).catch(() => null),
+        fetch(`${API_BASE_URL}/api/lead-stage-history`, { headers: authHeaders }).catch(() => null)
       ]);
 
       // Dynamic Catalogs & Stage Config Fetch
@@ -990,6 +991,14 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           const updatedUsers = storedLocalUsers.filter(u => !deletedUserIds.includes(u.id) && !isMockOrDemoUser(u));
           setUsers(updatedUsers);
           localStorage.setItem('rw_crm_users', JSON.stringify(updatedUsers));
+        }
+      }
+
+      if (historyRes && historyRes.ok) {
+        const historyData = await historyRes.json().catch(() => []);
+        if (Array.isArray(historyData)) {
+          setStageHistories(historyData);
+          localStorage.setItem('rw_crm_stage_histories', JSON.stringify(historyData));
         }
       }
 

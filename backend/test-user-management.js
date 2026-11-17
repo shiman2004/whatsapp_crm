@@ -318,6 +318,7 @@ async function main() {
   }
 
   console.log('\n🎉 USER MANAGEMENT AUTHORIZATION SUITE PASSED');
+  process.exit(0);
 }
 
 main().catch(async error => {

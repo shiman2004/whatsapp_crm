@@ -4,7 +4,6 @@ import { CourseManagementTab } from './CourseManagementTab';
 import { TreatmentManagementTab } from './TreatmentManagementTab';
 import { StageManagementTab } from './StageManagementTab';
 import { AdminAccountsTab } from './AdminAccountsTab';
-import { ExamSettingsView } from '../../exam/ExamSettingsView';
 import { LabelManagementTab } from './LabelManagementTab';
 import {
   Sliders,
@@ -18,9 +17,9 @@ import {
   Tag
 } from 'lucide-react';
 
-type SettingsTab = 'courses' | 'treatments' | 'stages' | 'labels' | 'admins' | 'exam-settings';
+type SettingsTab = 'courses' | 'treatments' | 'stages' | 'labels' | 'admins';
 
-const SETTINGS_TABS: SettingsTab[] = ['courses', 'treatments', 'stages', 'labels', 'admins', 'exam-settings'];
+const SETTINGS_TABS: SettingsTab[] = ['courses', 'treatments', 'stages', 'labels', 'admins'];
 
 /** Cold-load deep links (#/settings/admins) must open the right tab before the
  *  sidebar's settings-subtab-change event can reach this lazy-mounted module. */
@@ -120,16 +119,6 @@ export const SuperAdminSettingsView: React.FC = () => {
       tag: 'SECURITY',
       tagColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40',
     },
-    {
-      id: 'exam-settings' as SettingsTab,
-      label: 'Exam Department',
-      subtitle: 'Pass Thresholds & Governance',
-      icon: GraduationCap,
-      color: 'text-teal-400',
-      activeBg: 'bg-teal-500/15 border-teal-500/30 text-teal-300',
-      tag: 'EXAM',
-      tagColor: 'bg-teal-500/20 text-teal-300 border-teal-500/40',
-    },
   ];
 
   return (
@@ -206,7 +195,6 @@ export const SuperAdminSettingsView: React.FC = () => {
         {activeTab === 'stages' && <StageManagementTab />}
         {activeTab === 'labels' && <LabelManagementTab />}
         {activeTab === 'admins' && <AdminAccountsTab />}
-        {activeTab === 'exam-settings' && <div className="mt-2"><ExamSettingsView /></div>}
       </div>
     </div>
   );

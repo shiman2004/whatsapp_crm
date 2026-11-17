@@ -38,11 +38,46 @@ import {
   authenticateRequest
 } from './src/legacyServer.js';
 import { getPrisma, getDbStatus } from './src/db.js';
-import { initExamSocket } from './src/examSocket.js';
+import { Server as SocketIOServer } from 'socket.io';
 import {
   identifyAffectedPrivilegedAccounts,
   remediatePrivilegedAccounts
 } from './scripts/remediate-privileged-credentials.js';
+
+function initAuthSocket(httpServer) {
+  const io = new SocketIOServer(httpServer, {
+    cors: { origin: true, credentials: true },
+  });
+
+  io.use(async (socket, next) => {
+    const rawToken = socket.handshake.auth?.token || socket.handshake.query?.token;
+    if (!rawToken) return next(new Error('Authentication token required'));
+    const verification = verifyAuthToken(String(rawToken));
+    if (!verification || !verification.valid) return next(new Error('Invalid or expired authentication token'));
+    const payload = verification.payload;
+    if (!payload?.userId) return next(new Error('Invalid token claims'));
+
+    const prisma = getPrisma();
+    if (prisma) {
+      try {
+        const rows = await prisma.$queryRawUnsafe(
+          `SELECT active, session_version, locked_until FROM public.users WHERE id = $1 LIMIT 1`,
+          payload.userId
+        );
+        const dbUser = rows?.[0];
+        if (dbUser) {
+          if (dbUser.active === false) return next(new Error('Account has been deactivated'));
+          if (dbUser.locked_until && new Date(dbUser.locked_until).getTime() > Date.now()) return next(new Error('Account is temporarily locked'));
+          if (Number(payload.sv ?? 0) !== Number(dbUser.session_version || 0)) {
+            return next(new Error('This session was revoked. Please sign in again.'));
+          }
+        }
+      } catch (err) {}
+    }
+    socket.user = payload;
+    next();
+  });
+}
 
 console.log('🔒 =========================================================================');
 console.log('🔒 Starting Critical Authentication Bypass Remediation Test Suite');
@@ -52,7 +87,7 @@ const TEST_PORT = 39821;
 const baseUrl = `http://127.0.0.1:${TEST_PORT}`;
 
 // Attach Socket.IO for testing connection revocation
-initExamSocket(server);
+initAuthSocket(server);
 
 server.listen(TEST_PORT, '127.0.0.1', async () => {
   const prisma = getPrisma();

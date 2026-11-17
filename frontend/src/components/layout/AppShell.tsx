@@ -7,7 +7,6 @@ import { ToastContainer } from './ToastContainer';
 import { NotificationContainer } from '../notifications/NotificationContainer';
 import { NotificationSettingsModal } from '../notifications/NotificationSettingsModal';
 import { DesktopNotificationBanner } from '../notifications/DesktopNotificationBanner';
-import { ExamHandoffRequestModal } from '../exam/ExamHandoffRequestModal';
 import { WhatsAppSimulator } from '../simulator/WhatsAppSimulator';
 import { navigateToPath, routeForTab, type NavTab } from '../../config/navigation';
 import { cn } from '../ui';
@@ -51,7 +50,6 @@ export const AppShell: React.FC<AppShellProps> = ({ activeTab, children, onSelec
       <Header onToggleMobileSidebar={() => setMobileOpen((v) => !v)} onOpenLead={onSelectLead} />
 
       <DesktopNotificationBanner />
-      <ExamHandoffRequestModal />
 
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         <Sidebar

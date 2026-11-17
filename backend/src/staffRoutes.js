@@ -16,6 +16,7 @@ export async function handleStaffRoutes(req, res, pathname, authUser, ctx = {}) 
   if (req.method === 'GET' && pathname === '/api/coordinators') {
     const CANONICAL_USERS = ctx.CANONICAL_USERS || [];
     const DELETED_USER_IDS = ctx.DELETED_USER_IDS || new Set();
+    const IS_TEST_ENV = Boolean(ctx.IS_TEST_ENV ?? (process.env.NODE_ENV === 'test'));
 
     const defaultCoordinators = CANONICAL_USERS
       .filter(u => !DELETED_USER_IDS.has(u.id) && u.active !== false)
@@ -52,12 +53,15 @@ export async function handleStaffRoutes(req, res, pathname, authUser, ctx = {}) 
               };
             });
 
-          // Ensure all canonical users (such as Leads Officers) are present even if DB is partially seeded
-          const existingIds = new Set(mappedUsers.map(u => u.id));
-          const existingEmails = new Set(mappedUsers.map(u => (u.email || '').toLowerCase()));
-          for (const canonical of defaultCoordinators) {
-            if (!existingIds.has(canonical.id) && !existingEmails.has((canonical.email || '').toLowerCase())) {
-              mappedUsers.push(canonical);
+          // In test environments only: ensure test coordinators are present if test DB is empty/partial.
+          // In production, strictly return actual database users only (never leak canonical mock users).
+          if (IS_TEST_ENV) {
+            const existingIds = new Set(mappedUsers.map(u => u.id));
+            const existingEmails = new Set(mappedUsers.map(u => (u.email || '').toLowerCase()));
+            for (const canonical of defaultCoordinators) {
+              if (!existingIds.has(canonical.id) && !existingEmails.has((canonical.email || '').toLowerCase())) {
+                mappedUsers.push(canonical);
+              }
             }
           }
 
@@ -68,8 +72,14 @@ export async function handleStaffRoutes(req, res, pathname, authUser, ctx = {}) 
       } catch (e) {}
     }
 
+    if (IS_TEST_ENV) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(defaultCoordinators));
+      return true;
+    }
+
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(defaultCoordinators));
+    res.end(JSON.stringify([]));
     return true;
   }
 

@@ -9,8 +9,6 @@ import {
   listAuditEvents, listUsers, resetProfile, rolePolicyDetails, saveProfile, securityOverview,
 } from './securityStore.js';
 import { auditSecurityEvent } from './securityAudit.js';
-import { ExamStore } from './examStore.js';
-import { DevicePolicyManager } from './studentAccess.js';
 import { JWT_SECRET } from './runtimeConfig.js';
 
 const json = (res, status, value) => {
@@ -404,31 +402,6 @@ export async function handleSecurityRoutes(req, res, pathname, user, correlation
         actorId: query.get('actorId'), module: query.get('module'), action: query.get('action'),
         outcome: query.get('outcome'), from: query.get('from'), to: query.get('to'),
       }));
-      return true;
-    }
-
-    if (pathname === '/api/security/device-replacements' && req.method === 'GET') {
-      if (user.role !== 'super_admin' && user.role !== 'exam_department_manager') {
-        throw new PermissionError(403, 'FORBIDDEN', 'Administrative access required.');
-      }
-      const store = new ExamStore(prisma);
-      const items = await store.transaction(async tx => {
-        return tx.list('device_challenge');
-      });
-      ok(res, items);
-      return true;
-    }
-
-    const deviceApproveMatch = pathname.match(/^\/api\/security\/device-replacements\/([a-zA-Z0-9_-]{1,100})\/approve$/);
-    if (deviceApproveMatch && req.method === 'POST') {
-      if (user.role !== 'super_admin' && user.role !== 'exam_department_manager') {
-        throw new PermissionError(403, 'FORBIDDEN', 'Administrative access required.');
-      }
-      const challengeId = deviceApproveMatch[1];
-      const store = new ExamStore(prisma);
-      const manager = new DevicePolicyManager(store, JWT_SECRET);
-      const approval = await manager.approveDeviceReplacement(user, challengeId);
-      ok(res, approval);
       return true;
     }
   } catch (error) {

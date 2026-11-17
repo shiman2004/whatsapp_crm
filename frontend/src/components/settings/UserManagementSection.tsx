@@ -36,6 +36,7 @@ import { useCrm, isMockOrDemoUser } from '../../context/CrmContext';
 import { userManagementApi, type Department, type UserStatus } from '../admin/user-management/api';
 import { UserDetailDrawer } from '../admin/user-management/UserDetailDrawer';
 import { CreateUserTab } from '../admin/user-management/CreateUserTab';
+import { sanitizeFilterOptions } from '../../utils/filterUtils';
 
 interface UserManagementSectionProps {
   currentSectionId: string;
@@ -753,8 +754,8 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                   className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
                 >
                   <option value="ALL">All Roles</option>
-                  {[...new Map(usersList.map((user) => [user.role, user.roleLabel])).entries()].map(([role, label]) => (
-                    <option key={role} value={role}>{label}</option>
+                  {sanitizeFilterOptions(usersList.map((user) => ({ value: user.role, label: user.roleLabel }))).map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
 
@@ -768,8 +769,8 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                   className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
                 >
                   <option value="ALL">All Companies</option>
-                  {[...new Map(usersList.map((user) => [user.companyCode, user.companyName])).entries()].map(([code, name]) => (
-                    <option key={code} value={code}>{name}</option>
+                  {sanitizeFilterOptions(usersList.map((user) => ({ value: user.companyCode, label: user.companyName }))).map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
 
@@ -783,8 +784,8 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                   className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
                 >
                   <option value="ALL">All Branches</option>
-                  {[...new Set(usersList.map((user) => user.branch))].map((branch) => (
-                    <option key={branch} value={branch}>{branch}</option>
+                  {sanitizeFilterOptions(usersList.map((user) => ({ value: user.branch, label: user.branch }))).map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
 
@@ -798,8 +799,8 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                   className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
                 >
                   <option value="ALL">All Departments</option>
-                  {[...new Set(usersList.map((user) => user.department))].map((department) => (
-                    <option key={department} value={department}>{department}</option>
+                  {sanitizeFilterOptions(usersList.map((user) => ({ value: user.department, label: user.department }))).map(({ value, label }) => (
+                    <option key={value} value={value}>{label}</option>
                   ))}
                 </select>
 

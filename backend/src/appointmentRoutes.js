@@ -14,6 +14,13 @@ import { dispatchAutomationEvent } from './automationEngine.js';
 
 const COLOMBO_TZ = 'Asia/Colombo';
 
+// Doctor branch is free text (e.g. "Maruthamunai") while branches.name may be
+// longer (e.g. "Maruthamunai Branch"), so match in either direction.
+const branchTextMatches = (doctorBranch, branchLabel) =>
+  !doctorBranch || !branchLabel ||
+  doctorBranch.toLowerCase().includes(branchLabel.toLowerCase()) ||
+  branchLabel.toLowerCase().includes(doctorBranch.toLowerCase());
+
 // In-memory fallback stores when DB is operating offline
 let MEMORY_BRANCHES = [
   { id: 'branch-colombo', company: 'RWC', name: 'Colombo (Head Office)', code: 'COLOMBO', address: 'Colombo, Sri Lanka', phone: '+94 70 639 3353', isActive: true },
@@ -1003,8 +1010,8 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
 
         const [doctorRows, scheduleRows, exceptionRows, appointmentRows, blockRows] = await Promise.all([
           prisma.$queryRawUnsafe(`
-            SELECT id, full_name AS "fullName", title, branch, phone, avatar
-            FROM public.doctors WHERE is_active = TRUE ORDER BY full_name ASC;
+            SELECT id, "fullName", title, branch, phone, avatar
+            FROM public.doctors WHERE is_active = TRUE ORDER BY "fullName" ASC;
           `),
           prisma.$queryRawUnsafe(`
             SELECT id, doctor_id AS "doctorId", branch_id AS "branchId", day_of_week AS "dayOfWeek",
@@ -1021,7 +1028,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             ORDER BY start_time NULLS FIRST;
           `, parts.date),
           prisma.$queryRawUnsafe(`
-            SELECT ${enrichedAppointmentSelect().replace('FROM public.appointments a', 'FROM public.appointments a')}
+            ${enrichedAppointmentSelect()}
             WHERE a.branch_id = $1
               AND a.status NOT IN ${BLOCKING_STATUSES}
               AND a.start_time < $2 AND a.end_time > $3
@@ -1041,7 +1048,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             const schedules = (scheduleRows || []).filter((row) => row.doctorId === doctor.id);
             if (!schedules.length) {
               // Legacy doctors without a roster are still shown for their text branch.
-              return !doctor.branch || doctor.branch.toLowerCase().includes(branchName.toLowerCase());
+              return branchTextMatches(doctor.branch, branchName);
             }
             return schedules.some((row) => row.branchId === branchId);
           })
@@ -2007,7 +2014,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
             if (!branchId) return true;
             if (doctor.branchIds.includes(branchId)) return true;
             if (doctor.scheduleConfigured) return false;
-            return !doctor.branch || !branchName || doctor.branch.toLowerCase().includes(branchName.toLowerCase());
+            return branchTextMatches(doctor.branch, branchName);
           });
 
         return sendJson(res, 200, enriched);
@@ -2018,7 +2025,7 @@ export async function handleAppointmentRoutes(req, res, pathname, authUser) {
     let fallback = MEMORY_DOCTORS;
     if (branchId) {
       const branch = MEMORY_BRANCHES.find((row) => row.id === branchId);
-      fallback = fallback.filter((doctor) => !branch || !doctor.branch || doctor.branch.toLowerCase().includes(branch.name.toLowerCase()));
+      fallback = fallback.filter((doctor) => branchTextMatches(doctor.branch, branch?.name));
     }
     return sendJson(res, 200, fallback);
   }

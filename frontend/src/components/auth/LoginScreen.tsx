@@ -19,7 +19,7 @@ import {
   Clock,
   Loader2
 } from 'lucide-react';
-import { useCrm } from '../../context/CrmContext';
+import { useCrm, isMockOrDemoUser } from '../../context/CrmContext';
 
 // Helper to detect if Super Admin is unlocked via URL param (?admin=true, ?admin=1, ?admin, #admin, or /admin)
 const checkIsAdminAllowed = (): boolean => {
@@ -64,12 +64,11 @@ export const LoginScreen: React.FC = () => {
   const _deletedIds: string[] = (() => {
     try { return JSON.parse(localStorage.getItem('rw_crm_deleted_users') || '[]'); } catch { return []; }
   })();
-  const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false;
+  const _activeStaff = (u: any) => !_deletedIds.includes(u.id) && u.active !== false && !isMockOrDemoUser(u);
   const EXCLUDED_PORTAL_ROLES = ['super_admin', 'leads_officer', 'marketing_officer', 'marketing_admin'];
   const superAdmins = users.filter((u: any) => _activeStaff(u) && u.role === 'super_admin');
   const leadsOfficers = users.filter((u: any) => _activeStaff(u) && u.role === 'leads_officer');
   const DEFAULT_LEADS_OFFICERS = [
-    { id: 'user-officer-1', fullName: 'Sarah Fernando', email: 'sarah@royalwellness.lk', role: 'leads_officer', branch: 'Colombo' },
     { id: 'ba780507-8847-4de4-979d-57bef49d7b4a', fullName: 'Baasith', email: 'basith@royalwellness.lk', role: 'leads_officer', branch: 'Maruthamunai' },
     { id: '30205238-2be6-4187-a8c4-aba2cd67b8f7', fullName: 'Mohamed', email: 'mohamed@royalwellness.lk', role: 'leads_officer', branch: 'Maruthamunai' },
     { id: '6420da82-208c-4f25-b6ca-7130fdce6765', fullName: 'Ameer', email: 'ameer@royalwellness.lk', role: 'leads_officer', branch: 'Colombo' },

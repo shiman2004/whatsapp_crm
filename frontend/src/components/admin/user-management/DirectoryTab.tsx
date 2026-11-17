@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Columns3, Download, RefreshCw, ShieldOff, UserCheck, UserX, Search, Shield, Building2, MapPin, FolderTree, Activity, ExternalLink, X } from 'lucide-react';
 import { ConfirmDialog, EmptyState, ErrorState, LoadingSkeleton, SectionCard, cn } from '../../ui';
+import { isMockOrDemoUser } from '../../../context/CrmContext';
 import { userManagementApi, ROLE_OPTIONS, COMPANY_OPTIONS, type Department, type ManagedUser, type Page } from './api';
 import { GhostButton, RoleBadge, CompanyBadge, BranchBadge, UserStatusBadge, formatWhen, timeAgo } from './bits';
 import { UserDetailDrawer } from './UserDetailDrawer';
@@ -132,7 +133,7 @@ export const DirectoryTab: React.FC<DirectoryTabProps> = ({
 
   useEffect(() => { void load(); }, [load]);
 
-  const rows = data?.items || [];
+  const rows = (data?.items || []).filter((row) => !isMockOrDemoUser(row));
   const allSelected = rows.length > 0 && rows.every((row) => selected.includes(row.id));
 
   const runBulk = async () => {

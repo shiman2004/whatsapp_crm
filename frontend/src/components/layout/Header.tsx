@@ -13,7 +13,7 @@ import {
   UserRound,
   Users,
 } from 'lucide-react';
-import { useCrm } from '../../context/CrmContext';
+import { useCrm, isMockOrDemoUser } from '../../context/CrmContext';
 import { MetaApiModal } from './MetaApiModal';
 import { WhatsAppQrModal } from './WhatsAppQrModal';
 import { Breadcrumbs } from './Breadcrumbs';
@@ -353,7 +353,9 @@ export const Header: React.FC<HeaderProps> = ({ onToggleMobileSidebar, onOpenLea
                           Selecting a team member signs you out. Sign in with their own credentials.
                         </p>
                         <div className="max-h-40 space-y-0.5 overflow-y-auto pr-0.5">
-                          {users.map((u: any) => (
+                          {users
+                            .filter((u: any) => u.active !== false && !isMockOrDemoUser(u))
+                            .map((u: any) => (
                             <button
                               key={u.id}
                               type="button"

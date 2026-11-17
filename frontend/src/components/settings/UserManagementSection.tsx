@@ -32,7 +32,7 @@ import {
   Pencil
 } from 'lucide-react';
 import { SettingsLayout } from './SettingsLayout';
-import { useCrm } from '../../context/CrmContext';
+import { useCrm, isMockOrDemoUser } from '../../context/CrmContext';
 import { userManagementApi, type Department, type UserStatus } from '../admin/user-management/api';
 import { UserDetailDrawer } from '../admin/user-management/UserDetailDrawer';
 import { CreateUserTab } from '../admin/user-management/CreateUserTab';
@@ -132,7 +132,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
         setDepartments((orgRes as any).departments);
       }
       if (res && Array.isArray(res.items)) {
-        const mapped: UserDirectoryItem[] = res.items.map((u, idx) => ({
+        const mapped: UserDirectoryItem[] = res.items
+          .filter(u => !isMockOrDemoUser(u))
+          .map((u, idx) => ({
           id: u.id,
           name: u.fullName,
           email: u.email,
@@ -234,6 +236,15 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
       prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
     );
   };
+
+  const hasActiveFilters = Boolean(
+    searchQuery ||
+    roleFilter !== 'ALL' ||
+    companyFilter !== 'ALL' ||
+    branchFilter !== 'ALL' ||
+    departmentFilter !== 'ALL' ||
+    statusFilter !== 'ALL'
+  );
 
   const clearAllFilters = () => {
     setSearchQuery('');
@@ -668,19 +679,19 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
           <div className="bg-white dark:bg-[#202C33] border border-[#E0E5E7] dark:border-[#222D34] rounded-2xl p-5 sm:p-6 shadow-sm space-y-5 transition-colors">
             {/* Header: Title on Left, Columns/Export/Refresh on Right */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-[#E0E5E7] dark:border-[#222D34] pb-4">
-              <div className="flex items-center space-x-3">
+              <div className="flex items-center space-x-3 min-w-0">
                 <div className="h-8 w-8 rounded-xl bg-[#DDF5EC] dark:bg-[#005C4B]/40 text-[#128C7E] dark:text-[#25D366] border border-[#128C7E]/20 flex items-center justify-center shrink-0">
                   <Users className="h-4 w-4" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <h3 className="text-sm sm:text-base font-bold text-[#111B21] dark:text-[#E9EDEF]">User Directory</h3>
-                  <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5">
+                  <p className="text-xs text-[#667781] dark:text-[#8696A0] mt-0.5 truncate sm:overflow-visible">
                     Search, filter and manage all user accounts in your organization.
                   </p>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2 self-start sm:self-auto">
+              <div className="flex items-center space-x-2 self-start sm:self-auto shrink-0 flex-wrap gap-y-2">
                 <button
                   type="button"
                   onClick={() => toast('Column Customizer', 'All 9 directory columns are currently active.', 'info')}
@@ -714,9 +725,9 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
             </div>
 
             {/* Filters Row */}
-            <div className="flex flex-col lg:flex-row items-stretch lg:items-center gap-2.5">
-              {/* Search Bar */}
-              <div className="flex-1 relative min-w-[200px]">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2.5 flex-wrap">
+              {/* Search Bar - comfortably sized, takes available space */}
+              <div className="relative flex-1 min-w-[240px] max-w-md">
                 <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-[#667781] dark:text-[#8696A0]" />
                 <input
                   type="text"
@@ -730,97 +741,99 @@ export const UserManagementSection: React.FC<UserManagementSectionProps> = ({
                 />
               </div>
 
-              {/* Roles Dropdown */}
-              <select
-                value={roleFilter}
-                onChange={(e) => {
-                  setRoleFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
-              >
-                <option value="ALL">All Roles</option>
-                {[...new Map(usersList.map((user) => [user.role, user.roleLabel])).entries()].map(([role, label]) => (
-                  <option key={role} value={role}>{label}</option>
-                ))}
-              </select>
-
-              {/* Companies Dropdown */}
-              <select
-                value={companyFilter}
-                onChange={(e) => {
-                  setCompanyFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
-              >
-                <option value="ALL">All Companies</option>
-                {[...new Map(usersList.map((user) => [user.companyCode, user.companyName])).entries()].map(([code, name]) => (
-                  <option key={code} value={code}>{name}</option>
-                ))}
-              </select>
-
-              {/* Branches Dropdown */}
-              <select
-                value={branchFilter}
-                onChange={(e) => {
-                  setBranchFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
-              >
-                <option value="ALL">All Branches</option>
-                {[...new Set(usersList.map((user) => user.branch))].map((branch) => (
-                  <option key={branch} value={branch}>{branch}</option>
-                ))}
-              </select>
-
-              {/* Departments Dropdown */}
-              <select
-                value={departmentFilter}
-                onChange={(e) => {
-                  setDepartmentFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
-              >
-                <option value="ALL">All Departments</option>
-                {[...new Set(usersList.map((user) => user.department))].map((department) => (
-                  <option key={department} value={department}>{department}</option>
-                ))}
-              </select>
-
-              {/* Statuses Dropdown */}
-              <select
-                value={statusFilter}
-                onChange={(e) => {
-                  setStatusFilter(e.target.value);
-                  setCurrentPage(1);
-                }}
-                className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer shrink-0"
-              >
-                <option value="ALL">All Statuses</option>
-                <option value="ACTIVE">Active Only</option>
-                <option value="INACTIVE">Inactive Only</option>
-                <option value="SUSPENDED">Suspended</option>
-                <option value="LOCKED">Locked</option>
-                <option value="INVITED">Invited</option>
-              </select>
-
-              <div className="flex items-center space-x-1 shrink-0">
-                <button
-                  type="button"
-                  title="Filter options"
-                  className="p-1.5 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[#667781] hover:text-[#111B21] dark:text-[#8696A0] dark:hover:text-[#E9EDEF] transition-colors"
+              {/* Filter Dropdowns & Clear Action */}
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Roles Dropdown */}
+                <select
+                  value={roleFilter}
+                  onChange={(e) => {
+                    setRoleFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
                 >
-                  <Filter className="h-3.5 w-3.5" />
-                </button>
+                  <option value="ALL">All Roles</option>
+                  {[...new Map(usersList.map((user) => [user.role, user.roleLabel])).entries()].map(([role, label]) => (
+                    <option key={role} value={role}>{label}</option>
+                  ))}
+                </select>
+
+                {/* Companies Dropdown */}
+                <select
+                  value={companyFilter}
+                  onChange={(e) => {
+                    setCompanyFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
+                >
+                  <option value="ALL">All Companies</option>
+                  {[...new Map(usersList.map((user) => [user.companyCode, user.companyName])).entries()].map(([code, name]) => (
+                    <option key={code} value={code}>{name}</option>
+                  ))}
+                </select>
+
+                {/* Branches Dropdown */}
+                <select
+                  value={branchFilter}
+                  onChange={(e) => {
+                    setBranchFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
+                >
+                  <option value="ALL">All Branches</option>
+                  {[...new Set(usersList.map((user) => user.branch))].map((branch) => (
+                    <option key={branch} value={branch}>{branch}</option>
+                  ))}
+                </select>
+
+                {/* Departments Dropdown */}
+                <select
+                  value={departmentFilter}
+                  onChange={(e) => {
+                    setDepartmentFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
+                >
+                  <option value="ALL">All Departments</option>
+                  {[...new Set(usersList.map((user) => user.department))].map((department) => (
+                    <option key={department} value={department}>{department}</option>
+                  ))}
+                </select>
+
+                {/* Statuses Dropdown */}
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  className="bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] rounded-xl px-2.5 py-1.5 text-xs text-[#111B21] dark:text-[#E9EDEF] focus:outline-none focus:ring-2 focus:ring-[#128C7E]/40 cursor-pointer"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="ACTIVE">Active Only</option>
+                  <option value="INACTIVE">Inactive Only</option>
+                  <option value="SUSPENDED">Suspended</option>
+                  <option value="LOCKED">Locked</option>
+                  <option value="INVITED">Invited</option>
+                </select>
+
+                {/* Clear Filters Button */}
                 <button
                   type="button"
                   onClick={clearAllFilters}
-                  className="px-2.5 py-1.5 rounded-xl bg-[#F0F2F5] dark:bg-[#111B21] border border-[#E0E5E7] dark:border-[#222D34] text-[11px] font-semibold text-[#667781] hover:text-rose-500 dark:text-[#8696A0] dark:hover:text-rose-400 transition-colors whitespace-nowrap cursor-pointer"
+                  disabled={!hasActiveFilters}
+                  className={`px-2.5 py-1.5 rounded-xl border text-[11px] font-semibold transition-colors whitespace-nowrap flex items-center space-x-1.5 ${
+                    hasActiveFilters
+                      ? 'bg-rose-500/10 hover:bg-rose-500/20 border-rose-500/30 text-rose-600 dark:text-rose-400 cursor-pointer'
+                      : 'bg-[#F0F2F5] dark:bg-[#111B21] border-[#E0E5E7] dark:border-[#222D34] text-[#667781] dark:text-[#8696A0] opacity-50 cursor-not-allowed'
+                  }`}
+                  title={hasActiveFilters ? 'Reset all applied filters' : 'No filters active'}
                 >
-                  Clear Filters
+                  <Filter className="h-3 w-3" />
+                  <span>Clear Filters</span>
                 </button>
               </div>
             </div>

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle, BriefcaseBusiness, Building2, MailPlus, PlusCircle, ShieldCheck, UserCheck, UserRoundCheck, UserRoundX, UsersRound,
 } from 'lucide-react';
-import { useCrm } from '../../../context/CrmContext';
+import { useCrm, isMockOrDemoUser } from '../../../context/CrmContext';
 import { ErrorState, LoadingSkeleton, PageHeader, SectionCard, StatCard, cn } from '../../ui';
 import { setUserManagementTokenReader, userManagementApi, type Department, type ManagedUser, type Team, type TeamMember, type UserOverview } from './api';
 import { AssignmentsTab } from './AssignmentsTab';
@@ -60,7 +60,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({ hideHead
       ]);
       setOverview(overviewResult);
       setOrg(orgResult);
-      setManagers(people.items);
+      setManagers(people.items.filter((u) => !isMockOrDemoUser(u)));
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to load user management.');
     } finally {

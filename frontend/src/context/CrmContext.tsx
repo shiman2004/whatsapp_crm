@@ -399,13 +399,24 @@ export const isMockOrDemoUser = (u: { id?: string; email?: string } | null | und
   if (!u) return false;
   const id = u.id || '';
   const email = (u.email || '').toLowerCase().trim();
+  const name = ((u as any).fullName || (u as any).name || '').toLowerCase().trim();
   return (
     id === 'user-student-1' ||
     id === 'user-rwcc-admin-1' ||
+    id === 'user-admin-1' ||
+    id === 'user-officer-1' ||
     id === 'fca103e7-9843-4060-ad3f-16b3499e3337' ||
+    id === 'a3a86e08-ba1f-42ac-9a5a-aa83529feca1' ||
+    email === 'admin@royalwellness.lk' ||
+    email === 'sarah@royalwellness.lk' ||
     email === 'student@royalwellness.lk' ||
-    email === 'rwcc@royalwellness.lk' ||
     email === 'testing@royalwellness.lk' ||
+    email === 'testuser11@gmail.com' ||
+    name === 'admin user' ||
+    name === 'admin user (deactivated)' ||
+    name === 'sarah fernando' ||
+    name === 'testing' ||
+    name === 'test user' ||
     email.startsWith('admin_test_') ||
     ['6186a081-c8be-40c2-ad05-fc8faba514fe', 'f84ff967-3c72-4d1f-888f-6c1c998e0f40', '5dab2d42-2041-4e58-9b9f-28f73f58b8b4'].includes(id)
   );
@@ -417,7 +428,9 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const deletedUserIds = getStored<string[]>('rw_crm_deleted_users', []);
     const stored = getStored<User[]>('rw_crm_users', []);
     const filteredStored = stored.filter(u => !deletedUserIds.includes(u.id) && !isMockOrDemoUser(u));
-    return filteredStored.map(u => ({
+    const cleanInitial = INITIAL_USERS.filter(u => !isMockOrDemoUser(u));
+    const sourceUsers = filteredStored.length > 0 ? filteredStored : cleanInitial;
+    return sourceUsers.map(u => ({
       ...u,
       branch: u.branch || 'Colombo',
       company: u.role === 'super_admin' ? 'ALL' : ['leads_officer', 'exam_department_manager', 'exam_coordinator', 'exam_providing_officer', 'clinical_nurse', 'clinical_doctor', 'report_analyst'].includes(u.role) ? undefined : (u.company || 'RWC'),
@@ -436,7 +449,8 @@ export const CrmProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (authId) {
       resolvedUser = storedUsers.find(u => u.id === authId);
     }
-    const finalUser = resolvedUser || storedUsers[0] || INITIAL_USERS[0];
+    const cleanInitial = INITIAL_USERS.filter(u => !isMockOrDemoUser(u));
+    const finalUser = resolvedUser || storedUsers[0] || cleanInitial[0];
     if (finalUser && finalUser.role === 'super_admin') {
       return { ...finalUser, company: 'ALL' };
     }
